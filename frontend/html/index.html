@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DN Football | Nền tảng bóng đá tại Đà Nẵng</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="../css/style.css">
+    
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <nav class="navbar" id="navbar">
+        <div class="nav-container">
+            <a href="#" class="logo">
+                <i data-lucide="trophy" class="logo-icon"></i> 
+                <span>DN FOOTBALL</span>
+            </a>
+            
+            <div class="nav-links">
+                <a href="#home">Trang chủ</a>
+                <a href="#about">Giới thiệu</a>
+                <a href="#features">Tính năng</a>
+                <a href="#areas">Khu vực</a>
+                <a href="#contact">Liên hệ</a>
+            </div>
+
+            <div class="nav-actions">
+                <a href="login.html" class="btn btn-outline">ĐĂNG NHẬP</a>
+                <a href="register.html" class="btn btn-primary">ĐĂNG KÝ</a>
+            </div>
+
+            <button class="mobile-toggle" id="mobile-toggle">
+                <i data-lucide="menu"></i>
+            </button>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobile-menu">
+        <a href="#home">Trang chủ</a>
+        <a href="#about">Giới thiệu</a>
+        <a href="#features">Tính năng</a>
+        <a href="#areas">Khu vực</a>
+        <a href="#contact">Liên hệ</a>
+        <a href="login.html" class="btn btn-outline">ĐĂNG NHẬP</a>
+        <a href="register.html" class="btn btn-primary">ĐĂNG KÝ</a>
+    </div>
+
+    <section class="hero" id="home">
+        <div class="hero-bg-elements">
+            <div class="glow-sphere"></div>
+            <div class="grid-overlay"></div>
+        </div>
+        
+        <div class="container hero-container">
+            <div class="hero-content fade-up">
+                <div class="badge">
+                    <i data-lucide="map-pin"></i> NỀN TẢNG BÓNG ĐÁ TẠI ĐÀ NẴNG
+                </div>
+                <h1 class="hero-title">Kết nối đam mê.<br><span class="text-gradient">Chinh phục sân cỏ.</span></h1>
+                <p class="hero-subtitle">Khám phá nền tảng kết nối cộng đồng bóng đá và hệ thống sân bóng hiện đại nhất tại Đà Nẵng.</p>
+                
+                <div class="hero-cta">
+                    <a href="register.html" class="btn btn-primary btn-lg">ĐĂNG KÝ NGAY</a>
+                    <a href="login.html" class="btn btn-outline btn-lg">ĐĂNG NHẬP</a>
+                </div>
+            </div>
+            
+            <div class="hero-3d" id="canvas-container"></div>
+        </div>
+    </section>
+
+    <section class="intro section-padding" id="about">
+        <div class="container intro-container">
+            <div class="intro-image reveal-left">
+                <img src="https://images.unsplash.com/photo-1579952363873-27f3bade9f55?q=80&w=2070&auto=format&fit=crop" alt="Bóng đá Đà Nẵng">
+                <div class="image-overlay"></div>
+            </div>
+            <div class="intro-content reveal-right">
+                <h2 class="section-title">Đà Nẵng — <br>Thành phố của những trận cầu</h2>
+                <p class="section-desc">Chúng tôi mang đến một không gian kết nối mạnh mẽ cho cộng đồng yêu bóng đá. Từ những trận đấu giao hữu cuối tuần đến những giải đấu phong trào rực lửa, tinh thần thể thao luôn cháy bỏng trên mọi mặt sân.</p>
+                
+                <div class="stats-mini">
+                    <div class="stat-item">
+                        <h3 class="counter" data-target="50">0</h3><span>+</span>
+                        <p>Sân bóng</p>
+                    </div>
+                    <div class="stat-item">
+                        <h3 class="counter" data-target="10">0</h3><span>K+</span>
+                        <p>Người chơi</p>
+                    </div>
+                    <div class="stat-item">
+                        <h3 class="counter" data-target="1000">0</h3><span>+</span>
+                        <p>Trận/Tháng</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="who-we-are section-padding" id="features">
+        <div class="container text-center">
+            <h2 class="section-title fade-up">Một nền tảng dành cho<br>những người yêu bóng đá</h2>
+            <p class="section-desc fade-up delay-1">DN Football được xây dựng với mong muốn tạo ra một không gian kết nối những người yêu bóng đá tại Đà Nẵng.</p>
+            
+            <div class="features-grid mt-5">
+                <div class="feature-card fade-up delay-1">
+                    <div class="feature-icon"><i data-lucide="users"></i></div>
+                    <h3>Dành cho người chơi</h3>
+                    <p>Không gian để khám phá và kết nối với cộng đồng bóng đá đam mê khắp thành phố.</p>
+                </div>
+                <div class="feature-card fade-up delay-2">
+                    <div class="feature-icon"><i data-lucide="land-plot"></i></div>
+                    <h3>Dành cho sân bóng</h3>
+                    <p>Giúp các hệ thống sân bóng được giới thiệu và tiếp cận đến nhiều người chơi hơn.</p>
+                </div>
+                <div class="feature-card fade-up delay-3">
+                    <div class="feature-icon"><i data-lucide="handshake"></i></div>
+                    <h3>Kết nối cộng đồng</h3>
+                    <p>Xây dựng một hệ sinh thái bóng đá phong trào năng động, chuyên nghiệp tại Đà Nẵng.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="areas section-padding" id="areas">
+        <div class="container">
+            <h2 class="section-title text-center fade-up">Các khu vực tại Đà Nẵng</h2>
+            <div class="areas-grid mt-5">
+                <div class="area-card fade-up delay-1">
+                    <img src="https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?q=80&w=2070&auto=format&fit=crop" alt="Hải Châu">
+                    <div class="area-overlay"></div>
+                    <div class="area-content">
+                        <h3>HẢI CHÂU</h3>
+                        <p>Khám phá sân bóng</p>
+                    </div>
+                </div>
+                <div class="area-card fade-up delay-2">
+                    <img src="https://images.unsplash.com/photo-1529900748604-07564a03e7a6?q=80&w=2070&auto=format&fit=crop" alt="Thanh Khê">
+                    <div class="area-overlay"></div>
+                    <div class="area-content">
+                        <h3>THANH KHÊ</h3>
+                        <p>Khám phá sân bóng</p>
+                    </div>
+                </div>
+                <div class="area-card fade-up delay-3">
+                    <img src="https://images.unsplash.com/photo-1589487391730-58f20eb2c308?q=80&w=2074&auto=format&fit=crop" alt="Sơn Trà">
+                    <div class="area-overlay"></div>
+                    <div class="area-content">
+                        <h3>SƠN TRÀ</h3>
+                        <p>Khám phá sân bóng</p>
+                    </div>
+                </div>
+                <div class="area-card fade-up delay-4">
+                    <img src="https://images.unsplash.com/photo-1556056504-5c7696c4c28d?q=80&w=2070&auto=format&fit=crop" alt="Ngũ Hành Sơn">
+                    <div class="area-overlay"></div>
+                    <div class="area-content">
+                        <h3>NGŨ HÀNH SƠN</h3>
+                        <p>Khám phá sân bóng</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="experience">
+        <div class="experience-overlay"></div>
+        <div class="container experience-content text-center fade-up">
+            <h2>Không chỉ là bóng đá.<br>Đó là một cộng đồng.</h2>
+            <p>Chúng tôi hướng tới việc xây dựng một hệ sinh thái bóng đá hiện đại, nơi người chơi, đội bóng và sân bóng có thể kết nối với nhau.</p>
+        </div>
+    </section>
+
+    <section class="testimonials section-padding">
+        <div class="container">
+            <h2 class="section-title text-center fade-up">Cộng đồng nói gì?</h2>
+            <div class="testi-grid mt-5">
+                <div class="testi-card fade-up delay-1">
+                    <div class="quote-icon">"</div>
+                    <p class="testi-text">Cuối tuần nào đội mình cũng có những trận đấu rất vui. Không khí bóng đá ở Đà Nẵng thật sự rất tuyệt.</p>
+                    <div class="testi-author">— Minh Anh</div>
+                </div>
+                <div class="testi-card fade-up delay-2">
+                    <div class="quote-icon">"</div>
+                    <p class="testi-text">Điều mình thích nhất là cảm giác kết nối với những người cùng đam mê, một nền tảng thực sự mang tính cộng đồng.</p>
+                    <div class="testi-author">— Hoàng Nam</div>
+                </div>
+                <div class="testi-card fade-up delay-3">
+                    <div class="quote-icon">"</div>
+                    <p class="testi-text">Giao diện đẹp, hiện đại. Thật tuyệt khi Đà Nẵng có một nền tảng chuyên nghiệp dành riêng cho giới phủi.</p>
+                    <div class="testi-author">— Đức Trí</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cta-section section-padding">
+        <div class="container text-center fade-up">
+            <div class="cta-box">
+                <h2>Sẵn sàng bước vào sân cỏ?</h2>
+                <p>Tham gia cộng đồng bóng đá tại Đà Nẵng ngay hôm nay.</p>
+                <div class="hero-cta justify-center mt-3">
+                    <a href="register.html" class="btn btn-primary btn-lg">ĐĂNG KÝ</a>
+                    <a href="login.html" class="btn btn-outline btn-lg">ĐĂNG NHẬP</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer" id="contact">
+        <div class="container footer-grid">
+            <div class="footer-brand">
+                <a href="index.html" class="logo">
+                    <i data-lucide="trophy" class="logo-icon"></i> 
+                    <span>DN FOOTBALL</span>
+                </a>
+                <p>Nền tảng kết nối cộng đồng bóng đá tại Đà Nẵng.</p>
+                <p class="phone-text"><i data-lucide="phone"></i> 0899244124</p>
+                <p class="location-text"><i data-lucide="map-pin"></i> Đà Nẵng, Việt Nam</p>
+            </div>
+            
+            <div class="footer-links">
+                <h4>Khám phá</h4>
+                <a href="index.html">Trang chủ</a>
+                <a href="#about">Giới thiệu</a>
+                <a href="#features">Tính năng</a>
+                <a href="#areas">Khu vực</a>
+            </div>
+            
+            <div class="footer-links">
+                <h4>Hỗ trợ</h4>
+                <a href="contact.html">Liên hệ</a>
+                <a href="#">FAQ</a>
+                <a href="#">Điều khoản</a>
+                <a href="#">Bảo mật</a>
+            </div>
+            
+            <div class="footer-links">
+                <h4>Kết nối</h4>
+                <a href="https://www.facebook.com/caubetuan2944" target="_blank">Facebook</a>
+                <a href="#">Instagram</a>
+                <a href="#">TikTok</a>
+            </div>
+        </div>
+        <div class="container">
+            <div class="footer-bottom">
+                <p>&copy; 2026 DN Football. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="../js/main.js"></script>
+</body>
+</html>

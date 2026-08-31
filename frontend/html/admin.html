@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - DN FOOTBALL</title>
+    <link rel="stylesheet" href="../css/admin.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="admin-layout">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <i class="fa-solid fa-futbol"></i> DN FOOTBALL
+            </div>
+            <nav class="sidebar-nav">
+                <a href="#" class="active"><i class="fa-solid fa-chart-pie"></i> TỔNG QUAN</a>
+                <a href="#"><i class="fa-solid fa-layer-group"></i> QUẢN LÝ SÂN</a>
+                <a href="#"><i class="fa-solid fa-users"></i> QUẢN LÝ KHÁCH HÀNG</a>
+                <a href="#"><i class="fa-solid fa-calendar-check"></i> QUẢN LÝ ĐẶT SÂN</a>
+                <a href="#"><i class="fa-solid fa-wallet"></i> QUẢN LÝ GIAO DỊCH</a>
+                <a href="#"><i class="fa-solid fa-inbox"></i> QUẢN LÝ YÊU CẦU</a>
+                <a href="#"><i class="fa-solid fa-bullhorn"></i> QUẢN LÝ THÔNG BÁO</a>
+                <hr>
+                <a href="#"><i class="fa-solid fa-file-lines"></i> BÁO CÁO</a>
+                <a href="#"><i class="fa-solid fa-gear"></i> CÀI ĐẶT</a>
+                <a href="#" class="logout-link"><i class="fa-solid fa-arrow-right-from-bracket"></i> ĐĂNG XUẤT</a>
+            </nav>
+        </aside>
+
+        <main class="admin-main">
+            <header class="admin-topbar">
+                <div class="topbar-search">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" placeholder="Tìm kiếm nhanh...">
+                </div>
+                <div class="topbar-user">
+                    <span id="admin-user-name">Admin</span>
+                    <i class="fa-solid fa-circle-user" style="font-size: 1.5rem; color: var(--text-muted)"></i>
+                </div>
+            </header>
+
+            <div class="admin-content">
+                <div class="page-title" style="margin-bottom: 20px;">Tổng quan hệ thống</div>
+                
+                <div class="stat-grid">
+                    <div class="stat-card">
+                        <div class="stat-title">Doanh thu hôm nay</div>
+                        <div class="stat-value">2.500.000đ</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Tổng Booking (Ngày)</div>
+                        <div class="stat-value">24</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Khách hàng mới</div>
+                        <div class="stat-value">5</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Yêu cầu chờ xử lý</div>
+                        <div class="stat-value" style="color: #eab308;">3</div>
+                    </div>
+                </div>
+
+                <div class="chart-layout">
+                    <div class="panel">
+                        <div class="panel-header">Biểu đồ doanh thu 7 ngày</div>
+                        <canvas id="revenueChart" height="100"></canvas>
+                    </div>
+                </div>
+
+                <div class="panel" style="margin-top: 24px;">
+                    <div class="panel-header">
+                        Booking mới nhất
+                        <button class="btn-outline-sm">Xem tất cả</button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Mã Đặt</th>
+                                    <th>Khách hàng</th>
+                                    <th>Sân</th>
+                                    <th>Ngày & Giờ</th>
+                                    <th>Trạng thái</th>
+                                    <th>Hành động</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>#BK001</td>
+                                    <td>Nguyễn Văn A</td>
+                                    <td>Sân Đa Phước - Sân 1</td>
+                                    <td>31/08/2026<br><span class="text-sm text-muted">19:00 - 20:00</span></td>
+                                    <td><span class="badge badge-success">Đã xác nhận</span></td>
+                                    <td><button class="action-btn">Chi tiết</button></td>
+                                </tr>
+                                <tr>
+                                    <td>#BK002</td>
+                                    <td>Trần Thị B</td>
+                                    <td>Sân An Phúc - Sân A</td>
+                                    <td>31/08/2026<br><span class="text-sm text-muted">18:00 - 19:00</span></td>
+                                    <td><span class="badge badge-warning">Chờ xác nhận</span></td>
+                                    <td><button class="action-btn">Chi tiết</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="../js/admin.js"></script>
+</body>
+</html>

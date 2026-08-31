@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đăng nhập | DN FOOTBALL</title>
+    <link rel="stylesheet" href="../css/auth.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div class="decor-blob blob-1"></div>
+    <div class="decor-blob blob-2"></div>
+
+    <div class="auth-container">
+        <a href="index.html" class="back-link">
+            <i data-lucide="arrow-left"></i> Quay lại trang chủ
+        </a>
+
+        <div class="auth-card">
+            <div class="auth-header">
+                <div class="auth-logo">
+                    <i data-lucide="trophy"></i> DN FOOTBALL
+                </div>
+                <h1>Chào mừng trở lại!</h1>
+                <p>Đăng nhập để tiếp tục với DN Football.</p>
+            </div>
+
+            <form class="auth-form" id="loginForm" novalidate>
+                <div id="auth-message" class="auth-message">
+                    <i data-lucide="info" class="auth-message-icon"></i>
+                    <span class="auth-message-text"></span>
+                    <button type="button" class="auth-message-close">
+                        <i data-lucide="x"></i>
+                    </button>
+                </div>
+                <div class="form-group">
+                    <label for="phone">Số điện thoại</label>
+
+                    <div class="input-wrapper">
+                        <i data-lucide="phone" class="icon-left"></i>
+
+                        <input type="tel" id="phone" class="form-control" placeholder="Nhập số điện thoại của bạn" required>
+                    </div>
+
+                    <span class="error-text">
+                        Vui lòng nhập số điện thoại
+                    </span>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Mật khẩu</label>
+                    <div class="input-wrapper">
+                        <i data-lucide="lock" class="icon-left"></i>
+                        <input type="password" id="password" class="form-control" placeholder="Nhập mật khẩu của bạn" required>
+                        <button type="button" class="btn-toggle-password" tabindex="-1">
+                            <i data-lucide="eye"></i>
+                        </button>
+                    </div>
+                    <span class="error-text">Vui lòng nhập mật khẩu</span>
+                </div>
+
+                <a href="forgot-password.html" class="forgot-password-link">Quên mật khẩu?</a>
+
+                <button type="submit" class="btn-primary" data-loading-text="Đang đăng nhập...">
+                    <span class="btn-text">ĐĂNG NHẬP</span>
+                </button>
+            </form>
+
+            <div class="auth-footer">
+                Chưa có tài khoản? <a href="register.html">Đăng ký ngay</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/auth.js"></script>
+</body>
+</html>

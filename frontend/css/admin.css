@@ -1,0 +1,101 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* GLOBAL CSS (Thay thế style.css) */
+:root {
+    --bg-main: #F8FAFC;
+    --bg-white: #FFFFFF;
+    --text-dark: #0F172A;
+    --text-muted: #64748B;
+    --primary: #16A34A;
+    --primary-hover: #15803d;
+    --primary-light: #F0FDF4;
+    --border: #E2E8F0;
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    --font-main: 'Inter', sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: var(--font-main); background-color: var(--bg-main); color: var(--text-dark); line-height: 1.5; }
+a { text-decoration: none; color: inherit; }
+ul { list-style: none; }
+button { cursor: pointer; font-family: var(--font-main); border: none; }
+.btn-primary { background-color: var(--primary); color: white; padding: 10px 20px; border-radius: 6px; font-weight: 500; transition: background-color 0.2s; }
+.btn-primary:hover { background-color: var(--primary-hover); }
+
+/* ADMIN CSS */
+.admin-layout {
+    display: flex;
+    height: 100vh;
+    background: var(--bg-main);
+    overflow: hidden;
+}
+
+.sidebar {
+    width: 260px;
+    height: 100vh;
+    background: var(--text-dark);
+    color: white;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    position: fixed;
+    top: 0;
+    left: 0;
+}
+.sidebar-header { height: 64px; display: flex; align-items: center; padding: 0 24px; font-size: 1.25rem; font-weight: 700; color: var(--primary); background: rgba(0,0,0,0.2); }
+.sidebar-nav {
+    padding: 20px 0;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+}
+.sidebar-nav a { padding: 12px 24px; color: #94A3B8; display: flex; align-items: center; gap: 12px; font-weight: 500; transition: all 0.2s; }
+.sidebar-nav a i { width: 20px; text-align: center; }
+.sidebar-nav a:hover, .sidebar-nav a.active { color: white; background: rgba(255,255,255,0.05); border-left: 4px solid var(--primary); }
+.sidebar-nav hr { border-color: rgba(255,255,255,0.1); margin: 16px 0; }
+.logout-link { margin-top: auto; color: #ef4444 !important; }
+
+.admin-main {
+    margin-left: 260px;
+    width: calc(100% - 260px);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.admin-topbar { height: 64px; background: white; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 32px; }
+.topbar-search { display: flex; align-items: center; gap: 8px; color: var(--text-muted); background: var(--bg-main); padding: 8px 16px; border-radius: 6px; width: 300px; }
+.topbar-search input { border: none; background: transparent; outline: none; width: 100%; font-family: var(--font-main); }
+.topbar-user { display: flex; align-items: center; gap: 12px; font-weight: 500; }
+
+.admin-content {
+    padding: 32px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 1;
+}
+.page-title { font-size: 1.5rem; font-weight: 700; }
+
+.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-bottom: 24px; }
+.stat-card { background: white; padding: 24px; border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-sm); }
+.stat-title { color: var(--text-muted); font-size: 0.875rem; font-weight: 500; margin-bottom: 8px; }
+.stat-value { font-size: 1.75rem; font-weight: 700; color: var(--text-dark); }
+
+.panel { background: white; border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-sm); }
+.panel-header { padding: 16px 24px; border-bottom: 1px solid var(--border); font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+.table-responsive { width: 100%; overflow-x: auto; }
+.admin-table { width: 100%; border-collapse: collapse; text-align: left; }
+.admin-table th, .admin-table td { padding: 16px 24px; border-bottom: 1px solid var(--border); }
+.admin-table th { background: #F8FAFC; color: var(--text-muted); font-size: 0.875rem; font-weight: 600; }
+.admin-table tr:hover { background: #F8FAFC; }
+
+.badge { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+.badge-success { background: var(--primary-light); color: var(--primary); }
+.badge-warning { background: #fef9c3; color: #ca8a04; }
+.btn-outline-sm { border: 1px solid var(--border); background: white; padding: 6px 12px; border-radius: 4px; font-size: 0.875rem; }
+.btn-outline-sm:hover { background: var(--bg-main); }
+.action-btn { color: var(--primary); background: transparent; font-weight: 500; }
+.text-sm { font-size: 0.875rem; }
+.text-muted { color: var(--text-muted); }
