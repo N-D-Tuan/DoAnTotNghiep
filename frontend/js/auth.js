@@ -6,7 +6,7 @@
 // const API_BASE_URL = '/api';
 
 const API_BASE_URL = 'http://127.0.0.1:8000/api';
-
+let isOtpSent = false;
 
 // ======================================================
 // DOM READY
@@ -108,25 +108,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 // ======================================
                 // QUÊN MẬT KHẨU
                 // ======================================
-                else if (
-                    this.id === 'forgotPasswordForm'
-                ) {
-                    showFormMessage(
-                        this,
-                        'Nếu email tồn tại trong hệ thống, hướng dẫn khôi phục mật khẩu sẽ được gửi đến email của bạn.',
-                        'success'
-                    );
-
-                    setTimeout(() => {
-
-                        window.location.href =
-                            'login.html';
-
-                    }, 1500);
+                else if (this.id === 'forgotPasswordForm') {
+                    if (!isOtpSent) {
+                        await handleSendOTP(this); // Nếu chưa gửi OTP -> chạy hàm Gửi mail
+                    } else {
+                        await handleResetPassword(this); // Nếu đã gửi OTP -> chạy hàm Đổi Pass
+                    }
                 }
 
             } catch (error) {
-
                 console.error('Lỗi authentication:', error);
                 showFormMessage(
                     this,
@@ -169,6 +159,8 @@ function validateForm(form) {
     let isValid = true;
     const inputs = form.querySelectorAll('.form-control');
     inputs.forEach(input => {
+        // BỎ QUA KIỂM TRA LỖI cho các input đang bị ẩn
+        if (input.offsetParent === null) return;
 
         const group = input.closest('.form-group');
 
@@ -731,4 +723,82 @@ function setLoading(
             btn._loadingMsg = null;
         }
     }
+}
+
+// ======================================================
+// 13. GỬI OTP QUÊN MẬT KHẨU
+// ======================================================
+async function handleSendOTP(form) {
+    const email = document.getElementById('email').value.trim();
+
+    const response = await fetch(`${API_BASE_URL}/gui-otp`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email: email })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        showFormMessage(form, data.message || 'Lỗi: Không thể gửi email!', 'error');
+        return;
+    }
+
+    // Nếu thành công: Ẩn Form 1, Hiện Form 2
+    isOtpSent = true;
+    document.getElementById('step-1-email').style.display = 'none';
+    document.getElementById('step-2-reset').style.display = 'block';
+    
+    lucide.createIcons(); // Render lại các icon bị ẩn
+    showFormMessage(form, 'Mã OTP đã được gửi đến hộp thư của bạn!', 'success');
+}
+
+// ======================================================
+// 14. XÁC NHẬN OTP & ĐỔI MẬT KHẨU MỚI
+// ======================================================
+async function handleResetPassword(form) {
+    const email = document.getElementById('email').value.trim();
+    const otp = document.getElementById('otp').value.trim();
+    const newPassword = document.getElementById('new_password').value;
+
+    if (otp.length !== 6) {
+        showFormMessage(form, 'Mã OTP phải có đúng 6 chữ số', 'error');
+        return;
+    }
+    if (newPassword.length < 6) {
+        showFormMessage(form, 'Mật khẩu phải từ 6 ký tự', 'error');
+        return;
+    }
+
+    const response = await fetch(`${API_BASE_URL}/dat-lai-mat-khau`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            email: email,
+            otp: otp,
+            mat_khau_moi: newPassword
+        })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        showFormMessage(form, data.message || 'OTP không hợp lệ hoặc đã hết hạn', 'error');
+        return;
+    }
+
+    showFormMessage(form, 'Đổi mật khẩu thành công! Đang chuyển về Đăng nhập...', 'success');
+    
+    // Tự động điều hướng về login sau 2 giây
+    setTimeout(() => {
+        window.location.href = 'login.html';
+    }, 2000);
 }

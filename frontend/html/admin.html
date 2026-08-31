@@ -12,7 +12,8 @@
     <div class="admin-layout">
         <aside class="sidebar">
             <div class="sidebar-header">
-                <i class="fa-solid fa-futbol"></i> DN FOOTBALL
+                <i class="fa-solid fa-futbol"></i>
+                <span>DN FOOTBALL</span> 
             </div>
             <nav class="sidebar-nav">
                 <a href="#" class="active"><i class="fa-solid fa-chart-pie"></i> TỔNG QUAN</a>
@@ -23,8 +24,8 @@
                 <a href="#"><i class="fa-solid fa-inbox"></i> QUẢN LÝ YÊU CẦU</a>
                 <a href="#"><i class="fa-solid fa-bullhorn"></i> QUẢN LÝ THÔNG BÁO</a>
                 <hr>
-                <a href="#"><i class="fa-solid fa-file-lines"></i> BÁO CÁO</a>
-                <a href="#"><i class="fa-solid fa-gear"></i> CÀI ĐẶT</a>
+                <a href="#" onclick="renderAdminProfile(); return false;"><i class="fa-solid fa-user"></i> TRANG CÁ NHÂN</a>
+                <a href="#" onclick="openChangePasswordModal(); return false;"><i class="fa-solid fa-key"></i> ĐỔI MẬT KHẨU</a>
                 <a href="#" class="logout-link"><i class="fa-solid fa-arrow-right-from-bracket"></i> ĐĂNG XUẤT</a>
             </nav>
         </aside>
@@ -110,6 +111,86 @@
                 </div>
             </div>
         </main>
+    </div>
+
+    <!-- Modal cập nhật thông tin Admin -->
+    <div id="profile-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Chỉnh sửa thông tin</h3>
+                <i class="fa-solid fa-xmark" style="cursor:pointer;" onclick="closeProfileModal()"></i>
+            </div>
+
+            <div id="profile-alert" class="modal-alert"></div>
+
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Họ và tên</label>
+                    <input type="text" id="prof-hoten" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Số điện thoại</label>
+                    <input type="text" id="prof-sdt" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="prof-email" class="form-control">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-outline-sm" onclick="closeProfileModal()">Hủy</button>
+                <button id="btn-save-profile" class="btn-primary btn-disabled" onclick="saveAdminProfile()" disabled>Lưu thay đổi</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Đổi mật khẩu -->
+    <div id="password-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content" style="max-width: 450px;">
+            <div class="modal-header">
+                <h3>Đổi mật khẩu</h3>
+                <i class="fa-solid fa-xmark" onclick="closeChangePasswordModal()"></i>
+            </div>
+
+            <!-- Vùng hiển thị thông báo nội bộ -->
+            <div id="password-alert" class="modal-alert"></div>
+            
+            <div class="modal-body">
+                <!-- Bước 1: Gửi OTP -->
+                <div id="pwd-step-1">
+                    <p class="text-muted" style="font-size: 0.95rem; margin-bottom: 20px;">
+                        Để đảm bảo an toàn, hệ thống sẽ gửi một mã xác nhận (OTP) gồm 6 chữ số đến email của bạn:<br>
+                        <strong id="pwd-user-email" style="color: var(--text-dark); display: block; margin-top: 5px;"></strong>
+                    </p>
+                    <button type="button" id="btn-send-otp" class="btn-primary" style="width: 100%;" onclick="sendPasswordOTP()">
+                        Gửi mã OTP
+                    </button>
+                </div>
+
+                <!-- Bước 2: Nhập OTP & Mật khẩu mới (Mặc định ẩn) -->
+                <div id="pwd-step-2" style="display: none;">
+                    <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 16px;">
+                        Mã OTP 6 số đã được gửi. Vui lòng kiểm tra hộp thư (Mã có hiệu lực 5 phút).
+                    </p>
+                    <div class="form-group">
+                        <label>Mã OTP</label>
+                        <input type="text" id="pwd-otp" class="form-control" placeholder="Nhập mã 6 số" maxlength="6">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 24px;">
+                        <label>Mật khẩu mới</label>
+                        <div style="position: relative;">
+                            <input type="password" id="new-password" class="form-control" placeholder="Từ 6 ký tự trở lên">
+                            <button type="button" class="btn-toggle-password" tabindex="-1">
+                                <i class="fa-solid fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button type="button" id="btn-confirm-pwd" class="btn-primary" style="width: 100%;" onclick="verifyAndChangePassword()">
+                        Xác nhận đổi mật khẩu
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="../js/admin.js"></script>

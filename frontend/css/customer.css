@@ -165,3 +165,45 @@ button { cursor: pointer; font-family: var(--font-main); border: none; }
 @media (max-width: 768px) {
     .main-nav { display: none; }
 }
+
+/* FORM & PROFILE CSS */
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 0.875rem; font-weight: 600; margin-bottom: 6px; color: var(--text-dark); }
+.form-control { width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 6px; font-family: var(--font-main); font-size: 0.95rem; outline: none; transition: border-color 0.2s; }
+.form-control:focus { border-color: var(--primary); }
+.btn-disabled { background-color: #cbd5e1 !important; cursor: not-allowed; }
+
+/* MODAL ALERT */
+.modal-alert {
+    padding: 10px 16px;
+    margin: 16px 24px 0;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    display: none;
+    text-align: center;
+}
+.modal-alert.success { 
+    background-color: var(--primary-light); 
+    color: var(--primary); 
+    border: 1px solid #bbf7d0; 
+}
+.modal-alert.error { 
+    background-color: #fee2e2; 
+    color: #ef4444; 
+    border: 1px solid #fecaca; 
+}
+
+/* Password Toggle */
+.btn-toggle-password {
+    position: absolute;
+    right: 16px; top: 50%;
+    transform: translateY(-50%);
+    background: none; border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: var(--transition);
+}
+.btn-toggle-password:hover { color: var(--text-heading); }
+.btn-toggle-password svg { width: 20px; height: 20px; }

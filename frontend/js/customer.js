@@ -67,39 +67,26 @@ function checkCustomerAuthentication() {
 // HIỂN THỊ THÔNG TIN USER
 // ======================================================
 function loadCustomerInfo() {
+    const updatedUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+    
+    if (!updatedUser) return;
 
-    const userName =
-        document.getElementById(
-            'user-name'
-        );
-
-    const walletBalance =
-        document.getElementById(
-            'user-wallet-balance'
-        );
+    const userName = document.getElementById('user-name');
+    const walletBalance = document.getElementById('user-wallet-balance');
 
     // -----------------------------
     // TÊN
     // -----------------------------
     if (userName) {
-        userName.textContent =
-            currentUser.HoTen ||
-            'Khách hàng';
+        userName.textContent = updatedUser.HoTen || 'Khách hàng';
     }
 
     // -----------------------------
     // SỐ DƯ VÍ
     // -----------------------------
     if (walletBalance) {
-        const balance =
-            Number(
-                currentUser.SoDuVi || 0
-            );
-
-        walletBalance.textContent =
-            balance.toLocaleString(
-                'vi-VN'
-            ) + 'đ';
+        const balance = Number(updatedUser.SoDuVi || 0);
+        walletBalance.textContent = balance.toLocaleString('vi-VN') + 'đ';
     }
 }
 
@@ -152,6 +139,33 @@ let currentPitchName = null;
 let currentPitchType = null;
 
 document.addEventListener('DOMContentLoaded', () => {
+
+        // ==================================================
+        // SHOW / HIDE PASSWORD
+        // ==================================================
+
+        const toggleButtons = document.querySelectorAll('.btn-toggle-password');
+
+        toggleButtons.forEach(btn => {
+            btn.addEventListener('click', function (e) {
+                e.preventDefault();
+                const input = this.previousElementSibling;
+                const icon = this.querySelector('i');
+
+                if (input.type === 'password') {
+                    input.type = 'text';
+                    // Đổi icon sang nhắm mắt
+                    icon.classList.remove('fa-eye');
+                    icon.classList.add('fa-eye-slash');
+                } else {
+                    input.type = 'password';
+                    // Đổi icon sang mở mắt
+                    icon.classList.remove('fa-eye-slash');
+                    icon.classList.add('fa-eye');
+                }
+            });
+        });
+
         // Kiểm tra đăng nhập
         if (!checkCustomerAuthentication()) {
             return;
@@ -256,7 +270,6 @@ function clearAllSlots() {
 }
 
 function checkoutBooking() {
-    alert(`Thành công! Đã đặt ${selectedSlots.length} khung giờ.`);
     selectedSlots = [];
     saveToSession();
     closeCartModal();
@@ -457,4 +470,248 @@ function renderMyBookings() {
             <p style="color: var(--text-muted);">Bạn chưa có lịch sử đặt sân nào.</p>
         </div>
     `;
+}
+
+function showProfileAlert(message, isSuccess) {
+    const alertBox = document.getElementById('profile-alert');
+    alertBox.textContent = message;
+    alertBox.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
+    alertBox.style.display = 'block';
+
+    // Tự động ẩn sau 2 giây
+    setTimeout(() => {
+        alertBox.style.display = 'none';
+    }, 2000);
+}
+
+function openProfileModal() {
+    document.getElementById('profile-alert').style.display = 'none';
+
+    const user = JSON.parse(sessionStorage.getItem('dn_football_user'));
+    if (!user) return;
+    
+    document.getElementById('prof-hoten').value = user.HoTen || '';
+    document.getElementById('prof-sdt').value = user.SoDienThoai || '';
+    document.getElementById('prof-email').value = user.Email || '';
+    
+    document.getElementById('btn-save-profile').disabled = true;
+    document.getElementById('btn-save-profile').classList.add('btn-disabled');
+    document.getElementById('profile-modal').style.display = 'flex';
+    document.getElementById('user-dropdown').classList.remove('show');
+}
+
+function closeProfileModal() {
+    document.getElementById('profile-modal').style.display = 'none';
+}
+
+// Lắng nghe sự kiện thay đổi input để bật nút Lưu
+['prof-hoten', 'prof-sdt', 'prof-email'].forEach(id => {
+    document.getElementById(id).addEventListener('input', () => {
+        const user = JSON.parse(sessionStorage.getItem('dn_football_user'));
+        const isChanged = 
+            document.getElementById('prof-hoten').value !== (user.HoTen || '') ||
+            document.getElementById('prof-sdt').value !== (user.SoDienThoai || '') ||
+            document.getElementById('prof-email').value !== (user.Email || '');
+            
+        const btnSave = document.getElementById('btn-save-profile');
+        if (isChanged) {
+            btnSave.disabled = false;
+            btnSave.classList.remove('btn-disabled');
+        } else {
+            btnSave.disabled = true;
+            btnSave.classList.add('btn-disabled');
+        }
+    });
+});
+
+async function saveProfile() {
+    const btnSave = document.getElementById('btn-save-profile');
+    btnSave.disabled = true;
+    btnSave.textContent = 'Đang lưu...';
+
+    const payload = {
+        ho_ten: document.getElementById('prof-hoten').value,
+        so_dien_thoai: document.getElementById('prof-sdt').value,
+        email: document.getElementById('prof-email').value
+    };
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/cap-nhat-profile`, {
+            method: 'PUT',
+            credentials: 'include',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            showProfileAlert(data.message || 'Có lỗi xảy ra khi cập nhật!', false);
+            btnSave.disabled = false;
+            btnSave.textContent = 'Lưu thay đổi';
+            return;
+        }
+
+        // Cập nhật Session Storage
+        sessionStorage.setItem('dn_football_user', JSON.stringify(data.user));
+        
+        // Cập nhật lại UI Header
+        loadCustomerInfo(); 
+
+        showProfileAlert('Cập nhật thông tin thành công!', true);
+        
+        setTimeout(() => {
+            closeProfileModal();
+            btnSave.textContent = 'Lưu thay đổi';
+        }, 2000);
+
+    } catch (error) {
+        console.error('Lỗi:', error);
+        showProfileAlert('Không thể kết nối đến máy chủ!', false);
+        btnSave.disabled = false;
+        btnSave.textContent = 'Lưu thay đổi';
+    }
+}
+
+// ======================================================
+// MODULE: ĐỔI MẬT KHẨU
+// ======================================================
+
+// 1. Hàm hiển thị thông báo nội bộ cho Modal Mật Khẩu
+function showPasswordAlert(message, isSuccess) {
+    const alertBox = document.getElementById('password-alert');
+    alertBox.textContent = message;
+    alertBox.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
+    alertBox.style.display = 'block';
+
+    setTimeout(() => {
+        alertBox.style.display = 'none';
+    }, 2500);
+}
+
+// 2. Mở Modal
+function openChangePasswordModal() {
+    const user = JSON.parse(sessionStorage.getItem('dn_football_user'));
+    if (!user) return;
+
+    // Ẩn thông báo & Reset trạng thái các bước
+    document.getElementById('password-alert').style.display = 'none';
+    document.getElementById('pwd-step-1').style.display = 'block';
+    document.getElementById('pwd-step-2').style.display = 'none';
+    document.getElementById('pwd-otp').value = '';
+    document.getElementById('new-password').value = '';
+    
+    // In email ra giao diện
+    document.getElementById('pwd-user-email').textContent = user.Email;
+    
+    // Hiển thị Modal
+    document.getElementById('password-modal').style.display = 'flex';
+
+    // Đóng dropdown nếu ở trang Khách hàng
+    const dropdown = document.getElementById('user-dropdown');
+    if(dropdown) dropdown.classList.remove('show');
+    
+    // Đổi màu menu active nếu ở trang Admin
+    const pwdMenu = Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('ĐỔI MẬT KHẨU'));
+    if (pwdMenu) {
+        document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+        pwdMenu.classList.add('active');
+    }
+}
+
+// 3. Đóng Modal
+function closeChangePasswordModal() {
+    document.getElementById('password-modal').style.display = 'none';
+}
+
+// 4. API Gửi OTP
+async function sendPasswordOTP() {
+    const btn = document.getElementById('btn-send-otp');
+    btn.disabled = true;
+    btn.textContent = 'Đang gửi mã...';
+
+    const user = JSON.parse(sessionStorage.getItem('dn_football_user'));
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/gui-otp`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: user.Email })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            showPasswordAlert(data.message || 'Có lỗi khi gửi OTP', false);
+            btn.disabled = false;
+            btn.textContent = 'Gửi mã OTP';
+            return;
+        }
+
+        // Thành công -> Chuyển sang Bước 2
+        showPasswordAlert('Mã OTP đã được gửi đến email của bạn!', true);
+        document.getElementById('pwd-step-1').style.display = 'none';
+        document.getElementById('pwd-step-2').style.display = 'block';
+
+    } catch (error) {
+        showPasswordAlert('Không thể kết nối máy chủ', false);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Gửi mã OTP';
+    }
+}
+
+// 5. API Xác nhận và Đổi mật khẩu
+async function verifyAndChangePassword() {
+    const otp = document.getElementById('pwd-otp').value.trim();
+    const newPassword = document.getElementById('new-password').value;
+    const btn = document.getElementById('btn-confirm-pwd');
+
+    if (otp.length !== 6) return showPasswordAlert('Mã OTP phải có đúng 6 chữ số', false);
+    if (newPassword.length < 6) return showPasswordAlert('Mật khẩu mới phải từ 6 ký tự', false);
+
+    btn.disabled = true;
+    btn.textContent = 'Đang xử lý...';
+    
+    const user = JSON.parse(sessionStorage.getItem('dn_football_user'));
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/dat-lai-mat-khau`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email: user.Email,
+                otp: otp,
+                mat_khau_moi: newPassword
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            showPasswordAlert(data.message || 'Mã OTP không hợp lệ', false);
+            btn.disabled = false;
+            btn.textContent = 'Xác nhận đổi mật khẩu';
+            return;
+        }
+
+        showPasswordAlert('Đổi mật khẩu thành công!', true);
+        
+        // Thành công -> Đợi 2 giây để user đọc thông báo rồi đóng Modal
+        setTimeout(() => {
+            closeChangePasswordModal();
+            btn.disabled = false;
+            btn.textContent = 'Xác nhận đổi mật khẩu';
+        }, 2000);
+
+    } catch (error) {
+        showPasswordAlert('Không thể kết nối máy chủ', false);
+        btn.disabled = false;
+        btn.textContent = 'Xác nhận đổi mật khẩu';
+    }
 }
