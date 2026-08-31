@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sân bóng - DN FOOTBALL</title>
+    <link rel="stylesheet" href="../css/customer.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <header class="customer-header">
+        <div class="container header-inner">
+            <div class="logo" onclick="renderClusters()" style="cursor: pointer;">
+                <i class="fa-solid fa-futbol" style="color: var(--primary);"></i> DN FOOTBALL
+            </div>
+            <nav class="main-nav">
+                <a href="#" class="active" onclick="renderClusters(); return false;">Sân bóng</a>
+                <a href="#" onclick="renderMyBookings(); return false;">Lịch sử đặt sân</a>
+                <a href="#">Các yêu cầu</a>
+            </nav>
+            <div class="user-actions">
+                <!-- Ví tiền thiết kế mới trực quan -->
+                <div class="user-wallet">
+                    <i class="fa-solid fa-wallet"></i>
+                    <span id="user-wallet-balance">0đ</span>
+                    <button class="wallet-topup" title="Nạp tiền">+</button>
+                </div>
+
+                <div class="notification" id="notif-btn">
+                    <i class="fa-regular fa-bell"></i>
+                    <span class="badge">3</span>
+                </div>
+
+                <div class="user-dropdown-toggle" id="user-menu-btn">
+                    <div class="user-avatar">👤</div>
+                    <span id="user-name">Người dùng</span>
+                    <i class="fa-solid fa-chevron-down text-sm"></i>
+                </div>
+                
+                <div class="dropdown-menu" id="user-dropdown">
+                    <a href="#"><i class="fa-regular fa-user"></i> Trang cá nhân</a>
+                    <a href="#" onclick="renderMyBookings(); return false;"><i class="fa-regular fa-calendar-days"></i> Lịch sử đặt sân</a>
+                    <a href="#"><i class="fa-regular fa-file-lines"></i> Các yêu cầu</a>
+                    <hr>
+                    <a href="#" id="customer-logout-btn" style="color: #ef4444;">
+                        <i class="fa-solid fa-right-from-bracket"></i> Đăng xuất
+                    </a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container" id="app-content">
+        <!-- Render bằng Javascript -->
+    </main>
+
+    <!-- Thanh thông báo giỏ hàng nổi lưu trạng thái qua sessionStorage -->
+    <div id="floating-cart" class="floating-cart" style="display: none;">
+        <div class="container cart-inner">
+            <div class="cart-info">
+                <i class="fa-solid fa-cart-shopping"></i>
+                <span>Đã chọn: <strong id="cart-count">0</strong> khung giờ</span>
+            </div>
+            <div class="cart-actions">
+                <button class="btn-outline-white" onclick="openCartModal()">Xem chi tiết</button>
+                <button class="btn-primary" onclick="checkoutBooking()">Tiến hành đặt sân</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal chi tiết các sân đã chọn -->
+    <div id="cart-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Khung giờ đã chọn (Lưu trữ phiên)</h3>
+                <i class="fa-solid fa-xmark" onclick="closeCartModal()"></i>
+            </div>
+            <div class="modal-body" id="modal-cart-list"></div>
+            <div class="modal-footer">
+                <button class="btn-outline" onclick="clearAllSlots()" style="width: auto;">Xóa tất cả</button>
+                <button class="btn-primary" onclick="checkoutBooking()">Thanh toán ngay</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/customer.js"></script>
+</body>
+</html>
