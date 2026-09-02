@@ -17,12 +17,12 @@
             </div>
             <nav class="sidebar-nav">
                 <a href="#" class="active"><i class="fa-solid fa-chart-pie"></i> TỔNG QUAN</a>
-                <a href="#"><i class="fa-solid fa-layer-group"></i> QUẢN LÝ SÂN</a>
+                <a href="#" onclick="renderQuanLySan(); return false;"><i class="fa-solid fa-layer-group"></i> QUẢN LÝ SÂN</a>
                 <a href="#"><i class="fa-solid fa-users"></i> QUẢN LÝ KHÁCH HÀNG</a>
                 <a href="#"><i class="fa-solid fa-calendar-check"></i> QUẢN LÝ ĐẶT SÂN</a>
-                <a href="#"><i class="fa-solid fa-wallet"></i> QUẢN LÝ GIAO DỊCH</a>
-                <a href="#"><i class="fa-solid fa-inbox"></i> QUẢN LÝ YÊU CẦU</a>
-                <a href="#"><i class="fa-solid fa-bullhorn"></i> QUẢN LÝ THÔNG BÁO</a>
+                <a href="#"><i class="fa-solid fa-wallet"></i> YÊU CẦU RÚT TIỀN</a>
+                <a href="#"><i class="fa-solid fa-calendar-xmark"></i> YÊU CẦU HỦY SÂN</a>
+                <a href="#"><i class="fa-solid fa-flag-checkered"></i> YÊU CẦU GIẢI ĐẤU</a>
                 <hr>
                 <a href="#" onclick="renderAdminProfile(); return false;"><i class="fa-solid fa-user"></i> TRANG CÁ NHÂN</a>
                 <a href="#" onclick="openChangePasswordModal(); return false;"><i class="fa-solid fa-key"></i> ĐỔI MẬT KHẨU</a>
@@ -189,6 +189,88 @@
                         Xác nhận đổi mật khẩu
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Thêm cụm sân -->
+    <div id="cumsan-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="cumsan-modal-title">Thêm Cụm Sân Mới</h3>
+                <i class="fa-solid fa-xmark" style="cursor:pointer;" onclick="closeCumSanModal()"></i>
+            </div>
+            
+            <div id="cumsan-alert" class="modal-alert"></div>
+            
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Tên cụm sân <span style="color: red;">*</span></label>
+                    <input type="text" id="cs-ten" class="form-control" placeholder="VD: Cụm sân Đa Phước">
+                </div>
+                <div class="form-group">
+                    <label>Khu vực (Phường / Xã) <span style="color: red;">*</span></label>
+                    <select id="cs-phuong" class="form-control">
+                        <!-- Đổ dữ liệu từ API Phường -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Địa chỉ chi tiết <span style="color: red;">*</span></label>
+                    <input type="text" id="cs-diachi" class="form-control" placeholder="Số nhà, Tên đường...">
+                </div>
+                <div class="form-group">
+                    <label>Hình ảnh đại diện (Tùy chọn)</label>
+                    <input type="file" id="cs-hinhanh" class="form-control" accept="image/*">
+                </div>
+                <div style="display: flex; gap: 16px;">
+                    <div class="form-group" style="flex: 1;">
+                        <label>Giờ mở cửa <span style="color: red;">*</span></label>
+                        <select id="cs-giomo" class="form-control"></select>
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label>Giờ đóng cửa <span style="color: red;">*</span></label>
+                        <select id="cs-giodong" class="form-control"></select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button type="button" class="btn-outline-sm" onclick="closeCumSanModal()">Hủy</button>
+                <button type="button" class="btn-primary" onclick="saveCumSan()">Lưu Cụm Sân</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Thêm/Sửa Sân Bóng -->
+    <div id="sanbong-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3 id="sanbong-modal-title">Thêm Sân Con</h3>
+                <i class="fa-solid fa-xmark" style="cursor:pointer;" onclick="closeSanBongModal()"></i>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="sb-id">
+                <div class="form-group">
+                    <label>Tên sân (VD: Sân 1, Sân A) <span style="color: red;">*</span></label>
+                    <input type="text" id="sb-ten" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Loại Sân <span style="color: red;">*</span></label>
+                    <select id="sb-loaisan" class="form-control">
+                        <!-- Đổ từ API Loại Sân -->
+                    </select>
+                </div>
+                <div class="form-group" id="group-trangthai" style="display: none;">
+                    <label>Trạng Thái</label>
+                    <select id="sb-trangthai" class="form-control">
+                        <option value="HoatDong">Hoạt Động</option>
+                        <option value="BaoTri">Bảo Trì (Tạm đóng)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-outline-sm" onclick="closeSanBongModal()">Hủy</button>
+                <button type="button" class="btn-primary" onclick="saveSanBong()">Lưu Sân Bóng</button>
             </div>
         </div>
     </div>

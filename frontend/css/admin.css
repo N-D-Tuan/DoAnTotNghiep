@@ -96,7 +96,46 @@ button { cursor: pointer; font-family: var(--font-main); border: none; }
 .badge-warning { background: #fef9c3; color: #ca8a04; }
 .btn-outline-sm { border: 1px solid var(--border); background: white; padding: 6px 12px; border-radius: 4px; font-size: 0.875rem; }
 .btn-outline-sm:hover { background: var(--bg-main); }
-.action-btn { color: var(--primary); background: transparent; font-weight: 500; }
+.action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+
+    padding: 8px 13px;
+    border: 1px solid #dbeafe;
+    border-radius: 8px;
+
+    color: #2563eb;
+    background: #f8fbff;
+
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+
+    transition:
+        background-color 0.2s ease,
+        color 0.2s ease,
+        border-color 0.2s ease,
+        box-shadow 0.2s ease,
+        transform 0.2s ease;
+}
+
+.action-btn i {
+    font-size: 13px;
+}
+
+.action-btn:hover {
+    color: #fff;
+    background: linear-gradient(135deg, #2563eb, #3b82f6);
+    border-color: #2563eb;
+    box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25);
+    transform: translateY(-1px);
+}
+
+.action-btn:active {
+    transform: scale(0.97);
+}
+
 .text-sm { font-size: 0.875rem; }
 .text-muted { color: var(--text-muted); }
 
@@ -207,3 +246,30 @@ button { cursor: pointer; font-family: var(--font-main); border: none; }
 }
 .btn-toggle-password:hover { color: var(--text-heading); }
 .btn-toggle-password svg { width: 20px; height: 20px; }
+
+/* GIAO DIỆN THẺ CỤM SÂN */
+.cumsan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px; margin-top: 24px; }
+.cumsan-card { background: white; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-sm); cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; position: relative; }
+.cumsan-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); border-color: var(--primary); }
+.cumsan-card-img { height: 160px; background: #e2e8f0; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 2.5rem; }
+.cumsan-card-body { padding: 20px; }
+.cumsan-title { font-size: 1.25rem; font-weight: 700; color: var(--text-dark); margin-bottom: 12px; }
+.cumsan-info { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
+.cumsan-info i { width: 16px; text-align: center; color: var(--primary); }
+.cumsan-actions { position: absolute; top: 12px; right: 12px; display: flex; gap: 8px; }
+.cumsan-actions button { background: white; border-radius: 50%; width: 36px; height: 36px; box-shadow: var(--shadow-sm); transition: all 0.2s; }
+.cumsan-actions button:hover { background: var(--bg-main); color: var(--primary); }
+
+/* Nút quay lại ở trang chi tiết */
+.btn-back { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text-muted); cursor: pointer; margin-bottom: 20px; transition: color 0.2s; background: none; font-size: 1rem; }
+.btn-back:hover { color: var(--primary); }
+
+/* Giao diện Sân Bóng & Giá Tiền */
+.price-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; margin-top: 12px; }
+.price-card { background: #f8fafc; border: 1px solid var(--border); padding: 12px; border-radius: 8px; text-align: center; }
+.price-card .time-label { font-weight: 600; color: var(--text-dark); margin-bottom: 8px; font-size: 0.95rem; }
+.price-input { text-align: center; font-weight: 600; color: var(--primary); }
+.price-input::placeholder { color: #cbd5e1; font-weight: 400; font-size: 0.85rem; }
+.section-loaisan { margin-bottom: 32px; background: white; padding: 20px; border-radius: 8px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); }
+.section-loaisan-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px dashed var(--border); padding-bottom: 12px; margin-bottom: 16px; }
+.section-loaisan-title { font-size: 1.1rem; font-weight: 700; color: var(--text-dark); }
