@@ -10,6 +10,8 @@ let currentPitchId = null;
 let currentPitchName = null;
 let currentLoaiSanId = null;
 let currentPitchType = null;
+let userActiveTournaments = [];
+let currentBookingPurpose = sessionStorage.getItem('dn_football_booking_purpose') || 'normal';
 
 // ======================================================
 // USER ĐANG ĐĂNG NHẬP
@@ -196,41 +198,128 @@ function updateFloatingCart() {
     const cartBar = document.getElementById('floating-cart');
     const cartCount = document.getElementById('cart-count');
     
-    if (selectedSlots.length > 0) {
-        cartBar.style.display = 'block';
-        cartCount.innerText = selectedSlots.length;
-    } else {
-        cartBar.style.display = 'none';
+    cartBar.style.display = 'block';
+    cartCount.innerText = selectedSlots.length;
+    
+    const btnFloatingCheckout = document.querySelector('.cart-actions .btn-primary'); // Nút Tiến hành đặt sân
+    const btnFloatingClear = document.querySelector('.cart-actions button[onclick="clearAllSlots()"]'); // Nút Xóa tất cả (nếu có)
+    const isEmpty = selectedSlots.length === 0;
+
+    if (btnFloatingCheckout) {
+        btnFloatingCheckout.disabled = isEmpty;
+        isEmpty ? btnFloatingCheckout.classList.add('btn-disabled') : btnFloatingCheckout.classList.remove('btn-disabled');
+    }
+    if (btnFloatingClear) {
+        btnFloatingClear.disabled = isEmpty;
+        isEmpty ? btnFloatingClear.classList.add('btn-disabled') : btnFloatingClear.classList.remove('btn-disabled');
     }
 }
 
-function openCartModal() {
+async function openCartModal() {
     const modal = document.getElementById('cart-modal');
     const modalList = document.getElementById('modal-cart-list');
 
     const alertBox = document.getElementById('cart-alert');
     if (alertBox) alertBox.style.display = 'none';
+
+    // Gọi API giả định lấy danh sách Giải đấu "Đã duyệt" của user hiện tại
+    try {
+        const res = await fetch(`${API_BASE_URL}/giai-dau/da-duyet`, { credentials: 'include' });
+        if (res.ok) {
+            const data = await res.json();
+            userActiveTournaments = data.data || [];
+        }
+    } catch (e) {
+        console.error('Chưa có API lấy giải đấu', e);
+    }
     
-    if (selectedSlots.length === 0) {
-        modalList.innerHTML = `<p style="text-align: center; color: var(--text-muted); padding: 20px;">Chưa có khung giờ nào được chọn.</p>`;
-    } else {
-        let totalAmount = selectedSlots.reduce((sum, s) => sum + Number(s.price), 0);
-        modalList.innerHTML = selectedSlots.map((s, index) => `
-            <div class="cart-item-card">
-                <div class="cart-item-info">
-                    <h4>${s.clusterName} - ${s.pitchName}</h4>
-                    <p>Ngày: ${s.date} | Giờ: <strong style="color: var(--primary);">${s.time}</strong></p>
-                    <p>Giá: <strong>${Number(s.price).toLocaleString('vi-VN')}đ</strong></p>
-                </div>
-                <i class="fa-solid fa-trash-can cart-item-remove" onclick="removeSlotByIndex(${index})"></i>
-            </div>
-        `).join('') + `
-            <div style="text-align:right; margin-top: 15px; font-size: 1.1rem; border-top: 1px dashed #ccc; padding-top: 10px;">
-                <strong>Tổng cộng: <span style="color: var(--primary);">${totalAmount.toLocaleString('vi-VN')}đ</span></strong>
+    // Giao diện Dropdown nếu khách có giải đấu
+    let tournamentHtml = '';
+    if (userActiveTournaments.length > 0) {
+        tournamentHtml = `
+            <div style="margin-bottom: 15px; padding: 12px; background: var(--primary-light); border: 1px solid #bbf7d0; border-radius: 8px;">
+                <label style="font-weight: 600; font-size: 0.9rem; color: var(--primary); display: block; margin-bottom: 6px;">Mục đích đặt sân:</label>
+                <select id="booking-purpose" class="form-control" onchange="handlePurposeChange(this)" style="border-color: #bbf7d0;">
+                    <option value="normal" ${currentBookingPurpose === 'normal' ? 'selected' : ''}>Đá phong trào (Cọc 30% - Tối đa 7 ngày)</option>
+                    ${userActiveTournaments.map(t => `<option value="${t.ID}" ${currentBookingPurpose == t.ID ? 'selected' : ''}>Giải đấu: ${t.TenGiaiDau} (Cọc 50%)</option>`).join('')}
+                </select>
             </div>
         `;
     }
+    
+    if (selectedSlots.length === 0) {
+        modalList.innerHTML = tournamentHtml + `<p style="text-align: center; color: var(--text-muted); padding: 20px;">Chưa có khung giờ nào được chọn.</p>`;
+    } else {
+        let totalAmount = selectedSlots.reduce((sum, s) => sum + Number(s.price), 0);
+        modalList.innerHTML = tournamentHtml + `
+            <div id="cart-items-container" style="max-height: 250px; overflow-y: auto;">
+                ${selectedSlots.map((s, index) => `
+                    <div class="cart-item-card">
+                        <div class="cart-item-info">
+                            <h4>${s.clusterName} - ${s.pitchName}</h4>
+                            <p>Ngày: ${s.date} | Giờ: <strong style="color: var(--primary);">${s.time}</strong></p>
+                            <p>Giá: <strong>${Number(s.price).toLocaleString('vi-VN')}đ</strong></p>
+                        </div>
+                        <i class="fa-solid fa-trash-can cart-item-remove" onclick="removeSlotByIndex(${index})"></i>
+                    </div>
+                `).join('')}
+            </div>
+            <div style="text-align:right; margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 10px;">
+                <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 4px;">Tổng tiền sân: ${totalAmount.toLocaleString('vi-VN')}đ</div>
+                <div style="font-size: 1.15rem; font-weight: 700;">Tiền cần cọc: <span id="cart-deposit-amount" style="color: var(--primary);">0đ</span></div>
+            </div>
+        `;
+        // Tự động tính tiền cọc ngay khi mở modal
+        setTimeout(updateCartTotal, 50);
+    }
+
+    const btnModalCheckout = document.querySelector('#cart-modal .btn-primary'); // Nút Thanh toán ngay
+    const btnModalClear = document.querySelector('#cart-modal button[onclick="clearAllSlots()"]'); // Nút Xóa tất cả
+    const isEmpty = selectedSlots.length === 0;
+
+    if (btnModalCheckout) {
+        btnModalCheckout.disabled = isEmpty;
+        isEmpty ? btnModalCheckout.classList.add('btn-disabled') : btnModalCheckout.classList.remove('btn-disabled');
+    }
+    if (btnModalClear) {
+        btnModalClear.disabled = isEmpty;
+        isEmpty ? btnModalClear.classList.add('btn-disabled') : btnModalClear.classList.remove('btn-disabled');
+    }
+
     modal.style.display = 'flex';
+}
+
+// Hàm xử lý khi khách hàng thay đổi mục đích đặt sân
+function handlePurposeChange(selectElement) {
+    if (selectedSlots.length > 0) {
+        const isConfirm = confirm("Thay đổi mục đích sẽ xóa toàn bộ các khung giờ bạn đang chọn để tính toán lại. Bạn có chắc chắn?");
+        if (!isConfirm) {
+            selectElement.value = currentBookingPurpose;
+            return;
+        }
+        
+        currentBookingPurpose = selectElement.value;
+        sessionStorage.setItem('dn_football_booking_purpose', currentBookingPurpose); // Ghi nhớ vào Session
+        clearAllSlots();
+        return;
+    }
+    
+    currentBookingPurpose = selectElement.value;
+    sessionStorage.setItem('dn_football_booking_purpose', currentBookingPurpose); // Ghi nhớ vào Session
+    updateCartTotal();
+}
+
+// Hàm tính toán linh hoạt tiền cọc 30% hoặc 50%
+function updateCartTotal() {
+    let depositRate = (currentBookingPurpose !== 'normal') ? 0.5 : 0.3; 
+    
+    let totalAmount = selectedSlots.reduce((sum, s) => sum + Number(s.price), 0);
+    let depositAmount = totalAmount * depositRate;
+    
+    const depositEl = document.getElementById('cart-deposit-amount');
+    if (depositEl) {
+        depositEl.innerText = depositAmount.toLocaleString('vi-VN') + 'đ';
+    }
 }
 
 function closeCartModal() {
@@ -521,6 +610,18 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
             <div class="page-header" style="margin-top: 10px;">
                 <h1 class="page-title">${pitchName}</h1>
                 <p class="page-subtitle">Loại sân: ${pitchType} | Chọn các khung giờ bên dưới để đặt lịch</p>
+            </div>
+
+            <div style="margin: 20px 0; padding: 18px 24px; background-color: #fffbeb; border-left: 5px solid #f59e0b; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                <h4 style="color: #b45309; margin-bottom: 12px; font-size: 1.05rem; display: flex; align-items: center; gap: 8px; font-weight: 700;">
+                    <i class="fa-solid fa-circle-exclamation" style="font-size: 1.2rem;"></i> QUY ĐỊNH ĐẶT SÂN & HỦY SÂN
+                </h4>
+                <ul style="color: #78350f; font-size: 0.9rem; margin-left: 20px; line-height: 1.7;">
+                    <li><strong>Mức tiền cọc:</strong> Khách đặt phong trào cần cọc <strong>30%</strong>. Đơn vị tổ chức Giải đấu cọc <strong>50%</strong> tổng giá trị sân.</li>
+                    <li><strong>Hướng dẫn đá giải:</strong> Vui lòng mở Giỏ hàng ở Xem chi tiết và chọn "Mục đích đặt sân: Giải đấu" để hệ thống mở khóa lịch dài hạn và tính cọc tương ứng.</li>
+                    <li><strong>Hủy sân thường:</strong> Bạn được phép tự hủy lịch miễn phí trên hệ thống nếu thời gian bắt đầu trận đấu còn <strong>trên 10 tiếng</strong>.</li>
+                    <li><strong>Hủy sân gấp:</strong> Nếu còn <strong>dưới 10 tiếng</strong>, bạn phải gửi "Yêu cầu hủy gấp" trong mục Lịch sử đặt sân. Yêu cầu này cần được Admin phê duyệt (có thể từ chối hoàn cọc tùy lý do).</li>
+                </ul>
             </div>
             
             <div class="schedule-container">
