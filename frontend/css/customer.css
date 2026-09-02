@@ -207,3 +207,42 @@ button { cursor: pointer; font-family: var(--font-main); border: none; }
 }
 .btn-toggle-password:hover { color: var(--text-heading); }
 .btn-toggle-password svg { width: 20px; height: 20px; }
+
+/* CUSTOMER CLUSTER DETAIL HEADER */
+.cluster-detail-header {
+    margin: 20px 0 32px;
+    padding: 24px 30px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, #0b5d3b 0%, #16A34A 100%);
+    color: #ffffff;
+    box-shadow: 0 10px 20px rgba(22, 163, 74, 0.15);
+    border-left: 6px solid #fde047;
+}
+.cluster-detail-title {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+    color: #ffffff;
+}
+.cluster-detail-info {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    font-size: 0.95rem;
+    color: rgba(255, 255, 255, 0.9);
+}
+.cluster-detail-info span {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.cluster-detail-info i {
+    background: rgba(255, 255, 255, 0.2);
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    color: #fde047;
+}
