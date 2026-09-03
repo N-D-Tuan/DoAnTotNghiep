@@ -225,9 +225,18 @@ function saveToSession() {
 function updateFloatingCart() {
     const cartBar = document.getElementById('floating-cart');
     const cartCount = document.getElementById('cart-count');
+    const cartDeposit = document.getElementById('floating-cart-deposit');
     
     cartBar.style.display = 'block';
     cartCount.innerText = selectedSlots.length;
+
+    let depositRate = (currentBookingPurpose !== 'normal') ? 0.5 : 0.3; 
+    let totalAmount = selectedSlots.reduce((sum, s) => sum + Number(s.price), 0);
+    let depositAmount = totalAmount * depositRate;
+    
+    if (cartDeposit) {
+        cartDeposit.innerText = depositAmount.toLocaleString('vi-VN') + 'đ';
+    }
     
     const btnFloatingCheckout = document.querySelector('.cart-actions .btn-primary'); // Nút Tiến hành đặt sân
     const btnFloatingClear = document.querySelector('.cart-actions button[onclick="clearAllSlots()"]'); // Nút Xóa tất cả (nếu có)
@@ -415,6 +424,7 @@ function closeCartModal() {
 
     if (currentClusterId !== null && currentPitchId !== null) {
         let isPurposeMismatched = false;
+        let needReRender = false;
 
         if (currentBookingPurpose !== 'normal') {
             const tour = userActiveTournaments.find(t => t.ID == currentBookingPurpose);
@@ -425,6 +435,7 @@ function closeCartModal() {
                 selectedSlots = [];
                 saveToSession();
                 isPurposeMismatched = true;
+                needReRender = true;
             }
         }
 
@@ -432,10 +443,12 @@ function closeCartModal() {
         if (isPurposeMismatched || (selectedSlots.length > 0 && selectedSlots[0].clusterId !== currentClusterId)) {
             selectedSlots = [];
             saveToSession();
+            needReRender = true;
         }
 
-        // Tự động kích hoạt lại hàm vẽ lịch để giao diện cập nhật ngay lập tức
-        renderSchedule(currentClusterId, currentClusterName, currentPitchId, currentPitchName, currentLoaiSanId, currentPitchType);
+        if (needReRender) {
+            renderSchedule(currentClusterId, currentClusterName, currentPitchId, currentPitchName, currentLoaiSanId, currentPitchType);
+        }
     }
 }
 
