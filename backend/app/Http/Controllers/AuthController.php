@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\NguoiDung;
+use App\Models\GiaiDau;
+//use App\Models\DatSan;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -58,8 +60,7 @@ class AuthController extends Controller
         if (Auth::attempt($credentials)) {
             $user = Auth::user();
             
-            // Nếu bạn dùng API (Sanctum/Passport), bạn sẽ tạo Token ở đây.
-            // Ví dụ với Sanctum: $token = $user->createToken('auth_token')->plainTextToken;
+            $this->tuDongCapNhatHeThong();
 
             return response()->json([
                 'message' => 'Đăng nhập thành công',
@@ -168,5 +169,23 @@ class AuthController extends Controller
         $user->save();
 
         return response()->json(['message' => 'Đổi mật khẩu thành công!']);
+    }
+
+    private function tuDongCapNhatHeThong()
+    {
+        $today = now();
+        $ngayHetHan = now()->subDays(3);
+
+        // 1. Cập nhật Giải đấu
+        GiaiDau::where('TrangThai', 'DaDuyet')
+            ->where('NgayDuyet', '<', $ngayHetHan)
+            ->update(['TrangThai' => 'HetHan']);
+
+        GiaiDau::whereIn('TrangThai', ['DaDuyet', 'HetHan'])
+            ->whereDate('NgayBatDau', '<=', $today->toDateString())
+            ->update(['TrangThai' => 'HoanThanh']);
+
+        // 2. Cập nhật Đặt sân (Bổ sung sau)
+        // DatSan::where('TrangThai', '...')->update([...]);
     }
 }

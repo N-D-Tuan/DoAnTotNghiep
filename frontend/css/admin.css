@@ -68,7 +68,7 @@ button { cursor: pointer; font-family: var(--font-main); border: none; }
 .admin-topbar { height: 64px; background: white; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 32px; }
 .topbar-search { display: flex; align-items: center; gap: 8px; color: var(--text-muted); background: var(--bg-main); padding: 8px 16px; border-radius: 6px; width: 300px; }
 .topbar-search input { border: none; background: transparent; outline: none; width: 100%; font-family: var(--font-main); }
-.topbar-user { display: flex; align-items: center; gap: 12px; font-weight: 500; }
+.topbar-user { display: flex; align-items: center; gap: 12px; font-weight: 500; margin-left: auto;}
 
 .admin-content {
     padding: 32px;
@@ -94,6 +94,7 @@ button { cursor: pointer; font-family: var(--font-main); border: none; }
 .badge { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
 .badge-success { background: var(--primary-light); color: var(--primary); }
 .badge-warning { background: #fef9c3; color: #ca8a04; }
+.badge-danger { background: #fee2e2; color: #b91c1c; }
 .btn-outline-sm { border: 1px solid var(--border); background: white; padding: 6px 12px; border-radius: 4px; font-size: 0.875rem; }
 .btn-outline-sm:hover { background: var(--bg-main); }
 .action-btn {

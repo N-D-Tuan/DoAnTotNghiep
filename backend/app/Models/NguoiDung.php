@@ -26,4 +26,34 @@ class NguoiDung extends Authenticatable
     {
         return $this->MatKhau;
     }
+
+    public function giaiDaus()
+    {
+        return $this->hasMany(GiaiDau::class, 'ID_NguoiDung', 'ID');
+    }
+
+    public function datSans()
+    {
+        return $this->hasMany(DatSan::class, 'ID_NguoiDung', 'ID');
+    }
+
+    public function giaoDichs()
+    {
+        return $this->hasMany(GiaoDich::class, 'ID_NguoiDung', 'ID');
+    }
+
+    public function yeuCauHuyGaps()
+    {
+        return $this->hasMany(YeuCauHuyGap::class, 'ID_NguoiDung', 'ID');
+    }
+
+    public function yeuCauRutTiens()
+    {
+        return $this->hasMany(YeuCauRutTien::class, 'ID_NguoiDung', 'ID');
+    }
+
+    public function thongBaos()
+    {
+        return $this->hasMany(ThongBao::class, 'ID_NguoiDung', 'ID');
+    }
 }

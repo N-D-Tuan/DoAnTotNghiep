@@ -189,6 +189,34 @@ function setupDropdowns() {
     document.addEventListener('click', () => menu.classList.remove('show'));
 }
 
+function updateActiveNav(functionName) {
+    // 1. Quét và cập nhật thanh điều hướng chính (main-nav)
+    document.querySelectorAll('.main-nav a').forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('onclick') && link.getAttribute('onclick').includes(functionName)) {
+            link.classList.add('active');
+        }
+    });
+
+    // 2. Quét và cập nhật menu thả xuống (user-dropdown)
+    document.querySelectorAll('#user-dropdown a').forEach(link => {
+        link.classList.remove('active'); // Xóa trạng thái cũ
+        
+        // Reset lại style mặc định để tránh bị dính màu cũ
+        link.style.color = ''; 
+        link.style.fontWeight = ''; 
+        link.style.backgroundColor = '';
+
+        // Nếu trùng khớp với trang đang mở
+        if (link.getAttribute('onclick') && link.getAttribute('onclick').includes(functionName)) {
+            link.classList.add('active');
+            link.style.color = 'var(--primary)'; 
+            link.style.fontWeight = '600';
+            link.style.backgroundColor = 'var(--primary-light)'; 
+        }
+    });
+}
+
 function saveToSession() {
     sessionStorage.setItem('dn_football_selected_slots', JSON.stringify(selectedSlots));
     updateFloatingCart();
@@ -215,33 +243,61 @@ function updateFloatingCart() {
     }
 }
 
+// Hàm gọi API lấy danh sách giải đấu Đã Duyệt của khách hàng
+async function loadUserTournaments() {
+    try {
+        const res = await fetch(`${API_BASE_URL}/giai-dau/cua-toi`, { credentials: 'include' });
+        if (res.ok) {
+            const data = await res.json();
+            // Lọc và chỉ lưu lại các giải đấu đã được duyệt vào biến toàn cục
+            userActiveTournaments = (data.data || []).filter(t => t.TrangThai === 'DaDuyet');
+        }
+    } catch (e) {
+        console.error('Lỗi lấy danh sách giải đấu:', e);
+    }
+    return userActiveTournaments;
+}
+
 async function openCartModal() {
     const modal = document.getElementById('cart-modal');
     const modalList = document.getElementById('modal-cart-list');
-
     const alertBox = document.getElementById('cart-alert');
     if (alertBox) alertBox.style.display = 'none';
 
-    // Gọi API giả định lấy danh sách Giải đấu "Đã duyệt" của user hiện tại
-    try {
-        const res = await fetch(`${API_BASE_URL}/giai-dau/da-duyet`, { credentials: 'include' });
-        if (res.ok) {
-            const data = await res.json();
-            userActiveTournaments = data.data || [];
-        }
-    } catch (e) {
-        console.error('Chưa có API lấy giải đấu', e);
-    }
+    // Đợi tải danh sách giải đấu trước khi render giao diện
+    await loadUserTournaments();
     
-    // Giao diện Dropdown nếu khách có giải đấu
+    // ====================================================
+    // BỔ SUNG LOGIC LỌC GIẢI ĐẤU THEO CỤM SÂN
+    // ====================================================
+    // Lấy ID cụm sân hiện tại (Hoặc lấy từ dữ liệu giỏ hàng nếu khách đang đứng ở trang chủ)
+    let activeClusterId = currentClusterId;
+    if (!activeClusterId && selectedSlots.length > 0) {
+        activeClusterId = selectedSlots[0].clusterId;
+    }
+
+    // Chỉ giữ lại các giải đấu có ID_CumSan trùng khớp với Cụm sân đang xem
+    const validTournaments = activeClusterId 
+        ? userActiveTournaments.filter(t => t.ID_CumSan == activeClusterId || t.id_cum_san == activeClusterId) 
+        : [];
+    
+    if (currentBookingPurpose !== 'normal') {
+        const isPurposeValid = validTournaments.some(t => t.ID == currentBookingPurpose);
+        if (!isPurposeValid) {
+            currentBookingPurpose = 'normal';
+            sessionStorage.setItem('dn_football_booking_purpose', 'normal');
+        }
+    }
+
+    // Giao diện Dropdown (Thay biến userActiveTournaments thành validTournaments)
     let tournamentHtml = '';
-    if (userActiveTournaments.length > 0) {
+    if (validTournaments.length > 0) {
         tournamentHtml = `
             <div style="margin-bottom: 15px; padding: 12px; background: var(--primary-light); border: 1px solid #bbf7d0; border-radius: 8px;">
                 <label style="font-weight: 600; font-size: 0.9rem; color: var(--primary); display: block; margin-bottom: 6px;">Mục đích đặt sân:</label>
                 <select id="booking-purpose" class="form-control" onchange="handlePurposeChange(this)" style="border-color: #bbf7d0;">
-                    <option value="normal" ${currentBookingPurpose === 'normal' ? 'selected' : ''}>Đá phong trào (Cọc 30% - Tối đa 7 ngày)</option>
-                    ${userActiveTournaments.map(t => `<option value="${t.ID}" ${currentBookingPurpose == t.ID ? 'selected' : ''}>Giải đấu: ${t.TenGiaiDau} (Cọc 50%)</option>`).join('')}
+                    <option value="normal" ${currentBookingPurpose === 'normal' ? 'selected' : ''}>Đá phong trào (Cọc 30% - Lịch 7 ngày)</option>
+                    ${validTournaments.map(t => `<option value="${t.ID}" ${currentBookingPurpose == t.ID ? 'selected' : ''}>Giải đấu: ${t.TenGiaiDau} (Cọc 50% - Theo lịch giải)</option>`).join('')}
                 </select>
             </div>
         `;
@@ -269,12 +325,11 @@ async function openCartModal() {
                 <div style="font-size: 1.15rem; font-weight: 700;">Tiền cần cọc: <span id="cart-deposit-amount" style="color: var(--primary);">0đ</span></div>
             </div>
         `;
-        // Tự động tính tiền cọc ngay khi mở modal
         setTimeout(updateCartTotal, 50);
     }
 
-    const btnModalCheckout = document.querySelector('#cart-modal .btn-primary'); // Nút Thanh toán ngay
-    const btnModalClear = document.querySelector('#cart-modal button[onclick="clearAllSlots()"]'); // Nút Xóa tất cả
+    const btnModalCheckout = document.querySelector('#cart-modal .btn-primary'); 
+    const btnModalClear = document.querySelector('#cart-modal button[onclick="clearAllSlots()"]'); 
     const isEmpty = selectedSlots.length === 0;
 
     if (btnModalCheckout) {
@@ -289,24 +344,54 @@ async function openCartModal() {
     modal.style.display = 'flex';
 }
 
-// Hàm xử lý khi khách hàng thay đổi mục đích đặt sân
+// Biến tạm để ghi nhớ trạng thái đang chờ xác nhận
+let pendingBookingPurpose = null;
+let pendingSelectElement = null;
+
 function handlePurposeChange(selectElement) {
     if (selectedSlots.length > 0) {
-        const isConfirm = confirm("Thay đổi mục đích sẽ xóa toàn bộ các khung giờ bạn đang chọn để tính toán lại. Bạn có chắc chắn?");
-        if (!isConfirm) {
-            selectElement.value = currentBookingPurpose;
-            return;
-        }
-        
+        // Ghi nhớ mục đích muốn đổi và hiển thị Modal xác nhận
+        pendingBookingPurpose = selectElement.value;
+        pendingSelectElement = selectElement;
+        document.getElementById('purpose-confirm-modal').style.display = 'flex';
+    } else {
+        // Nếu giỏ hàng đang trống, cho phép đổi ngay lập tức không cần xác nhận
         currentBookingPurpose = selectElement.value;
-        sessionStorage.setItem('dn_football_booking_purpose', currentBookingPurpose); // Ghi nhớ vào Session
-        clearAllSlots();
-        return;
+        sessionStorage.setItem('dn_football_booking_purpose', currentBookingPurpose); 
+        updateCartTotal();
+    }
+}
+
+function confirmPurposeChange() {
+    // 1. Đóng Modal xác nhận
+    document.getElementById('purpose-confirm-modal').style.display = 'none';
+    
+    // 2. Chấp nhận thay đổi
+    if (pendingBookingPurpose !== null) {
+        currentBookingPurpose = pendingBookingPurpose;
+        sessionStorage.setItem('dn_football_booking_purpose', currentBookingPurpose); 
+        
+        // 3. Xóa giỏ hàng và render lại (Hàm clearAllSlots đã chứa sẵn logic này)
+        clearAllSlots(); 
     }
     
-    currentBookingPurpose = selectElement.value;
-    sessionStorage.setItem('dn_football_booking_purpose', currentBookingPurpose); // Ghi nhớ vào Session
-    updateCartTotal();
+    // 4. Reset biến tạm
+    pendingBookingPurpose = null;
+    pendingSelectElement = null;
+}
+
+function cancelPurposeChange() {
+    // 1. Đóng Modal xác nhận
+    document.getElementById('purpose-confirm-modal').style.display = 'none';
+    
+    // 2. Trả Dropdown trên màn hình về lại giá trị cũ
+    if (pendingSelectElement) {
+        pendingSelectElement.value = currentBookingPurpose;
+    }
+    
+    // 3. Reset biến tạm
+    pendingBookingPurpose = null;
+    pendingSelectElement = null;
 }
 
 // Hàm tính toán linh hoạt tiền cọc 30% hoặc 50%
@@ -327,6 +412,31 @@ function closeCartModal() {
 
     const alertBox = document.getElementById('cart-alert');
     if (alertBox) alertBox.style.display = 'none';
+
+    if (currentClusterId !== null && currentPitchId !== null) {
+        let isPurposeMismatched = false;
+
+        if (currentBookingPurpose !== 'normal') {
+            const tour = userActiveTournaments.find(t => t.ID == currentBookingPurpose);
+            // Nếu giải đấu không thuộc cụm sân hiện tại -> Ép về normal và xóa giỏ hàng
+            if (!tour || (tour.ID_CumSan != currentClusterId && tour.id_cum_san != currentClusterId)) {
+                currentBookingPurpose = 'normal';
+                sessionStorage.setItem('dn_football_booking_purpose', 'normal');
+                selectedSlots = [];
+                saveToSession();
+                isPurposeMismatched = true;
+            }
+        }
+
+        // Nếu giỏ hàng có chứa sân thuộc cụm khác, hoặc vừa bị ép về normal -> Vẽ lại lịch ngay lập tức
+        if (isPurposeMismatched || (selectedSlots.length > 0 && selectedSlots[0].clusterId !== currentClusterId)) {
+            selectedSlots = [];
+            saveToSession();
+        }
+
+        // Tự động kích hoạt lại hàm vẽ lịch để giao diện cập nhật ngay lập tức
+        renderSchedule(currentClusterId, currentClusterName, currentPitchId, currentPitchName, currentLoaiSanId, currentPitchType);
+    }
 }
 
 function removeSlotByIndex(index) {
@@ -451,6 +561,8 @@ async function checkoutBooking() {
 }
 
 async function renderClusters() {
+    updateActiveNav('renderClusters');
+
     currentClusterId = null; currentPitchName = null; currentPitchId = null;
     appContent.innerHTML = `<div style="text-align:center; padding: 50px;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải danh sách sân...</div>`;
 
@@ -497,6 +609,19 @@ async function renderClusters() {
 }
 
 async function renderPitches(clusterId, clusterName, clusterAddress, gioMo, gioDong) {
+    await loadUserTournaments();
+    if (currentBookingPurpose !== 'normal') {
+        const tour = userActiveTournaments.find(t => t.ID == currentBookingPurpose);
+        // Kiểm tra xem giải đấu có thuộc về cụm sân vừa click không
+        if (!tour || (tour.ID_CumSan != clusterId && tour.id_cum_san != clusterId)) {
+            // Trả về bình thường và xóa sạch giỏ hàng
+            currentBookingPurpose = 'normal';
+            sessionStorage.setItem('dn_football_booking_purpose', 'normal');
+            selectedSlots = [];
+            saveToSession(); // Cập nhật lại UI giỏ hàng
+        }
+    }
+
     if (clusterId) currentClusterId = clusterId; 
     if (clusterName) currentClusterName = clusterName;
     if (clusterAddress !== undefined && clusterAddress !== '') currentClusterAddress = clusterAddress;
@@ -566,6 +691,22 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
     appContent.innerHTML = `<div style="text-align:center; padding: 50px;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải lịch...</div>`;
 
     try {
+        // Tải giải đấu trước để xem khách đang ở chế độ Đặt thường hay Đá giải
+        await loadUserTournaments();
+
+        // ====================================================
+        // BỔ SUNG: KIỂM TRA LẠI ĐỂ BẢO VỆ GIAO DIỆN LỊCH SÂN
+        // ====================================================
+        if (currentBookingPurpose !== 'normal') {
+            const tour = userActiveTournaments.find(t => t.ID == currentBookingPurpose);
+            if (!tour || (tour.ID_CumSan != clusterId && tour.id_cum_san != clusterId)) {
+                currentBookingPurpose = 'normal';
+                sessionStorage.setItem('dn_football_booking_purpose', 'normal');
+                selectedSlots = [];
+                saveToSession();
+            }
+        }
+
         const [gtRes, kgRes] = await Promise.all([
             fetch(`${API_BASE_URL}/gia-tien?cum_san_id=${clusterId}`),
             fetch(`${API_BASE_URL}/khung-gio`)
@@ -574,7 +715,6 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
         const giaTienData = (await gtRes.json()).data || [];
         const allKhungGio = (await kgRes.json()).data || [];
 
-        // Lọc ra các khung giờ đã được set Giá cho đúng Loại sân này
         const validPrices = giaTienData.filter(gt => gt.ID_LoaiSan == loaiSanId);
         const validKhungGioIds = validPrices.map(gt => gt.ID_KhungGio);
         const availableTimeSlots = allKhungGio.filter(kg => validKhungGioIds.includes(kg.ID));
@@ -589,15 +729,44 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
             return;
         }
 
-        // Tạo ngày (7 ngày tới)
-        const today = new Date();
-        const next7Days = [];
-        for(let i = 0; i < 7; i++) {
-            let d = new Date(today); d.setDate(today.getDate() + i);
-            next7Days.push({
-                short: d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }),
-                full: d.toLocaleDateString('vi-VN') // Định dạng: DD/MM/YYYY
-            });
+        // ====================================================
+        // THUẬT TOÁN TÍNH TOÁN NGÀY CỘT HIỂN THỊ
+        // ====================================================
+        let dateArray = [];
+        let isTournamentMode = false;
+
+        if (currentBookingPurpose !== 'normal') {
+            const selectedTournament = userActiveTournaments.find(t => t.ID == currentBookingPurpose);
+            if (selectedTournament) {
+                isTournamentMode = true;
+                
+                // Đọc ngày YYYY-MM-DD từ DB
+                let dStart = new Date(selectedTournament.NgayBatDau);
+                let dEnd = new Date(selectedTournament.NgayKetThuc);
+                
+                // Thuật toán lặp từ ngày khai mạc đến bế mạc
+                for (let d = new Date(dStart); d <= dEnd; d.setDate(d.getDate() + 1)) {
+                    const pad = n => n < 10 ? '0' + n : n; // Hàm thêm số 0 cho chuẩn DD/MM
+                    dateArray.push({
+                        short: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`,
+                        full: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`
+                    });
+                }
+            }
+        }
+
+        // Nếu đá phong trào (hoặc giải lỗi), hiện 7 ngày như cũ
+        if (!isTournamentMode) {
+            const today = new Date();
+            for(let i = 0; i < 7; i++) {
+                let d = new Date(today); 
+                d.setDate(today.getDate() + i);
+                const pad = n => n < 10 ? '0' + n : n;
+                dateArray.push({
+                    short: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`,
+                    full: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`
+                });
+            }
         }
 
         let html = `
@@ -608,35 +777,61 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                 Sân bóng &gt; ${currentClusterName} &gt; <strong>${pitchName}</strong>
             </div>
             <div class="page-header" style="margin-top: 10px;">
-                <h1 class="page-title">${pitchName}</h1>
+                <h1 class="page-title">${pitchName} ${isTournamentMode ? `<span class="badge badge-success" style="font-size: 0.9rem;">Chế độ đá giải</span>` : ''}</h1>
                 <p class="page-subtitle">Loại sân: ${pitchType} | Chọn các khung giờ bên dưới để đặt lịch</p>
             </div>
 
-            <div style="margin: 20px 0; padding: 18px 24px; background-color: #fffbeb; border-left: 5px solid #f59e0b; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                <h4 style="color: #b45309; margin-bottom: 12px; font-size: 1.05rem; display: flex; align-items: center; gap: 8px; font-weight: 700;">
-                    <i class="fa-solid fa-circle-exclamation" style="font-size: 1.2rem;"></i> QUY ĐỊNH ĐẶT SÂN & HỦY SÂN
-                </h4>
-                <ul style="color: #78350f; font-size: 0.9rem; margin-left: 20px; line-height: 1.7;">
-                    <li><strong>Mức tiền cọc:</strong> Khách đặt phong trào cần cọc <strong>30%</strong>. Đơn vị tổ chức Giải đấu cọc <strong>50%</strong> tổng giá trị sân.</li>
-                    <li><strong>Hướng dẫn đá giải:</strong> Vui lòng mở Giỏ hàng ở Xem chi tiết và chọn "Mục đích đặt sân: Giải đấu" để hệ thống mở khóa lịch dài hạn và tính cọc tương ứng.</li>
-                    <li><strong>Hủy sân thường:</strong> Bạn được phép tự hủy lịch miễn phí trên hệ thống nếu thời gian bắt đầu trận đấu còn <strong>trên 10 tiếng</strong>.</li>
-                    <li><strong>Hủy sân gấp:</strong> Nếu còn <strong>dưới 10 tiếng</strong>, bạn phải gửi "Yêu cầu hủy gấp" trong mục Lịch sử đặt sân. Yêu cầu này cần được Admin phê duyệt (có thể từ chối hoàn cọc tùy lý do).</li>
-                </ul>
+            <!-- Khung Quy định dạng Dropdown / Popover bấm vào mới mở -->
+            <div style="margin: 20px 0; position: relative; display: inline-block;">
+                <!-- Nút icon dấu chấm than -->
+                <button type="button" onclick="toggleRuleDropdown(event)" style="background-color: #fffbeb; color: #b45309; border: 1px solid #f59e0b; padding: 8px 16px; border-radius: 8px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                    <i class="fa-solid fa-circle-exclamation" style="font-size: 1.1rem;"></i> Quy định đặt sân
+                </button>
+
+                <!-- Hộp nội dung quy định (Mặc định ẩn: display: none) -->
+                <div id="rule-dropdown-box" style="display: none; position: absolute; top: 110%; left: 0; width: 800px; background-color: #fffbeb; border: 1px solid #f59e0b; border-radius: 8px; padding: 18px 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 99;">
+                    <h4 style="color: #b45309; margin-bottom: 12px; font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                        <i class="fa-solid fa-circle-exclamation"></i> QUY ĐỊNH ĐẶT SÂN CHI TIẾT
+                    </h4>
+                    <ul style="color: #78350f; font-size: 0.9rem; margin-left: 20px; line-height: 1.7;">
+                        <li><strong>Đặt sân phong trào:</strong>
+                            <ul style="margin-top: 4px; margin-bottom: 6px; list-style-type: disc;">
+                                <li>Phạm vi lịch hiển thị: Xem và đặt trước trong vòng <strong>7 ngày tới</strong>.</li>
+                                <li>Mức tiền cọc: Thanh toán trước <strong>30%</strong> tổng giá trị sân.</li>
+                            </ul>
+                        </li>
+                        <li style="margin-top: 6px;"><strong>Đặt sân đá giải:</strong>
+                            <ul style="margin-top: 4px; margin-bottom: 6px; list-style-type: disc;">
+                                <li>Điều kiện: Giải đấu phải được Admin phê duyệt tại đúng cụm sân tương ứng. Khách hàng cần mở Giỏ hàng và chọn đúng mục đích "Giải đấu" để hệ thống mở khóa lịch theo giải.</li>
+                                <li>Phạm vi lịch hiển thị: Render toàn bộ khung giờ trải dài từ <strong>Ngày bắt đầu đến Ngày kết thúc</strong> của giải đấu.</li>
+                                <li>Thời hạn thực hiện: Phải hoàn tất việc đặt lịch trong vòng <strong>3 ngày</strong> kể từ ngày giải đấu được duyệt.</li>
+                                <li>Mức tiền cọc: Thanh toán trước <strong>50%</strong> tổng giá trị sân giải đấu.</li>
+                            </ul>
+                        </li>
+                        <li style="margin-top: 6px;"><strong>Quy định hủy lịch chung:</strong>
+                            <ul style="margin-top: 4px; list-style-type: disc;">
+                                <li>Hủy miễn phí: Tự hủy trực tiếp trên hệ thống nếu thời gian diễn ra trận đấu còn <strong>trên 10 tiếng</strong> đổi với đá phong trào và trước <strong>1 tuần</strong> với đá giải.</li>
+                                <li>Hủy gấp: Nếu qua thời gian hủy, bắt buộc phải tạo "Yêu cầu hủy gấp" trong mục Lịch sử đặt sân để chờ Admin phê duyệt hoàn cọc (tùy theo lý do).</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
             </div>
             
             <div class="schedule-container">
-                <table class="schedule-table">
-                    <thead style="position: sticky; top: 0; background: #F8FAFC; z-index: 1;">
-                        <tr>
-                            <th>Khung giờ</th>
-                            <th>Giá tiền</th>
-                            ${next7Days.map(d => `<th>${d.short}</th>`).join('')}
-                        </tr>
-                    </thead>
-                    <tbody>
+                <!-- Bọc thẻ table-responsive cho phép cuộn ngang (Scroll) khi lịch giải đấu dài -->
+                <div class="table-responsive" style="overflow-x: auto; white-space: nowrap;"> 
+                    <table class="schedule-table" style="min-width: 100%;">
+                        <thead style="position: sticky; top: 0; background: #F8FAFC; z-index: 1;">
+                            <tr>
+                                <th style="min-width: 120px;">Khung giờ</th>
+                                <th style="min-width: 100px;">Giá tiền</th>
+                                ${dateArray.map(d => `<th style="min-width: 90px;">${d.short}</th>`).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
         `;
 
-        // Lấy thời gian hiện tại của hệ thống để làm chuẩn so sánh
         const now = new Date();
 
         availableTimeSlots.forEach((kg) => {
@@ -648,25 +843,21 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                         <td><strong>${timeStr}</strong></td>
                         <td style="color: var(--primary); font-weight: 600;">${Number(priceValue).toLocaleString('vi-VN')}đ</td>`;
                         
-            next7Days.forEach((date) => {
+            dateArray.forEach((date) => {
                 const slotId = `${clusterName}-${pitchName}-${date.full}-${timeStr}`;
-                const isBooked = false; // Tạm thời để trống đợi API Đặt sân
+                const isBooked = false; 
                 const isSelected = selectedSlots.some(s => s.id === slotId);
                 
-                // --- BẮT ĐẦU LOGIC KIỂM TRA QUÁ GIỜ ---
-                // Tách chuỗi ngày DD/MM/YYYY và giờ HH:mm:ss để tạo object Date của slot
                 const [day, month, year] = date.full.split('/');
                 const [startHour, startMinute] = kg.GioBatDau.split(':');
                 const slotDateTime = new Date(year, month - 1, day, startHour, startMinute);
                 
-                // Nếu thời gian bắt đầu của ca <= thời gian hiện tại -> Đã quá giờ
                 const isPast = slotDateTime <= now; 
-                // ----------------------------------------
                 
                 let statusClass = 'available', statusText = 'CÒN TRỐNG';
                 
                 if (isPast) {
-                    statusClass = 'booked'; // Dùng chung style mờ của booked
+                    statusClass = 'booked'; 
                     statusText = 'Quá giờ';
                 } else if (isBooked) { 
                     statusClass = 'booked'; 
@@ -676,7 +867,6 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                     statusText = 'ĐÃ CHỌN ✓'; 
                 }
                 
-                // Chỉ gán sự kiện onclick nếu khung giờ đó chưa bị đặt và chưa bị quá giờ
                 html += `
                     <td>
                         <div class="slot ${statusClass}" 
@@ -688,7 +878,7 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
             });
             html += `</tr>`;
         });
-        html += `</tbody></table></div>`;
+        html += `</tbody></table></div></div>`;
         appContent.innerHTML = html;
     } catch (e) { console.error(e); }
 }
@@ -709,6 +899,8 @@ function toggleSlot(element, clusterId, clusterName, pitchId, pitchName, date, t
 }
 
 function renderMyBookings() {
+    updateActiveNav('renderMyBookings');
+
     currentClusterId = null;
     currentPitchName = null;
     currentPitchType = null;
@@ -967,3 +1159,292 @@ async function verifyAndChangePassword() {
         btn.textContent = 'Xác nhận đổi mật khẩu';
     }
 }
+
+async function renderRequests(activeTab = 'giai_dau') {
+    updateActiveNav('renderRequests');
+    currentClusterId = null;
+
+    const activeStyle = "padding: 10px 16px; border-bottom: 2px solid var(--primary); color: var(--primary); font-weight: 600; background: none; border-top: none; border-left: none; border-right: none; cursor: pointer;";
+    const inactiveStyle = "padding: 10px 16px; color: var(--text-muted); background: none; font-weight: 500; border: none; cursor: pointer;";
+
+    appContent.innerHTML = `
+        <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 16px;">
+            <div>
+                <h1 class="page-title">Quản lý Yêu cầu</h1>
+                <p class="page-subtitle">Theo dõi các đơn xin tổ chức giải đấu, hủy sân gấp và rút tiền</p>
+            </div>
+            
+            ${activeTab === 'giai_dau' ? `
+            <button class="btn-primary" onclick="openCreateTournamentModal()" style="display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-plus"></i> Tạo Yêu cầu Giải đấu
+            </button>` : ''}
+        </div>
+
+        <div style="display: flex; gap: 16px; margin-bottom: 20px; border-bottom: 1px solid var(--border);">
+            <button style="${activeTab === 'giai_dau' ? activeStyle : inactiveStyle}" onclick="renderRequests('giai_dau')">Giải đấu</button>
+            <button style="${activeTab === 'huy_san' ? activeStyle : inactiveStyle}" onclick="renderRequests('huy_san')">Hủy sân gấp</button>
+            <button style="${activeTab === 'rut_tien' ? activeStyle : inactiveStyle}" onclick="renderRequests('rut_tien')">Rút tiền</button>
+        </div>
+
+        <div id="requests-content-body" class="schedule-container" style="padding: 20px; text-align: center; background: var(--bg-white); border-radius: 12px; box-shadow: var(--shadow-sm);">
+            <i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem; color: var(--primary);"></i>
+        </div>
+    `;
+
+    const container = document.getElementById('requests-content-body');
+
+    if (activeTab === 'giai_dau') {
+        try {
+            // Cần tạo API Backend cho route này sau
+            const response = await fetch(`${API_BASE_URL}/giai-dau/cua-toi`, { credentials: 'include' });
+            if (!response.ok) throw new Error('API chưa sẵn sàng');
+            
+            const res = await response.json();
+            const list = res.data || [];
+
+            if (list.length === 0) {
+                container.innerHTML = `
+                    <div style="padding: 40px;">
+                        <i class="fa-regular fa-folder-open" style="font-size: 3rem; color: var(--border); margin-bottom: 16px;"></i>
+                        <p style="color: var(--text-muted); font-size: 1.05rem;">Bạn chưa có yêu cầu tổ chức giải đấu nào.</p>
+                    </div>`;
+            } else {
+                // Thiết lập max-height tạo Scroll dọc chứa khoảng 4-5 item
+                let html = `<div style="display: flex; flex-direction: column; gap: 12px; max-height: 480px; overflow-y: auto; padding-right: 8px; text-align: left;">`;
+                
+                list.forEach(item => {
+                    // 1. Tạo từ điển dịch trạng thái
+                    const statusTextMap = {
+                        'ChoDuyet': 'Chờ duyệt',
+                        'DaDuyet': 'Đã duyệt',
+                        'TuChoi': 'Từ chối',
+                        'HetHan': 'Hết hạn',
+                        'HoanThanh': 'Hoàn thành',
+                        'DaHuy': 'Đã hủy'
+                    };
+                    
+                    // Lấy trạng thái tiếng Việt (nếu mã không khớp sẽ giữ nguyên gốc)
+                    const viStatus = statusTextMap[item.TrangThai] || item.TrangThai;
+
+                    let badgeColor = '#6b7280', badgeBg = '#f3f4f6'; 
+                    if(item.TrangThai === 'DaDuyet') { badgeColor = '#047857'; badgeBg = '#d1fae5'; }
+                    else if(item.TrangThai === 'TuChoi' || item.TrangThai === 'DaHuy') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; }
+                    else if(item.TrangThai === 'ChoDuyet') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; }
+                    else if(item.TrangThai === 'HetHan') { badgeColor = '#9ca3af'; badgeBg = '#f3f4f6'; }
+
+                    // 1. Xử lý logic tính ngày duyệt và ngày hết hạn (duyệt + 3 ngày)
+                    let approvalInfoHtml = '';
+                    
+                    if (item.TrangThai === 'DaDuyet' && item.NgayDuyet) {
+                        const d = new Date(item.NgayDuyet);
+                        
+                        // Tạo biến dExp và cộng thêm 3 ngày
+                        const dExp = new Date(d);
+                        dExp.setDate(d.getDate() + 3);
+                        
+                        // Hàm format ngày định dạng YYYY-MM-DD an toàn theo giờ Local
+                        const pad = n => n < 10 ? '0' + n : n;
+                        const fApprove = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+                        const fExp = `${dExp.getFullYear()}-${pad(dExp.getMonth() + 1)}-${pad(dExp.getDate())}`;
+
+                        // Tạo khối HTML hiển thị riêng
+                        approvalInfoHtml = `
+                            <p style="margin: 6px 0 0 0; font-size: 0.9rem; color: #047857;">
+                                <i class="fa-solid fa-calendar-check"></i> Ngày duyệt: <strong>${fApprove}</strong> 
+                                <span style="margin-left: 15px; color: #b91c1c;">
+                                    <i class="fa-solid fa-hourglass-half"></i> Ngày hết hạn: <strong>${fExp}</strong>
+                                </span>
+                            </p>
+                        `;
+                    }
+
+                    // 2. Chèn biến approvalInfoHtml vào cấu trúc HTML
+                    html += `
+                        <div style="border: 1px solid var(--border); border-radius: 8px; padding: 16px; background: #fff; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <div>
+                                <h4 style="margin: 0 0 8px 0; color: var(--text-dark); font-size: 1.1rem;">${item.TenGiaiDau}</h4>
+                                <p style="margin: 0 0 6px 0; font-size: 0.9rem; color: var(--text-muted);">
+                                    <i class="fa-regular fa-calendar"></i> Lịch đá: ${item.NgayBatDau} đến ${item.NgayKetThuc}
+                                </p>
+                                <p style="margin: 0; font-size: 0.9rem; color: var(--text-muted);">
+                                    <i class="fa-solid fa-location-dot"></i> Cụm sân: <strong style="color:var(--text-dark);">${item.cum_san ? item.cum_san.TenCumSan : 'Không xác định'}</strong>
+                                    <span style="margin-left: 10px; font-size: 0.8rem;">(Ngày nộp: ${item.NgayTao ? item.NgayTao.substring(0,10) : 'N/A'})</span>
+                                </p>
+                                <!-- Dòng thông tin phê duyệt sẽ chỉ hiện ra nếu được duyệt -->
+                                ${approvalInfoHtml}
+                            </div>
+                            <div>
+                                <span style="padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${viStatus}</span>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += `</div>`;
+                container.innerHTML = html;
+            }
+        } catch (e) {
+            container.innerHTML = `<div style="padding: 40px; color: var(--text-muted);">API chưa kết nối. Giao diện danh sách giải đấu đã sẵn sàng.</div>`;
+        }
+    } else if (activeTab === 'huy_san') {
+        container.innerHTML = `
+            <div style="padding: 40px;">
+                <i class="fa-regular fa-calendar-xmark" style="font-size: 3rem; color: var(--border); margin-bottom: 16px;"></i>
+                <p style="color: var(--text-muted); font-size: 1.05rem;">Bạn chưa có yêu cầu hủy sân gấp nào.</p>
+            </div>`;
+    } else if (activeTab === 'rut_tien') {
+        container.innerHTML = `
+            <div style="padding: 40px;">
+                <i class="fa-solid fa-money-bill-transfer" style="font-size: 3rem; color: var(--border); margin-bottom: 16px;"></i>
+                <p style="color: var(--text-muted); font-size: 1.05rem;">Bạn chưa có lịch sử rút tiền nào.</p>
+            </div>`;
+    }
+}
+
+// ======================================================
+// MODULE: TẠO YÊU CẦU GIẢI ĐẤU
+// ======================================================
+
+// 1. Hàm hiển thị thông báo ngay trong Modal
+function showTournamentAlert(message, isSuccess) {
+    const alertBox = document.getElementById('tournament-alert');
+    alertBox.textContent = message;
+    alertBox.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
+    alertBox.style.display = 'block';
+}
+
+// 2. Hàm mở Modal và gọi API lấy danh sách Cụm sân đổ vào Dropdown
+async function openCreateTournamentModal() {
+    // Reset form và ẩn thông báo
+    document.getElementById('tournament-alert').style.display = 'none';
+    document.getElementById('tour-name').value = '';
+    document.getElementById('tour-start-date').value = '';
+    document.getElementById('tour-end-date').value = '';
+    document.getElementById('tour-desc').value = '';
+    
+    const clusterSelect = document.getElementById('tour-cluster');
+    clusterSelect.innerHTML = '<option value="">Đang tải dữ liệu...</option>';
+    
+    document.getElementById('create-tournament-modal').style.display = 'flex';
+
+    // Gọi API lấy cụm sân (Tái sử dụng API đã có)
+    try {
+        const response = await fetch(`${API_BASE_URL}/cum-san`);
+        const res = await response.json();
+        
+        // Lọc các cụm sân chưa bị xóa
+        const activeClusters = res.data.filter(c => c.deleted_at === null);
+        
+        if (activeClusters.length === 0) {
+            clusterSelect.innerHTML = '<option value="">Không có cụm sân nào hoạt động</option>';
+            return;
+        }
+        
+        clusterSelect.innerHTML = '<option value="">-- Chọn cụm sân --</option>' + 
+            activeClusters.map(c => `<option value="${c.ID}">${c.TenCumSan} - ${c.DiaChi}</option>`).join('');
+    } catch (error) {
+        clusterSelect.innerHTML = '<option value="">Lỗi kết nối máy chủ</option>';
+    }
+}
+
+// 3. Hàm đóng Modal
+function closeCreateTournamentModal() {
+    document.getElementById('create-tournament-modal').style.display = 'none';
+}
+
+// 4. Hàm Gửi yêu cầu qua API (Xử lý bất đồng bộ)
+async function submitTournamentRequest() {
+    const btn = document.getElementById('btn-submit-tournament');
+    const clusterId = document.getElementById('tour-cluster').value;
+    const name = document.getElementById('tour-name').value.trim();
+    const startDate = document.getElementById('tour-start-date').value;
+    const endDate = document.getElementById('tour-end-date').value;
+    const desc = document.getElementById('tour-desc').value.trim();
+
+    // Xác thực dữ liệu đầu vào trực tiếp trên JS
+    if (!clusterId) return showTournamentAlert('Vui lòng chọn cụm sân!', false);
+    if (!name) return showTournamentAlert('Vui lòng nhập tên giải đấu!', false);
+    if (!startDate || !endDate) return showTournamentAlert('Vui lòng chọn đầy đủ ngày bắt đầu và kết thúc!', false);
+    
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (start < today) return showTournamentAlert('Ngày bắt đầu không được trong quá khứ!', false);
+    if (end < start) return showTournamentAlert('Ngày kết thúc phải sau hoặc bằng ngày bắt đầu!', false);
+
+    // Chuyển UI sang trạng thái chờ
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/giai-dau/tao-yeu-cau`, {
+            method: 'POST',
+            credentials: 'include', // Bắt buộc để gửi kèm Session/Cookie định danh user
+            headers: { 
+                'Accept': 'application/json', 
+                'Content-Type': 'application/json' 
+            },
+            body: JSON.stringify({
+                id_cum_san: clusterId,
+                ten_giai_dau: name,
+                ngay_bat_dau: startDate,
+                ngay_ket_thuc: endDate,
+                noi_dung: desc
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            // Lấy thông báo lỗi đầu tiên từ validation của Laravel (nếu có)
+            let errorMsg = data.message || 'Có lỗi xảy ra!';
+            if (data.errors) {
+                errorMsg = Object.values(data.errors)[0][0];
+            }
+            showTournamentAlert(errorMsg, false);
+            btn.disabled = false;
+            btn.innerHTML = 'Gửi yêu cầu';
+            return;
+        }
+
+        // Thành công: Hiển thị thông báo xanh
+        showTournamentAlert('Gửi yêu cầu thành công! Vui lòng chờ Admin duyệt.', true);
+        
+        // Tự động đóng Modal sau 2 giây và vẽ lại danh sách yêu cầu
+        setTimeout(() => {
+            closeCreateTournamentModal();
+            renderRequests('giai_dau'); // Load lại danh sách giải đấu vừa tạo
+            btn.disabled = false;
+            btn.innerHTML = 'Gửi yêu cầu';
+        }, 2000);
+
+    } catch (error) {
+        showTournamentAlert('Không thể kết nối đến máy chủ!', false);
+        btn.disabled = false;
+        btn.innerHTML = 'Gửi yêu cầu';
+    }
+}
+
+// ======================================================
+// MODULE: XỬ LÝ BẬT/TẮT HỘP QUY ĐỊNH DẠNG POPOVER
+// ======================================================
+function toggleRuleDropdown(event) {
+    event.stopPropagation(); // Ngăn sự kiện nổi bọt để tránh bị window click đóng ngay lập tức
+    const box = document.getElementById('rule-dropdown-box');
+    if (box) {
+        box.style.display = (box.style.display === 'block') ? 'none' : 'block';
+    }
+}
+
+// Bắt sự kiện click toàn màn hình để ẩn hộp quy định khi bấm ra ngoài
+window.addEventListener('click', function(e) {
+    const box = document.getElementById('rule-dropdown-box');
+    if (box && box.style.display === 'block') {
+        // Kiểm tra xem cú click có nằm bên trong hộp quy định hay không
+        // Nếu click bên ngoài -> ẩn hộp đi
+        if (!box.contains(e.target)) {
+            box.style.display = 'none';
+        }
+    }
+});

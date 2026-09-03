@@ -1104,3 +1104,330 @@ function switchSanTab(tabId, element) {
     element.classList.add('active');
     document.getElementById(tabId).classList.add('active');
 }
+
+// ======================================================
+// MODULE: QUẢN LÝ YÊU CẦU GIẢI ĐẤU
+// ======================================================
+
+// Các biến toàn cục quản lý trạng thái của trang Giải Đấu
+let allGiaiDauData = []; 
+let currentGDPage = 1;
+const itemsPerGDPage = 5; // Số dòng trên mỗi trang
+let currentGDFilter = 'All';
+let currentGDSearch = '';
+
+// Biến lưu trữ hành động chuẩn bị duyệt/từ chối
+let pendingActionId = null;
+let pendingActionStatus = null;
+
+function renderQuanLyGiaiDau() {
+    currentGDPage = 1;
+    currentGDFilter = 'All';
+    currentGDSearch = '';
+    allGiaiDauData = [];
+
+    // 1. Cập nhật trạng thái Active trên Menu
+    document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+    const menuLink = Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('YÊU CẦU GIẢI ĐẤU'));
+    if (menuLink) menuLink.classList.add('active');
+
+    // 2. Render khung giao diện chính tích hợp Bộ lọc, Tìm kiếm và Modal Confirm
+    const contentArea = document.querySelector('.admin-content');
+    contentArea.innerHTML = `
+        <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+            <div>
+                <h1 class="page-title">Quản lý Yêu cầu Giải đấu</h1>
+                <p class="text-muted">Có <strong id="gd-pending-count" style="color: #ea580c; font-size: 1.1rem;">0</strong> đơn đang chờ bạn phê duyệt</p>
+            </div>
+        </div>
+        
+        <!-- Khu vực thông báo tùy chỉnh (Thay thế alert) -->
+        <div id="giaidau-alert" class="modal-alert" style="display: none; margin-bottom: 16px;"></div>
+
+        <div class="panel">
+            <!-- Khu vực Tìm kiếm và Lọc -->
+            <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
+                <div style="position: relative; flex: 1; min-width: 250px;">
+                    <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
+                    <input type="text" id="gd-search-input" class="form-control" style="padding-left: 35px;" placeholder="Tìm tên khách hàng, tên sân, tên giải..." oninput="handleGDSearch(this.value)">
+                </div>
+                <select class="form-control" style="width: 200px;" onchange="handleGDFilter(this.value)">
+                    <option value="All">Tất cả trạng thái</option>
+                    <option value="ChoDuyet">Chờ duyệt</option>
+                    <option value="DaDuyet">Đã duyệt</option>
+                    <option value="TuChoi">Từ chối</option>
+                    <option value="HetHan">Hết hạn</option>
+                    <option value="HoanThanh">Hoàn thành</option>
+                    <option value="DaHuy">Đã hủy</option>
+                </select>
+            </div>
+
+            <div class="table-responsive" style="min-height: 350px;">
+                <table class="admin-table">
+                    <thead style="background: #F8FAFC;">
+                        <tr>
+                            <th>Khách Hàng</th>
+                            <th>Thông tin Giải đấu</th>
+                            <th>Lịch đá</th>
+                            <th>Ngày nộp</th>
+                            <th>Trạng thái</th>
+                            <th>Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody id="giaidau-table-body">
+                        <tr><td colspan="6" class="text-center">Đang tải dữ liệu...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Vùng hiển thị nút Phân trang -->
+            <div id="gd-pagination" style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 15px; margin-bottom: 15px; padding-top: 15px; border-top: 1px solid var(--border);"></div>
+        </div>
+
+        <!-- Modal Xác nhận (Thay thế confirm() mặc định của trình duyệt) -->
+        <div id="gd-confirm-modal" class="modal-overlay" style="display: none; z-index: 9999;">
+            <div class="modal-content" style="max-width: 400px; text-align: center; padding: 30px 20px;">
+                <div style="font-size: 3.5rem; color: #f59e0b; margin-bottom: 15px;"><i class="fa-solid fa-circle-exclamation"></i></div>
+                <h3 id="gd-confirm-title" style="margin-bottom: 10px; font-size: 1.4rem;">Xác nhận</h3>
+                <p id="gd-confirm-msg" style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5;"></p>
+                <div style="display: flex; justify-content: center; gap: 12px;">
+                    <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="closeGDConfirmModal()">Hủy bỏ</button>
+                    <button id="gd-confirm-btn" class="btn-primary" style="width: auto; padding: 10px 24px;" onclick="executeCapNhatTrangThai()">Đồng ý</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // 3. Gọi API lấy toàn bộ dữ liệu 1 lần
+    loadDanhSachGiaiDauAdmin();
+}
+
+// ----------------------------------------------------
+// HIỂN THỊ THÔNG BÁO TÙY CHỈNH
+// ----------------------------------------------------
+function showGDAlert(message, isSuccess) {
+    const alertBox = document.getElementById('giaidau-alert');
+    alertBox.textContent = message;
+    alertBox.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
+    alertBox.style.display = 'block';
+    setTimeout(() => { alertBox.style.display = 'none'; }, 3000);
+}
+
+// ----------------------------------------------------
+// GỌI API VÀ LỌC/PHÂN TRANG DỮ LIỆU
+// ----------------------------------------------------
+async function loadDanhSachGiaiDauAdmin() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/giai-dau`, { credentials: 'include' });
+        const res = await response.json();
+        
+        if (res.success) {
+            allGiaiDauData = res.data || [];
+            applyGDFiltersAndRender(); // Tiến hành lọc và vẽ bảng
+        } else {
+            showGDAlert(res.message || 'Lỗi tải dữ liệu', false);
+        }
+    } catch (error) {
+        document.getElementById('giaidau-table-body').innerHTML = `<tr><td colspan="6" class="text-center text-danger">Lỗi kết nối máy chủ!</td></tr>`;
+    }
+}
+
+// Hàm ghi nhận gõ phím tìm kiếm
+function handleGDSearch(value) {
+    currentGDSearch = value.toLowerCase().trim();
+    currentGDPage = 1; // Về trang 1 khi tìm kiếm
+    applyGDFiltersAndRender();
+}
+
+// Hàm ghi nhận đổi bộ lọc trạng thái
+function handleGDFilter(value) {
+    currentGDFilter = value;
+    currentGDPage = 1; // Về trang 1 khi lọc
+    applyGDFiltersAndRender();
+}
+
+function applyGDFiltersAndRender() {
+    // 1. Tính tổng số yêu cầu "Chờ duyệt" (Tính trên tổng data gốc)
+    const totalPending = allGiaiDauData.filter(item => item.TrangThai === 'ChoDuyet').length;
+    document.getElementById('gd-pending-count').innerText = totalPending;
+
+    // 2. Lọc dữ liệu theo Trạng thái và Từ khóa
+    let filteredData = allGiaiDauData.filter(item => {
+        // Lọc trạng thái
+        const matchStatus = (currentGDFilter === 'All' || item.TrangThai === currentGDFilter);
+        
+        // Lọc tìm kiếm (Tên giải, Tên cụm sân, Tên khách hàng)
+        const tenGiai = item.TenGiaiDau ? item.TenGiaiDau.toLowerCase() : '';
+        const tenSan = item.cum_san ? item.cum_san.TenCumSan.toLowerCase() : '';
+        const tenKhach = item.nguoi_dung ? item.nguoi_dung.HoTen.toLowerCase() : '';
+        const matchSearch = tenGiai.includes(currentGDSearch) || tenSan.includes(currentGDSearch) || tenKhach.includes(currentGDSearch);
+
+        return matchStatus && matchSearch;
+    });
+
+    // 3. Tính toán phân trang
+    const totalItems = filteredData.length;
+    const totalPages = Math.ceil(totalItems / itemsPerGDPage) || 1;
+    if (currentGDPage > totalPages) currentGDPage = totalPages;
+
+    const startIdx = (currentGDPage - 1) * itemsPerGDPage;
+    const pageData = filteredData.slice(startIdx, startIdx + itemsPerGDPage);
+
+    // 4. Render Bảng và Nút phân trang
+    renderGDTable(pageData);
+    renderGDPagination(totalPages);
+}
+
+function renderGDTable(data) {
+    const tbody = document.getElementById('giaidau-table-body');
+    
+    if (data.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="text-align: center; padding: 40px;">Không tìm thấy dữ liệu phù hợp.</td></tr>`;
+        return;
+    }
+
+    const statusTextMap = {
+        'ChoDuyet': 'Chờ duyệt',
+        'DaDuyet': 'Đã duyệt',
+        'TuChoi': 'Từ chối',
+        'HetHan': 'Hết hạn',
+        'HoanThanh': 'Hoàn thành',
+        'DaHuy': 'Đã hủy'
+    };
+
+    tbody.innerHTML = data.map(item => {
+        let badgeClass = 'badge-secondary';
+        if(item.TrangThai === 'DaDuyet') badgeClass = 'badge-success';
+        else if(item.TrangThai === 'ChoDuyet') badgeClass = 'badge-warning';
+        else if(item.TrangThai === 'TuChoi' || item.TrangThai === 'DaHuy') badgeClass = 'badge-danger';
+
+        const viStatus = statusTextMap[item.TrangThai] || item.TrangThai;
+
+        // Hành động Mở Modal thay vì gọi thẳng hàm
+        let actionHtml = '';
+        if (item.TrangThai === 'ChoDuyet') {
+            actionHtml = `
+                <button class="btn-outline-sm" style="color: #047857; border-color: #047857;" onclick="openGDConfirmModal(${item.ID}, 'DaDuyet')"><i class="fa-solid fa-check"></i> Duyệt</button>
+                <button class="btn-outline-sm" style="color: #b91c1c; border-color: #b91c1c; margin-left: 5px;" onclick="openGDConfirmModal(${item.ID}, 'TuChoi')"><i class="fa-solid fa-xmark"></i> Từ chối</button>
+            `;
+        } else {
+            actionHtml = `<span style="color: var(--text-muted); font-size: 0.85rem;">Không có hành động</span>`;
+        }
+
+        return `
+            <tr>
+                <td>
+                    <strong style="color: var(--text-dark);">${item.nguoi_dung ? item.nguoi_dung.HoTen : 'N/A'}</strong><br>
+                    <span style="font-size: 0.85rem; color: var(--text-muted);">${item.nguoi_dung ? item.nguoi_dung.SoDienThoai : ''}</span>
+                </td>
+                <td>
+                    <strong style="color: var(--primary);">${item.TenGiaiDau}</strong><br>
+                    <span style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-solid fa-location-dot"></i> ${item.cum_san ? item.cum_san.TenCumSan : 'N/A'}</span>
+                </td>
+                <td>
+                    <span style="font-size: 0.9rem;">${item.NgayBatDau}</span><br>
+                    <span style="font-size: 0.9rem; color: var(--text-muted);">đến ${item.NgayKetThuc}</span>
+                </td>
+                <td>${item.NgayTao ? item.NgayTao.substring(0,10) : 'N/A'}</td>
+                <td><span class="badge ${badgeClass}">${viStatus}</span></td>
+                <td>${actionHtml}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function renderGDPagination(totalPages) {
+    const paginationDiv = document.getElementById('gd-pagination');
+    let html = '';
+    
+    // Nếu chỉ có 1 trang thì ẩn luôn thanh phân trang cho gọn
+    if (totalPages <= 1) {
+        paginationDiv.innerHTML = '';
+        return;
+    }
+
+    // Nút "Trang trước" (Mũi tên trái)
+    const prevDisabled = currentGDPage === 1 ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : '';
+    html += `<button class="btn-outline-sm" ${prevDisabled} onclick="changeGDPage(${currentGDPage - 1})" style="padding: 6px 12px; border-color: var(--border); color: var(--text-dark);"><i class="fa-solid fa-chevron-left"></i></button>`;
+
+    // Các nút Số trang
+    for (let i = 1; i <= totalPages; i++) {
+        // Nút active có màu nền xanh, nút thường viền mờ
+        const btnClass = i === currentGDPage ? 'btn-primary' : 'btn-outline-sm';
+        const style = i === currentGDPage ? 'padding: 6px 14px;' : 'padding: 6px 14px; border-color: var(--border); color: var(--text-dark);';
+        html += `<button class="${btnClass}" style="${style}" onclick="changeGDPage(${i})">${i}</button>`;
+    }
+
+    // Nút "Trang sau" (Mũi tên phải)
+    const nextDisabled = currentGDPage === totalPages ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : '';
+    html += `<button class="btn-outline-sm" ${nextDisabled} onclick="changeGDPage(${currentGDPage + 1})" style="padding: 6px 12px; border-color: var(--border); color: var(--text-dark);"><i class="fa-solid fa-chevron-right"></i></button>`;
+
+    paginationDiv.innerHTML = html;
+}
+
+function changeGDPage(page) {
+    currentGDPage = page;
+    applyGDFiltersAndRender();
+}
+
+// ----------------------------------------------------
+// LOGIC MODAL XÁC NHẬN VÀ GỌI API
+// ----------------------------------------------------
+function openGDConfirmModal(id, trangThaiMoi) {
+    pendingActionId = id;
+    pendingActionStatus = trangThaiMoi;
+    
+    const isApprove = (trangThaiMoi === 'DaDuyet');
+    
+    // Đổi Tiêu đề, Lời nhắn và Màu Nút
+    document.getElementById('gd-confirm-title').innerText = isApprove ? 'Duyệt Giải Đấu' : 'Từ Chối Giải Đấu';
+    document.getElementById('gd-confirm-msg').innerHTML = isApprove 
+        ? 'Bạn có chắc chắn muốn <strong style="color: #047857;">DUYỆT</strong> yêu cầu tổ chức giải đấu này không?' 
+        : 'Bạn có chắc chắn muốn <strong style="color: #ef4444;">TỪ CHỐI</strong> yêu cầu tổ chức giải đấu này không?';
+    
+    const btnConfirm = document.getElementById('gd-confirm-btn');
+    btnConfirm.style.backgroundColor = isApprove ? 'var(--primary)' : '#ef4444'; // Xanh lá hoặc Đỏ
+    btnConfirm.style.borderColor = isApprove ? 'var(--primary)' : '#ef4444';
+
+    document.getElementById('gd-confirm-modal').style.display = 'flex';
+}
+
+function closeGDConfirmModal() {
+    document.getElementById('gd-confirm-modal').style.display = 'none';
+    pendingActionId = null;
+    pendingActionStatus = null;
+}
+
+async function executeCapNhatTrangThai() {
+    if (!pendingActionId || !pendingActionStatus) return;
+    
+    const btn = document.getElementById('gd-confirm-btn');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/giai-dau/${pendingActionId}/xu-ly`, {
+            method: 'PUT',
+            credentials: 'include',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trang_thai: pendingActionStatus })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            showGDAlert('Xử lý yêu cầu thành công!', true);
+            closeGDConfirmModal();
+            loadDanhSachGiaiDauAdmin(); // Reset lại toàn bộ data mới từ Server
+        } else {
+            showGDAlert(data.message || 'Có lỗi xảy ra!', false);
+            closeGDConfirmModal();
+        }
+    } catch (error) {
+        showGDAlert('Lỗi kết nối máy chủ!', false);
+        closeGDConfirmModal();
+    } finally {
+        btn.innerHTML = 'Đồng ý';
+        btn.disabled = false;
+    }
+}
