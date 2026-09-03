@@ -58,9 +58,15 @@
     <!-- Thanh thông báo giỏ hàng nổi lưu trạng thái qua sessionStorage -->
     <div id="floating-cart" class="floating-cart" style="display: none;">
         <div class="container cart-inner">
-            <div class="cart-info">
-                <i class="fa-solid fa-cart-shopping"></i>
-                <span>Đã chọn: <strong id="cart-count">0</strong> khung giờ</span>
+            <div class="cart-info" style="display: flex; align-items: center; gap: 15px;">
+                <div>
+                    <i class="fa-solid fa-cart-shopping"></i>
+                    <span>Đã chọn: <strong id="cart-count">0</strong> khung giờ</span>
+                </div>
+                <div style="border-left: 2px solid rgba(255,255,255,0.3); height: 20px;"></div>
+                <div>
+                    <span>Tiền cọc: <strong id="floating-cart-deposit" style="color: #ffd700; font-size: 1.15rem;">0đ</strong></span>
+                </div>
             </div>
             <div class="cart-actions">
                 <button class="btn-outline-white" onclick="openCartModal()">Xem chi tiết</button>

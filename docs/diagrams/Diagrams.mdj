@@ -16628,7 +16628,7 @@
 								"$ref": "AAAAAAGgUPFkVA5uj2k="
 							},
 							"name": "TrangThai",
-							"documentation": "Trong, DaCoc, DaHuy, HoanThanh",
+							"documentation": "DaCoc, DaHuy, HoanThanh, KhongDen",
 							"length": 0
 						}
 					]
