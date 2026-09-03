@@ -15,4 +15,9 @@ class KhungGio extends Model
     {
         return $this->hasMany(GiaTien::class, 'ID_KhungGio', 'ID');
     }
+
+    public function datSans()
+    {
+        return $this->hasMany(DatSan::class, 'ID_KhungGio', 'ID');
+    }
 }

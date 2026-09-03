@@ -16,7 +16,7 @@
             <nav class="main-nav">
                 <a href="#" class="active" onclick="renderClusters(); return false;">Sân bóng</a>
                 <a href="#" onclick="renderMyBookings(); return false;">Lịch sử đặt sân</a>
-                <a href="#">Các yêu cầu</a>
+                <a href="#" onclick="renderRequests(); return false;">Các yêu cầu</a>
             </nav>
             <div class="user-actions">
                 <!-- Ví tiền thiết kế mới trực quan -->
@@ -38,12 +38,12 @@
                 </div>
                 
                 <div class="dropdown-menu" id="user-dropdown">
-                    <a href="#" onclick="openProfileModal(); return false;"><i class="fa-regular fa-user"></i> Trang cá nhân</a>
+                    <a href="#" onclick="openProfileModal(); return false;"><i class="fa-regular fa-user"></i> Thông tin cá nhân</a>
                     <a href="#" onclick="openChangePasswordModal(); return false;"><i class="fa-solid fa-key"></i> Đổi mật khẩu</a>
                     <a href="#" onclick="renderMyBookings(); return false;"><i class="fa-regular fa-calendar-days"></i> Lịch sử đặt sân</a>
-                    <a href="#"><i class="fa-regular fa-file-lines"></i> Các yêu cầu</a>
+                    <a href="#" onclick="renderRequests(); return false;"><i class="fa-regular fa-file-lines"></i> Các yêu cầu</a>
                     <hr>
-                    <a href="#" id="customer-logout-btn" style="color: #ef4444;">
+                    <a href="#" id="customer-logout-btn" class="logout-btn">
                         <i class="fa-solid fa-right-from-bracket"></i> Đăng xuất
                     </a>
                 </div>
@@ -164,6 +164,62 @@
         </div>
     </div>
 
+    <!-- Modal Tạo Yêu cầu Giải đấu -->
+    <div id="create-tournament-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3>Tạo yêu cầu tổ chức giải đấu</h3>
+                <i class="fa-solid fa-xmark" onclick="closeCreateTournamentModal()"></i>
+            </div>
+
+            <!-- Vùng hiển thị thông báo nội bộ (Thay thế hoàn toàn alert) -->
+            <div id="tournament-alert" class="modal-alert" style="display: none; margin: 16px 24px 0;"></div>
+
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Chọn cụm sân <span style="color:var(--danger, red)">*</span></label>
+                    <select id="tour-cluster" class="form-control">
+                        <option value="">-- Đang tải danh sách cụm sân --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Tên giải đấu <span style="color:var(--danger, red)">*</span></label>
+                    <input type="text" id="tour-name" class="form-control" placeholder="Nhập tên giải đấu">
+                </div>
+                <div style="display: flex; gap: 16px;">
+                    <div class="form-group" style="flex: 1;">
+                        <label>Ngày bắt đầu <span style="color:var(--danger, red)">*</span></label>
+                        <input type="date" id="tour-start-date" class="form-control">
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label>Ngày kết thúc <span style="color:var(--danger, red)">*</span></label>
+                        <input type="date" id="tour-end-date" class="form-control">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Nội dung chi tiết</label>
+                    <textarea id="tour-desc" class="form-control" rows="3" placeholder="Mô tả quy mô, số đội tham gia..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-outline" onclick="closeCreateTournamentModal()" style="width: auto;">Hủy</button>
+                <button id="btn-submit-tournament" class="btn-primary" onclick="submitTournamentRequest()">Gửi yêu cầu</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Xác nhận thay đổi mục đích đặt sân -->
+    <div id="purpose-confirm-modal" class="modal-overlay" style="display: none; z-index: 9999;">
+        <div class="modal-content" style="max-width: 400px; text-align: center; padding: 30px 20px;">
+            <div style="font-size: 3.5rem; color: #f59e0b; margin-bottom: 15px;"><i class="fa-solid fa-circle-exclamation"></i></div>
+            <h3 style="margin-bottom: 10px; font-size: 1.4rem;">Xác nhận thay đổi</h3>
+            <p style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5;">Thay đổi mục đích sẽ <strong>xóa toàn bộ khung giờ đang chọn</strong> để tải lại lịch mới. Bạn có chắc chắn?</p>
+            <div style="display: flex; justify-content: center; gap: 12px;">
+                <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="cancelPurposeChange()">Hủy bỏ</button>
+                <button class="btn-primary" style="width: auto; padding: 10px 24px;" onclick="confirmPurposeChange()">Đồng ý</button>
+            </div>
+        </div>
+    </div>
     <script src="../js/customer.js"></script>
 </body>
 </html>

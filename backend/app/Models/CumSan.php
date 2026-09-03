@@ -28,4 +28,9 @@ class CumSan extends Model
     {
         return $this->hasMany(GiaTien::class, 'ID_CumSan', 'ID');
     }
+
+    public function giaiDaus()
+    {
+        return $this->hasMany(GiaiDau::class, 'ID_CumSan', 'ID');
+    }
 }

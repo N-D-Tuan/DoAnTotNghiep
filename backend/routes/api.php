@@ -9,6 +9,7 @@ use App\Http\Controllers\PhuongController;
 use App\Http\Controllers\SanBongController;
 use App\Http\Controllers\GiaTienController;
 use App\Http\Controllers\KhungGioController;
+use App\Http\Controllers\GiaiDauController;
 
 // Bọc TẤT CẢ trong middleware 'web' để đồng bộ Session Cookie
 Route::middleware('web')->group(function () {
@@ -26,6 +27,12 @@ Route::middleware('web')->group(function () {
 });
 
 Route::middleware('web')->group(function () {
+    // API Giải Đấu
+    Route::get('/giai-dau/cua-toi', [GiaiDauController::class, 'layDanhSachCuaToi']);
+    Route::post('/giai-dau/tao-yeu-cau', [GiaiDauController::class, 'taoYeuCau']);
+    Route::get('/admin/giai-dau', [GiaiDauController::class, 'layDanhSachAdmin']);
+    Route::put('/admin/giai-dau/{id}/xu-ly', [GiaiDauController::class, 'xuLyYeuCau']);
+    
     // API Cụm Sân
     Route::get('/cum-san', [CumSanController::class, 'index']);
     Route::post('/cum-san', [CumSanController::class, 'store']);

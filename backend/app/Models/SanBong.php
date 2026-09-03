@@ -20,4 +20,9 @@ class SanBong extends Model
     {
         return $this->belongsTo(LoaiSan::class, 'ID_LoaiSan', 'ID');
     }
+
+    public function datSans()
+    {
+        return $this->hasMany(DatSan::class, 'ID_SanBong', 'ID');
+    }
 }

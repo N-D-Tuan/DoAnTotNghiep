@@ -82,6 +82,19 @@ button { cursor: pointer; font-family: var(--font-main); border: none; }
   font-size: 22px;
 }
 
+.dropdown-menu a.logout-btn {
+    color: #ef4444;
+}
+
+.dropdown-menu a.logout-btn:hover {
+    color: #dc2626;
+    background: #fef2f2;
+}
+
+.dropdown-menu a.logout-btn i {
+    color: inherit;
+}
+
 .dropdown-menu { display: none; position: absolute; top: 52px; right: 0; background: var(--bg-white); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-md); width: 220px; padding: 8px 0; z-index: 101; }
 .dropdown-menu.show { display: block; }
 .dropdown-menu a { display: flex; align-items: center; gap: 10px; padding: 10px 16px; color: var(--text-dark); font-size: 0.9rem; }
