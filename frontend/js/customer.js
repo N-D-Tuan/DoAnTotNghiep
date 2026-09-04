@@ -351,11 +351,16 @@ async function loadUserTournaments() {
     return userActiveTournaments;
 }
 
+// Biến toàn cục hoặc biến cục bộ để lưu mục đích ban đầu khi mở modal
+let initialBookingPurpose = currentBookingPurpose;
+
 async function openCartModal() {
     const modal = document.getElementById('cart-modal');
     const modalList = document.getElementById('modal-cart-list');
     const alertBox = document.getElementById('cart-alert');
     if (alertBox) alertBox.style.display = 'none';
+
+    initialBookingPurpose = currentBookingPurpose;
 
     // Đợi tải danh sách giải đấu trước khi render giao diện
     await loadUserTournaments();
@@ -506,9 +511,20 @@ function closeCartModal() {
     const alertBox = document.getElementById('cart-alert');
     if (alertBox) alertBox.style.display = 'none';
 
+    // Lấy giá trị mới nhất từ thẻ select trong modal (nếu có tồn tại)
+    const purposeSelect = document.getElementById('booking-purpose');
+    if (purposeSelect) {
+        currentBookingPurpose = purposeSelect.value;
+        sessionStorage.setItem('dn_football_booking_purpose', currentBookingPurpose);
+    }
+
+    // Kiểm tra xem mục đích có bị thay đổi so với lúc mở modal hay không,
+    // hoặc giỏ hàng có bị lệch cụm sân hay không
+    const isPurposeChanged = (currentBookingPurpose !== initialBookingPurpose);
+
     if (currentClusterId !== null && currentPitchId !== null) {
         let isPurposeMismatched = false;
-        let needReRender = false;
+        let needReRender = isPurposeChanged;
 
         if (currentBookingPurpose !== 'normal') {
             const tour = userActiveTournaments.find(t => t.ID == currentBookingPurpose);
