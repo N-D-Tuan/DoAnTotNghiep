@@ -79,6 +79,57 @@ function loadCustomerInfo() {
 }
 
 // ======================================================
+// ĐỒNG BỘ SỐ DƯ TỪ DATABASE VỀ TRÌNH DUYỆT (REAL-TIME)
+// ======================================================
+async function syncUserWallet() {
+    try {
+        const res = await fetch(`${API_BASE_URL}/thong-tin-ca-nhan`, { credentials: 'include' });
+        if (res.ok) {
+            const data = await res.json();
+
+            // 1. Cập nhật dữ liệu mới nhất vào bộ nhớ và hiển thị lên Header
+            sessionStorage.setItem('dn_football_user', JSON.stringify(data.user));
+            loadCustomerInfo();
+
+            // --- CẬP NHẬT SỐ DƯ LỚN TRONG THẺ VÍ (NẾU ĐANG MỞ) ---
+            const mainBalanceEl = document.getElementById('main-wallet-balance');
+            if (mainBalanceEl) {
+                mainBalanceEl.textContent = Number(data.user.SoDuVi || 0).toLocaleString('vi-VN') + 'đ';
+            }
+
+            // 2. TỰ ĐỘNG QUÉT LẠI DỮ LIỆU CỦA TRANG ĐANG MỞ (NẾU CÓ)
+            
+            // Trường hợp A: Khách đang mở trang "Ví tiền" -> Load lại Lịch sử giao dịch
+            if (document.getElementById('transaction-list')) {
+                const dateFilter = document.getElementById('tx-date-filter')?.value || '';
+                loadTransactionHistory(dateFilter);
+            }
+            
+            // Trường hợp B: Khách đang mở trang "Các Yêu Cầu" -> Load lại Bảng trạng thái
+            if (document.getElementById('requests-content-body')) {
+                // Dò tìm xem khách hàng đang đứng ở chính xác Tab nào (Giải đấu, Hủy sân hay Rút tiền)
+                const buttons = document.querySelectorAll('button[onclick^="renderRequests"]');
+                let activeTab = 'giai_dau';
+                
+                buttons.forEach(btn => {
+                    // Nút nào đang active sẽ có border-bottom (viền dưới)
+                    if (btn.style.borderBottom && btn.style.borderBottom.includes('solid')) {
+                        // Trích xuất tên tab từ sự kiện onclick. VD: renderRequests('rut_tien') -> 'rut_tien'
+                        const match = btn.getAttribute('onclick').match(/'([^']+)'/);
+                        if (match) activeTab = match[1];
+                    }
+                });
+                
+                // Gọi hàm vẽ lại đúng tab đang mở để trạng thái (Chờ duyệt -> Đã duyệt) tự cập nhật
+                renderRequests(activeTab);
+            }
+        }
+    } catch (error) {
+        console.error("Lỗi đồng bộ ví ngầm:", error);
+    }
+}
+
+// ======================================================
 // ĐĂNG XUẤT CUSTOMER
 // ======================================================
 async function logoutCustomer() {
@@ -121,7 +172,7 @@ async function logoutCustomer() {
 // Lưu trữ và khôi phục các khung giờ đã chọn bằng sessionStorage
 let selectedSlots = JSON.parse(sessionStorage.getItem('dn_football_selected_slots')) || [];
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
 
         // ==================================================
         // SHOW / HIDE PASSWORD
@@ -154,28 +205,61 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        loadCustomerInfo();
-        renderClusters();
         setupDropdowns();
         updateFloatingCart();
 
         // ==========================================
         // LOGOUT
         // ==========================================
-        const logoutButton =
-            document.getElementById(
-                'customer-logout-btn'
-            );
-
+        const logoutButton = document.getElementById('customer-logout-btn');
         if (logoutButton) {
-            logoutButton.addEventListener(
-                'click',
-                (e) => {
-                    e.preventDefault();
-                    logoutCustomer();
-                }
-            );
+            logoutButton.addEventListener('click', (e) => {
+                e.preventDefault();
+                logoutCustomer();
+            });
         }
+
+        // ==========================================
+        // ĐIỀU HƯỚNG GIAO DIỆN & XỬ LÝ VNPAY
+        // ==========================================
+        const urlParams = new URLSearchParams(window.location.search);
+        const vnpayStatus = urlParams.get('vnpay_status');
+        
+        if (vnpayStatus) {
+            let msg = '';
+            let isSuccess = false;
+            
+            if (vnpayStatus === 'success') { 
+
+                await syncUserWallet();
+
+                msg = 'Thanh toán VNPay thành công! Số dư đã được cập nhật.'; 
+                isSuccess = true; 
+            } else if (vnpayStatus === 'failed') { 
+                msg = 'Giao dịch đã bị hủy bởi người dùng.'; 
+            } else { 
+                msg = 'Giao dịch không hợp lệ hoặc lỗi chữ ký bảo mật.'; 
+            }
+
+            // 3. Load lại Header và Ép hệ thống KHÔNG VẼ danh sách sân
+            loadCustomerInfo(); 
+            renderWallet(msg, isSuccess); 
+            
+            // Xóa query param để F5 không bị lặp thông báo
+            window.history.replaceState({}, document.title, window.location.pathname);
+            
+        } else {
+            // NẾU LÀ TRUY CẬP BÌNH THƯỜNG: Mới load thông tin và vẽ danh sách Cụm sân
+            loadCustomerInfo();
+            renderClusters();
+        }
+
+        // --- BỔ SUNG: AUTO-SYNC MỖI 60 GIÂY ---
+        // Giúp tiền tự nhảy lên nếu Admin vừa bấm duyệt đơn ở máy khác
+        setInterval(() => {
+            syncUserWallet();
+        }, 60000); // 60000 ms = 1 phút
+        // --------------------------------------
     }
 );
 
@@ -1305,11 +1389,38 @@ async function renderRequests(activeTab = 'giai_dau') {
                 <p style="color: var(--text-muted); font-size: 1.05rem;">Bạn chưa có yêu cầu hủy sân gấp nào.</p>
             </div>`;
     } else if (activeTab === 'rut_tien') {
-        container.innerHTML = `
-            <div style="padding: 40px;">
-                <i class="fa-solid fa-money-bill-transfer" style="font-size: 3rem; color: var(--border); margin-bottom: 16px;"></i>
-                <p style="color: var(--text-muted); font-size: 1.05rem;">Bạn chưa có lịch sử rút tiền nào.</p>
-            </div>`;
+        try {
+            const response = await fetch(`${API_BASE_URL}/yeu-cau-rut-tien/cua-toi`, { credentials: 'include' });
+            const res = await response.json();
+            const list = res.data || [];
+
+            if (list.length === 0) {
+                container.innerHTML = `<div style="padding: 40px;"><i class="fa-solid fa-money-bill-transfer" style="font-size: 3rem; color: var(--border); margin-bottom: 16px;"></i><p style="color: var(--text-muted); font-size: 1.05rem;">Bạn chưa có lịch sử rút tiền nào.</p></div>`;
+            } else {
+                let html = `<div style="display: flex; flex-direction: column; gap: 12px; max-height: 480px; overflow-y: auto; padding-right: 8px; text-align: left;">`;
+                list.forEach(item => {
+                    let badgeColor = '#b45309', badgeBg = '#fef3c7', statusText = 'Chờ duyệt';
+                    if(item.TrangThai === 'DaDuyet') { badgeColor = '#047857'; badgeBg = '#d1fae5'; statusText = 'Đã duyệt'; }
+                    if(item.TrangThai === 'TuChoi') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; statusText = 'Từ chối'; }
+
+                    const dateStr = item.NgayTao ? item.NgayTao.substring(0, 10) : '';
+                    html += `
+                        <div style="border: 1px solid var(--border); border-radius: 8px; padding: 16px; background: #fff; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <div>
+                                <h4 style="margin: 0 0 8px 0; color: var(--text-dark); font-size: 1.1rem;">Rút ${Number(item.SoTien).toLocaleString('vi-VN')}đ</h4>
+                                <p style="margin: 0 0 4px 0; font-size: 0.9rem; color: var(--text-muted); white-space: pre-line;">${item.NoiDung}</p>
+                                <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> Ngày tạo: ${dateStr}</p>
+                            </div>
+                            <span style="padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${statusText}</span>
+                        </div>
+                    `;
+                });
+                html += `</div>`;
+                container.innerHTML = html;
+            }
+        } catch (e) {
+            container.innerHTML = `<div style="padding: 40px; color: var(--danger);">Lỗi tải dữ liệu.</div>`;
+        }
     }
 }
 
@@ -1461,3 +1572,308 @@ window.addEventListener('click', function(e) {
         }
     }
 });
+
+// ======================================================
+// MODULE: QUẢN LÝ VÍ & VNPAY
+// ======================================================
+
+// 1. Render Giao diện Ví
+async function renderWallet(statusMessage = null, isSuccess = true) {
+    updateActiveNav('renderWallet'); 
+    currentClusterId = null;
+
+    await syncUserWallet();
+
+    const user = JSON.parse(sessionStorage.getItem('dn_football_user'));
+    const balance = Number(user?.SoDuVi || 0).toLocaleString('vi-VN') + 'đ';
+
+    // Tạo HTML thông báo nếu có redirect từ VNPay về
+    let alertHtml = '';
+    if (statusMessage) {
+        const alertClass = isSuccess ? 'success' : 'error';
+        alertHtml = `<div id="wallet-page-alert" class="modal-alert ${alertClass}" style="display: block; margin-bottom: 20px; font-weight: 500;">${statusMessage}</div>`;
+    }
+
+    appContent.innerHTML = `
+        <div class="page-header" style="margin-bottom: 30px;">
+            <h1 class="page-title">Quản lý Tài chính</h1>
+            <p class="page-subtitle">Ví điện tử và lịch sử giao dịch cá nhân</p>
+        </div>
+
+        ${alertHtml}
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 30px;">
+            <!-- Cột trái: Thẻ Ví dạng Fintech -->
+            <div>
+                <div style="background: linear-gradient(135deg, var(--primary) 0%, #047857 100%); border-radius: 20px; padding: 30px; color: white; box-shadow: 0 15px 30px rgba(16, 185, 129, 0.25); position: relative; overflow: hidden;">
+                    <!-- Decor vòng tròn -->
+                    <div style="position: absolute; top: -30px; right: -30px; width: 150px; height: 150px; background: rgba(255,255,255,0.1); border-radius: 50%;"></div>
+                    <div style="position: absolute; bottom: -20px; right: 50px; width: 80px; height: 80px; background: rgba(255,255,255,0.05); border-radius: 50%;"></div>
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; position: relative; z-index: 2;">
+                        <div>
+                            <h3 style="margin: 0; font-weight: 500; font-size: 1.05rem; opacity: 0.9;">Số dư khả dụng</h3>
+                            <div id="main-wallet-balance" style="font-size: 2.8rem; font-weight: 700; margin: 10px 0 30px 0; letter-spacing: -1px;">${balance}</div>
+                        </div>
+                        <i class="fa-solid fa-wallet" style="font-size: 2rem; opacity: 0.8;"></i>
+                    </div>
+                    
+                    <div style="display: flex; gap: 12px; position: relative; z-index: 2;">
+                        <button onclick="openDepositModal()" style="flex: 1; padding: 12px; border-radius: 12px; border: none; background: white; color: var(--primary); font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                            <i class="fa-solid fa-plus-circle"></i> Nạp tiền
+                        </button>
+                        <button onclick="openWithdrawModal()" style="flex: 1; padding: 12px; border-radius: 12px; border: 1.5px solid rgba(255,255,255,0.4); background: rgba(255,255,255,0.1); color: white; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; backdrop-filter: blur(4px);">
+                            <i class="fa-solid fa-money-bill-transfer"></i> Rút tiền
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cột phải: Lịch sử giao dịch (Có bộ lọc) -->
+            <div style="background: white; border-radius: 20px; padding: 24px; box-shadow: var(--shadow-sm); border: 1px solid var(--border); display: flex; flex-direction: column;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                    <h3 style="margin: 0; font-size: 1.25rem; color: var(--text-dark); display: flex; align-items: center; gap: 8px;">
+                        Lịch sử giao dịch
+                        <i class="fa-solid fa-clock-rotate-left" style="color: #000000; font-size: 1.1rem;"></i>
+                    </h3>
+                    <!-- Input chọn ngày để lọc -->
+                    <input type="date" id="tx-date-filter" class="form-control" style="width: auto; padding: 6px 12px; font-size: 0.9rem; border-radius: 8px;" onchange="loadTransactionHistory(this.value)">
+                </div>
+                
+                <div id="transaction-list" style="flex: 1;">
+                    <div style="text-align:center; padding: 20px;"><i class="fa-solid fa-spinner fa-spin text-primary"></i> Đang tải dữ liệu...</div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    loadTransactionHistory();
+
+    if (statusMessage) {
+        setTimeout(() => {
+            const alertBox = document.getElementById('wallet-page-alert');
+            if (alertBox) {
+                alertBox.style.opacity = '0';
+                setTimeout(() => alertBox.style.display = 'none', 500);
+            }
+        }, 2500);
+    }
+}
+
+// Hàm hỗ trợ render thông báo tại thẻ ví mà không cần load lại trang
+function showWalletAlert(message, isSuccess) {
+    renderWallet(message, isSuccess);
+}
+
+// 2. Load API Lịch sử giao dịch (Có tham số bộ lọc ngày)
+async function loadTransactionHistory(filterDate = '') {
+    const listContainer = document.getElementById('transaction-list');
+    try {
+        // GỌI API THẬT TỪ BACKEND
+        const response = await fetch(`${API_BASE_URL}/giao-dich/cua-toi`, { credentials: 'include' });
+        const data = await response.json();
+        
+        // Kiểm tra nếu API trả về không thành công
+        if (!data.success) throw new Error('API Error');
+
+        let transactions = data.data || [];
+
+        // 1. Xử lý đồng bộ Múi giờ và Format dữ liệu hiển thị
+        transactions = transactions.map(tx => {
+            let localDateStr = '';
+            let filterMatchStr = '';
+            
+            if (tx.NgayTao) {
+                // Đưa chuỗi UTC vào đối tượng Date -> JS tự động cộng bù 7 tiếng theo giờ Việt Nam
+                const d = new Date(tx.NgayTao); 
+                const pad = n => n < 10 ? '0' + n : n;
+                
+                // Format để render ra màn hình: HH:mm:ss DD/MM/YYYY
+                localDateStr = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())} ${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
+                
+                // Format chuẩn YYYY-MM-DD ẩn bên dưới để đối chiếu với thanh công cụ Lọc ngày
+                filterMatchStr = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+            }
+            
+            // Nạp 2 trường vừa xử lý vào lại object để tái sử dụng
+            return { 
+                ...tx, 
+                displayDate: localDateStr, 
+                filterDateStr: filterMatchStr 
+            };
+        });
+
+        // 2. Xử lý Lọc theo ngày (Sử dụng trường filterDateStr mới)
+        if (filterDate) {
+            transactions = transactions.filter(tx => tx.filterDateStr === filterDate);
+        }
+
+        if (transactions.length === 0) {
+            listContainer.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 40px 0;"><i class="fa-solid fa-receipt" style="font-size: 3rem; color: #e5e7eb; margin-bottom: 15px; display: block;"></i>Không có giao dịch nào${filterDate ? ' trong ngày này' : ''}.</div>`;
+            return;
+        }
+
+        // Thêm CSS scrollbar-width cho thanh cuộn thanh mảnh, đẹp mắt
+        let html = '<div style="display: flex; flex-direction: column; gap: 16px; max-height: 380px; overflow-y: auto; padding-right: 12px; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent;">';
+        
+        transactions.forEach(tx => {
+            const isCong = tx.DongTien === 'Cong';
+            const sign = isCong ? '+' : '-';
+            const color = isCong ? '#047857' : '#b91c1c'; // Xanh lá / Đỏ
+            const bgIcon = isCong ? '#d1fae5' : '#fee2e2';
+            
+            let icon = 'fa-money-bill-wave';
+            if(tx.LoaiGiaoDich === 'NapTien') icon = 'fa-arrow-down';
+            if(tx.LoaiGiaoDich === 'DatSan') icon = 'fa-calendar-check';
+            if(tx.LoaiGiaoDich === 'RutTien') icon = 'fa-arrow-up';
+            if(tx.LoaiGiaoDich === 'HoanTienHuyGap') icon = 'fa-clock-rotate-left';
+            if(tx.LoaiGiaoDich === 'HoanTienHuySan') icon = 'fa-clock-rotate-left';
+
+            html += `
+                <div style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 16px; border-bottom: 1px dashed var(--border);">
+                    <div style="display: flex; align-items: center; gap: 16px; max-width: 70%;">
+                        <div style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px; background: ${bgIcon}; color: ${color}; display: flex; align-items: center; justify-content: center; font-size: 1.15rem;">
+                            <i class="fa-solid ${icon}"></i>
+                        </div>
+                        <div>
+                            <div style="font-weight: 600; color: var(--text-dark); margin-bottom: 5px; line-height: 1.4;">${tx.NoiDung || tx.LoaiGiaoDich}</div>
+                            <div style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-regular fa-clock" style="margin-right: 4px;"></i>${tx.displayDate}</div>
+                        </div>
+                    </div>
+                    <div style="font-weight: 700; font-size: 1.1rem; color: ${color}; flex-shrink: 0;">
+                        ${sign}${Number(tx.SoTien).toLocaleString('vi-VN')}đ
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        listContainer.innerHTML = html;
+
+    } catch (e) {
+        listContainer.innerHTML = `<div style="color: var(--danger); text-align: center;">Lỗi tải dữ liệu.</div>`;
+    }
+}
+
+// 3. Logic điều khiển Modal Nạp tiền bằng Custom Alert
+function showDepositAlert(message, isSuccess) {
+    const alertBox = document.getElementById('deposit-alert');
+    alertBox.textContent = message;
+    alertBox.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
+    alertBox.style.display = 'block';
+
+    setTimeout(() => {
+        alertBox.style.display = 'none';
+    }, 2500);
+}
+
+function openDepositModal() {
+    document.getElementById('deposit-alert').style.display = 'none';
+    document.getElementById('deposit-amount').value = '';
+    document.getElementById('deposit-modal').style.display = 'flex';
+}
+
+function closeDepositModal() {
+    document.getElementById('deposit-modal').style.display = 'none';
+}
+
+// 4. API Gửi yêu cầu lấy URL VNPay
+async function processDeposit() {
+    document.getElementById('deposit-alert').style.display = 'none';
+    const amount = document.getElementById('deposit-amount').value;
+    
+    if (!amount || amount < 10000) {
+        showDepositAlert('Vui lòng nhập số tiền hợp lệ (tối thiểu 10.000đ)', false);
+        return;
+    }
+
+    const btn = document.querySelector('#deposit-modal .btn-primary');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang kết nối VNPay...';
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/vnpay/nap-tien`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ so_tien: amount })
+        });
+        
+        const data = await response.json();
+        if (data.success && data.url) {
+            window.location.href = data.url; 
+        } else {
+            showDepositAlert('Lỗi: ' + (data.message || 'Hệ thống đang bận.'), false);
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    } catch (error) {
+        showDepositAlert('Lỗi kết nối đến máy chủ. Vui lòng thử lại sau.', false);
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
+}
+
+// ======================================================
+// MODULE: TẠO YÊU CẦU RÚT TIỀN
+// ======================================================
+function showWithdrawAlert(message, isSuccess) {
+    const alertBox = document.getElementById('withdraw-alert');
+    alertBox.textContent = message;
+    alertBox.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
+    alertBox.style.display = 'block';
+    setTimeout(() => alertBox.style.display = 'none', 3000);
+}
+
+function openWithdrawModal() {
+    document.getElementById('withdraw-alert').style.display = 'none';
+    document.getElementById('withdraw-amount').value = '';
+    document.getElementById('withdraw-note').value = '';
+    document.getElementById('withdraw-modal').style.display = 'flex';
+}
+
+function closeWithdrawModal() {
+    document.getElementById('withdraw-modal').style.display = 'none';
+}
+
+async function submitWithdrawRequest() {
+    const user = JSON.parse(sessionStorage.getItem('dn_football_user'));
+    const amount = Number(document.getElementById('withdraw-amount').value);
+    const note = document.getElementById('withdraw-note').value.trim();
+
+    if (!amount || amount < 50000) return showWithdrawAlert('Số tiền rút tối thiểu là 50,000đ!', false);
+    if (!note) return showWithdrawAlert('Vui lòng nhập thông tin ngân hàng!', false);
+    if (amount > Number(user.SoDuVi)) return showWithdrawAlert('Số dư ví không đủ!', false);
+
+    const btn = document.getElementById('btn-submit-withdraw');
+    btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/yeu-cau-rut-tien`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ SoTien: amount, NoiDung: note })
+        });
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            showWithdrawAlert('Tạo yêu cầu thành công! Vui lòng chờ duyệt.', true);
+
+            // --- GỌI HÀM ĐỒNG BỘ NGAY SAU KHI RÚT TIỀN THÀNH CÔNG ---
+            syncUserWallet();
+            // --------------------------------------------------------
+
+            setTimeout(() => {
+                closeWithdrawModal();
+                btn.disabled = false; btn.innerHTML = 'Gửi yêu cầu';               
+            }, 2000);
+        } else {
+            showWithdrawAlert(data.message || 'Lỗi hệ thống.', false);
+            btn.disabled = false; btn.innerHTML = 'Gửi yêu cầu';
+        }
+    } catch (e) {
+        showWithdrawAlert('Lỗi kết nối máy chủ.', false);
+        btn.disabled = false; btn.innerHTML = 'Gửi yêu cầu';
+    }
+}

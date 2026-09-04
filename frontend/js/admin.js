@@ -3,6 +3,7 @@
 // ======================================================
 const API_BASE_URL = 'http://127.0.0.1:8000/api';
 
+let currentGDDate = '';
 // ======================================================
 // DOM READY
 // ======================================================
@@ -1151,6 +1152,7 @@ function renderQuanLyGiaiDau() {
                     <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
                     <input type="text" id="gd-search-input" class="form-control" style="padding-left: 35px;" placeholder="Tìm tên khách hàng, tên sân, tên giải..." oninput="handleGDSearch(this.value)">
                 </div>
+                <input type="date" id="gd-date-filter" class="form-control" style="width: 150px;" onchange="handleGDDate(this.value)">
                 <select class="form-control" style="width: 200px;" onchange="handleGDFilter(this.value)">
                     <option value="All">Tất cả trạng thái</option>
                     <option value="ChoDuyet">Chờ duyệt</option>
@@ -1201,6 +1203,8 @@ function renderQuanLyGiaiDau() {
     // 3. Gọi API lấy toàn bộ dữ liệu 1 lần
     loadDanhSachGiaiDauAdmin();
 }
+
+function handleGDDate(val) { currentGDDate = val; currentGDPage = 1; applyGDFiltersAndRender(); }
 
 // ----------------------------------------------------
 // HIỂN THỊ THÔNG BÁO TÙY CHỈNH
@@ -1256,13 +1260,14 @@ function applyGDFiltersAndRender() {
         // Lọc trạng thái
         const matchStatus = (currentGDFilter === 'All' || item.TrangThai === currentGDFilter);
         
-        // Lọc tìm kiếm (Tên giải, Tên cụm sân, Tên khách hàng)
+        // Lọc tìm kiếm
         const tenGiai = item.TenGiaiDau ? item.TenGiaiDau.toLowerCase() : '';
         const tenSan = item.cum_san ? item.cum_san.TenCumSan.toLowerCase() : '';
         const tenKhach = item.nguoi_dung ? item.nguoi_dung.HoTen.toLowerCase() : '';
         const matchSearch = tenGiai.includes(currentGDSearch) || tenSan.includes(currentGDSearch) || tenKhach.includes(currentGDSearch);
-
-        return matchStatus && matchSearch;
+        const txDate = item.NgayTao ? item.NgayTao.substring(0, 10) : '';
+        const matchDate = currentGDDate ? (txDate === currentGDDate) : true;
+        return matchStatus && matchSearch && matchDate;
     });
 
     // 3. Tính toán phân trang
@@ -1430,4 +1435,190 @@ async function executeCapNhatTrangThai() {
         btn.innerHTML = 'Đồng ý';
         btn.disabled = false;
     }
+}
+
+// ======================================================
+// MODULE: QUẢN LÝ YÊU CẦU RÚT TIỀN
+// ======================================================
+let allRutTienData = []; 
+let currentRTPage = 1;
+const itemsPerRTPage = 5; 
+let currentRTFilter = 'All';
+let currentRTSearch = '';
+let currentRTDate = '';
+let pendingRTId = null;
+let pendingRTStatus = null;
+
+function renderQuanLyRutTien() {
+    currentRTPage = 1; currentRTFilter = 'All'; currentRTSearch = ''; currentRTDate = '';
+    document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+    Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('RÚT TIỀN')).classList.add('active');
+
+    const contentArea = document.querySelector('.admin-content');
+    contentArea.innerHTML = `
+        <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+            <div>
+                <h1 class="page-title">Quản lý Yêu cầu Rút tiền</h1>
+                <p class="text-muted">Có <strong id="rt-pending-count" style="color: #ea580c; font-size: 1.1rem;">0</strong> đơn đang chờ phê duyệt</p>
+            </div>
+        </div>
+        <div id="ruttien-alert" class="modal-alert" style="display: none; margin-bottom: 16px;"></div>
+
+        <div class="panel">
+            <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
+                <div style="position: relative; flex: 1; min-width: 250px;">
+                    <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
+                    <input type="text" class="form-control" style="padding-left: 35px;" placeholder="Tìm tên khách hàng..." oninput="handleRTSearch(this.value)">
+                </div>
+                <input type="date" class="form-control" style="width: 150px;" onchange="handleRTDate(this.value)">
+                <select class="form-control" style="width: 200px;" onchange="handleRTFilter(this.value)">
+                    <option value="All">Tất cả trạng thái</option>
+                    <option value="ChoDuyet">Chờ duyệt</option>
+                    <option value="DaDuyet">Đã duyệt</option>
+                    <option value="TuChoi">Từ chối</option>
+                </select>
+            </div>
+
+            <div class="table-responsive" style="min-height: 350px;">
+                <table class="admin-table">
+                    <thead style="background: #F8FAFC;">
+                        <tr>
+                            <th>Khách Hàng</th>
+                            <th>Số tiền</th>
+                            <th>Thông tin NH</th>
+                            <th>Ngày nộp</th>
+                            <th>Trạng thái</th>
+                            <th>Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ruttien-table-body">
+                        <tr><td colspan="6" class="text-center">Đang tải dữ liệu...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div id="rt-pagination" style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 15px; margin-bottom: 15px; padding-top: 15px; border-top: 1px solid var(--border);"></div>
+        </div>
+
+        <!-- Modal Xác nhận RT -->
+        <div id="rt-confirm-modal" class="modal-overlay" style="display: none; z-index: 9999;">
+            <div class="modal-content" style="max-width: 400px; text-align: center; padding: 30px 20px;">
+                <div style="font-size: 3.5rem; color: #f59e0b; margin-bottom: 15px;"><i class="fa-solid fa-circle-exclamation"></i></div>
+                <h3 id="rt-confirm-title" style="margin-bottom: 10px; font-size: 1.4rem;">Xác nhận</h3>
+                <p id="rt-confirm-msg" style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5;"></p>
+                <div style="display: flex; justify-content: center; gap: 12px;">
+                    <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="closeRTConfirmModal()">Hủy bỏ</button>
+                    <button id="rt-confirm-btn" class="btn-primary" style="width: auto; padding: 10px 24px;" onclick="executeCapNhatTrangThaiRT()">Đồng ý</button>
+                </div>
+            </div>
+        </div>
+    `;
+    loadDanhSachRutTienAdmin();
+}
+
+function showRTAlert(message, isSuccess) {
+    const alertBox = document.getElementById('ruttien-alert');
+    alertBox.textContent = message; alertBox.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
+    alertBox.style.display = 'block'; setTimeout(() => alertBox.style.display = 'none', 3000);
+}
+
+function handleRTSearch(val) { currentRTSearch = val.toLowerCase().trim(); currentRTPage = 1; applyRTFiltersAndRender(); }
+function handleRTDate(val) { currentRTDate = val; currentRTPage = 1; applyRTFiltersAndRender(); }
+function handleRTFilter(val) { currentRTFilter = val; currentRTPage = 1; applyRTFiltersAndRender(); }
+
+async function loadDanhSachRutTienAdmin() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/yeu-cau-rut-tien`, { credentials: 'include' });
+        const res = await response.json();
+        if (res.success) { allRutTienData = res.data || []; applyRTFiltersAndRender(); }
+    } catch (error) { showRTAlert('Lỗi kết nối.', false); }
+}
+
+function applyRTFiltersAndRender() {
+    document.getElementById('rt-pending-count').innerText = allRutTienData.filter(i => i.TrangThai === 'ChoDuyet').length;
+
+    let filteredData = allRutTienData.filter(item => {
+        const matchStatus = (currentRTFilter === 'All' || item.TrangThai === currentRTFilter);
+        const tenKhach = item.nguoi_dung ? item.nguoi_dung.HoTen.toLowerCase() : '';
+        const matchSearch = tenKhach.includes(currentRTSearch);
+        const txDate = item.NgayTao ? item.NgayTao.substring(0, 10) : '';
+        const matchDate = currentRTDate ? (txDate === currentRTDate) : true;
+        return matchStatus && matchSearch && matchDate;
+    });
+
+    const totalPages = Math.ceil(filteredData.length / itemsPerRTPage) || 1;
+    if (currentRTPage > totalPages) currentRTPage = totalPages;
+    const startIdx = (currentRTPage - 1) * itemsPerRTPage;
+    
+    renderRTTable(filteredData.slice(startIdx, startIdx + itemsPerRTPage));
+    renderRTPagination(totalPages);
+}
+
+function renderRTTable(data) {
+    const tbody = document.getElementById('ruttien-table-body');
+    if (data.length === 0) return tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="text-align: center; padding: 40px;">Không có dữ liệu.</td></tr>`;
+
+    tbody.innerHTML = data.map(item => {
+        let badgeClass = 'badge-warning', viStatus = 'Chờ duyệt', actionHtml = '';
+        if(item.TrangThai === 'DaDuyet') { badgeClass = 'badge-success'; viStatus = 'Đã duyệt'; }
+        if(item.TrangThai === 'TuChoi') { badgeClass = 'badge-danger'; viStatus = 'Từ chối'; }
+
+        if (item.TrangThai === 'ChoDuyet') {
+            actionHtml = `<button class="btn-outline-sm" style="color: #047857; border-color: #047857;" onclick="openRTConfirmModal(${item.ID}, 'DaDuyet')"><i class="fa-solid fa-check"></i> Duyệt</button>
+                          <button class="btn-outline-sm" style="color: #b91c1c; border-color: #b91c1c; margin-left: 5px;" onclick="openRTConfirmModal(${item.ID}, 'TuChoi')"><i class="fa-solid fa-xmark"></i> Từ chối</button>`;
+        } else {
+            actionHtml = `<span style="color: var(--text-muted); font-size: 0.85rem;">(Ngày duyệt: ${item.NgayDuyet.substring(0,10)})</span>`;
+        }
+
+        return `<tr>
+            <td><strong>${item.nguoi_dung?.HoTen || 'N/A'}</strong><br><span style="font-size: 0.85rem;">Số dư ví: ${Number(item.nguoi_dung?.SoDuVi || 0).toLocaleString('vi-VN')}đ</span></td>
+            <td><strong style="color: var(--danger);">${Number(item.SoTien).toLocaleString('vi-VN')}đ</strong></td>
+            <td><span style="font-size: 0.85rem; white-space: pre-line;">${item.NoiDung}</span></td>
+            <td>${item.NgayTao ? item.NgayTao.substring(0,10) : ''}</td>
+            <td><span class="badge ${badgeClass}">${viStatus}</span></td>
+            <td>${actionHtml}</td>
+        </tr>`;
+    }).join('');
+}
+
+function renderRTPagination(totalPages) {
+    const div = document.getElementById('rt-pagination');
+    if (totalPages <= 1) return div.innerHTML = '';
+    let html = `<button class="btn-outline-sm" ${currentRTPage === 1 ? 'disabled style="opacity:0.5;"' : ''} onclick="currentRTPage--; applyRTFiltersAndRender()"><i class="fa-solid fa-chevron-left"></i></button>`;
+    for (let i = 1; i <= totalPages; i++) {
+        html += `<button class="${i === currentRTPage ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="currentRTPage=${i}; applyRTFiltersAndRender()">${i}</button>`;
+    }
+    html += `<button class="btn-outline-sm" ${currentRTPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="currentRTPage++; applyRTFiltersAndRender()"><i class="fa-solid fa-chevron-right"></i></button>`;
+    div.innerHTML = html;
+}
+
+function openRTConfirmModal(id, status) {
+    pendingRTId = id; pendingRTStatus = status;
+    const isApprove = (status === 'DaDuyet');
+    document.getElementById('rt-confirm-title').innerText = isApprove ? 'Duyệt Rút Tiền' : 'Từ Chối Rút Tiền';
+    document.getElementById('rt-confirm-msg').innerHTML = isApprove ? 'Hệ thống sẽ <strong>TRỪ</strong> tiền trong ví khách hàng. Xác nhận?' : 'Xác nhận <strong>TỪ CHỐI</strong>?';
+    
+    const btn = document.getElementById('rt-confirm-btn');
+    btn.style.backgroundColor = isApprove ? 'var(--primary)' : '#ef4444';
+    btn.style.borderColor = isApprove ? 'var(--primary)' : '#ef4444';
+    document.getElementById('rt-confirm-modal').style.display = 'flex';
+}
+
+function closeRTConfirmModal() { document.getElementById('rt-confirm-modal').style.display = 'none'; }
+
+async function executeCapNhatTrangThaiRT() {
+    const btn = document.getElementById('rt-confirm-btn');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...'; btn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/yeu-cau-rut-tien/${pendingRTId}/xu-ly`, {
+            method: 'PUT', credentials: 'include', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trang_thai: pendingRTStatus })
+        });
+        const data = await response.json();
+        if (response.ok && data.success) {
+            showRTAlert('Xử lý thành công!', true);
+            closeRTConfirmModal(); loadDanhSachRutTienAdmin();
+        } else { showRTAlert(data.message, false); closeRTConfirmModal(); }
+    } catch (e) { showRTAlert('Lỗi mạng!', false); closeRTConfirmModal(); }
+    finally { btn.innerHTML = 'Đồng ý'; btn.disabled = false; }
 }
