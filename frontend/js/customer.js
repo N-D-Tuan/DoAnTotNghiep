@@ -539,13 +539,6 @@ function closeCartModal() {
             }
         }
 
-        // Nếu giỏ hàng có chứa sân thuộc cụm khác, hoặc vừa bị ép về normal -> Vẽ lại lịch ngay lập tức
-        if (isPurposeMismatched || (selectedSlots.length > 0 && selectedSlots[0].clusterId !== currentClusterId)) {
-            selectedSlots = [];
-            saveToSession();
-            needReRender = true;
-        }
-
         if (needReRender) {
             renderSchedule(currentClusterId, currentClusterName, currentPitchId, currentPitchName, currentLoaiSanId, currentPitchType);
         }
