@@ -117,6 +117,14 @@ class AuthController extends Controller
         ]);
     }
 
+    public function layThongTin(Request $request)
+    {
+        return response()->json([
+            'success' => true,
+            'user' => $request->user()
+        ]);
+    }
+
     // Hàm 1: Gửi mã OTP
     public function guiOTP(Request $request)
     {
