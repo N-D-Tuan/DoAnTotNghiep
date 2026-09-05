@@ -99,33 +99,164 @@ async function syncUserWallet() {
 
             // 2. TỰ ĐỘNG QUÉT LẠI DỮ LIỆU CỦA TRANG ĐANG MỞ (NẾU CÓ)
             
-            // Trường hợp A: Khách đang mở trang "Ví tiền" -> Load lại Lịch sử giao dịch
+            // Khách đang mở trang "Ví tiền" -> Load lại Lịch sử giao dịch
             if (document.getElementById('transaction-list')) {
                 const dateFilter = document.getElementById('tx-date-filter')?.value || '';
                 loadTransactionHistory(dateFilter);
             }
             
-            // Trường hợp B: Khách đang mở trang "Các Yêu Cầu" -> Load lại Bảng trạng thái
-            if (document.getElementById('requests-content-body')) {
-                // Dò tìm xem khách hàng đang đứng ở chính xác Tab nào (Giải đấu, Hủy sân hay Rút tiền)
-                const buttons = document.querySelectorAll('button[onclick^="renderRequests"]');
-                let activeTab = 'giai_dau';
-                
-                buttons.forEach(btn => {
-                    // Nút nào đang active sẽ có border-bottom (viền dưới)
-                    if (btn.style.borderBottom && btn.style.borderBottom.includes('solid')) {
-                        // Trích xuất tên tab từ sự kiện onclick. VD: renderRequests('rut_tien') -> 'rut_tien'
-                        const match = btn.getAttribute('onclick').match(/'([^']+)'/);
-                        if (match) activeTab = match[1];
-                    }
-                });
-                
-                // Gọi hàm vẽ lại đúng tab đang mở để trạng thái (Chờ duyệt -> Đã duyệt) tự cập nhật
-                renderRequests(activeTab);
-            }
         }
     } catch (error) {
         console.error("Lỗi đồng bộ ví ngầm:", error);
+    }
+}
+
+// ======================================================
+// ĐỒNG BỘ YÊU CẦU GIẢI ĐẤU NGẦM (REAL-TIME KHÔNG CHỚP TRANG)
+// ======================================================
+async function syncUserTournaments() {
+    // 1. Chỉ chạy ngầm nếu đang mở giao diện Các yêu cầu
+    const container = document.getElementById('requests-content-body');
+    if (!container) return;
+
+    // 2. Dò xem khách có đang đứng ở đúng Tab "Giải đấu" hay không
+    let isGiaiDauTab = false;
+    document.querySelectorAll('button[onclick^="renderRequests"]').forEach(btn => {
+        if (btn.style.borderBottom && btn.style.borderBottom.includes('solid') && btn.getAttribute('onclick').includes('giai_dau')) {
+            isGiaiDauTab = true;
+        }
+    });
+
+    if (!isGiaiDauTab) return;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/giai-dau/cua-toi`, { credentials: 'include' });
+        if (!response.ok) return;
+        
+        const res = await response.json();
+        const list = res.data || [];
+
+        // Cập nhật lại mảng global ngay lập tức để Giỏ hàng nhận diện giải đấu đã duyệt
+        userActiveTournaments = list.filter(t => t.TrangThai === 'DaDuyet');
+
+        // Bắt đầu vẽ HTML ngầm (Chỉ vẽ cái ruột bên trong)
+        if (list.length === 0) {
+            container.innerHTML = `
+                <div style="padding: 40px;">
+                    <i class="fa-regular fa-folder-open" style="font-size: 3rem; color: var(--border); margin-bottom: 16px;"></i>
+                    <p style="color: var(--text-muted); font-size: 1.05rem;">Bạn chưa có yêu cầu tổ chức giải đấu nào.</p>
+                </div>`;
+        } else {
+            let html = `<div style="display: flex; flex-direction: column; gap: 12px; max-height: 480px; overflow-y: auto; padding-right: 8px; text-align: left;">`;
+            
+            list.forEach(item => {
+                const statusTextMap = {
+                    'ChoDuyet': 'Chờ duyệt', 'DaDuyet': 'Đã duyệt', 'TuChoi': 'Từ chối',
+                    'HetHan': 'Hết hạn', 'HoanThanh': 'Hoàn thành', 'DaHuy': 'Đã hủy'
+                };
+                const viStatus = statusTextMap[item.TrangThai] || item.TrangThai;
+
+                let badgeColor = '#6b7280', badgeBg = '#f3f4f6'; 
+                if(item.TrangThai === 'DaDuyet') { badgeColor = '#047857'; badgeBg = '#d1fae5'; }
+                else if(item.TrangThai === 'TuChoi' || item.TrangThai === 'DaHuy') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; }
+                else if(item.TrangThai === 'ChoDuyet') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; }
+                else if(item.TrangThai === 'HetHan') { badgeColor = '#9ca3af'; badgeBg = '#f3f4f6'; }
+
+                let approvalInfoHtml = '';
+                if (item.TrangThai === 'DaDuyet' && item.NgayDuyet) {
+                    const d = new Date(item.NgayDuyet);
+                    const dExp = new Date(d);
+                    dExp.setDate(d.getDate() + 3);
+                    const pad = n => n < 10 ? '0' + n : n;
+                    
+                    approvalInfoHtml = `
+                        <p style="margin: 6px 0 0 0; font-size: 0.9rem; color: #047857;">
+                            <i class="fa-solid fa-calendar-check"></i> Ngày duyệt: <strong>${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}</strong> 
+                            <span style="margin-left: 15px; color: #b91c1c;">
+                                <i class="fa-solid fa-hourglass-half"></i> Ngày hết hạn: <strong>${dExp.getFullYear()}-${pad(dExp.getMonth() + 1)}-${pad(dExp.getDate())}</strong>
+                            </span>
+                        </p>
+                    `;
+                }
+
+                html += `
+                    <div style="border: 1px solid var(--border); border-radius: 8px; padding: 16px; background: #fff; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <div>
+                            <h4 style="margin: 0 0 8px 0; color: var(--text-dark); font-size: 1.1rem;">${item.TenGiaiDau}</h4>
+                            <p style="margin: 0 0 6px 0; font-size: 0.9rem; color: var(--text-muted);">
+                                <i class="fa-regular fa-calendar"></i> Lịch đá: ${item.NgayBatDau} đến ${item.NgayKetThuc}
+                            </p>
+                            <p style="margin: 0; font-size: 0.9rem; color: var(--text-muted);">
+                                <i class="fa-solid fa-location-dot"></i> Cụm sân: <strong style="color:var(--text-dark);">${item.cum_san ? item.cum_san.TenCumSan : 'Không xác định'}</strong>
+                            </p>
+                            ${approvalInfoHtml}
+                        </div>
+                        <div>
+                            <span style="padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${viStatus}</span>
+                        </div>
+                    </div>
+                `;
+            });
+            html += `</div>`;
+            container.innerHTML = html; // Cập nhật ruột HTML nhẹ nhàng
+        }
+    } catch (error) {
+        console.error("Lỗi đồng bộ giải đấu ngầm:", error);
+    }
+}
+
+// ======================================================
+// ĐỒNG BỘ YÊU CẦU RÚT TIỀN NGẦM (REAL-TIME KHÔNG CHỚP TRANG)
+// ======================================================
+async function syncUserWithdrawals() {
+    // 1. Chỉ chạy ngầm nếu đang mở giao diện Các yêu cầu
+    const container = document.getElementById('requests-content-body');
+    if (!container) return;
+
+    // 2. Dò xem khách có đang đứng ở đúng Tab "Rút tiền" hay không
+    let isRutTienTab = false;
+    document.querySelectorAll('button[onclick^="renderRequests"]').forEach(btn => {
+        if (btn.style.borderBottom && btn.style.borderBottom.includes('solid') && btn.getAttribute('onclick').includes('rut_tien')) {
+            isRutTienTab = true;
+        }
+    });
+
+    if (!isRutTienTab) return;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/yeu-cau-rut-tien/cua-toi`, { credentials: 'include' });
+        if (!response.ok) return;
+        
+        const res = await response.json();
+        const list = res.data || [];
+
+        // 3. Vẽ lại HTML ngầm phần lõi bên trong
+        if (list.length === 0) {
+            container.innerHTML = `<div style="padding: 40px;"><i class="fa-solid fa-money-bill-transfer" style="font-size: 3rem; color: var(--border); margin-bottom: 16px;"></i><p style="color: var(--text-muted); font-size: 1.05rem;">Bạn chưa có lịch sử rút tiền nào.</p></div>`;
+        } else {
+            let html = `<div style="display: flex; flex-direction: column; gap: 12px; max-height: 480px; overflow-y: auto; padding-right: 8px; text-align: left;">`;
+            list.forEach(item => {
+                let badgeColor = '#b45309', badgeBg = '#fef3c7', statusText = 'Chờ duyệt';
+                if(item.TrangThai === 'DaDuyet') { badgeColor = '#047857'; badgeBg = '#d1fae5'; statusText = 'Đã duyệt'; }
+                if(item.TrangThai === 'TuChoi') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; statusText = 'Từ chối'; }
+
+                const dateStr = item.NgayTao ? item.NgayTao.substring(0, 10) : '';
+                html += `
+                    <div style="border: 1px solid var(--border); border-radius: 8px; padding: 16px; background: #fff; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <div>
+                            <h4 style="margin: 0 0 8px 0; color: var(--text-dark); font-size: 1.1rem;">Rút ${Number(item.SoTien).toLocaleString('vi-VN')}đ</h4>
+                            <p style="margin: 0 0 4px 0; font-size: 0.9rem; color: var(--text-muted); white-space: pre-line;">${item.NoiDung}</p>
+                            <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> Ngày tạo: ${dateStr}</p>
+                        </div>
+                        <span style="padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${statusText}</span>
+                    </div>
+                `;
+            });
+            html += `</div>`;
+            container.innerHTML = html;
+        }
+    } catch (error) {
+        console.error("Lỗi đồng bộ rút tiền ngầm:", error);
     }
 }
 
@@ -258,6 +389,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Giúp tiền tự nhảy lên nếu Admin vừa bấm duyệt đơn ở máy khác
         setInterval(() => {
             syncUserWallet();
+            syncUserTournaments();
+            syncUserWithdrawals();
         }, 60000); // 60000 ms = 1 phút
         // --------------------------------------
     }
