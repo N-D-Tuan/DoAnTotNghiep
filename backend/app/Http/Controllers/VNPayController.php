@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use App\Models\NguoiDung;
 use App\Models\GiaoDich;
+use App\Models\ThongBao;
 
 class VNPayController extends Controller
 {
@@ -139,6 +140,16 @@ class VNPayController extends Controller
                                 'SoDuTruoc'    => $soDuTruoc,
                                 'SoDuSau'      => $soDuSau,
                                 'NoiDung'      => 'Nạp tiền VNPay (Mã GD: ' . $request->vnp_TxnRef . ')'
+                            ]);
+
+                            // -----------------------------------------
+                            // TẠO THÔNG BÁO NẠP TIỀN
+                            // -----------------------------------------
+                            ThongBao::create([
+                                'ID_NguoiDung' => $nguoiDung->ID,
+                                'TieuDe'       => 'Nạp tiền thành công',
+                                'NoiDung'      => 'Bạn đã nạp thành công ' . number_format($soTienNap) . 'đ vào ví điện tử từ VNPay.',
+                                'LoaiThongBao' => 'ViTien'
                             ]);
                         }
                     }

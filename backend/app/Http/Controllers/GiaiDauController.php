@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\GiaiDau;
 use App\Models\CumSan;
+use App\Models\ThongBao;
 
 class GiaiDauController extends Controller
 {
@@ -91,6 +92,24 @@ class GiaiDauController extends Controller
         }
 
         $giaiDau->save();
+
+        // -----------------------------------------
+        // TẠO THÔNG BÁO GIẢI ĐẤU
+        // -----------------------------------------
+        $tieuDe = $trangThaiMoi === 'DaDuyet' ? 'Giải đấu đã được duyệt' : 'Giải đấu bị từ chối';
+        $noiDung = $trangThaiMoi === 'DaDuyet' 
+            ? 'Yêu cầu tổ chức giải đấu "' . $giaiDau->TenGiaiDau . '" của bạn đã được duyệt thành công.' 
+            : 'Yêu cầu tổ chức giải đấu "' . $giaiDau->TenGiaiDau . '" của bạn đã bị từ chối.';
+
+        ThongBao::create([
+            'ID_NguoiDung' => $giaiDau->ID_NguoiDung,
+            'TieuDe'       => $tieuDe,
+            'NoiDung'      => $noiDung,
+            'LoaiThongBao' => 'GiaiDau'
+        ]);
+        // -----------------------------------------
+
+        broadcast(new \App\Events\UserDataUpdated($giaiDau->ID_NguoiDung))->toOthers();
 
         return response()->json([
             'success' => true,

@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\YeuCauRutTien;
 use App\Models\GiaoDich;
 use App\Models\NguoiDung;
+use App\Models\ThongBao;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -113,7 +114,27 @@ class YeuCauRutTienController extends Controller
             } else {
                 $yeuCau->update(['TrangThai' => 'TuChoi', 'NgayDuyet' => now()]);
             }
+
+            // -----------------------------------------
+            // TẠO THÔNG BÁO RÚT TIỀN
+            // -----------------------------------------
+            $tieuDe = $trangThaiMoi === 'DaDuyet' ? 'Rút tiền thành công' : 'Rút tiền bị từ chối';
+            $noiDung = $trangThaiMoi === 'DaDuyet'
+                ? 'Yêu cầu rút ' . number_format($yeuCau->SoTien) . 'đ về tài khoản của bạn đã được xử lý thành công.'
+                : 'Yêu cầu rút ' . number_format($yeuCau->SoTien) . 'đ của bạn không hợp lệ hoặc đã bị từ chối.';
+
+            ThongBao::create([
+                'ID_NguoiDung' => $yeuCau->ID_NguoiDung,
+                'TieuDe'       => $tieuDe,
+                'NoiDung'      => $noiDung,
+                'LoaiThongBao' => 'ViTien'
+            ]);
+            // -----------------------------------------
+
             DB::commit();
+
+            broadcast(new \App\Events\UserDataUpdated($yeuCau->ID_NguoiDung))->toOthers();
+
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
             DB::rollBack();

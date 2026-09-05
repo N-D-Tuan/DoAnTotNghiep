@@ -13,6 +13,7 @@ use App\Http\Controllers\GiaiDauController;
 use App\Http\Controllers\VNPayController;
 use App\Http\Controllers\GiaoDichController;
 use App\Http\Controllers\YeuCauRutTienController;
+use App\Http\Controllers\ThongBaoController;
 
 // Bọc TẤT CẢ trong middleware 'web' để đồng bộ Session Cookie
 Route::middleware('web')->group(function () {
@@ -27,6 +28,11 @@ Route::middleware('web')->group(function () {
     Route::post('/dang-xuat', [AuthController::class, 'dangXuat'])->middleware('auth:web');
     Route::put('/cap-nhat-profile', [AuthController::class, 'capNhatProfile'])->middleware('auth:web');
     Route::get('/thong-tin-ca-nhan', [AuthController::class, 'layThongTin'])->middleware('auth:web');
+
+    //3. Thông báo của user
+    Route::get('/thong-bao', [ThongBaoController::class, 'layDanhSachCuaToi']);
+    Route::put('/thong-bao/doc-tat-ca', [ThongBaoController::class, 'danhDauDaDocTatCa']);
+    Route::put('/thong-bao/{id}/doc', [ThongBaoController::class, 'danhDauDaDocTheoId']);
     
 });
 
