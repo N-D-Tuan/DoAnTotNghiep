@@ -188,6 +188,7 @@ async function syncUserTournaments() {
                             </p>
                             <p style="margin: 0; font-size: 0.9rem; color: var(--text-muted);">
                                 <i class="fa-solid fa-location-dot"></i> Cụm sân: <strong style="color:var(--text-dark);">${item.cum_san ? item.cum_san.TenCumSan : 'Không xác định'}</strong>
+                                <span style="margin-left: 10px; font-size: 0.8rem;">(Ngày nộp: ${item.NgayTao ? item.NgayTao.substring(0,10) : 'N/A'})</span>
                             </p>
                             ${approvalInfoHtml}
                         </div>
@@ -374,6 +375,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // 3. Load lại Header và Ép hệ thống KHÔNG VẼ danh sách sân
             loadCustomerInfo(); 
+            loadNotifications();
             renderWallet(msg, isSuccess); 
             
             // Xóa query param để F5 không bị lặp thông báo
@@ -382,17 +384,62 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else {
             // NẾU LÀ TRUY CẬP BÌNH THƯỜNG: Mới load thông tin và vẽ danh sách Cụm sân
             loadCustomerInfo();
+            loadNotifications();
             renderClusters();
         }
 
-        // --- BỔ SUNG: AUTO-SYNC MỖI 60 GIÂY ---
-        // Giúp tiền tự nhảy lên nếu Admin vừa bấm duyệt đơn ở máy khác
-        setInterval(() => {
-            syncUserWallet();
-            syncUserTournaments();
-            syncUserWithdrawals();
-        }, 60000); // 60000 ms = 1 phút
-        // --------------------------------------
+        // ==========================================
+        // KẾT NỐI WEBSOCKET BẰNG LARAVEL REVERB
+        // ==========================================
+        const REVERB_APP_KEY = '32o5b6sskjqfuf7qnqtd'; 
+
+        window.Echo = new Echo({
+            broadcaster: 'reverb',
+            key: REVERB_APP_KEY,
+            wsHost: '127.0.0.1',
+            wsPort: 8080,
+            forceTLS: false,
+            disableStats: true,
+            // Custom Authorizer: Dùng fetch với credentials: 'include' để tự động gửi Session Cookie khi xác thực Private Channel
+            authorizer: (channel, options) => {
+                return {
+                    authorize: (socketId, callback) => {
+                        fetch(`${API_BASE_URL.replace('/api', '')}/broadcasting/auth`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json'
+                            },
+                            credentials: 'include', // Mang theo cookie đăng nhập
+                            body: JSON.stringify({
+                                socket_id: socketId,
+                                channel_name: channel.name
+                            })
+                        })
+                        .then(response => {
+                            if (!response.ok) throw new Error('Xác thực Socket thất bại');
+                            return response.json();
+                        })
+                        .then(data => callback(false, data))
+                        .catch(error => callback(true, error));
+                    }
+                };
+            }
+        });
+
+        // BẮT ĐẦU LẮNG NGHE TÍN HIỆU RIÊNG TƯ CỦA USER NÀY
+        window.Echo.private('user.' + currentUser.ID)
+            .listen('UserDataUpdated', (e) => {
+                console.log('⚡ Đã nhận tín hiệu từ Backend, đang tự động đồng bộ...');
+                
+                // Kích hoạt ngay 3 hàm cập nhật giao diện mà không cần chờ 1 phút
+                syncUserWallet();
+                syncUserTournaments();
+                syncUserWithdrawals();
+                
+                // Hàm render thông báo mới
+                loadNotifications();
+            });
     }
 );
 
@@ -401,9 +448,18 @@ function setupDropdowns() {
     const menu = document.getElementById('user-dropdown');
     btn.addEventListener('click', (e) => {
         e.stopPropagation();
+
+        // Đóng menu thông báo nếu đang mở để tránh chồng chéo
+        document.getElementById('notif-dropdown').style.display = 'none';
+
         menu.classList.toggle('show');
     });
     document.addEventListener('click', () => menu.classList.remove('show'));
+
+    document.addEventListener('click', () => {
+        const notifDropdown = document.getElementById('notif-dropdown');
+        if(notifDropdown) notifDropdown.style.display = 'none';
+    });
 }
 
 function updateActiveNav(functionName) {
@@ -2017,5 +2073,144 @@ async function submitWithdrawRequest() {
     } catch (e) {
         showWithdrawAlert('Lỗi kết nối máy chủ.', false);
         btn.disabled = false; btn.innerHTML = 'Gửi yêu cầu';
+    }
+}
+
+// ======================================================
+// MODULE: THÔNG BÁO (NOTIFICATIONS)
+// ======================================================
+
+// 1. Tải danh sách thông báo từ API
+async function loadNotifications() {
+    try {
+        const res = await fetch(`${API_BASE_URL}/thong-bao`, { credentials: 'include' });
+        if (!res.ok) return;
+        
+        const data = await res.json();
+        const list = data.data || [];
+        
+        const badge = document.getElementById('notif-badge');
+        const listContainer = document.getElementById('notif-list');
+        
+        // Đếm số lượng chưa đọc
+        const unreadCount = list.filter(item => item.DaDoc === 0).length;
+        
+        // Cập nhật huy hiệu (chuông đỏ)
+        if (unreadCount > 0) {
+            badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+            badge.style.display = 'flex';
+        } else {
+            badge.style.display = 'none';
+        }
+        
+        // Render danh sách
+        if (list.length === 0) {
+            listContainer.innerHTML = `<div style="padding: 40px 20px; text-align: center; color: var(--text-muted);"><i class="fa-regular fa-bell-slash" style="font-size: 2.5rem; color: #cbd5e1; margin-bottom: 10px; display: block;"></i>Bạn chưa có thông báo nào.</div>`;
+            return;
+        }
+        
+        let html = '';
+        list.forEach(item => {
+            const isUnread = item.DaDoc === 0;
+            const bgClass = isUnread ? 'background-color: #f0fdf4;' : 'background-color: #ffffff;'; // Nền xanh nhạt nếu chưa đọc
+            const textClass = isUnread ? 'color: var(--text-dark); font-weight: 600;' : 'color: var(--text-muted);';
+            
+            // Xử lý Icon theo LoaiThongBao
+            let icon = 'fa-bell';
+            let iconColor = '#64748b';
+            let bgIcon = '#f1f5f9';
+            
+            if(item.LoaiThongBao === 'ViTien') { icon = 'fa-wallet'; iconColor = '#047857'; bgIcon = '#d1fae5'; }
+            if(item.LoaiThongBao === 'DatSan') { icon = 'fa-calendar-check'; iconColor = '#b45309'; bgIcon = '#fef3c7'; }
+            if(item.LoaiThongBao === 'GiaiDau') { icon = 'fa-trophy'; iconColor = '#4338ca'; bgIcon = '#e0e7ff'; }
+            if(item.LoaiThongBao === 'HeThong') { icon = 'fa-circle-exclamation'; iconColor = '#b91c1c'; bgIcon = '#fee2e2'; }
+            if(item.LoaiThongBao === 'ThoiTiet') { icon = 'fa-cloud-rain'; iconColor = '#0369a1'; bgIcon = '#e0f2fe'; }
+
+            // Format ngày giờ an toàn
+            const d = new Date(item.NgayTao);
+            const pad = n => n < 10 ? '0' + n : n;
+            const timeStr = `${pad(d.getHours())}:${pad(d.getMinutes())} - ${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
+
+            html += `
+                <div onclick="markAsRead(${item.ID}, this)" style="${bgClass} padding: 12px 16px; border-bottom: 1px solid #f1f5f9; display: flex; gap: 12px; transition: 0.2s;">
+                    <div style="width: 40px; height: 40px; border-radius: 50%; background: ${bgIcon}; color: ${iconColor}; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 1.1rem;">
+                        <i class="fa-solid ${icon}"></i>
+                    </div>
+                    <div>
+                        <div style="${textClass} font-size: 0.95rem; margin-bottom: 4px; line-height: 1.3;">${item.TieuDe}</div>
+                        <div style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 6px; line-height: 1.4;">${item.NoiDung}</div>
+                        <div style="color: #94a3b8; font-size: 0.75rem;"><i class="fa-regular fa-clock"></i> ${timeStr}</div>
+                    </div>
+                </div>
+            `;
+        });
+        listContainer.innerHTML = html;
+        
+    } catch (e) {
+        console.error('Lỗi load thông báo:', e);
+    }
+}
+
+// 2. API Cập nhật trạng thái "Đã đọc tất cả"
+async function markAllAsRead() {
+    try {
+        await fetch(`${API_BASE_URL}/thong-bao/doc-tat-ca`, { 
+            method: 'PUT', 
+            credentials: 'include' 
+        });
+        
+        // Ẩn huy hiệu chuông ngay lập tức trên UI để tạo cảm giác mượt mà
+        document.getElementById('notif-badge').style.display = 'none';
+        
+        // Chuyển toàn bộ nền xanh thành trắng
+        const notifItems = document.querySelectorAll('#notif-list > div');
+        notifItems.forEach(el => {
+            el.style.backgroundColor = '#ffffff';
+        });
+        
+    } catch (e) {
+        console.error('Lỗi cập nhật đã đọc', e);
+    }
+}
+
+// 3. Xử lý logic Click mở/đóng Chuông
+function toggleNotificationDropdown(e) {
+    e.stopPropagation();
+    const dropdown = document.getElementById('notif-dropdown');
+    
+    // Đóng menu User (avatar) nếu đang mở để tránh chồng chéo
+    document.getElementById('user-dropdown').classList.remove('show');
+
+    // Kiểm tra xem dropdown thông báo đang đóng hay mở
+    const isOpening = dropdown.style.display === 'none' || dropdown.style.display === '';
+    
+    if (isOpening) {
+        dropdown.style.display = 'block';
+    } else {
+        dropdown.style.display = 'none';
+    }
+}
+
+// 4. Đổi trạng thái 1 thông báo sang đã đọc khi người dùng click vào nó
+async function markAsRead(id, element) {
+    try {
+        const res = await fetch(`${API_BASE_URL}/thong-bao/${id}/doc`, {
+            method: 'PUT',
+            credentials: 'include'
+        });
+        
+        if (res.ok) {
+            // Đổi giao diện trực tiếp tại dòng vừa click (mất nền xanh, chuyển chữ sang màu nhạt)
+            element.style.backgroundColor = '#ffffff';
+            const titleEl = element.querySelector('.notif-title');
+            if (titleEl) {
+                titleEl.style.color = 'var(--text-muted)';
+                titleEl.style.fontWeight = 'normal';
+            }
+            // Gọi lại loadNotifications để cập nhật lại số lượng badge đỏ trên Header
+            loadNotifications();
+        }
+    } catch (e) {
+        console.error('Lỗi cập nhật trạng thái thông báo:', e);
     }
 }

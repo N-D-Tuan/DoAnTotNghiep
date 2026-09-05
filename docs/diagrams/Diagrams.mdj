@@ -556,7 +556,7 @@
 									"font": "Arial;13;0",
 									"left": 253,
 									"top": 332.5,
-									"width": 137,
+									"width": 138.5908203125,
 									"height": 25,
 									"stereotypeLabel": {
 										"$ref": "AAAAAAGgTThjwEsDLtg="
@@ -956,7 +956,7 @@
 									"font": "Arial;13;0",
 									"left": 274.5,
 									"top": 276.5,
-									"width": 89,
+									"width": 89.47900390625,
 									"height": 25,
 									"stereotypeLabel": {
 										"$ref": "AAAAAAGgTTlYk0ts1nI="
@@ -1756,7 +1756,7 @@
 									"font": "Arial;13;0",
 									"left": 519,
 									"top": 548.5,
-									"width": 109,
+									"width": 109.68359375,
 									"height": 25,
 									"stereotypeLabel": {
 										"$ref": "AAAAAAGgTTqK3kwraLo="
@@ -2548,7 +2548,7 @@
 									"font": "Arial;13;0",
 									"left": 251.5,
 									"top": 892.5,
-									"width": 132,
+									"width": 132.8271484375,
 									"height": 25,
 									"stereotypeLabel": {
 										"$ref": "AAAAAAGgTT/Iv00Bjqo="
@@ -2711,9 +2711,9 @@
 											},
 											"font": "Arial;13;1",
 											"left": 269,
-											"top": 823.5,
+											"top": 817,
 											"width": 103,
-											"height": 26,
+											"height": 39,
 											"text": "Xem số dư và lịch sử giao dịch",
 											"wordWrap": true
 										},
@@ -2747,9 +2747,9 @@
 									],
 									"font": "Arial;13;0",
 									"left": 264,
-									"top": 816.5,
+									"top": 810,
 									"width": 113,
-									"height": 38,
+									"height": 51,
 									"stereotypeLabel": {
 										"$ref": "AAAAAAGgTUGhbU0whqg="
 									},
@@ -2948,7 +2948,7 @@
 									"font": "Arial;13;0",
 									"left": 865.5,
 									"top": 140.5,
-									"width": 83,
+									"width": 83.68994140625,
 									"height": 25,
 									"stereotypeLabel": {
 										"$ref": "AAAAAAGgTUeLrE1omLE="
@@ -3147,7 +3147,7 @@
 									"font": "Arial;13;0",
 									"left": 773,
 									"top": 492.5,
-									"width": 176,
+									"width": 176.8798828125,
 									"height": 25,
 									"stereotypeLabel": {
 										"$ref": "AAAAAAGgTVNVRU2ZQzk="
@@ -3346,7 +3346,7 @@
 									"font": "Arial;13;0",
 									"left": 757.5,
 									"top": 692.5,
-									"width": 181,
+									"width": 181.25341796875,
 									"height": 25,
 									"stereotypeLabel": {
 										"$ref": "AAAAAAGgTVPnh03IbYQ="
@@ -3545,7 +3545,7 @@
 									"font": "Arial;13;0",
 									"left": 765.5,
 									"top": 892.5,
-									"width": 142,
+									"width": 142.22802734375,
 									"height": 25,
 									"stereotypeLabel": {
 										"$ref": "AAAAAAGgTVULKE5ASMw="
@@ -3744,7 +3744,7 @@
 									"font": "Arial;13;0",
 									"left": 791,
 									"top": 596.5,
-									"width": 147,
+									"width": 147.97265625,
 									"height": 25,
 									"stereotypeLabel": {
 										"$ref": "AAAAAAGgTVUrHE5v5q8="
@@ -3943,7 +3943,7 @@
 									"font": "Arial;13;0",
 									"left": 269,
 									"top": 732.5,
-									"width": 101,
+									"width": 101.7490234375,
 									"height": 25,
 									"stereotypeLabel": {
 										"$ref": "AAAAAAGgTVxQ1U6fEPA="
@@ -8464,7 +8464,7 @@
 									"font": "Arial;13;0",
 									"left": 866.5,
 									"top": 364.5,
-									"width": 87,
+									"width": 88,
 									"height": 25,
 									"stereotypeLabel": {
 										"$ref": "AAAAAAGgTXWVgSEwlb4="
@@ -9128,7 +9128,7 @@
 									"font": "Arial;13;0",
 									"left": 560,
 									"top": 76.5,
-									"width": 77,
+									"width": 77.16455078125,
 									"height": 25,
 									"stereotypeLabel": {
 										"$ref": "AAAAAAGgTXoMLMxo/5M="
@@ -10721,7 +10721,7 @@
 									"font": "Arial;13;0",
 									"left": 563,
 									"top": 204.5,
-									"width": 91,
+									"width": 91.62451171875,
 									"height": 25,
 									"stereotypeLabel": {
 										"$ref": "AAAAAAGgTkpzzVAGA74="
@@ -16910,7 +16910,7 @@
 								"$ref": "AAAAAAGgUPiZpQ9Hj+s="
 							},
 							"name": "LoaiThongBao",
-							"documentation": "ViTien, ThoiTiet, DatSan, HeThong",
+							"documentation": "ViTien, ThoiTiet, DatSan, GiaiDau, HeThong",
 							"length": 0
 						},
 						{
