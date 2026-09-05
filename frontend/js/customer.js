@@ -1526,6 +1526,7 @@ async function renderRequests(activeTab = 'giai_dau') {
                     else if(item.TrangThai === 'TuChoi' || item.TrangThai === 'DaHuy') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; }
                     else if(item.TrangThai === 'ChoDuyet') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; }
                     else if(item.TrangThai === 'HetHan') { badgeColor = '#9ca3af'; badgeBg = '#f3f4f6'; }
+                    else if(item.TrangThai === 'HoanThanh') { badgeColor = '#2563eb'; badgeBg = '#dbeafe'; }
 
                     // 1. Xử lý logic tính ngày duyệt và ngày hết hạn (duyệt + 3 ngày)
                     let approvalInfoHtml = '';
