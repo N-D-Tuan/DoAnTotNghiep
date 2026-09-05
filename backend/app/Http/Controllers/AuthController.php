@@ -180,16 +180,17 @@ class AuthController extends Controller
 
     private function tuDongCapNhatHeThong()
     {
-        $today = now();
-        $ngayHetHan = now()->subDays(3);
+        // Tính theo mốc ngày (không theo giờ)
+        $today = now()->toDateString();
+        $ngayHetHan = now()->subDays(3)->toDateString();
 
         // Cập nhật Giải đấu
         GiaiDau::where('TrangThai', 'DaDuyet')
-            ->where('NgayDuyet', '<', $ngayHetHan)
+            ->whereDate('NgayDuyet', '<=', $ngayHetHan)
             ->update(['TrangThai' => 'HetHan']);
 
         GiaiDau::whereIn('TrangThai', ['DaDuyet', 'HetHan'])
-            ->whereDate('NgayBatDau', '<=', $today->toDateString())
+            ->whereDate('NgayBatDau', '<=', $today)
             ->update(['TrangThai' => 'HoanThanh']);
     }
 }
