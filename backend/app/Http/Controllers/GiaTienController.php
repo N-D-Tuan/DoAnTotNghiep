@@ -44,6 +44,9 @@ class GiaTienController extends Controller
                 );
             }
         }
+
+        broadcast(new \App\Events\SystemDataUpdated());
+        
         return response()->json(['success' => true, 'message' => 'Lưu bảng giá thành công']);
     }
 }

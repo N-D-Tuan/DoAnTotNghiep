@@ -1,6 +1,7 @@
 const API_BASE_URL = 'http://127.0.0.1:8000/api';
 const appContent = document.getElementById('app-content');
 
+let toastTimeout;
 let currentClusterId = null;
 let currentClusterName = null;
 let currentClusterAddress = null;
@@ -10,6 +11,7 @@ let currentPitchId = null;
 let currentPitchName = null;
 let currentLoaiSanId = null;
 let currentPitchType = null;
+let allActiveClusters = [];
 let userActiveTournaments = [];
 let currentBookingPurpose = sessionStorage.getItem('dn_football_booking_purpose') || 'normal';
 
@@ -261,6 +263,93 @@ async function syncUserWithdrawals() {
     }
 }
 
+function showToast(message) {
+    let toast = document.getElementById('system-toast');
+    
+    // Nếu chưa có thẻ toast trong HTML, dùng JS tự động tạo ra
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'system-toast';
+        // Cấu hình CSS hiển thị nổi ở góc dưới bên phải
+        toast.style.cssText = 'position: fixed; top: 80px; right: 30px; background-color: #f59e0b; color: white; padding: 14px 24px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 9999; font-weight: 600; transition: opacity 0.3s ease; display: none; opacity: 0;';
+        document.body.appendChild(toast);
+    }
+    
+    // Cập nhật nội dung
+    toast.innerHTML = `<i class="fa-solid fa-circle-exclamation" style="margin-right: 8px;"></i> ${message}`;
+    toast.style.display = 'block';
+    
+    // Ép trình duyệt nhận diện display:block trước khi tăng opacity để có hiệu ứng mượt
+    setTimeout(() => { toast.style.opacity = '1'; }, 10);
+
+    // Xóa bộ đếm cũ nếu có nhiều thông báo bắn ra liên tục
+    clearTimeout(toastTimeout);
+    
+    // Đặt thời gian 2 giây (2000ms) rồi làm mờ đi
+    toastTimeout = setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => { toast.style.display = 'none'; }, 300); // Chờ hiệu ứng mờ kết thúc mới ẩn hẳn
+    }, 2000);
+}
+
+async function revalidateCartPrices() {
+    if (selectedSlots.length === 0) return;
+
+    let isChanged = false;
+
+    try {
+        // Tải danh sách khung giờ hệ thống
+        const kgRes = await fetch(`${API_BASE_URL}/khung-gio`);
+        const allKhungGio = (await kgRes.json()).data || [];
+
+        // Gom nhóm các slot theo Cụm sân để tối ưu số lần gọi API
+        const clusterIds = [...new Set(selectedSlots.map(s => s.clusterId))];
+
+        for (let cId of clusterIds) {
+            // Tải danh sách Sân con (để lấy Loại Sân) và Bảng Giá của Cụm này
+            const [sbRes, gtRes] = await Promise.all([
+                fetch(`${API_BASE_URL}/san-bong?cum_san_id=${cId}`),
+                fetch(`${API_BASE_URL}/gia-tien?cum_san_id=${cId}`)
+            ]);
+            
+            const pitches = (await sbRes.json()).data || [];
+            const prices = (await gtRes.json()).data || [];
+
+            const slotsInCluster = selectedSlots.filter(s => s.clusterId == cId);
+
+            for (let slot of slotsInCluster) {
+                // 1. Tìm sân để biết là Sân 5, Sân 7 hay Sân 11
+                const pitch = pitches.find(p => p.ID == slot.pitchId);
+                if (!pitch) continue; 
+
+                // 2. Tìm ID của khung giờ tương ứng với chuỗi giờ trong giỏ
+                const matchingKhungGio = allKhungGio.find(kg => `${kg.GioBatDau.substring(0,5)} - ${kg.GioKetThuc.substring(0,5)}` === slot.time);
+                if (!matchingKhungGio) continue;
+
+                // 3. Đối chiếu giá mới nhất
+                const priceInfo = prices.find(p => p.ID_LoaiSan == pitch.ID_LoaiSan && p.ID_KhungGio == matchingKhungGio.ID);
+                const newRealPrice = priceInfo ? priceInfo.SoTien : 0;
+
+                // 4. Nếu giá thay đổi -> Lưu lại
+                if (Number(slot.price) !== Number(newRealPrice)) {
+                    slot.price = newRealPrice;
+                    isChanged = true;
+                }
+            }
+        }
+
+        if (isChanged) {
+            saveToSession(); // Cập nhật lại thanh nổi
+            if (document.getElementById('cart-modal').style.display === 'flex') {
+                openCartModal(); // Vẽ lại Modal nếu khách đang mở
+            }
+            showToast('Giá tiền trong giỏ hàng vừa được tự động cập nhật!');
+        }
+    } catch (error) {
+        console.error("Lỗi đồng bộ giá giỏ hàng ngầm:", error);
+    }
+}
+
 // ======================================================
 // ĐĂNG XUẤT CUSTOMER
 // ======================================================
@@ -439,6 +528,37 @@ document.addEventListener('DOMContentLoaded', async () => {
                 
                 // Hàm render thông báo mới
                 loadNotifications();
+            });
+
+        // BẮT ĐẦU LẮNG NGHE TÍN HIỆU TOÀN HỆ THỐNG
+        window.Echo.channel('system-updates')
+            .listen('SystemDataUpdated', async (e) => {
+                console.log('⚡ Hệ thống có thay đổi Cụm sân/Sân bóng...');
+
+                await revalidateCartPrices();
+                
+                // Trạng thái 1: Khách đang xem trang Danh sách Cụm Sân (Dựa vào ID vùng chứa lưới sân)
+                if (document.getElementById('cluster-grid-container')) {
+                    try {
+                        // Tải lại ngầm dữ liệu cụm sân
+                        const response = await fetch(`${API_BASE_URL}/cum-san`);
+                        const res = await response.json();
+                        allActiveClusters = res.data.filter(c => c.deleted_at === null);
+                        
+                        // Gọi hàm lọc để vẽ lại sân mà KHÔNG làm mất chữ đang gõ trong thanh tìm kiếm
+                        filterClusters(); 
+                    } catch(err) { console.error(err); }
+                } 
+                // Trạng thái 2: Khách đang xem trang chi tiết Sân con bên trong 1 Cụm
+                else if (currentClusterId !== null && document.querySelector('.pitch-section')) {
+                    renderPitches(currentClusterId, currentClusterName, currentClusterAddress, currentClusterGioMo, currentClusterGioDong);
+                }
+
+                // TRẠNG THÁI 3: Khách đang xem Lịch Sân
+                else if (currentPitchId !== null && document.querySelector('.schedule-table')) {
+                    // Tự động load lại lịch và cập nhật giỏ hàng ngầm
+                    renderSchedule(currentClusterId, currentClusterName, currentPitchId, currentPitchName, currentLoaiSanId, currentPitchType);
+                }
             });
     }
 );
@@ -865,42 +985,104 @@ async function renderClusters() {
         const response = await fetch(`${API_BASE_URL}/cum-san`);
         const res = await response.json();
         
-        // 1. NGHIỆP VỤ: Chỉ hiển thị các sân KHÔNG BỊ XÓA MỀM
-        const activeClusters = res.data.filter(c => c.deleted_at === null);
+        // 1. Lọc sân hoạt động và lưu vào biến toàn cục
+        allActiveClusters = res.data.filter(c => c.deleted_at === null);
 
+        // 2. Trích xuất danh sách Phường tự động từ dữ liệu cụm sân
+        const uniquePhuongs = [];
+        const phuongMap = new Set();
+        allActiveClusters.forEach(c => {
+            if (c.ID_Phuong && c.phuong && !phuongMap.has(c.ID_Phuong)) {
+                phuongMap.add(c.ID_Phuong);
+                uniquePhuongs.push({ id: c.ID_Phuong, name: c.phuong.TenPhuong });
+            }
+        });
+
+        // 3. Render Giao diện (Thêm Thanh tìm kiếm và Bộ lọc)
         let html = `
             <div class="page-header">
                 <h1 class="page-title">Hệ thống sân bóng DN FOOTBALL</h1>
                 <p class="page-subtitle">Chọn cụm sân bạn muốn đặt lịch thi đấu</p>
             </div>
-            <div class="cluster-grid">
-        `;
 
-        if (activeClusters.length === 0) {
-            html += `<div style="grid-column: 1/-1; text-align:center; color: var(--text-muted);">Hiện chưa có cụm sân nào hoạt động.</div>`;
-        }
-
-        activeClusters.forEach(cluster => {
-            const imgUrl = cluster.HinhAnh ? `http://127.0.0.1:8000${cluster.HinhAnh}` : 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?q=80&w=600&auto=format&fit=crop';
-            html += `
-                <div class="cluster-card" onclick="renderPitches(${cluster.ID}, '${cluster.TenCumSan}', '${cluster.DiaChi}', '${cluster.GioMoCua}', '${cluster.GioDongCua}')">
-                    <div class="cluster-img-box">
-                        <img src="${imgUrl}" alt="${cluster.TenCumSan}" class="cluster-img">
-                    </div>
-                    <div class="cluster-info">
-                        <div class="cluster-name">${cluster.TenCumSan}</div>
-                        <div class="cluster-address"><i class="fa-solid fa-location-dot" style="color: var(--primary);"></i> ${cluster.DiaChi} (${cluster.phuong?.TenPhuong || ''})</div>
-                        <div class="cluster-meta"><i class="fa-solid fa-clock"></i> ${cluster.GioMoCua.substring(0,5)} - ${cluster.GioDongCua.substring(0,5)}</div>
-                        <button class="btn-outline">XEM DANH SÁCH SÂN &rarr;</button>
-                    </div>
+            <!-- THANH CÔNG CỤ TÌM KIẾM VÀ LỌC -->
+            <div style="display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 250px; position: relative;">
+                    <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
+                    <input type="text" id="search-cluster" class="form-control" placeholder="Tìm kiếm theo tên cụm hoặc địa chỉ..." style="padding-left: 40px;" oninput="filterClusters()">
                 </div>
-            `;
-        });
-        html += `</div>`;
+                <div style="min-width: 220px;">
+                    <select id="filter-phuong" class="form-control" onchange="filterClusters()">
+                        <option value="">-- Tất cả khu vực --</option>
+                        ${uniquePhuongs.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+                    </select>
+                </div>
+            </div>
+
+            <!-- VÙNG CHỨA DANH SÁCH (Sẽ được điền bởi JS) -->
+            <div class="cluster-grid" id="cluster-grid-container"></div>
+        `;
+        
         appContent.innerHTML = html;
+
+        // 4. Kích hoạt bộ lọc lần đầu để vẽ danh sách
+        filterClusters();
+
     } catch (error) {
         appContent.innerHTML = `<div style="text-align:center; color:red;">Lỗi tải dữ liệu máy chủ!</div>`;
     }
+}
+
+// Hàm xử lý logic Tìm kiếm và Lọc theo phường
+function filterClusters() {
+    const searchInput = document.getElementById('search-cluster');
+    const phuongSelect = document.getElementById('filter-phuong');
+    const gridContainer = document.getElementById('cluster-grid-container');
+
+    // Chặn lỗi nếu các phần tử DOM chưa được render
+    if (!searchInput || !phuongSelect || !gridContainer) return;
+
+    const searchTerm = searchInput.value.toLowerCase().trim();
+    const selectedPhuongId = phuongSelect.value;
+
+    // Tiến hành lọc dữ liệu từ mảng gốc
+    const filtered = allActiveClusters.filter(cluster => {
+        // Lọc theo Text (Tên cụm hoặc Địa chỉ)
+        const textMatch = cluster.TenCumSan.toLowerCase().includes(searchTerm) || 
+                          cluster.DiaChi.toLowerCase().includes(searchTerm);
+        
+        // Lọc theo Phường
+        const phuongMatch = selectedPhuongId === "" || String(cluster.ID_Phuong) === String(selectedPhuongId);
+        
+        return textMatch && phuongMatch;
+    });
+
+    // Cập nhật lại giao diện Grid
+    if (filtered.length === 0) {
+        gridContainer.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding: 40px; color: var(--text-muted); background: #fff; border-radius: 12px; border: 1px dashed var(--border);">Không tìm thấy cụm sân nào phù hợp với yêu cầu tìm kiếm.</div>`;
+        return;
+    }
+
+    let gridHtml = '';
+    filtered.forEach(cluster => {
+        const imgUrl = cluster.HinhAnh ? `http://127.0.0.1:8000${cluster.HinhAnh}` : 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?q=80&w=600&auto=format&fit=crop';
+        gridHtml += `
+            <div class="cluster-card" onclick="renderPitches(${cluster.ID}, '${cluster.TenCumSan}', '${cluster.DiaChi}', '${cluster.GioMoCua}', '${cluster.GioDongCua}')">
+                <div class="cluster-img-box">
+                    <img src="${imgUrl}" alt="${cluster.TenCumSan}" class="cluster-img">
+                </div>
+                <div class="cluster-info">
+                    <div class="cluster-name">${cluster.TenCumSan}</div>
+                    <div class="cluster-address"><i class="fa-solid fa-location-dot" style="color: var(--primary);"></i> ${cluster.DiaChi} (${cluster.phuong?.TenPhuong || ''})</div>
+                    <div class="cluster-meta"><i class="fa-solid fa-clock"></i> ${cluster.GioMoCua.substring(0,5)} - ${cluster.GioDongCua.substring(0,5)}</div>
+                    <button class="btn-outline">XEM DANH SÁCH SÂN &rarr;</button>
+                </div>
+            </div>
+        `;
+    });
+    
+    // ĐIỂM QUAN TRỌNG NHẤT: Bơm chuỗi HTML vừa tạo vào vùng chứa
+    gridContainer.innerHTML = gridHtml;
 }
 
 async function renderPitches(clusterId, clusterName, clusterAddress, gioMo, gioDong) {
@@ -1006,7 +1188,7 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
             fetch(`${API_BASE_URL}/gia-tien?cum_san_id=${clusterId}`),
             fetch(`${API_BASE_URL}/khung-gio`)
         ]);
-        
+
         const giaTienData = (await gtRes.json()).data || [];
         const allKhungGio = (await kgRes.json()).data || [];
 
@@ -2138,7 +2320,7 @@ async function loadNotifications() {
                         <i class="fa-solid ${icon}"></i>
                     </div>
                     <div>
-                        <div style="${textClass} font-size: 0.95rem; margin-bottom: 4px; line-height: 1.3;">${item.TieuDe}</div>
+                        <div class="notif-title" style="${textClass} font-size: 0.95rem; margin-bottom: 4px; line-height: 1.3;">${item.TieuDe}</div>
                         <div style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 6px; line-height: 1.4;">${item.NoiDung}</div>
                         <div style="color: #94a3b8; font-size: 0.75rem;"><i class="fa-regular fa-clock"></i> ${timeStr}</div>
                     </div>
