@@ -43,6 +43,9 @@ class SanBongController extends Controller
         ]);
 
         $sanBong->update($validated);
+
+        broadcast(new \App\Events\SystemDataUpdated());
+        
         return response()->json(['success' => true, 'message' => 'Cập nhật thành công', 'data' => $sanBong]);
     }
 }

@@ -75,6 +75,9 @@ class CumSanController extends Controller
         }
 
         $cumSan->delete();
+
+        broadcast(new \App\Events\SystemDataUpdated());
+
         return response()->json(['success' => true, 'message' => 'Xóa Cụm Sân thành công!']);
     }
 
@@ -93,6 +96,9 @@ class CumSanController extends Controller
         }
 
         $cumSan->restore(); // Xóa giá trị trong cột deleted_at (trở về NULL)
+
+        broadcast(new \App\Events\SystemDataUpdated());
+        
         return response()->json(['success' => true, 'message' => 'Khôi phục Cụm Sân thành công!']);
     }
 }
