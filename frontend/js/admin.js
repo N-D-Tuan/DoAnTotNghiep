@@ -531,6 +531,19 @@ function renderQuanLySan() {
         <div id="cumsan-grid" class="cumsan-grid">
             <div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 40px;">Đang tải dữ liệu...</div>
         </div>
+
+        <!-- BỔ SUNG: Modal Xác nhận Xóa/Khôi phục Cụm Sân -->
+        <div id="cs-confirm-modal" class="modal-overlay" style="display: none; z-index: 9999;">
+            <div class="modal-content" style="max-width: 400px; text-align: center; padding: 30px 20px;">
+                <div style="font-size: 3.5rem; color: #f59e0b; margin-bottom: 15px;"><i class="fa-solid fa-circle-exclamation"></i></div>
+                <h3 id="cs-confirm-title" style="margin-bottom: 10px; font-size: 1.4rem;">Xác nhận</h3>
+                <p id="cs-confirm-msg" style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5;"></p>
+                <div style="display: flex; justify-content: center; gap: 12px;">
+                    <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="closeCSConfirmModal()">Hủy bỏ</button>
+                    <button id="cs-confirm-btn" class="btn-primary" style="width: auto; padding: 10px 24px;" onclick="executeCSAction()">Đồng ý</button>
+                </div>
+            </div>
+        </div>
     `;
 
     loadCumSanCards(); // Gọi API lấy dữ liệu thẻ
@@ -1055,12 +1068,81 @@ async function saveCumSan() {
     }
 }
 
-async function deleteCumSan(id) {
-    if (!confirm('Bạn có chắc chắn muốn xóa Cụm Sân này?')) return;
+// ======================================================
+// XÓA / KHÔI PHỤC CỤM SÂN (DÙNG MODAL)
+// ======================================================
+let pendingCumSanId = null;
+let pendingCumSanAction = null; // 'delete' hoặc 'restore'
+
+// 1. Mở Modal cấu hình tự động theo hành động
+function deleteCumSan(id) {
+    openCSConfirmModal(id, 'delete');
+}
+
+function restoreCumSan(id) {
+    openCSConfirmModal(id, 'restore');
+}
+
+function openCSConfirmModal(id, action) {
+    pendingCumSanId = id;
+    pendingCumSanAction = action;
+
+    // Tự động tạo Modal bám vào body nếu chưa tồn tại
+    let modal = document.getElementById('cs-confirm-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'cs-confirm-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 9999;';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 400px; text-align: center; padding: 30px 20px;">
+                <div style="font-size: 3.5rem; color: #f59e0b; margin-bottom: 15px;"><i class="fa-solid fa-circle-exclamation"></i></div>
+                <h3 id="cs-confirm-title" style="margin-bottom: 10px; font-size: 1.4rem;">Xác nhận</h3>
+                <p id="cs-confirm-msg" style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5;"></p>
+                <div style="display: flex; justify-content: center; gap: 12px;">
+                    <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="closeCSConfirmModal()">Hủy bỏ</button>
+                    <button id="cs-confirm-btn" class="btn-primary" style="width: auto; padding: 10px 24px;" onclick="executeCSAction()">Đồng ý</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+
+    const isDelete = (action === 'delete');
+    
+    document.getElementById('cs-confirm-title').innerText = isDelete ? 'Tạm Ngưng Cụm Sân' : 'Khôi Phục Cụm Sân';
+    document.getElementById('cs-confirm-msg').innerHTML = isDelete 
+        ? 'Bạn có chắc chắn muốn <strong style="color: #ef4444;">XÓA (Tạm ngưng)</strong> hoạt động của Cụm Sân này không?' 
+        : 'Bạn muốn <strong style="color: #16A34A;">KHÔI PHỤC</strong> hoạt động cho Cụm Sân này?';
+    
+    const btnConfirm = document.getElementById('cs-confirm-btn');
+    btnConfirm.style.backgroundColor = isDelete ? '#ef4444' : 'var(--primary)';
+    btnConfirm.style.borderColor = isDelete ? '#ef4444' : 'var(--primary)';
+
+    modal.style.display = 'flex';
+}
+
+function closeCSConfirmModal() {
+    document.getElementById('cs-confirm-modal').style.display = 'none';
+    pendingCumSanId = null;
+    pendingCumSanAction = null;
+}
+
+// 2. Thực thi gọi API sau khi nhấn Đồng ý
+async function executeCSAction() {
+    if (!pendingCumSanId || !pendingCumSanAction) return;
+
+    const btn = document.getElementById('cs-confirm-btn');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+    btn.disabled = true;
+
+    const isDelete = pendingCumSanAction === 'delete';
+    const url = isDelete ? `${API_BASE_URL}/cum-san/${pendingCumSanId}` : `${API_BASE_URL}/cum-san/${pendingCumSanId}/restore`;
+    const method = isDelete ? 'DELETE' : 'PUT';
 
     try {
-        const response = await fetch(`${API_BASE_URL}/cum-san/${id}`, {
-            method: 'DELETE',
+        const response = await fetch(url, {
+            method: method,
             credentials: 'include',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
         });
@@ -1068,33 +1150,17 @@ async function deleteCumSan(id) {
         const data = await response.json();
         
         if (response.ok && data.success) {
-            showCumSanAlert('Đã xóa Cụm Sân thành công!', true);
-            //renderQuanLySan(); // Quay lại trang danh sách tổng
-            renderCumSanDetail(currentCumSanId);
+            showCumSanAlert(isDelete ? 'Đã tạm ngưng Cụm Sân!' : 'Đã khôi phục Cụm Sân!', true);
+            renderCumSanDetail(currentCumSanId); // Cập nhật lại màn hình chi tiết
         } else {
-            showCumSanAlert(data.message || 'Có lỗi khi xóa!', false);
+            showCumSanAlert(data.message || 'Có lỗi xảy ra!', false);
         }
     } catch (error) {
         showCumSanAlert('Không thể kết nối máy chủ!', false);
-    }
-}
-
-async function restoreCumSan(id) {
-    if (!confirm('Bạn muốn mở lại hoạt động cho Cụm Sân này?')) return;
-    try {
-        const response = await fetch(`${API_BASE_URL}/cum-san/${id}/restore`, {
-            method: 'PUT',
-            credentials: 'include',
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
-        });
-        const data = await response.json();
-        if (response.ok && data.success) {
-            showCumSanAlert('Đã khôi phục Cụm Sân!', true);
-            //renderQuanLySan();
-            renderCumSanDetail(currentCumSanId); 
-        }
-    } catch (error) {
-        showCumSanAlert('Lỗi kết nối!', false);
+    } finally {
+        btn.innerHTML = 'Đồng ý';
+        btn.disabled = false;
+        closeCSConfirmModal();
     }
 }
 
