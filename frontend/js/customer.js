@@ -917,12 +917,31 @@ async function checkoutBooking() {
             
             if (!clusterData.success || clusterData.data.deleted_at !== null) {
                 const clusterName = selectedSlots.find(s => s.clusterId === cId).clusterName;
-                showCartAlert(`Cụm sân "${clusterName}" đang bảo trì hoặc ngừng hoạt động!`, false);
+                showCartAlert(`Cụm sân "${clusterName}" đang bảo trì hoặc ngừng hoạt động. Đã tự động gỡ khỏi giỏ!`, false);
                 
-                // Chờ 3 giây để khách đọc thông báo rồi xóa giỏ hàng & chuyển hướng
                 setTimeout(() => {
-                    clearAllSlots();
-                    renderClusters();
+                    // Lọc bỏ toàn bộ các sân con thuộc cụm bị lỗi ra khỏi giỏ hàng
+                    selectedSlots = selectedSlots.filter(s => s.clusterId !== cId);
+                    saveToSession();
+                    
+                    // Kiểm tra giỏ hàng để mở/đóng Modal
+                    if (selectedSlots.length > 0) {
+                        openCartModal(); // Nếu còn sân của cụm khác thì giữ Modal
+                    } else {
+                        closeCartModal(); // Đóng nếu giỏ trống
+                    }
+                    
+                    // Xử lý giao diện nền phía sau Modal
+                    if (currentClusterId === cId) {
+                        // NẾU khách đang đứng ở ngay cụm sân vừa bị xóa -> Đá văng ra trang danh sách cụm
+                        renderClusters();
+                    } else if (currentClusterId !== null) {
+                        // Khách đang đứng xem ở một cụm khác an toàn -> Render lại cụm đó
+                        renderPitches(currentClusterId, currentClusterName, currentClusterAddress, currentClusterGioMo, currentClusterGioDong);
+                    } else {
+                        // Khách đang đứng ở trang chủ
+                        renderClusters();
+                    }
                 }, 3000); 
                 return;
             }
