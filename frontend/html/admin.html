@@ -19,7 +19,7 @@
                 <a href="#" class="active"><i class="fa-solid fa-chart-pie"></i> TỔNG QUAN</a>
                 <a href="#" onclick="renderQuanLySan(); return false;"><i class="fa-solid fa-layer-group"></i> QUẢN LÝ SÂN</a>
                 <a href="#"><i class="fa-solid fa-users"></i> QUẢN LÝ KHÁCH HÀNG</a>
-                <a href="#"><i class="fa-solid fa-calendar-check"></i> QUẢN LÝ ĐẶT SÂN</a>
+                <a href="#" onclick="renderQuanLyDatSan(); return false;"><i class="fa-solid fa-calendar-check"></i> QUẢN LÝ ĐẶT SÂN</a>
                 <a href="#" onclick="renderQuanLyGiaiDau(); return false;"><i class="fa-solid fa-flag-checkered"></i> YÊU CẦU GIẢI ĐẤU</a>
                 <a href="#"><i class="fa-solid fa-calendar-xmark"></i> YÊU CẦU HỦY SÂN</a>
                 <a href="#" onclick="renderQuanLyRutTien(); return false;"><i class="fa-solid fa-wallet"></i> YÊU CẦU RÚT TIỀN</a>
@@ -35,9 +35,9 @@
                 <div style="display: flex; align-items: center; gap: 20px; margin-left: auto;">
                     
                     <!-- NÚT CHUÔNG THÔNG BÁO ADMIN -->
-                    <div class="notification" id="notif-btn" onclick="toggleNotificationDropdown(event)" style="position: relative; cursor: pointer;">
-                        <i class="fa-regular fa-bell" style="font-size: 1.4rem; color: var(--text-muted);"></i>
-                        <span class="badge" id="notif-badge" style="display: none; position: absolute; top: -5px; right: -8px; background: #ef4444; color: white; border-radius: 50%; padding: 2px 6px; font-size: 0.75rem; font-weight: bold;">0</span>
+                    <div class="notification notification-bell" id="notif-btn" onclick="toggleNotificationDropdown(event)">
+                        <i class="fa-regular fa-bell"></i>
+                        <span class="badge notification-badge" id="notif-badge" style="display: none;">0</span>
                         
                         <!-- Dropdown Danh sách -->
                         <div class="dropdown-menu" id="notif-dropdown" style="position: absolute; width: 340px; right: -10px; top: 35px; background: white; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); padding: 0; display: none; cursor: default; z-index: 1000;" onclick="event.stopPropagation()">

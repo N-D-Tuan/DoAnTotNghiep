@@ -259,3 +259,216 @@ button { cursor: pointer; font-family: var(--font-main); border: none; }
     border-radius: 8px;
     color: #fde047;
 }
+
+/* =====================================================
+   CHUÔNG THÔNG BÁO ADMIN
+===================================================== */
+
+.notification-bell {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 38px;
+    height: 38px;
+
+    cursor: pointer;
+}
+
+
+/* Icon chuông lớn hơn */
+.notification-bell > .fa-bell {
+    font-size: 1.75rem;
+    color: var(--text-muted);
+
+    transition: transform 0.2s ease, color 0.2s ease;
+}
+
+
+/* Hover */
+.notification-bell:hover > .fa-bell {
+    transform: scale(1.08);
+    color: var(--primary);
+}
+
+
+/* Badge số thông báo */
+.notification-bell .notification-badge {
+    position: absolute;
+
+    top: 1px;
+    right: -5px;
+
+    min-width: 18px;
+    height: 18px;
+
+    padding: 0 5px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background: #ef4444;
+    color: #ffffff;
+
+    border: 2px solid #ffffff;
+    border-radius: 999px;
+
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1;
+
+    box-sizing: border-box;
+
+    z-index: 2;
+}
+
+/* =========================================
+   NÚT HỦY SÂN
+========================================= */
+
+.cancel-booking-btn {
+    width: 100%;
+    margin-top: 12px;
+    padding: 10px 14px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+
+    color: #dc2626;
+    background: #fff5f5;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+
+    font-size: 0.9rem;
+    font-weight: 600;
+
+    cursor: pointer;
+    transition: 
+        background 0.2s ease,
+        color 0.2s ease,
+        border-color 0.2s ease,
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.cancel-booking-btn:hover {
+    background: #ef4444;
+    color: #ffffff;
+    border-color: #ef4444;
+
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(239, 68, 68, 0.2);
+}
+
+.cancel-booking-btn:active {
+    transform: translateY(0);
+    box-shadow: none;
+}
+
+.cancel-booking-btn i {
+    font-size: 0.9rem;
+}
+
+/* =========================================
+   NÚT HỦY TOÀN BỘ GIẢI
+========================================= */
+
+.btn-cancel-tour {
+    flex-shrink: 0;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+
+    min-width: 170px;
+    padding: 10px 16px;
+
+    color: #dc2626;
+    background: #fff5f5;
+
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+
+    font-size: 0.88rem;
+    font-weight: 600;
+
+    cursor: pointer;
+
+    transition:
+        background 0.2s ease,
+        color 0.2s ease,
+        border-color 0.2s ease,
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+
+/* Hover */
+
+.btn-cancel-tour:hover {
+    background: #ef4444;
+    color: #ffffff;
+
+    border-color: #ef4444;
+
+    transform: translateY(-1px);
+
+    box-shadow:
+        0 4px 10px rgba(239, 68, 68, 0.18);
+}
+
+
+/* Khi click */
+
+.btn-cancel-tour:active {
+    transform: translateY(0);
+
+    box-shadow: none;
+}
+
+
+/* Icon */
+
+.btn-cancel-tour i {
+    font-size: 0.9rem;
+}
+
+
+/* =========================================
+   TRẠNG THÁI KHÔNG THỂ HỦY
+========================================= */
+
+.cancel-tour-disabled {
+    flex-shrink: 0;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+
+    padding: 10px 14px;
+
+    color: #9ca3af;
+    background: #f9fafb;
+
+    border: 1px dashed #d1d5db;
+    border-radius: 8px;
+
+    font-size: 0.85rem;
+    font-style: italic;
+
+    cursor: not-allowed;
+
+    user-select: none;
+}
+
+
+.cancel-tour-disabled i {
+    font-size: 0.82rem;
+    color: #9ca3af;
+}

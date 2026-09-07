@@ -189,8 +189,5 @@ class AuthController extends Controller
             ->whereDate('NgayDuyet', '<=', $ngayHetHan)
             ->update(['TrangThai' => 'HetHan']);
 
-        GiaiDau::whereIn('TrangThai', ['DaDuyet', 'HetHan'])
-            ->whereDate('NgayBatDau', '<=', $today)
-            ->update(['TrangThai' => 'HoanThanh']);
     }
 }

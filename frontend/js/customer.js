@@ -13,6 +13,11 @@ let currentLoaiSanId = null;
 let currentPitchType = null;
 let allActiveClusters = [];
 let userActiveTournaments = [];
+let allMyBookingsData = [];
+let currentBookingSearch = '';
+let currentBookingDate = '';
+let currentBookingStatus = 'All';
+let currentBookingTab = 'phong_trao';
 let currentBookingPurpose = sessionStorage.getItem('dn_football_booking_purpose') || 'normal';
 
 // ======================================================
@@ -981,8 +986,45 @@ async function checkoutBooking() {
             }
         }
 
-        // Vượt qua kiểm tra
-        showCartAlert('Tất cả sân hợp lệ! (Chức năng tạo hóa đơn sẽ được phát triển tiếp)', true);
+        const payload = {
+            slots: selectedSlots,
+            purpose: currentBookingPurpose
+        };
+
+        const response = await fetch(`${API_BASE_URL}/dat-san`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 
+                'Accept': 'application/json', 
+                'Content-Type': 'application/json' 
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            // Thông báo màu xanh báo thành công
+            showCartAlert(data.message, true);
+            
+            // Cập nhật ngay lập tức số dư Ví trên Header mà không cần tải lại trang
+            await syncUserWallet();
+
+            // Nếu là đặt giải đấu, reset mục đích về mặc định để tránh lỗi giỏ hàng phiên tiếp theo
+            if (currentBookingPurpose !== 'normal') {
+                currentBookingPurpose = 'normal';
+                sessionStorage.setItem('dn_football_booking_purpose', 'normal');
+            }
+            
+            // Chờ 2 giây cho khách hàng đọc thông báo, sau đó xóa sạch giỏ và Load lại Lịch sân
+            setTimeout(() => {
+                clearAllSlots(); // Hàm này đã chứa sẵn closeCartModal() và renderSchedule()
+            }, 2000);
+            
+        } else {
+            // Thông báo màu đỏ (Lỗi hết tiền, lỗi sân bị người khác đặt...)
+            showCartAlert(data.message, false);
+        }
         
     } catch (error) {
         console.error('Lỗi xác thực:', error);
@@ -1203,13 +1245,15 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
             }
         }
 
-        const [gtRes, kgRes] = await Promise.all([
+        const [gtRes, kgRes, dsRes] = await Promise.all([
             fetch(`${API_BASE_URL}/gia-tien?cum_san_id=${clusterId}`),
-            fetch(`${API_BASE_URL}/khung-gio`)
+            fetch(`${API_BASE_URL}/khung-gio`),
+            fetch(`${API_BASE_URL}/dat-san/da-dat?id_san_bong=${pitchId}`)
         ]);
 
         const giaTienData = (await gtRes.json()).data || [];
         const allKhungGio = (await kgRes.json()).data || [];
+        const bookedSlots = (await dsRes.json()).data || [];
 
         const validPrices = giaTienData.filter(gt => gt.ID_LoaiSan == loaiSanId);
         const validKhungGioIds = validPrices.map(gt => gt.ID_KhungGio);
@@ -1341,10 +1385,16 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                         
             dateArray.forEach((date) => {
                 const slotId = `${clusterName}-${pitchName}-${date.full}-${timeStr}`;
-                const isBooked = false; 
+
+                // 1. Ép kiểu date.full (DD/MM/YYYY) về YYYY-MM-DD để so sánh với Database
+                const [day, month, year] = date.full.split('/');
+                const formatNgayDa = `${year}-${month}-${day}`;
+                
+                // 2. Kiểm tra xem (Ngày Đá + ID Khung Giờ) này đã tồn tại trong mảng bookedSlots chưa
+                const isBooked = bookedSlots.some(b => b.NgayDa === formatNgayDa && b.ID_KhungGio === kg.ID);
+
                 const isSelected = selectedSlots.some(s => s.id === slotId);
                 
-                const [day, month, year] = date.full.split('/');
                 const [startHour, startMinute] = kg.GioBatDau.split(':');
                 const slotDateTime = new Date(year, month - 1, day, startHour, startMinute);
                 
@@ -1394,22 +1444,468 @@ function toggleSlot(element, clusterId, clusterName, pitchId, pitchName, date, t
     saveToSession();
 }
 
-function renderMyBookings() {
+// ======================================================
+// MODULE: LỊCH SỬ ĐẶT SÂN & HỦY SÂN PHONG TRÀO
+// ======================================================
+async function renderMyBookings() {
     updateActiveNav('renderMyBookings');
+    currentClusterId = null; currentPitchName = null; currentPitchType = null;
 
-    currentClusterId = null;
-    currentPitchName = null;
-    currentPitchType = null;
+    currentBookingSearch = '';
+    currentBookingDate = '';
+    currentBookingStatus = 'All';
+    currentBookingTab = 'phong_trao';
 
     appContent.innerHTML = `
-        <div class="page-header">
+        <div class="page-header" style="margin-bottom: 24px;">
             <h1 class="page-title">Lịch sử đặt sân</h1>
             <p class="page-subtitle">Theo dõi trạng thái các sân bạn đã đặt</p>
         </div>
-        <div class="schedule-container" style="padding: 30px; text-align: center;">
-            <p style="color: var(--text-muted);">Bạn chưa có lịch sử đặt sân nào.</p>
+
+        <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+            <!-- SIDEBAR TRÁI: MENU TAB -->
+            <div style="width: 220px; flex-shrink: 0;">
+                <div style="background: white; border-radius: 12px; padding: 12px; box-shadow: var(--shadow-sm); border: 1px solid var(--border);">
+                    <button onclick="switchBookingTab('phong_trao')" id="tab-phong-trao" style="width: 100%; text-align: left; padding: 12px 16px; margin-bottom: 8px; border-radius: 8px; border: none; background: var(--primary-light); color: var(--primary); font-weight: 600; cursor: pointer; transition: 0.2s;">
+                        <i class="fa-solid fa-user-ninja" style="width: 20px;"></i> Phong trào
+                    </button>
+                    <button onclick="switchBookingTab('giai_dau')" id="tab-giai-dau" style="width: 100%; text-align: left; padding: 12px 16px; border-radius: 8px; border: none; background: transparent; color: var(--text-muted); font-weight: 500; cursor: pointer; transition: 0.2s;">
+                        <i class="fa-solid fa-trophy" style="width: 20px;"></i> Giải đấu
+                    </button>
+                </div>
+            </div>
+
+            <!-- CỘT PHẢI: BỘ LỌC & DANH SÁCH -->
+            <div style="flex: 1; min-width: 0;">
+                <div style="display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 200px; position: relative;">
+                        <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
+                        <input type="text" id="search-booking" class="form-control" placeholder="Tìm tên sân, cụm sân, giải đấu..." style="padding-left: 40px;" oninput="handleBookingSearch(this.value)">
+                    </div>
+                    <input type="date" id="filter-booking-date" class="form-control" style="width: 150px;" onchange="handleBookingDate(this.value)">
+                    <select id="filter-booking-status" class="form-control" style="width: 170px;" onchange="handleBookingStatus(this.value)">
+                        <option value="All">Tất cả trạng thái</option>
+                        <option value="DaCoc">Đã cọc</option>
+                        <option value="HoanThanh">Hoàn thành</option>
+                        <option value="DaHuy">Đã hủy</option>
+                        <option value="KhongDen">Không đến</option>
+                    </select>
+                </div>
+
+                <div id="my-bookings-container" style="min-height: 300px; position: relative;">
+                    <div style="text-align:center; padding: 50px;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải dữ liệu...</div>
+                </div>
+            </div>
         </div>
     `;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/dat-san/cua-toi`, { credentials: 'include' });
+        const res = await response.json();
+        
+        // Lưu toàn bộ dữ liệu gốc vào biến toàn cục để phục vụ lọc
+        allMyBookingsData = res.data || [];
+        
+        // Gọi hàm lọc và vẽ lưới ngay lần đầu tiên
+        applyBookingFiltersAndRender();
+
+    } catch (error) {
+        document.getElementById('my-bookings-container').innerHTML = `<div style="text-align:center; color:red; padding: 40px;">Lỗi kết nối đến máy chủ!</div>`;
+    }
+}
+
+function switchBookingTab(tab) {
+    currentBookingTab = tab;
+    const btnPhongTrao = document.getElementById('tab-phong-trao');
+    const btnGiaiDau = document.getElementById('tab-giai-dau');
+
+    const activeStyle = "width: 100%; text-align: left; padding: 12px 16px; border-radius: 8px; border: none; background: var(--primary-light); color: var(--primary); font-weight: 600; cursor: pointer; transition: 0.2s;";
+    const inactiveStyle = "width: 100%; text-align: left; padding: 12px 16px; border-radius: 8px; border: none; background: transparent; color: var(--text-muted); font-weight: 500; cursor: pointer; transition: 0.2s;";
+
+    if (tab === 'phong_trao') {
+        btnPhongTrao.style.cssText = activeStyle + " margin-bottom: 8px;";
+        btnGiaiDau.style.cssText = inactiveStyle;
+    } else {
+        btnGiaiDau.style.cssText = activeStyle;
+        btnPhongTrao.style.cssText = inactiveStyle + " margin-bottom: 8px;";
+    }
+    
+    // Xóa chữ tìm kiếm cũ khi đổi Tab
+    document.getElementById('search-booking').value = '';
+    currentBookingSearch = '';
+    
+    applyBookingFiltersAndRender();
+}
+
+function handleBookingSearch(val) { currentBookingSearch = val.toLowerCase().trim(); applyBookingFiltersAndRender(); }
+function handleBookingDate(val) { currentBookingDate = val; applyBookingFiltersAndRender(); }
+function handleBookingStatus(val) { currentBookingStatus = val; applyBookingFiltersAndRender(); }
+
+function applyBookingFiltersAndRender() {
+    const container = document.getElementById('my-bookings-container');
+    if (!container) return;
+
+    // Các hàm tiện ích Format
+    const renderBadge = (trangThai) => {
+        let badgeColor = '#6b7280', badgeBg = '#f3f4f6', viStatus = trangThai;
+        if(trangThai === 'DaCoc') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; viStatus = 'Đã cọc'; }
+        else if(trangThai === 'DaHuy') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; viStatus = 'Đã hủy'; }
+        else if(trangThai === 'HoanThanh') { badgeColor = '#047857'; badgeBg = '#d1fae5'; viStatus = 'Hoàn thành'; }
+        else if(trangThai === 'KhongDen') { badgeColor = '#6b7280'; badgeBg = '#f3f4f6'; viStatus = 'Không đến'; }
+        return `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${viStatus}</span>`;
+    };
+
+    const formatDate = (dateString) => {
+        if (!dateString) return '';
+        const d = new Date(dateString);
+        const pad = n => n < 10 ? '0' + n : n;
+        return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
+    };
+
+    let html = '';
+
+    // ==========================================
+    // LUỒNG 1: TAB PHONG TRÀO
+    // ==========================================
+    if (currentBookingTab === 'phong_trao') {
+        const filteredList = allMyBookingsData.filter(item => {
+            if (item.ID_GiaiDau !== null) return false; // Lọc bỏ dữ liệu giải đấu
+
+            const matchStatus = currentBookingStatus === 'All' || item.TrangThai === currentBookingStatus;
+            const sanBong = item.san_bong ? item.san_bong.TenSan.toLowerCase() : '';
+            const cumSan = (item.san_bong && item.san_bong.cum_san) ? item.san_bong.cum_san.TenCumSan.toLowerCase() : '';
+            const matchSearch = sanBong.includes(currentBookingSearch) || cumSan.includes(currentBookingSearch);
+            const matchDate = currentBookingDate ? (item.NgayDa === currentBookingDate) : true; // Lọc chính xác 1 ngày
+
+            return matchStatus && matchSearch && matchDate;
+        });
+
+        if (filteredList.length === 0) {
+            container.innerHTML = `<div class="schedule-container" style="padding: 40px; text-align: center; background: white; border-radius: 12px;"><i class="fa-regular fa-calendar-xmark" style="font-size: 3rem; color: var(--border); margin-bottom: 16px;"></i><p style="color: var(--text-muted); font-size: 1.05rem;">Không có lịch đặt phong trào nào.</p></div>`;
+            return;
+        }
+
+        html += '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;">';
+        filteredList.forEach(item => {
+            const sanBong = item.san_bong ? item.san_bong.TenSan : 'Sân không xác định';
+            const cumSan = (item.san_bong && item.san_bong.cum_san) ? item.san_bong.cum_san.TenCumSan : '';
+            const khungGio = item.khung_gio ? `${item.khung_gio.GioBatDau.substring(0,5)} - ${item.khung_gio.GioKetThuc.substring(0,5)}` : 'N/A';
+            
+            let actionHtml = '';
+            if (item.TrangThai === 'DaCoc') {
+                actionHtml = `<button class="btn-outline-sm cancel-booking-btn" onclick="openCancelModal(${item.ID})"><i class="fa-solid fa-ban"></i><span>Hủy sân</span></button>`;
+            }
+
+            html += `
+                <div style="background: white; border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: var(--shadow-sm); transition: 0.2s;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                        <div>
+                            <h3 style="margin: 0 0 4px 0; font-size: 1.15rem; color: var(--text-dark);">${sanBong}</h3>
+                            <div style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-solid fa-location-dot"></i> ${cumSan}</div>
+                        </div>
+                        ${renderBadge(item.TrangThai)}
+                    </div>
+                    <div style="background: #f8fafc; border-radius: 8px; padding: 12px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="color: var(--text-muted); font-size: 0.9rem;">Ngày đá:</span>
+                            <strong style="color: var(--text-dark);">${formatDate(item.NgayDa)}</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="color: var(--text-muted); font-size: 0.9rem;">Giờ đá:</span>
+                            <strong style="color: var(--primary);">${khungGio}</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-muted); font-size: 0.9rem;">Đã cọc:</span>
+                            <strong style="color: #ea580c;">${Number(item.TienCoc).toLocaleString('vi-VN')}đ</strong>
+                        </div>
+                    </div>
+                    ${actionHtml}
+                </div>
+            `;
+        });
+        html += '</div>';
+    } 
+    // ==========================================
+    // LUỒNG 2: TAB GIẢI ĐẤU
+    // ==========================================
+    else {
+        const giaiDauMap = {};
+
+        // 1. Gom nhóm dữ liệu giải đấu
+        allMyBookingsData.forEach(item => {
+            if (item.ID_GiaiDau === null) return; // Lọc bỏ phong trào
+
+            const sanBong = item.san_bong ? item.san_bong.TenSan.toLowerCase() : '';
+            const cumSan = (item.san_bong && item.san_bong.cum_san) ? item.san_bong.cum_san.TenCumSan.toLowerCase() : '';
+            const tenGiai = item.giai_dau ? item.giai_dau.TenGiaiDau.toLowerCase() : '';
+            const matchSearch = sanBong.includes(currentBookingSearch) || cumSan.includes(currentBookingSearch) || tenGiai.includes(currentBookingSearch);
+            const matchStatus = currentBookingStatus === 'All' || item.TrangThai === currentBookingStatus;
+
+            if (!matchSearch || !matchStatus) return; // Loại khung giờ không đạt tiêu chí Text/Status
+
+            if (!giaiDauMap[item.ID_GiaiDau]) {
+                giaiDauMap[item.ID_GiaiDau] = {
+                    idGiaiDau: item.ID_GiaiDau,
+                    tenGiaiDau: item.giai_dau ? item.giai_dau.TenGiaiDau : 'Giải đấu không xác định',
+                    cumSan: (item.san_bong && item.san_bong.cum_san) ? item.san_bong.cum_san.TenCumSan : 'Cụm sân chưa xác định',
+                    ngayBatDau: item.giai_dau ? item.giai_dau.NgayBatDau : null, // Mốc Start Date của Toàn Giải
+                    ngayKetThuc: item.giai_dau ? item.giai_dau.NgayKetThuc : null, // Mốc End Date của Toàn Giải
+                    matches: [],
+                    totalCoc: 0,
+                    canCancel: true 
+                };
+            }
+            giaiDauMap[item.ID_GiaiDau].matches.push(item);
+            giaiDauMap[item.ID_GiaiDau].totalCoc += Number(item.TienCoc);
+            if(item.TrangThai !== 'DaCoc') giaiDauMap[item.ID_GiaiDau].canCancel = false;
+        });
+
+        // 2. Lọc mốc Ngày ở Cấp độ Thẻ Giải Đấu (Between Start and End Date)
+        const validTournaments = Object.values(giaiDauMap).filter(gd => {
+            if (!currentBookingDate) return true; // Không chọn ngày -> Cho qua hết
+            if (!gd.ngayBatDau || !gd.ngayKetThuc) return false;
+            
+            // So sánh ngày chuỗi chuẩn YYYY-MM-DD
+            return currentBookingDate >= gd.ngayBatDau && currentBookingDate <= gd.ngayKetThuc;
+        });
+
+        if (validTournaments.length === 0) {
+            container.innerHTML = `<div class="schedule-container" style="padding: 40px; text-align: center; background: white; border-radius: 12px;"><i class="fa-regular fa-calendar-xmark" style="font-size: 3rem; color: var(--border); margin-bottom: 16px;"></i><p style="color: var(--text-muted); font-size: 1.05rem;">Không tìm thấy giải đấu nào.</p></div>`;
+            return;
+        }
+
+        // 3. Render HTML Giải đấu
+        validTournaments.forEach(gd => {
+            let actionTourHtml = '';
+            if (gd.canCancel) {
+                actionTourHtml = `<button class="btn-cancel-tour" onclick="openCancelTourModal(${gd.idGiaiDau})"><i class="fa-solid fa-ban"></i><span>Hủy toàn bộ giải</span></button>`;
+            } else {
+                actionTourHtml = `<div class="cancel-tour-disabled"><i class="fa-solid fa-lock"></i><span>Không thể hủy tự động</span></div>`;
+            }
+
+            const thoiGianGiaiDau = (gd.ngayBatDau && gd.ngayKetThuc) 
+                ? `Thời gian diễn ra: <strong>${formatDate(gd.ngayBatDau)} - ${formatDate(gd.ngayKetThuc)}</strong>`
+                : 'Thời gian: Đang cập nhật';
+
+            gd.matches.sort((a, b) => {
+                const timeA = new Date(a.NgayDa + 'T' + (a.khung_gio ? a.khung_gio.GioBatDau : '00:00:00')).getTime();
+                const timeB = new Date(b.NgayDa + 'T' + (b.khung_gio ? b.khung_gio.GioBatDau : '00:00:00')).getTime();
+                return timeA - timeB;
+            });
+
+            // Xây dựng danh sách hàng (Chỉ hiện 4 dòng đầu)
+            let rowsHtml = '';
+            gd.matches.forEach((m, index) => {
+                const timeStr = m.khung_gio ? `${m.khung_gio.GioBatDau.substring(0,5)} - ${m.khung_gio.GioKetThuc.substring(0,5)}` : '';
+                const isExtra = index >= 4;
+                const displayStyle = isExtra ? 'display: none;' : '';
+                const rowClass = `tour-match-${gd.idGiaiDau} ${isExtra ? 'extra-match' : ''}`;
+                
+                rowsHtml += `
+                <tr class="${rowClass}" style="${displayStyle}">
+                    <td style="text-align: center;"><strong>${m.san_bong ? m.san_bong.TenSan : ''}</strong><br><span style="font-size: 0.8rem; color: var(--text-muted);">${m.san_bong && m.san_bong.cum_san ? m.san_bong.cum_san.TenCumSan : ''}</span></td>
+                    <td style="text-align: center;">${formatDate(m.NgayDa)}</td>
+                    <td style="text-align: center;"><strong style="color: var(--primary);">${timeStr}</strong></td>
+                    <td style="text-align: center;">${Number(m.TienCoc).toLocaleString('vi-VN')}đ</td>
+                </tr>
+                `;
+            });
+
+            // Xây dựng nút chức năng mở rộng nếu có > 4 trận
+            let toggleBtnHtml = '';
+            if (gd.matches.length > 4) {
+                toggleBtnHtml = `
+                <div style="text-align: center; padding: 12px; background: #f8fafc; border-top: 1px dashed var(--border);">
+                    <button type="button" class="btn-outline-sm" data-expanded="false" onclick="toggleTourMatches(${gd.idGiaiDau}, this)" style="border-radius: 20px; padding: 6px 16px; font-size: 0.85rem; background: white;">
+                        Hiển thị tất cả (${gd.matches.length} trận) <i class="fa-solid fa-chevron-down" style="margin-left: 4px;"></i>
+                    </button>
+                </div>
+                `;
+            }
+
+            html += `
+                <div style="background: white; border: 1px solid var(--border); border-left: 4px solid #4338ca; border-radius: 12px; padding: 20px; margin-bottom: 24px; box-shadow: var(--shadow-sm);">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; border-bottom: 1px dashed var(--border); padding-bottom: 16px;">
+                        <div>
+                            <h3 style="margin: 0 0 6px 0; font-size: 1.25rem; color: #4338ca;"><i class="fa-solid fa-trophy"></i> Giải đấu: ${gd.tenGiaiDau}</h3>
+                            <div style="font-size: 0.95rem; color: var(--text-dark); margin-bottom: 4px; font-weight: 500;"><i class="fa-solid fa-location-dot" style="color: var(--primary);"></i> ${gd.cumSan}</div>
+                            <div style="font-size: 0.95rem; color: var(--text-muted); margin-bottom: 4px;">${thoiGianGiaiDau}</div>
+                            <div style="font-size: 0.95rem; color: var(--text-muted);">Tổng số trận: <strong>${gd.matches.length}</strong> | Tổng cọc: <strong style="color: #ea580c;">${gd.totalCoc.toLocaleString('vi-VN')}đ</strong></div>
+                        </div>
+                        ${actionTourHtml}
+                    </div>
+                    
+                    <div class="table-responsive" style="border: 1px solid var(--border); border-radius: 8px; overflow: hidden;">
+                        <table class="admin-table" style="font-size: 0.9rem; margin: 0; min-width: 100%; border: none;">
+                            <thead style="background: #f8fafc;">
+                                <tr>
+                                    <th style="text-align: center;">Sân bóng</th>
+                                    <th style="text-align: center;">Ngày đá</th>
+                                    <th style="text-align: center;">Khung giờ</th>
+                                    <th style="text-align: center;">Tiền cọc</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rowsHtml}
+                            </tbody>
+                        </table>
+                        ${toggleBtnHtml}
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    container.innerHTML = html;
+}
+
+function toggleTourMatches(idGiaiDau, btnElement) {
+    const extraRows = document.querySelectorAll(`.tour-match-${idGiaiDau}.extra-match`);
+    const isExpanded = btnElement.getAttribute('data-expanded') === 'true';
+
+    if (isExpanded) {
+        // Thu gọn lại
+        extraRows.forEach(row => row.style.display = 'none');
+        btnElement.innerHTML = `Hiển thị tất cả <i class="fa-solid fa-chevron-down" style="margin-left: 4px;"></i>`;
+        btnElement.setAttribute('data-expanded', 'false');
+    } else {
+        // Mở rộng ra
+        extraRows.forEach(row => row.style.display = 'table-row');
+        btnElement.innerHTML = `Thu gọn <i class="fa-solid fa-chevron-up" style="margin-left: 4px;"></i>`;
+        btnElement.setAttribute('data-expanded', 'true');
+    }
+}
+
+// ======================================================
+// LOGIC MODAL HỦY TOÀN BỘ GIẢI ĐẤU
+// ======================================================
+let pendingCancelTourId = null;
+
+function openCancelTourModal(idGiaiDau) {
+    pendingCancelTourId = idGiaiDau;
+    document.getElementById('cancel-tour-alert').style.display = 'none';
+    document.getElementById('cancel-tour-modal').style.display = 'flex';
+}
+
+function closeCancelTourModal() {
+    pendingCancelTourId = null;
+    document.getElementById('cancel-tour-modal').style.display = 'none';
+}
+
+async function executeCancelTournament() {
+    if (!pendingCancelTourId) return;
+    
+    const btn = document.getElementById('btn-confirm-cancel-tour');
+    const alertBox = document.getElementById('cancel-tour-alert');
+    
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+    alertBox.style.display = 'none';
+
+    try {
+        // Gọi API Hủy hàng loạt theo ID Giải Đấu
+        const response = await fetch(`${API_BASE_URL}/giai-dau/${pendingCancelTourId}/huy-lich`, {
+            method: 'PUT',
+            credentials: 'include',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            alertBox.textContent = data.message;
+            alertBox.className = 'modal-alert success';
+            alertBox.style.display = 'block';
+
+            // Đồng bộ tiền hoàn trả vào số dư Ví trên thanh Header
+            syncUserWallet();
+            
+            setTimeout(() => {
+                closeCancelTourModal();
+                renderMyBookings(); // Tải lại trang Lịch sử
+                btn.disabled = false;
+                btn.innerHTML = 'Đồng ý Hủy Giải';
+            }, 2000);
+        } else {
+            // Thông báo lỗi nếu quá hạn 7 ngày
+            alertBox.textContent = data.message || 'Có lỗi xảy ra!';
+            alertBox.className = 'modal-alert error';
+            alertBox.style.display = 'block';
+            btn.disabled = false;
+            btn.innerHTML = 'Đồng ý Hủy Giải';
+        }
+    } catch (error) {
+        alertBox.textContent = 'Lỗi kết nối máy chủ!';
+        alertBox.className = 'modal-alert error';
+        alertBox.style.display = 'block';
+        btn.disabled = false;
+        btn.innerHTML = 'Đồng ý Hủy Giải';
+    }
+}
+
+// Logic điểu khiển Modal Hủy Sân
+let pendingCancelId = null;
+
+function openCancelModal(id) {
+    pendingCancelId = id;
+    document.getElementById('cancel-booking-alert').style.display = 'none';
+    document.getElementById('cancel-booking-modal').style.display = 'flex';
+}
+
+function closeCancelModal() {
+    pendingCancelId = null;
+    document.getElementById('cancel-booking-modal').style.display = 'none';
+}
+
+async function executeCancelBooking() {
+    if (!pendingCancelId) return;
+    
+    const btn = document.getElementById('btn-confirm-cancel');
+    const alertBox = document.getElementById('cancel-booking-alert');
+    
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+    alertBox.style.display = 'none';
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/dat-san/${pendingCancelId}/huy`, {
+            method: 'PUT',
+            credentials: 'include',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            // Thông báo thành công
+            alertBox.textContent = data.message;
+            alertBox.className = 'modal-alert success';
+            alertBox.style.display = 'block';
+
+            // Đồng bộ tiền hoàn trả vào số dư Ví trên thanh Header
+            syncUserWallet();
+            
+            setTimeout(() => {
+                closeCancelModal();
+                renderMyBookings(); // Vẽ lại giao diện lưới
+                btn.disabled = false;
+                btn.innerHTML = 'Đồng ý Hủy';
+            }, 2000);
+        } else {
+            // Thông báo lỗi nếu quá hạn 10 tiếng
+            alertBox.textContent = data.message || 'Có lỗi xảy ra!';
+            alertBox.className = 'modal-alert error';
+            alertBox.style.display = 'block';
+            btn.disabled = false;
+            btn.innerHTML = 'Đồng ý Hủy';
+        }
+    } catch (error) {
+        alertBox.textContent = 'Lỗi kết nối máy chủ!';
+        alertBox.className = 'modal-alert error';
+        alertBox.style.display = 'block';
+        btn.disabled = false;
+        btn.innerHTML = 'Đồng ý Hủy';
+    }
 }
 
 function showProfileAlert(message, isSuccess) {
@@ -2363,6 +2859,14 @@ async function markAllAsRead() {
         
         // Ẩn huy hiệu chuông ngay lập tức trên UI để tạo cảm giác mượt mà
         document.getElementById('notif-badge').style.display = 'none';
+
+        const titleEl = document.querySelectorAll('.notif-title');
+            if (titleEl) {
+                titleEl.forEach(el => {
+                    el.style.color = 'var(--text-muted)';
+                    el.style.fontWeight = 'normal';
+                });
+            }
         
         // Chuyển toàn bộ nền xanh thành trắng
         const notifItems = document.querySelectorAll('#notif-list > div');

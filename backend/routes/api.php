@@ -14,6 +14,8 @@ use App\Http\Controllers\VNPayController;
 use App\Http\Controllers\GiaoDichController;
 use App\Http\Controllers\YeuCauRutTienController;
 use App\Http\Controllers\ThongBaoController;
+use App\Http\Controllers\DatSanController;
+use App\Http\Controllers\YeuCauHuyGapController;
 
 // Bọc TẤT CẢ trong middleware 'web' để đồng bộ Session Cookie
 Route::middleware('web')->group(function () {
@@ -37,6 +39,15 @@ Route::middleware('web')->group(function () {
 });
 
 Route::middleware('web')->group(function () {
+    // API Đặt Sân
+    Route::post('/dat-san', [DatSanController::class, 'datSan']);
+    Route::get('/dat-san/da-dat', [DatSanController::class, 'layDanhSachDaDat']);
+    Route::get('/dat-san/cua-toi', [DatSanController::class, 'layDanhSachCuaToi']);
+    Route::put('/dat-san/{id}/huy', [DatSanController::class, 'huySanPhongTrao']);
+    Route::put('/giai-dau/{idGiaiDau}/huy-lich', [DatSanController::class, 'huySanGiaiDau']);
+    Route::get('/admin/dat-san', [DatSanController::class, 'layDanhSachAdmin']);
+    Route::put('/admin/dat-san/{id}/chot', [DatSanController::class, 'chotTrangThaiAdmin']);
+
     // API Giải Đấu
     Route::get('/giai-dau/cua-toi', [GiaiDauController::class, 'layDanhSachCuaToi']);
     Route::post('/giai-dau/tao-yeu-cau', [GiaiDauController::class, 'taoYeuCau']);
