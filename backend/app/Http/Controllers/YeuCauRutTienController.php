@@ -50,6 +50,18 @@ class YeuCauRutTienController extends Controller
             'TrangThai'    => 'ChoDuyet'
         ]);
 
+        $admins = NguoiDung::where('VaiTro', 'Admin')->get();
+        foreach ($admins as $admin) {
+            ThongBao::create([
+                'ID_NguoiDung' => $admin->ID,
+                'TieuDe'       => 'Yêu cầu Rút tiền mới',
+                'NoiDung'      => 'Khách hàng ' . $user->HoTen . ' vừa gửi yêu cầu rút ' . number_format($request->SoTien) . 'đ.',
+                'LoaiThongBao' => 'ViTien'
+            ]);
+        }
+
+        broadcast(new \App\Events\AdminDataUpdated())->toOthers();
+
         return response()->json(['success' => true, 'message' => 'Tạo yêu cầu rút tiền thành công!']);
     }
 

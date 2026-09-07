@@ -6,3 +6,6 @@ Broadcast::channel('user.{id}', function ($user, $id) {
     // Tùy thuộc vào Database của bạn, nếu khóa chính NguoiDung là ID (viết hoa) thì sửa thành $user->ID
     return (int) $user->ID === (int) $id; 
 });
+Broadcast::channel('admin-notifications', function ($user) {
+    return $user->VaiTro === 'Admin';
+});
