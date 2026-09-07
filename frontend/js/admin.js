@@ -1827,6 +1827,14 @@ async function markAllAsRead() {
         
         // Ẩn huy hiệu chuông ngay lập tức trên UI để tạo cảm giác mượt mà
         document.getElementById('notif-badge').style.display = 'none';
+
+        const titleEl = document.querySelectorAll('.notif-title');
+            if (titleEl) {
+                titleEl.forEach(el => {
+                    el.style.color = 'var(--text-muted)';
+                    el.style.fontWeight = 'normal';
+                });
+            }
         
         // Chuyển toàn bộ nền xanh thành trắng
         const notifItems = document.querySelectorAll('#notif-list > div');
@@ -1875,5 +1883,241 @@ async function markAsRead(id, element) {
         }
     } catch (e) {
         console.error('Lỗi cập nhật trạng thái thông báo:', e);
+    }
+}
+
+// ======================================================
+// MODULE: ADMIN - QUẢN LÝ LỊCH ĐẶT SÂN
+// ======================================================
+let allDatSanData = [];
+let currentDSPage = 1;
+const itemsPerDSPage = 8;
+let currentDSFilter = 'DaCoc';
+let currentDSDate = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10); // Mặc định hiển thị ngày hôm nay
+let currentDSSearch = '';
+
+function renderQuanLyDatSan() {
+    currentDSPage = 1; currentDSFilter = 'DaCoc'; currentDSSearch = ''; 
+    currentDSDate = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10);
+
+    document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+    const menuLink = Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('LỊCH ĐẶT SÂN'));
+    if (menuLink) menuLink.classList.add('active');
+
+    const contentArea = document.querySelector('.admin-content');
+    contentArea.innerHTML = `
+        <div class="page-header" style="margin-bottom: 24px;">
+            <h1 class="page-title">Quản lý Lịch Đặt Sân</h1>
+            <p class="text-muted">Chốt trạng thái khách đến sân cho ngày hôm nay.</p>
+        </div>
+
+        <div id="datsan-alert" class="modal-alert" style="display: none; margin-bottom: 16px;"></div>
+
+        <div class="panel">
+            <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
+                <div style="position: relative; flex: 1; min-width: 250px;">
+                    <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
+                    <input type="text" class="form-control" style="padding-left: 35px;" placeholder="Tìm SDT, Tên khách, Tên sân..." oninput="handleDSSearch(this.value)">
+                </div>
+                <input type="date" class="form-control" style="width: 150px;" id="ds-date-input" onchange="handleDSDate(this.value)">
+                <select class="form-control" style="width: 180px;" onchange="handleDSFilter(this.value)">
+                    <option value="All">Tất cả trạng thái</option>
+                    <option value="DaCoc" selected>Đã cọc</option>
+                    <option value="HoanThanh">Hoàn thành</option>
+                    <option value="DaHuy">Đã hủy</option>
+                    <option value="KhongDen">Không đến</option>
+                </select>                
+            </div>
+
+            <div class="table-responsive" style="min-height: 350px;">
+                <table class="admin-table">
+                    <thead style="background: #F8FAFC;">
+                        <tr>
+                            <th>Khách hàng</th>
+                            <th>Thông tin Sân</th>
+                            <th>Khung giờ</th>
+                            <th>Tiền thu</th>
+                            <th>Trạng thái</th>
+                            <th style="text-align: center;">Chốt sân</th>
+                        </tr>
+                    </thead>
+                    <tbody id="datsan-table-body">
+                        <tr><td colspan="6" class="text-center" style="text-align: center;">Đang tải dữ liệu...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div id="ds-pagination" style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 15px; margin-bottom: 15px; padding-top: 15px; border-top: 1px solid var(--border);"></div>
+        </div>
+    `;
+
+    document.getElementById('ds-date-input').value = currentDSDate;
+    loadDanhSachDatSanAdmin();
+}
+
+function showDSAlert(message, isSuccess) {
+    const alertBox = document.getElementById('datsan-alert');
+    alertBox.textContent = message; 
+    alertBox.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
+    alertBox.style.display = 'block'; 
+    setTimeout(() => alertBox.style.display = 'none', 3000);
+}
+
+function handleDSSearch(val) { currentDSSearch = val.toLowerCase().trim(); currentDSPage = 1; applyDSFiltersAndRender(); }
+function handleDSDate(val) { currentDSDate = val; currentDSPage = 1; applyDSFiltersAndRender(); }
+function handleDSFilter(val) { currentDSFilter = val; currentDSPage = 1; applyDSFiltersAndRender(); }
+
+async function loadDanhSachDatSanAdmin() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/dat-san`, { credentials: 'include' });
+        const res = await response.json();
+        if (res.success) { allDatSanData = res.data || []; applyDSFiltersAndRender(); }
+    } catch (error) { showDSAlert('Lỗi kết nối máy chủ.', false); }
+}
+
+function applyDSFiltersAndRender() {
+    let filteredData = allDatSanData.filter(item => {
+        const matchStatus = (currentDSFilter === 'All' || item.TrangThai === currentDSFilter);
+        const sdt = item.nguoi_dung ? item.nguoi_dung.SoDienThoai.toLowerCase() : '';
+        const tenKhach = item.nguoi_dung ? item.nguoi_dung.HoTen.toLowerCase() : '';
+        const tenSan = item.san_bong ? item.san_bong.TenSan.toLowerCase() : '';
+        const cumSan = (item.san_bong && item.san_bong.cum_san) ? item.san_bong.cum_san.TenCumSan.toLowerCase() : '';
+        const tenGiai = (item.ID_GiaiDau !== null && item.giai_dau) ? item.giai_dau.TenGiaiDau.toLowerCase() : '';
+        const matchSearch = sdt.includes(currentDSSearch) 
+                         || tenKhach.includes(currentDSSearch) 
+                         || tenSan.includes(currentDSSearch)
+                         || cumSan.includes(currentDSSearch)
+                         || tenGiai.includes(currentDSSearch);
+        
+        // Lọc ngày chính xác
+        const matchDate = currentDSDate ? (item.NgayDa === currentDSDate) : true;
+        
+        return matchStatus && matchSearch && matchDate;
+    });
+
+    const totalPages = Math.ceil(filteredData.length / itemsPerDSPage) || 1;
+    if (currentDSPage > totalPages) currentDSPage = totalPages;
+    const startIdx = (currentDSPage - 1) * itemsPerDSPage;
+    
+    renderDSTable(filteredData.slice(startIdx, startIdx + itemsPerDSPage));
+    renderDSPagination(totalPages);
+}
+
+function renderDSTable(data) {
+    const tbody = document.getElementById('datsan-table-body');
+    if (data.length === 0) return tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="text-align: center; padding: 40px;">Không có dữ liệu.</td></tr>`;
+
+    tbody.innerHTML = data.map(item => {
+        let badgeColor = '#6b7280', badgeBg = '#f3f4f6', viStatus = item.TrangThai;
+        if(item.TrangThai === 'DaCoc') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; viStatus = 'Đã cọc'; }
+        else if(item.TrangThai === 'DaHuy') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; viStatus = 'Đã hủy'; }
+        else if(item.TrangThai === 'HoanThanh') { badgeColor = '#047857'; badgeBg = '#d1fae5'; viStatus = 'Hoàn thành'; }
+        else if(item.TrangThai === 'KhongDen') { badgeColor = '#6b7280'; badgeBg = '#f3f4f6'; viStatus = 'Không đến'; }
+
+        const badgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${viStatus}</span>`;
+        
+        const isGiaiDau = item.ID_GiaiDau !== null;
+        const tenGiaiDau = isGiaiDau && item.giai_dau ? item.giai_dau.TenGiaiDau : '';
+        const tagLoai = isGiaiDau 
+            ? `<span style="font-size: 0.75rem; background: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: 4px;"><i class="fa-solid fa-trophy"></i> Giải đấu</span>` 
+            : `<span style="font-size: 0.75rem; background: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px;">Phong trào</span>`;
+        const htmlTenGiai = isGiaiDau ? `<div style="font-size: 0.85rem; color: #4338ca; margin-top: 4px; font-weight: 600;"><i class="fa-solid fa-medal"></i> ${tenGiaiDau}</div>` : '';
+
+        const d = new Date(item.NgayDa);
+        const dateStr = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth()+1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+        const timeStr = item.khung_gio ? `${item.khung_gio.GioBatDau.substring(0,5)} - ${item.khung_gio.GioKetThuc.substring(0,5)}` : '';
+
+        const tienThu = Number(item.TongTien) - Number(item.TienCoc);
+
+        // Nút hành động
+        let actionHtml = '';
+        if (item.TrangThai === 'DaCoc') {
+            actionHtml = `<button class="btn-primary" style="padding: 6px 12px; font-size: 0.85rem;" onclick="openDSConfirmModal(${item.ID})">Chốt sân</button>`;
+        } else {
+            actionHtml = `<span style="color: var(--text-muted); font-size: 0.85rem;">Đã xử lý</span>`;
+        }
+
+        return `<tr>
+            <td>
+                <strong>${item.nguoi_dung?.HoTen || 'N/A'}</strong><br>
+                <span style="font-size: 0.85rem; color: var(--text-muted);">${item.nguoi_dung?.SoDienThoai || ''}</span>
+            </td>
+            <td>
+                <strong style="color: var(--text-dark);">${item.san_bong ? item.san_bong.TenSan : 'N/A'}</strong> ${tagLoai}<br>
+                <span style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-solid fa-location-dot"></i> ${item.san_bong?.cum_san?.TenCumSan || ''}</span>
+                ${htmlTenGiai}
+            </td>
+            <td>
+                <span style="font-size: 0.9rem;">Ngày: ${dateStr}</span><br>
+                <strong style="color: var(--primary);">Giờ: ${timeStr}</strong>
+            </td>
+            <td><strong style="color: #ea580c;">${tienThu.toLocaleString('vi-VN')}đ</strong></td>
+            <td>${badgeHtml}</td>
+            <td style="text-align: center;">${actionHtml}</td>
+        </tr>`;
+    }).join('');
+}
+
+function renderDSPagination(totalPages) {
+    const div = document.getElementById('ds-pagination');
+    if (totalPages <= 1) return div.innerHTML = '';
+    let html = `<button class="btn-outline-sm" ${currentDSPage === 1 ? 'disabled style="opacity:0.5;"' : ''} onclick="currentDSPage--; applyDSFiltersAndRender()"><i class="fa-solid fa-chevron-left"></i></button>`;
+    for (let i = 1; i <= totalPages; i++) {
+        html += `<button class="${i === currentDSPage ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="currentDSPage=${i}; applyDSFiltersAndRender()">${i}</button>`;
+    }
+    html += `<button class="btn-outline-sm" ${currentDSPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="currentDSPage++; applyDSFiltersAndRender()"><i class="fa-solid fa-chevron-right"></i></button>`;
+    div.innerHTML = html;
+}
+
+// ----------------------------------------------------
+// TẠO MODAL CHỐT SÂN VÀ GỌI API
+// ----------------------------------------------------
+let pendingDSId = null;
+
+function openDSConfirmModal(id) {
+    pendingDSId = id;
+    let modal = document.getElementById('ds-confirm-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'ds-confirm-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 9999;';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 450px; text-align: center; padding: 30px 20px;">
+                <h3 style="margin-bottom: 10px; font-size: 1.4rem; color: var(--text-dark);">Chốt trạng thái sân</h3>
+                <p style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5;">Vui lòng xác nhận trạng thái cho khách hàng này.</p>
+                <div style="display: flex; justify-content: center; gap: 12px;">
+                    <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="closeDSConfirmModal()">Hủy bỏ</button>
+                    <button class="btn-outline" style="width: auto; padding: 10px 24px; color: #64748b; border-color: #cbd5e1;" onclick="executeCapNhatDatSan('KhongDen')"><i class="fa-solid fa-user-slash"></i> Không đến</button>
+                    <button class="btn-primary" style="width: auto; padding: 10px 24px; background-color: #10b981; border-color: #10b981;" onclick="executeCapNhatDatSan('HoanThanh')"><i class="fa-solid fa-check"></i> Hoàn thành</button>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+    }
+    modal.style.display = 'flex';
+}
+
+function closeDSConfirmModal() { document.getElementById('ds-confirm-modal').style.display = 'none'; }
+
+async function executeCapNhatDatSan(trangThai) {
+    if (!pendingDSId) return;
+    closeDSConfirmModal(); 
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/dat-san/${pendingDSId}/chot`, {
+            method: 'PUT',
+            credentials: 'include',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trang_thai: trangThai })
+        });
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            showDSAlert('Đã cập nhật trạng thái thành công!', true);
+            loadDanhSachDatSanAdmin(); // Tải lại lưới dữ liệu
+        } else {
+            showDSAlert(data.message || 'Lỗi xử lý.', false);
+        }
+    } catch (e) {
+        showDSAlert('Lỗi kết nối máy chủ.', false);
     }
 }
