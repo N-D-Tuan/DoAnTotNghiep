@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use App\Models\GiaiDau;
 use App\Models\CumSan;
 use App\Models\ThongBao;
+use App\Models\NguoiDung;
 
 class GiaiDauController extends Controller
 {
@@ -51,6 +52,20 @@ class GiaiDauController extends Controller
             'NgayKetThuc' => $request->ngay_ket_thuc,
             'NoiDung' => $request->noi_dung
         ]);
+
+        $admins = NguoiDung::where('VaiTro', 'Admin')->get();
+        $nguoiTao = NguoiDung::find(Auth::id()); // Lấy tên người dùng vừa tạo
+        
+        foreach ($admins as $admin) {
+            ThongBao::create([
+                'ID_NguoiDung' => $admin->ID,
+                'TieuDe'       => 'Yêu cầu Giải đấu mới',
+                'NoiDung'      => 'Khách hàng ' . ($nguoiTao ? $nguoiTao->HoTen : '') . ' vừa gửi yêu cầu tổ chức giải đấu "' . $giaiDau->TenGiaiDau . '".',
+                'LoaiThongBao' => 'GiaiDau'
+            ]);
+        }
+
+        broadcast(new \App\Events\AdminDataUpdated())->toOthers();
 
         return response()->json([
             'success' => true,
