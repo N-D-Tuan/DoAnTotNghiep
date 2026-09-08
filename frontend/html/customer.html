@@ -325,6 +325,37 @@
         </div>
     </div>
 
+    <!-- Modal Tạo Yêu cầu Hủy Gấp -->
+    <div id="urgent-cancel-modal" class="modal-overlay" style="display: none; z-index: 9999;">
+        <div class="modal-content" style="max-width: 650px;">
+            <div class="modal-header">
+                <h3>Tạo Yêu cầu Hủy Sân Gấp</h3>
+                <i class="fa-solid fa-xmark" onclick="closeUrgentCancelModal()"></i>
+            </div>
+            
+            <!-- Vùng hiển thị thông báo nội bộ -->
+            <div id="urgent-cancel-alert" class="modal-alert" style="display: none; margin: 16px 24px 0;"></div>
+            
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Chọn lịch đặt muốn hủy <span style="color:var(--danger, red)">*</span></label>
+                    <select id="uc-booking-id" class="form-control">
+                        <option value="">-- Đang tải danh sách lịch đặt --</option>
+                    </select>
+                    <small style="color: var(--text-muted); display: block; margin-top: 6px;">Chỉ hiển thị các sân đang ở trạng thái "Đã cọc". Với giải đấu, chọn 1 trận bất kỳ sẽ hủy toàn giải.</small>
+                </div>
+                <div class="form-group">
+                    <label>Lý do hủy gấp <span style="color:var(--danger, red)">*</span></label>
+                    <textarea id="uc-reason" class="form-control" rows="3" placeholder="Ví dụ: Bận công tác đột xuất, Tai nạn..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-outline" onclick="closeUrgentCancelModal()" style="width: auto;">Hủy</button>
+                <button id="btn-submit-urgent-cancel" class="btn-primary" onclick="submitUrgentCancelRequest()">Gửi yêu cầu</button>
+            </div>
+        </div>
+    </div>
+
     <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/laravel-echo@1.16.1/dist/echo.iife.js"></script>
     <script src="../js/customer.js"></script>

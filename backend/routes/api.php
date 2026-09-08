@@ -48,6 +48,12 @@ Route::middleware('web')->group(function () {
     Route::get('/admin/dat-san', [DatSanController::class, 'layDanhSachAdmin']);
     Route::put('/admin/dat-san/{id}/chot', [DatSanController::class, 'chotTrangThaiAdmin']);
 
+    // API Yêu cầu hủy gấp
+    Route::post('/yeu-cau-huy-gap', [YeuCauHuyGapController::class, 'taoYeuCau']);
+    Route::put('/admin/yeu-cau-huy-gap/{id}/xu-ly', [YeuCauHuyGapController::class, 'xuLyYeuCau']);
+    Route::get('/yeu-cau-huy-gap/cua-toi', [YeuCauHuyGapController::class, 'layDanhSachCuaToi']);
+    Route::get('/admin/yeu-cau-huy-gap', [YeuCauHuyGapController::class, 'layDanhSachAdmin']);
+
     // API Giải Đấu
     Route::get('/giai-dau/cua-toi', [GiaiDauController::class, 'layDanhSachCuaToi']);
     Route::post('/giai-dau/tao-yeu-cau', [GiaiDauController::class, 'taoYeuCau']);
