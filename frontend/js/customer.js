@@ -119,6 +119,30 @@ async function syncUserWallet() {
 }
 
 // ======================================================
+// ĐỒNG BỘ LỊCH SỬ ĐẶT SÂN NGẦM (REAL-TIME KHÔNG CHỚP TRANG)
+// ======================================================
+async function syncUserBookings() {
+    // Chỉ chạy nếu người dùng đang mở trang Lịch sử đặt sân
+    if (!document.getElementById('my-bookings-container')) return;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/dat-san/cua-toi`, { credentials: 'include' });
+        if (!response.ok) return;
+        
+        const res = await response.json();
+        
+        // Cập nhật lại mảng dữ liệu toàn cục
+        allMyBookingsData = res.data || [];
+        
+        // Cập nhật lại giao diện lưới với bộ lọc/tab đang giữ nguyên
+        applyBookingFiltersAndRender();
+        
+    } catch (error) {
+        console.error("Lỗi đồng bộ lịch sử đặt sân ngầm:", error);
+    }
+}
+
+// ======================================================
 // ĐỒNG BỘ YÊU CẦU GIẢI ĐẤU NGẦM (REAL-TIME KHÔNG CHỚP TRANG)
 // ======================================================
 async function syncUserTournaments() {
@@ -210,6 +234,78 @@ async function syncUserTournaments() {
         }
     } catch (error) {
         console.error("Lỗi đồng bộ giải đấu ngầm:", error);
+    }
+}
+
+// ======================================================
+// ĐỒNG BỘ YÊU CẦU HỦY GẤP NGẦM (REAL-TIME KHÔNG CHỚP TRANG)
+// ======================================================
+async function syncUserUrgentCancels() {
+    // 1. Chỉ chạy ngầm nếu đang mở giao diện Các yêu cầu
+    const container = document.getElementById('requests-content-body');
+    if (!container) return;
+
+    // 2. Dò xem khách có đang đứng ở đúng Tab "Hủy sân gấp" hay không
+    let isHuySanTab = false;
+    document.querySelectorAll('button[onclick^="renderRequests"]').forEach(btn => {
+        if (btn.style.borderBottom && btn.style.borderBottom.includes('solid') && btn.getAttribute('onclick').includes('huy_san')) {
+            isHuySanTab = true;
+        }
+    });
+
+    if (!isHuySanTab) return;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/yeu-cau-huy-gap/cua-toi`, { credentials: 'include' });
+        if (!response.ok) return;
+        
+        const res = await response.json();
+        const list = res.data || [];
+
+        // 3. Bắt đầu vẽ lại ruột HTML
+        if (list.length === 0) {
+            container.innerHTML = `<div style="padding: 40px;"><i class="fa-regular fa-calendar-xmark" style="font-size: 3rem; color: var(--border); margin-bottom: 16px;"></i><p style="color: var(--text-muted); font-size: 1.05rem;">Bạn chưa có yêu cầu hủy sân gấp nào.</p></div>`;
+        } else {
+            let html = `<div style="display: flex; flex-direction: column; gap: 12px; max-height: 480px; overflow-y: auto; padding-right: 8px; text-align: left;">`;
+            list.forEach(item => {
+                let badgeColor = '#b45309', badgeBg = '#fef3c7', statusText = 'Chờ duyệt';
+                if(item.TrangThai === 'DaDuyet') { badgeColor = '#047857'; badgeBg = '#d1fae5'; statusText = 'Đã duyệt'; }
+                if(item.TrangThai === 'TuChoi') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; statusText = 'Từ chối'; }
+
+                const sanBong = item.dat_san && item.dat_san.san_bong ? item.dat_san.san_bong.TenSan : 'Sân không xác định';
+                const cumSan = item.dat_san && item.dat_san.san_bong && item.dat_san.san_bong.cum_san ? item.dat_san.san_bong.cum_san.TenCumSan : '';
+                const khungGio = item.dat_san && item.dat_san.khung_gio ? `${item.dat_san.khung_gio.GioBatDau.substring(0,5)} - ${item.dat_san.khung_gio.GioKetThuc.substring(0,5)}` : '';
+                
+                // Format ngày
+                let dateStr = '';
+                if (item.dat_san && item.dat_san.NgayDa) {
+                    const parts = item.dat_san.NgayDa.split('-');
+                    dateStr = `${parts[2]}/${parts[1]}/${parts[0]}`;
+                }
+                
+                const isGiaiDau = item.dat_san && item.dat_san.ID_GiaiDau != null;
+                const loaiTag = isGiaiDau ? `<span style="font-size: 0.7rem; background: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: 4px; margin-left: 8px;"><i class="fa-solid fa-trophy"></i> Giải đấu</span>` : `<span style="font-size: 0.7rem; background: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">Phong trào</span>`;
+
+                html += `
+                    <div style="border: 1px solid var(--border); border-radius: 8px; padding: 16px; background: #fff; display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                        <div>
+                            <h4 style="margin: 0 0 8px 0; color: var(--text-dark); font-size: 1.1rem;">Sân: ${sanBong} ${loaiTag}</h4>
+                            <p style="margin: 0 0 6px 0; font-size: 0.9rem; color: var(--text-muted);"><i class="fa-solid fa-location-dot"></i> Cụm sân: ${cumSan}</p>
+                            <p style="margin: 0 0 6px 0; font-size: 0.9rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> Lịch đá: <strong style="color: var(--primary);">${khungGio}</strong> ngày <strong>${dateStr}</strong></p>
+                            <p style="margin: 0 0 6px 0; font-size: 0.9rem; color: var(--text-muted);">Lý do: <span style="font-style: italic;">"${item.NoiDung}"</span></p>
+                            <p style="margin: 0; font-size: 0.8rem; color: #94a3b8;">Ngày gửi: ${item.NgayTao ? item.NgayTao.substring(0, 16).replace('T', ' ') : ''}</p>
+                        </div>
+                        <div>
+                            <span style="padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${statusText}</span>
+                        </div>
+                    </div>
+                `;
+            });
+            html += `</div>`;
+            container.innerHTML = html;
+        }
+    } catch (error) {
+        console.error("Lỗi đồng bộ hủy sân gấp ngầm:", error);
     }
 }
 
@@ -528,7 +624,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 
                 // Kích hoạt ngay 3 hàm cập nhật giao diện mà không cần chờ 1 phút
                 syncUserWallet();
+
+                syncUserBookings();
+
                 syncUserTournaments();
+                syncUserUrgentCancels();
                 syncUserWithdrawals();
                 
                 // Hàm render thông báo mới
@@ -2166,10 +2266,10 @@ async function renderRequests(activeTab = 'giai_dau') {
                 <p class="page-subtitle">Theo dõi các đơn xin tổ chức giải đấu, hủy sân gấp và rút tiền</p>
             </div>
             
-            ${activeTab === 'giai_dau' ? `
-            <button class="btn-primary" onclick="openCreateTournamentModal()" style="display: flex; align-items: center; gap: 8px;">
-                <i class="fa-solid fa-plus"></i> Tạo Yêu cầu Giải đấu
-            </button>` : ''}
+            <div>
+                ${activeTab === 'giai_dau' ? `<button class="btn-primary" onclick="openCreateTournamentModal()" style="display: flex; align-items: center; gap: 8px;"><i class="fa-solid fa-plus"></i> Tạo Yêu cầu Giải đấu</button>` : ''}
+                ${activeTab === 'huy_san' ? `<button class="btn-primary" onclick="openUrgentCancelModal()" style="display: flex; align-items: center; gap: 8px;"><i class="fa-solid fa-plus"></i> Tạo Yêu cầu Hủy Gấp</button>` : ''}
+            </div>
         </div>
 
         <div style="display: flex; gap: 16px; margin-bottom: 20px; border-bottom: 1px solid var(--border);">
@@ -2279,11 +2379,55 @@ async function renderRequests(activeTab = 'giai_dau') {
             container.innerHTML = `<div style="padding: 40px; color: var(--text-muted);">API chưa kết nối. Giao diện danh sách giải đấu đã sẵn sàng.</div>`;
         }
     } else if (activeTab === 'huy_san') {
-        container.innerHTML = `
-            <div style="padding: 40px;">
-                <i class="fa-regular fa-calendar-xmark" style="font-size: 3rem; color: var(--border); margin-bottom: 16px;"></i>
-                <p style="color: var(--text-muted); font-size: 1.05rem;">Bạn chưa có yêu cầu hủy sân gấp nào.</p>
-            </div>`;
+        try {
+            const response = await fetch(`${API_BASE_URL}/yeu-cau-huy-gap/cua-toi`, { credentials: 'include' });
+            const res = await response.json();
+            const list = res.data || [];
+
+            if (list.length === 0) {
+                container.innerHTML = `<div style="padding: 40px;"><i class="fa-regular fa-calendar-xmark" style="font-size: 3rem; color: var(--border); margin-bottom: 16px;"></i><p style="color: var(--text-muted); font-size: 1.05rem;">Bạn chưa có yêu cầu hủy sân gấp nào.</p></div>`;
+            } else {
+                let html = `<div style="display: flex; flex-direction: column; gap: 12px; max-height: 480px; overflow-y: auto; padding-right: 8px; text-align: left;">`;
+                list.forEach(item => {
+                    let badgeColor = '#b45309', badgeBg = '#fef3c7', statusText = 'Chờ duyệt';
+                    if(item.TrangThai === 'DaDuyet') { badgeColor = '#047857'; badgeBg = '#d1fae5'; statusText = 'Đã duyệt'; }
+                    if(item.TrangThai === 'TuChoi') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; statusText = 'Từ chối'; }
+
+                    const sanBong = item.dat_san && item.dat_san.san_bong ? item.dat_san.san_bong.TenSan : 'Sân không xác định';
+                    const cumSan = item.dat_san && item.dat_san.san_bong && item.dat_san.san_bong.cum_san ? item.dat_san.san_bong.cum_san.TenCumSan : '';
+                    const khungGio = item.dat_san && item.dat_san.khung_gio ? `${item.dat_san.khung_gio.GioBatDau.substring(0,5)} - ${item.dat_san.khung_gio.GioKetThuc.substring(0,5)}` : '';
+                    
+                    // Format ngày an toàn
+                    let dateStr = '';
+                    if (item.dat_san && item.dat_san.NgayDa) {
+                        const d = new Date(item.NgayTao); // Đưa chuỗi vào Date để nhận diện múi giờ
+                        const pad = n => n < 10 ? '0' + n : n;
+                        // Format lại thành: YYYY-MM-DD HH:mm
+                        dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                    }
+                    
+                    const isGiaiDau = item.dat_san && item.dat_san.ID_GiaiDau != null;
+                    const loaiTag = isGiaiDau ? `<span style="font-size: 0.7rem; background: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: 4px; margin-left: 8px;"><i class="fa-solid fa-trophy"></i> Giải đấu</span>` : `<span style="font-size: 0.7rem; background: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">Phong trào</span>`;
+
+                    html += `
+                        <div style="border: 1px solid var(--border); border-radius: 8px; padding: 16px; background: #fff; display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                            <div>
+                                <h4 style="margin: 0 0 8px 0; color: var(--text-dark); font-size: 1.1rem;">${sanBong} ${loaiTag}</h4>
+                                <p style="margin: 0 0 6px 0; font-size: 0.9rem; color: var(--text-muted);"><i class="fa-solid fa-location-dot"></i> Cụm sân: ${cumSan}</p>
+                                <p style="margin: 0 0 6px 0; font-size: 0.9rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> Lịch đá: <strong style="color: var(--primary);">${khungGio}</strong> ngày <strong>${dateStr}</strong></p>
+                                <p style="margin: 0 0 6px 0; font-size: 0.9rem; color: var(--text-muted);">Lý do: <span style="font-style: italic;">"${item.NoiDung}"</span></p>
+                                <p style="margin: 0; font-size: 0.8rem; color: #94a3b8;">Ngày gửi: ${item.NgayTao ? item.NgayTao.substring(0, 16).replace('T', ' ') : ''}</p>
+                            </div>
+                            <div>
+                                <span style="padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${statusText}</span>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += `</div>`;
+                container.innerHTML = html;
+            }
+        } catch (e) { container.innerHTML = `<div style="padding: 40px; color: var(--danger);">Lỗi tải dữ liệu.</div>`; }
     } else if (activeTab === 'rut_tien') {
         try {
             const response = await fetch(`${API_BASE_URL}/yeu-cau-rut-tien/cua-toi`, { credentials: 'include' });
@@ -2918,5 +3062,191 @@ async function markAsRead(id, element) {
         }
     } catch (e) {
         console.error('Lỗi cập nhật trạng thái thông báo:', e);
+    }
+}
+
+// ======================================================
+// MODULE: TẠO YÊU CẦU HỦY GẤP
+// ======================================================
+function showUrgentCancelAlert(message, isSuccess) {
+    const alertBox = document.getElementById('urgent-cancel-alert');
+    alertBox.textContent = message;
+    alertBox.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
+    alertBox.style.display = 'block';
+}
+
+async function openUrgentCancelModal() {
+    document.getElementById('urgent-cancel-alert').style.display = 'none';
+    document.getElementById('uc-reason').value = '';
+    
+    const selectBox = document.getElementById('uc-booking-id');
+    selectBox.innerHTML = '<option value="">Đang tải danh sách lịch đặt...</option>';
+    
+    document.getElementById('urgent-cancel-modal').style.display = 'flex';
+
+    try {
+        // ĐÃ SỬA: Gọi song song 2 API để lấy Lịch Đặt Sân và Yêu Cầu Hủy Gấp
+        const [dsRes, ygRes] = await Promise.all([
+            fetch(`${API_BASE_URL}/dat-san/cua-toi`, { credentials: 'include' }),
+            fetch(`${API_BASE_URL}/yeu-cau-huy-gap/cua-toi`, { credentials: 'include' })
+        ]);
+        
+        const dsData = await dsRes.json();
+        const ygData = await ygRes.json();
+        
+        if (dsData.success) {
+            const listDatSan = dsData.data || [];
+            const listYeuCau = ygData.success ? (ygData.data || []) : [];
+
+            // =========================================================
+            // LỌC DỮ LIỆU BƯỚC 1: TÌM CÁC ID ĐANG CHỜ DUYỆT ĐỂ BỎ QUA
+            // =========================================================
+            const pendingDatSanIds = new Set();
+            const pendingGiaiDauIds = new Set();
+
+            listYeuCau.forEach(yc => {
+                if (yc.TrangThai === 'ChoDuyet') {
+                    pendingDatSanIds.add(yc.ID_DatSan);
+                    // Nếu sân hủy thuộc giải đấu, ghi nhận luôn ID Giải Đấu đó
+                    if (yc.dat_san && yc.dat_san.ID_GiaiDau) {
+                        pendingGiaiDauIds.add(yc.dat_san.ID_GiaiDau);
+                    }
+                }
+            });
+
+            // Lọc ra những sân đang "Đã Cọc" VÀ KHÔNG nằm trong danh sách đang chờ hủy
+            const activeBookings = listDatSan.filter(item => {
+                if (item.TrangThai !== 'DaCoc') return false;
+                if (pendingDatSanIds.has(item.ID)) return false;
+                if (item.ID_GiaiDau && pendingGiaiDauIds.has(item.ID_GiaiDau)) return false;
+                return true;
+            });
+
+            if (activeBookings.length === 0) {
+                selectBox.innerHTML = '<option value="">Bạn không có sân nào đang đặt (Đã cọc) để hủy</option>';
+                return;
+            }
+
+            const now = new Date();
+
+            // =========================================================
+            // LỌC DỮ LIỆU BƯỚC 2: KIỂM TRA ĐIỀU KIỆN QUÁ HẠN HỦY BÌNH THƯỜNG
+            // VÀ LOẠI BỎ CÁC TRẬN TRÙNG CỦA CÙNG 1 GIẢI ĐẤU
+            // =========================================================
+            const processedTournaments = new Set();
+            const filteredBookings = [];
+
+            // Sắp xếp tăng dần theo Ngày Đá để ưu tiên lấy trận khai mạc làm đại diện cho giải đấu
+            activeBookings.sort((a, b) => new Date(a.NgayDa) - new Date(b.NgayDa));
+
+            activeBookings.forEach(item => {
+                const gioBatDau = item.khung_gio ? item.khung_gio.GioBatDau : '00:00:00';
+                const matchTime = new Date(`${item.NgayDa}T${gioBatDau}`);
+                
+                const timeDiff = matchTime.getTime() - now.getTime();
+                const hoursDiff = timeDiff / (1000 * 3600); 
+
+                if (item.ID_GiaiDau) {
+                    if (hoursDiff <= 168) {
+                        if (!processedTournaments.has(item.ID_GiaiDau)) {
+                            processedTournaments.add(item.ID_GiaiDau); 
+                            filteredBookings.push(item); 
+                        }
+                    } else {
+                        processedTournaments.add(item.ID_GiaiDau);
+                    }
+                } else {
+                    if (hoursDiff <= 10) {
+                        filteredBookings.push(item);
+                    }
+                }
+            });
+
+            if (filteredBookings.length === 0) {
+                selectBox.innerHTML = '<option value="">Không có sân nào vi phạm thời hạn (Bạn có thể tự hủy miễn phí bên Lịch sử đặt sân)</option>';
+                return;
+            }
+
+            // =========================================================
+            // RENDER DỮ LIỆU VÀO DROPDOWN
+            // =========================================================
+            let html = '<option value="" title="-- Chọn lịch đặt --">-- Chọn lịch đặt --</option>';
+            filteredBookings.forEach(item => {
+                const cumSan = (item.san_bong && item.san_bong.cum_san) ? item.san_bong.cum_san.TenCumSan : 'Cụm sân chưa xác định';
+                const sanBong = item.san_bong ? item.san_bong.TenSan : 'Sân';
+                const khungGio = item.khung_gio ? `${item.khung_gio.GioBatDau.substring(0,5)}-${item.khung_gio.GioKetThuc.substring(0,5)}` : '';
+                
+                const parts = item.NgayDa.split('-');
+                const dateStr = `${parts[2]}/${parts[1]}/${parts[0]}`;
+                
+                if (item.ID_GiaiDau) {
+                    const tenGiai = item.giai_dau ? item.giai_dau.TenGiaiDau : 'Không xác định';
+                    // Khai báo biến textStr để tái sử dụng
+                    const textStr = `[Giải đấu: ${tenGiai}] ${cumSan} - ${sanBong} | Khai mạc: ${dateStr}`;
+                    // Thêm thuộc tính title để hiện Tooltip khi hover chuột
+                    html += `<option value="${item.ID}" title="${textStr}">${textStr}</option>`;
+                } else {
+                    // Gom Ngày và Giờ lại cho ngắn gọn hơn
+                    const textStr = `[Phong trào] ${cumSan} - ${sanBong} | ${khungGio} (${dateStr})`;
+                    html += `<option value="${item.ID}" title="${textStr}">${textStr}</option>`;
+                }
+            });
+
+            selectBox.innerHTML = html;
+        }
+    } catch (error) {
+        selectBox.innerHTML = '<option value="">Lỗi kết nối máy chủ</option>';
+    }
+}
+
+function closeUrgentCancelModal() {
+    document.getElementById('urgent-cancel-modal').style.display = 'none';
+}
+
+async function submitUrgentCancelRequest() {
+    const btn = document.getElementById('btn-submit-urgent-cancel');
+    const datSanId = document.getElementById('uc-booking-id').value;
+    const reason = document.getElementById('uc-reason').value.trim();
+
+    if (!datSanId) return showUrgentCancelAlert('Vui lòng chọn lịch đặt muốn hủy!', false);
+    if (!reason) return showUrgentCancelAlert('Vui lòng nhập lý do hủy gấp!', false);
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/yeu-cau-huy-gap`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id_dat_san: datSanId,
+                noi_dung: reason
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            showUrgentCancelAlert(data.message || 'Có lỗi xảy ra!', false);
+            btn.disabled = false;
+            btn.innerHTML = 'Gửi yêu cầu';
+            return;
+        }
+
+        // Hiện thông báo Custom xanh lá
+        showUrgentCancelAlert('Gửi yêu cầu thành công! Vui lòng chờ Admin duyệt.', true);
+        
+        setTimeout(() => {
+            closeUrgentCancelModal();
+            renderRequests('huy_san'); 
+            btn.disabled = false;
+            btn.innerHTML = 'Gửi yêu cầu';
+        }, 2000);
+
+    } catch (error) {
+        showUrgentCancelAlert('Không thể kết nối đến máy chủ!', false);
+        btn.disabled = false;
+        btn.innerHTML = 'Gửi yêu cầu';
     }
 }

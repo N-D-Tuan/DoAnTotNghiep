@@ -204,10 +204,19 @@ document.addEventListener(
 
                 loadNotifications();
 
+                // Nếu Admin đang mở tab Quản lý Đặt sân -> tự refresh bảng
+                if (document.getElementById('datsan-table-body')) {
+                    loadDanhSachDatSanAdmin();
+                } 
+
                 // Nếu Admin đang mở tab Yêu cầu Giải đấu -> tự refresh bảng
                 if (document.getElementById('gd-pending-count')) {
                     loadDanhSachGiaiDauAdmin();
                 } 
+                // Nếu Admin đang mở tab Yêu cầu Hủy sân -> tự refresh bảng
+                else if (document.getElementById('uc-pending-count')) {
+                    loadDanhSachHuySanAdmin();
+                }
                 // Nếu Admin đang mở tab Yêu cầu Rút tiền -> tự refresh bảng
                 else if (document.getElementById('rt-pending-count')) {
                     loadDanhSachRutTienAdmin();
@@ -2119,5 +2128,278 @@ async function executeCapNhatDatSan(trangThai) {
         }
     } catch (e) {
         showDSAlert('Lỗi kết nối máy chủ.', false);
+    }
+}
+
+// ======================================================
+// MODULE: ADMIN - QUẢN LÝ YÊU CẦU HỦY SÂN GẤP
+// ======================================================
+let allHuySanData = [];
+let currentUCPage = 1;
+const itemsPerUCPage = 5;
+let currentUCFilter = 'All';
+let currentUCSearch = '';
+let currentUCDate = '';
+let pendingUCId = null;
+let pendingUCStatus = null;
+
+function renderQuanLyHuySan() {
+    currentUCPage = 1; currentUCFilter = 'All'; currentUCSearch = ''; currentUCDate = '';
+    
+    // Cập nhật thẻ Active trên Menu
+    document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+    const menuLink = Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('YÊU CẦU HỦY SÂN'));
+    if (menuLink) menuLink.classList.add('active');
+
+    const contentArea = document.querySelector('.admin-content');
+    contentArea.innerHTML = `
+        <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+            <div>
+                <h1 class="page-title">Quản lý Yêu cầu Hủy Sân Gấp</h1>
+                <p class="text-muted">Có <strong id="uc-pending-count" style="color: #ea580c; font-size: 1.1rem;">0</strong> đơn đang chờ phê duyệt</p>
+            </div>
+        </div>
+        
+        <div id="huysan-alert" class="modal-alert" style="display: none; margin-bottom: 16px;"></div>
+
+        <div class="panel">
+            <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
+                <div style="position: relative; flex: 1; min-width: 250px;">
+                    <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
+                    <input type="text" class="form-control" style="padding-left: 35px;" placeholder="Tìm tên khách, tên sân, cụm sân..." oninput="handleUCSearch(this.value)">
+                </div>
+                <input type="date" class="form-control" style="width: 150px;" onchange="handleUCDate(this.value)">
+                <select class="form-control" style="width: 200px;" onchange="handleUCFilter(this.value)">
+                    <option value="All">Tất cả trạng thái</option>
+                    <option value="ChoDuyet">Chờ duyệt</option>
+                    <option value="DaDuyet">Đã duyệt</option>
+                    <option value="TuChoi">Từ chối</option>
+                </select>
+            </div>
+
+            <div class="table-responsive" style="min-height: 350px;">
+                <table class="admin-table">
+                    <thead style="background: #F8FAFC;">
+                        <tr>
+                            <th>Khách Hàng</th>
+                            <th>Thông tin Sân</th>
+                            <th>Lý do hủy</th>
+                            <th>Ngày gửi</th>
+                            <th>Trạng thái</th>
+                            <th>Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody id="huysan-table-body">
+                        <tr><td colspan="6" class="text-center" style="text-align: center;">Đang tải dữ liệu...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div id="uc-pagination" style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 15px; margin-bottom: 15px; padding-top: 15px; border-top: 1px solid var(--border);"></div>
+        </div>
+    `;
+    loadDanhSachHuySanAdmin();
+}
+
+function showUCAlert(message, isSuccess) {
+    const alertBox = document.getElementById('huysan-alert');
+    alertBox.textContent = message; 
+    alertBox.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
+    alertBox.style.display = 'block'; 
+    setTimeout(() => alertBox.style.display = 'none', 3000);
+}
+
+function handleUCSearch(val) { currentUCSearch = val.toLowerCase().trim(); currentUCPage = 1; applyUCFiltersAndRender(); }
+function handleUCDate(val) { currentUCDate = val; currentUCPage = 1; applyUCFiltersAndRender(); }
+function handleUCFilter(val) { currentUCFilter = val; currentUCPage = 1; applyUCFiltersAndRender(); }
+
+async function loadDanhSachHuySanAdmin() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/yeu-cau-huy-gap`, { credentials: 'include' });
+        const res = await response.json();
+        if (res.success) { 
+            allHuySanData = res.data || []; 
+            applyUCFiltersAndRender(); 
+        }
+    } catch (error) { 
+        showUCAlert('Lỗi kết nối máy chủ.', false); 
+    }
+}
+
+function applyUCFiltersAndRender() {
+    document.getElementById('uc-pending-count').innerText = allHuySanData.filter(i => i.TrangThai === 'ChoDuyet').length;
+
+    let filteredData = allHuySanData.filter(item => {
+        const matchStatus = (currentUCFilter === 'All' || item.TrangThai === currentUCFilter);
+        
+        const tenKhach = item.nguoi_dung ? item.nguoi_dung.HoTen.toLowerCase() : '';
+        const tenSan = (item.dat_san && item.dat_san.san_bong) ? item.dat_san.san_bong.TenSan.toLowerCase() : '';
+        const cumSan = (item.dat_san && item.dat_san.san_bong && item.dat_san.san_bong.cum_san) ? item.dat_san.san_bong.cum_san.TenCumSan.toLowerCase() : '';
+        
+        const matchSearch = tenKhach.includes(currentUCSearch) || tenSan.includes(currentUCSearch) || cumSan.includes(currentUCSearch);
+        
+        const txDate = item.NgayTao ? item.NgayTao.substring(0, 10) : '';
+        const matchDate = currentUCDate ? (txDate === currentUCDate) : true;
+        
+        return matchStatus && matchSearch && matchDate;
+    });
+
+    const totalPages = Math.ceil(filteredData.length / itemsPerUCPage) || 1;
+    if (currentUCPage > totalPages) currentUCPage = totalPages;
+    const startIdx = (currentUCPage - 1) * itemsPerUCPage;
+    
+    renderUCTable(filteredData.slice(startIdx, startIdx + itemsPerUCPage));
+    renderUCPagination(totalPages);
+}
+
+function renderUCTable(data) {
+    const tbody = document.getElementById('huysan-table-body');
+    if (data.length === 0) return tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="text-align: center; padding: 40px;">Không có dữ liệu.</td></tr>`;
+
+    tbody.innerHTML = data.map(item => {
+        let badgeClass = 'badge-warning', viStatus = 'Chờ duyệt', actionHtml = '';
+        if(item.TrangThai === 'DaDuyet') { badgeClass = 'badge-success'; viStatus = 'Đã duyệt'; }
+        if(item.TrangThai === 'TuChoi') { badgeClass = 'badge-danger'; viStatus = 'Từ chối'; }
+
+        if (item.TrangThai === 'ChoDuyet') {
+            actionHtml = `
+                <div style="display: flex; gap: 8px; justify-content: flex-start;">
+                    <button class="btn-outline-sm" style="color: #047857; border-color: #047857; padding: 6px 12px; white-space: nowrap;" onclick="openUCConfirmModal(${item.ID}, 'DaDuyet')">
+                        <i class="fa-solid fa-check"></i> Duyệt
+                    </button>
+                    <button class="btn-outline-sm" style="color: #b91c1c; border-color: #b91c1c; padding: 6px 12px; white-space: nowrap;" onclick="openUCConfirmModal(${item.ID}, 'TuChoi')">
+                        <i class="fa-solid fa-xmark"></i> Từ chối
+                    </button>
+                </div>
+            `;
+        } else {
+            actionHtml = `<span style="color: var(--text-muted); font-size: 0.85rem;">(Ngày xử lý: ${item.NgayDuyet ? item.NgayDuyet.substring(0,10) : 'N/A'})</span>`;
+        }
+
+        const sanBong = item.dat_san && item.dat_san.san_bong ? item.dat_san.san_bong.TenSan : 'N/A';
+        const cumSan = item.dat_san && item.dat_san.san_bong && item.dat_san.san_bong.cum_san ? item.dat_san.san_bong.cum_san.TenCumSan : '';
+        const isGiaiDau = item.dat_san && item.dat_san.ID_GiaiDau != null;
+        const tenGiai = isGiaiDau && item.dat_san.giai_dau ? item.dat_san.giai_dau.TenGiaiDau : '';
+        
+        const loaiTag = isGiaiDau 
+            ? `<span style="font-size: 0.7rem; background: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: 4px; margin-bottom: 4px; display: inline-block;"><i class="fa-solid fa-trophy"></i> Giải đấu</span>` 
+            : `<span style="font-size: 0.7rem; background: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px; margin-bottom: 4px; display: inline-block;">Phong trào</span>`;
+
+        const htmlTenGiai = isGiaiDau ? `<div style="font-size: 0.8rem; color: #4338ca; font-weight: 600;">${tenGiai}</div>` : '';
+
+        let dateStr = '';
+        if (item.NgayTao) {
+            const d = new Date(item.NgayTao);
+            const pad = n => n < 10 ? '0' + n : n;
+            dateStr = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
+        
+        let ngayDaStr = ''; let gioDaStr = '';
+        if(item.dat_san) {
+            const d = new Date(item.dat_san.NgayDa);
+            ngayDaStr = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth()+1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+            gioDaStr = item.dat_san.khung_gio ? `${item.dat_san.khung_gio.GioBatDau.substring(0,5)} - ${item.dat_san.khung_gio.GioKetThuc.substring(0,5)}` : '';
+        }
+
+        return `<tr>
+            <td>
+                <strong>${item.nguoi_dung?.HoTen || 'N/A'}</strong><br>
+                <span style="font-size: 0.85rem; color: var(--text-muted);">${item.nguoi_dung?.SoDienThoai || ''}</span>
+            </td>
+            <td>
+                ${loaiTag}<br>
+                <strong style="color: var(--text-dark);">${sanBong}</strong><br>
+                <span style="font-size: 0.8rem; color: var(--text-muted);"><i class="fa-solid fa-location-dot"></i> ${cumSan}</span>
+                ${htmlTenGiai}
+                <div style="font-size: 0.85rem; margin-top: 4px;">Đá lúc: <strong style="color:var(--primary);">${gioDaStr}</strong> (${ngayDaStr})</div>
+            </td>
+            <td style="max-width: 250px;">
+                <span style="font-size: 0.9rem; white-space: pre-line; color: var(--text-dark);">"${item.NoiDung}"</span>
+            </td>
+            <td><span style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> ${dateStr}</span></td>
+            <td><span class="badge ${badgeClass}" style="white-space: nowrap; display: inline-block; text-align: center; min-width: 85px;">${viStatus}</span></td>
+            <td>${actionHtml}</td>
+        </tr>`;
+    }).join('');
+}
+
+function renderUCPagination(totalPages) {
+    const div = document.getElementById('uc-pagination');
+    if (totalPages <= 1) return div.innerHTML = '';
+    let html = `<button class="btn-outline-sm" ${currentUCPage === 1 ? 'disabled style="opacity:0.5;"' : ''} onclick="currentUCPage--; applyUCFiltersAndRender()"><i class="fa-solid fa-chevron-left"></i></button>`;
+    for (let i = 1; i <= totalPages; i++) {
+        html += `<button class="${i === currentUCPage ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="currentUCPage=${i}; applyUCFiltersAndRender()">${i}</button>`;
+    }
+    html += `<button class="btn-outline-sm" ${currentUCPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="currentUCPage++; applyUCFiltersAndRender()"><i class="fa-solid fa-chevron-right"></i></button>`;
+    div.innerHTML = html;
+}
+
+function openUCConfirmModal(id, status) {
+    pendingUCId = id; pendingUCStatus = status;
+    
+    // Tạo Modal xác nhận ngay trong Javascript
+    let modal = document.getElementById('uc-confirm-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'uc-confirm-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 9999;';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 400px; text-align: center; padding: 30px 20px;">
+                <div style="font-size: 3.5rem; color: #f59e0b; margin-bottom: 15px;"><i class="fa-solid fa-circle-exclamation"></i></div>
+                <h3 id="uc-confirm-title" style="margin-bottom: 10px; font-size: 1.4rem;">Xác nhận</h3>
+                <p id="uc-confirm-msg" style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5;"></p>
+                <div style="display: flex; justify-content: center; gap: 12px;">
+                    <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="closeUCConfirmModal()">Hủy bỏ</button>
+                    <button id="uc-confirm-btn" class="btn-primary" style="width: auto; padding: 10px 24px;" onclick="executeCapNhatTrangThaiUC()">Đồng ý</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+
+    const isApprove = (status === 'DaDuyet');
+    document.getElementById('uc-confirm-title').innerText = isApprove ? 'Duyệt Hủy Sân' : 'Từ Chối Hủy Sân';
+    document.getElementById('uc-confirm-msg').innerHTML = isApprove 
+        ? 'Sân (hoặc Giải đấu) này sẽ bị <strong style="color: #ef4444;">HỦY</strong> và tiền cọc sẽ tự động hoàn lại ví khách hàng. Xác nhận?' 
+        : 'Bạn sẽ <strong style="color: #ef4444;">TỪ CHỐI</strong> đơn hủy này (Lịch đặt được giữ nguyên). Xác nhận?';
+    
+    const btn = document.getElementById('uc-confirm-btn');
+    btn.style.backgroundColor = isApprove ? 'var(--primary)' : '#ef4444';
+    btn.style.borderColor = isApprove ? 'var(--primary)' : '#ef4444';
+    
+    modal.style.display = 'flex';
+}
+
+function closeUCConfirmModal() { 
+    const modal = document.getElementById('uc-confirm-modal');
+    if(modal) modal.style.display = 'none'; 
+}
+
+async function executeCapNhatTrangThaiUC() {
+    const btn = document.getElementById('uc-confirm-btn');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...'; 
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/yeu-cau-huy-gap/${pendingUCId}/xu-ly`, {
+            method: 'PUT', credentials: 'include', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trang_thai: pendingUCStatus })
+        });
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            showUCAlert('Xử lý thành công!', true);
+            closeUCConfirmModal(); 
+            loadDanhSachHuySanAdmin(); // Tự động làm mới bảng sau khi duyệt
+        } else { 
+            showUCAlert(data.message, false); 
+            closeUCConfirmModal(); 
+        }
+    } catch (e) { 
+        showUCAlert('Lỗi mạng!', false); 
+        closeUCConfirmModal(); 
+    } finally { 
+        btn.innerHTML = 'Đồng ý'; 
+        btn.disabled = false; 
     }
 }

@@ -286,7 +286,8 @@ class DatSanController extends Controller
 
         DB::beginTransaction();
         try {
-            $datSan = DatSan::find($id);
+            // Load kèm sanBong và khungGio để lấy thông tin đưa vào nội dung thông báo
+            $datSan = DatSan::with(['sanBong', 'khungGio'])->find($id);
             if (!$datSan) return response()->json(['success' => false, 'message' => 'Không tìm thấy dữ liệu đặt sân!']);
 
             if ($datSan->TrangThai !== 'DaCoc') {
@@ -312,7 +313,35 @@ class DatSanController extends Controller
                 }
             }
 
+            // 3. TẠO THÔNG BÁO CHO KHÁCH HÀNG
+            $tenSan = $datSan->sanBong ? $datSan->sanBong->TenSan : 'Sân bóng';
+            $ngayDa = date('d/m/Y', strtotime($datSan->NgayDa));
+            $gioDa = $datSan->khungGio ? substr($datSan->khungGio->GioBatDau, 0, 5) . ' - ' . substr($datSan->khungGio->GioKetThuc, 0, 5) : '';
+
+            $tieuDe = '';
+            $noiDung = '';
+
+            if ($request->trang_thai === 'HoanThanh') {
+                $tieuDe = 'Trận đấu đã hoàn thành';
+                $noiDung = "Trận đấu tại {$tenSan} lúc {$gioDa} ngày {$ngayDa} đã hoàn tất. Cảm ơn bạn đã sử dụng dịch vụ!";
+            } else if ($request->trang_thai === 'KhongDen') {
+                $tieuDe = 'Vắng mặt và mất cọc';
+                $noiDung = "Hệ thống ghi nhận bạn đã không đến nhận sân tại {$tenSan} lúc {$gioDa} ngày {$ngayDa}. Tiền cọc của lịch đặt này sẽ không được hoàn lại theo quy định.";
+            }
+
+            // Lưu thông báo vào CSDL
+            \App\Models\ThongBao::create([
+                'ID_NguoiDung' => $datSan->ID_NguoiDung,
+                'TieuDe'       => $tieuDe,
+                'NoiDung'      => $noiDung,
+                'LoaiThongBao' => 'DatSan'
+            ]);
+
             DB::commit();
+
+            // Phát tín hiệu Realtime cho khách hàng
+            broadcast(new \App\Events\UserDataUpdated($datSan->ID_NguoiDung))->toOthers();
+
             return response()->json(['success' => true, 'message' => 'Đã chốt trạng thái sân thành công!']);
         } catch (\Exception $e) {
             DB::rollBack();
