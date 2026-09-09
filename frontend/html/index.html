@@ -10,6 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
@@ -26,7 +27,8 @@
                 <a href="#about">Giới thiệu</a>
                 <a href="#features">Tính năng</a>
                 <a href="#areas">Khu vực</a>
-                <a href="#contact">Liên hệ</a>
+                <a href="#fields-section">Xem sân</a>
+                <a href="#contact">Liên hệ</a>               
             </div>
 
             <div class="nav-actions">
@@ -45,6 +47,7 @@
         <a href="#about">Giới thiệu</a>
         <a href="#features">Tính năng</a>
         <a href="#areas">Khu vực</a>
+        <a href="#fields-section">Xem sân</a>
         <a href="#contact">Liên hệ</a>
         <a href="login.html" class="btn btn-outline">ĐĂNG NHẬP</a>
         <a href="register.html" class="btn btn-primary">ĐĂNG KÝ</a>
@@ -65,8 +68,10 @@
                 <p class="hero-subtitle">Khám phá nền tảng kết nối cộng đồng bóng đá và hệ thống sân bóng hiện đại nhất tại Đà Nẵng.</p>
                 
                 <div class="hero-cta">
+                    <a href="#fields-section" class="btn btn-primary btn-lg">
+                        XEM SÂN NGAY
+                    </a>
                     <a href="register.html" class="btn btn-primary btn-lg">ĐĂNG KÝ NGAY</a>
-                    <a href="login.html" class="btn btn-outline btn-lg">ĐĂNG NHẬP</a>
                 </div>
             </div>
             
@@ -210,6 +215,33 @@
             </div>
         </div>
     </section>
+
+    <!-- KHU VỰC HIỂN THỊ SÂN TRÊN TRANG CHỦ -->
+    <section id="fields-section" class="fields-section section-padding">
+        <div class="guest-container" style="max-width: 1280px; margin: 0 auto; padding: 0 24px;">
+            <div class="breadcrumb-container" id="guest-breadcrumb" style="display: none; margin-bottom: 20px;"></div>
+            <!-- Vùng hiển thị dữ liệu động (Cụm sân -> Sân -> Lịch) -->
+            <div id="guest-app-content"></div>
+        </div>
+    </section>
+
+    <!-- MODAL BÁO ĐĂNG NHẬP CHUNG DƯỚI CUỐI TRANG -->
+    <div class="modal-overlay" id="login-required-modal">
+        <div class="modal-card">
+            <button class="modal-close-btn" id="modal-close-x"><i class="fa-solid fa-xmark"></i></button>
+            <div class="modal-header">
+                <div class="modal-icon"><i class="fa-solid fa-lock"></i></div>
+                <h3 class="modal-title">Đăng Nhập Để Đặt Sân</h3>
+                <p class="modal-subtitle">Bạn cần có tài khoản để giữ chỗ khung giờ này.</p>
+            </div>
+            <div class="modal-slot-details" id="modal-slot-info"></div>
+            <div class="modal-actions">
+                <a href="login.html" class="btn btn-primary-full">ĐĂNG NHẬP NGAY</a>
+                <a href="register.html" class="btn btn-outline-full">TẠO TÀI KHOẢN MỚI</a>
+                <button type="button" class="btn btn-link-close" id="modal-cancel-btn">Để sau</button>
+            </div>
+        </div>
+    </div>
 
     <footer class="footer" id="contact">
         <div class="container footer-grid">

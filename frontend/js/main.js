@@ -263,3 +263,228 @@ function initThreeScene() {
 
     animate();
 }
+
+const API_BASE_URL = 'http://127.0.0.1:8000/api';
+const appContent = document.getElementById('guest-app-content');
+const breadcrumbEl = document.getElementById('guest-breadcrumb');
+const fieldsSection = document.getElementById('fields-section');
+
+let appState = { clusters: [], currentCluster: null, currentPitch: null };
+
+document.addEventListener('DOMContentLoaded', () => {
+    if(appContent) {
+        loadClusters();
+        setupModals();
+    }
+});
+
+// Hàm cuộn mượt về khu vực sân
+// function scrollToFields() {
+//     fieldsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+// }
+
+async function loadClusters() {
+    appContent.innerHTML = '<div style="text-align:center; padding: 40px;"><i class="fa-solid fa-spinner fa-spin fa-2x" style="color:#10B981"></i></div>';
+    try {
+        const res = await fetch(`${API_BASE_URL}/cum-san`);
+        const data = await res.json();
+        appState.clusters = (data.data || []).filter(c => c.deleted_at === null);
+        renderClusters();
+    } catch (err) {
+        appContent.innerHTML = '<p style="text-align:center; color:red;">Lỗi tải dữ liệu. Vui lòng thử lại.</p>';
+    }
+}
+
+function renderClusters() {
+    breadcrumbEl.style.display = 'none';
+    let html = `
+        <div style="margin-bottom: 24px;">
+            <h2 style="font-size: 1.75rem; color: var(--text-main);">Danh Sách Cụm Sân</h2>
+        </div>
+        <div class="cluster-grid">
+    `;
+
+    appState.clusters.forEach(c => {
+        // Bắt sự kiện onclick TRỰC TIẾP trên thẻ div.cluster-card
+        html += `
+            <div class="cluster-card" onclick="loadPitches(${c.ID})">
+                <div class="cluster-img-box">
+                    ${c.HinhAnh ? `<img src="http://127.0.0.1:8000${c.HinhAnh}" class="cluster-img">` : `<div style="display:flex; height:100%; align-items:center; justify-content:center; background:#E5E7EB;"><i class="fa-solid fa-futbol fa-3x" style="color:#9CA3AF"></i></div>`}
+                </div>
+                <div class="cluster-info">
+                    <h3 class="cluster-name">${c.TenCumSan}</h3>
+                    <div class="cluster-meta"><i class="fa-solid fa-location-dot" style="color: #10B981;"></i> ${c.DiaChi}</div>
+                    <div class="cluster-meta"><i class="fa-solid fa-clock"></i> ${c.GioMoCua?.substring(0,5)} - ${c.GioDongCua?.substring(0,5)}</div>
+                </div>
+            </div>
+        `;
+    });
+    appContent.innerHTML = html + '</div>';
+    //scrollToFields();
+}
+
+async function loadPitches(clusterId) {
+    appState.currentCluster = appState.clusters.find(c => c.ID == clusterId);
+    renderBreadcrumb('pitches');
+    appContent.innerHTML = '<div style="text-align:center; padding: 40px;"><i class="fa-solid fa-spinner fa-spin fa-2x" style="color:#10B981"></i></div>';
+    //scrollToFields();
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/san-bong?cum_san_id=${clusterId}`);
+        const data = await res.json();
+        const activePitches = (data.data || []).filter(sb => sb.TrangThai === 'HoatDong');
+
+        if (activePitches.length === 0) {
+            appContent.innerHTML = `
+                <div style="text-align: center; padding: 50px 20px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px;">
+                    <i class="fa-solid fa-circle-exclamation fa-3x" style="color: var(--accent); margin-bottom: 16px;"></i>
+                    <h3 style="color: var(--text-main); font-size: 1.25rem; margin-bottom: 8px;">Hiện không có sân bóng nào</h3>
+                    <p style="color: var(--text-muted); font-size: 0.95rem;">Cụm sân này hiện chưa có sân con nào hoạt động. Vui lòng chọn cụm sân khác.</p>
+                </div>
+            `;
+            return;
+        }
+
+        let html = '<div class="pitch-grid">';
+        activePitches.forEach(sb => {
+            const loaiName = sb.loaiSan?.TenLoaiSan || sb.loai_san?.TenLoaiSan || 'Khác';
+            // Bắt sự kiện onclick TRỰC TIẾP trên thẻ div.pitch-card
+            html += `
+                <div class="pitch-card" onclick="loadSchedule(${clusterId}, ${sb.ID})">
+                    <div style="padding: 20px;">
+                        <div class="pitch-card-name">${sb.TenSan}</div>
+                        <div class="pitch-card-type"><i class="fa-solid fa-layer-group"></i> ${loaiName}</div>
+                    </div>
+                </div>
+            `;
+        });
+        appContent.innerHTML = html + '</div>';
+    } catch (err) {
+        appContent.innerHTML = '<p style="text-align:center; color:red;">Lỗi tải dữ liệu sân.</p>';
+    }
+}
+
+async function loadSchedule(clusterId, pitchId) {
+    renderBreadcrumb('schedule');
+    appContent.innerHTML = '<div style="text-align:center; padding: 40px;"><i class="fa-solid fa-spinner fa-spin fa-2x" style="color:#10B981"></i></div>';
+    //scrollToFields();
+
+    try {
+        const [sbRes, gtRes, kgRes, dsRes] = await Promise.all([
+            fetch(`${API_BASE_URL}/san-bong?cum_san_id=${clusterId}`),
+            fetch(`${API_BASE_URL}/gia-tien?cum_san_id=${clusterId}`),
+            fetch(`${API_BASE_URL}/khung-gio`),
+            fetch(`${API_BASE_URL}/dat-san/da-dat?id_san_bong=${pitchId}`)
+        ]);
+
+        const pitches = (await sbRes.json()).data || [];
+        const prices = (await gtRes.json()).data || [];
+        const timeSlots = (await kgRes.json()).data || [];
+        const booked = (await dsRes.json()).data || [];
+
+        const pitch = pitches.find(p => p.ID == pitchId);
+        appState.currentPitch = pitch;
+
+        const validPrices = prices.filter(gt => gt.ID_LoaiSan == pitch.ID_LoaiSan);
+        const validKhungGioIds = validPrices.map(gt => gt.ID_KhungGio);
+        const availableTimeSlots = timeSlots.filter(kg => validKhungGioIds.includes(kg.ID));
+
+        // Lấy ngày hôm nay và 6 ngày tới
+        const dateArray = [];
+        const today = new Date();
+        for (let i = 0; i < 7; i++) {
+            let d = new Date(today);
+            d.setDate(today.getDate() + i);
+            const pad = n => n < 10 ? '0' + n : n;
+            dateArray.push({
+                short: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`,
+                dbDate: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+                rawDate: d
+            });
+        }
+
+        let html = `
+            <div class="schedule-container" style="position: relative; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 14px; overflow: visible;">
+                <table class="schedule-table" style="width: 100%; border-collapse: separate; border-spacing: 0; min-width: 900px; table-layout: auto;">
+                    <thead>
+                        <tr>
+                            <!-- CỘT KHUNG GIỜ (TIÊU ĐỀ) -->
+                            <th style="width: 120px; min-width: 120px; padding: 14px 10px; border-bottom: 1px solid var(--border-color); background: var(--bg-tertiary); position: sticky; top: 80px; left: 0; z-index: 50; box-shadow: 0 3px 8px rgba(0,0,0,0.2); text-align: center; color: var(--text-main);">
+                                Khung giờ
+                            </th>
+
+                            <!-- CỘT GIÁ TIỀN (TIÊU ĐỀ) -->
+                            <th style="width: 100px; min-width: 100px; padding: 14px 10px; border-bottom: 1px solid var(--border-color); background: var(--bg-tertiary); position: sticky; top: 80px; left: 120px; z-index: 49; box-shadow: 4px 0 6px -2px rgba(0,0,0,0.2), 0 3px 8px rgba(0,0,0,0.2); text-align: center; color: var(--text-main);">
+                                Giá tiền
+                            </th>
+
+                            <!-- CÁC NGÀY (TIÊU ĐỀ) -->
+                            ${dateArray.map((d, i) => `
+                                <th style="min-width: 105px; padding: 14px 10px; text-align: center; white-space: nowrap; border-bottom: 1px solid var(--border-color); background: var(--bg-tertiary); position: sticky; top: 80px; z-index: 40; box-shadow: 0 3px 8px rgba(0,0,0,0.2); color: var(--text-main);">
+                                    ${i === 0 ? 'Hôm nay' : d.short}
+                                </th>
+                            `).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        availableTimeSlots.forEach(kg => {
+            const priceInfo = validPrices.find(p => p.ID_KhungGio == kg.ID);
+            const priceVal = priceInfo ? Number(priceInfo.SoTien).toLocaleString('vi-VN') + 'đ' : '0đ';
+            const timeStr = `${kg.GioBatDau.substring(0,5)} - ${kg.GioKetThuc.substring(0,5)}`;
+            
+            html += `
+                <tr>
+                    <!-- CỘT KHUNG GIỜ (NỘI DUNG) -->
+                    <td style="width: 120px; min-width: 120px; background: var(--bg-secondary); position: sticky; left: 0; z-index: 15; border-right: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); text-align: center; padding: 12px 10px; white-space: nowrap;">
+                        <strong>${timeStr}</strong>
+                    </td>
+
+                    <!-- CỘT GIÁ TIỀN (NỘI DUNG) -->
+                    <td style="width: 100px; min-width: 100px; background: var(--bg-secondary); position: sticky; left: 120px; z-index: 14; color: var(--accent); font-weight: 600; border-right: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); box-shadow: 4px 0 6px -2px rgba(0,0,0,0.2); text-align: center; padding: 12px 10px;">
+                        ${priceVal}
+                    </td>
+            `;
+            
+            dateArray.forEach(date => {
+                const isBooked = booked.some(b => b.NgayDa === date.dbDate && b.ID_KhungGio === kg.ID);
+                const isPast = new Date(date.rawDate.getFullYear(), date.rawDate.getMonth(), date.rawDate.getDate(), kg.GioBatDau.split(':')[0], kg.GioBatDau.split(':')[1]) <= new Date();
+
+                if (isPast) html += `<td style="text-align:center; border-bottom: 1px solid var(--border-color);"><button class="slot-btn past" disabled>Quá giờ</button></td>`;
+                else if (isBooked) html += `<td style="text-align:center; border-bottom: 1px solid var(--border-color);"><button class="slot-btn booked" disabled>Đã đặt</button></td>`;
+                else html += `<td style="text-align:center; border-bottom: 1px solid var(--border-color);"><button class="slot-btn available" onclick="triggerModal('${timeStr}', '${priceVal}', '${date.short}')">TRỐNG</button></td>`;
+            });
+            html += `</tr>`;
+        });
+
+        appContent.innerHTML = html + '</tbody></table></div>';
+    } catch (err) {
+        appContent.innerHTML = '<p style="text-align:center; color:red;">Lỗi tải bảng lịch.</p>';
+    }
+}
+
+function renderBreadcrumb(view) {
+    breadcrumbEl.style.display = 'flex';
+    let html = `<span class="breadcrumb-item" onclick="renderClusters()"><i class="fa-solid fa-arrow-left"></i> Quay lại danh sách</span>`;
+    if (view === 'schedule') {
+        html = `<span class="breadcrumb-item" onclick="loadPitches(${appState.currentCluster.ID})"><i class="fa-solid fa-arrow-left"></i> Chọn sân khác thuộc ${appState.currentCluster.TenCumSan}</span>`;
+    }
+    breadcrumbEl.innerHTML = html;
+}
+
+function triggerModal(time, price, date) {
+    document.getElementById('modal-slot-info').innerHTML = `
+        <div style="margin-bottom:8px">Sân: <strong>${appState.currentPitch.TenSan}</strong> (${appState.currentCluster.TenCumSan})</div>
+        <div style="margin-bottom:8px">Ngày: <strong>${date}</strong></div>
+        <div style="margin-bottom:8px">Giờ: <strong style="color:#10B981">${time}</strong></div>
+        <div>Giá: <strong style="color:#10B981">${price}</strong></div>
+    `;
+    document.getElementById('login-required-modal').classList.add('active');
+}
+
+function setupModals() {
+    const modal = document.getElementById('login-required-modal');
+    document.getElementById('modal-close-x').onclick = () => modal.classList.remove('active');
+    document.getElementById('modal-cancel-btn').onclick = () => modal.classList.remove('active');
+}
