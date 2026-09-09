@@ -1465,29 +1465,29 @@ function renderGDTable(data) {
 
 function renderGDPagination(totalPages) {
     const paginationDiv = document.getElementById('gd-pagination');
-    let html = '';
-    
-    // Nếu chỉ có 1 trang thì ẩn luôn thanh phân trang cho gọn
-    if (totalPages <= 1) {
-        paginationDiv.innerHTML = '';
-        return;
-    }
+    if (totalPages <= 1) return paginationDiv.innerHTML = '';
 
-    // Nút "Trang trước" (Mũi tên trái)
-    const prevDisabled = currentGDPage === 1 ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : '';
-    html += `<button class="btn-outline-sm" ${prevDisabled} onclick="changeGDPage(${currentGDPage - 1})" style="padding: 6px 12px; border-color: var(--border); color: var(--text-dark);"><i class="fa-solid fa-chevron-left"></i></button>`;
+    let html = `<button class="btn-outline-sm" ${currentGDPage === 1 ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''} onclick="changeGDPage(${currentGDPage - 1})" style="padding: 6px 12px; border-color: var(--border); color: var(--text-dark);"><i class="fa-solid fa-chevron-left"></i></button>`;
 
-    // Các nút Số trang
-    for (let i = 1; i <= totalPages; i++) {
-        // Nút active có màu nền xanh, nút thường viền mờ
-        const btnClass = i === currentGDPage ? 'btn-primary' : 'btn-outline-sm';
-        const style = i === currentGDPage ? 'padding: 6px 14px;' : 'padding: 6px 14px; border-color: var(--border); color: var(--text-dark);';
-        html += `<button class="${btnClass}" style="${style}" onclick="changeGDPage(${i})">${i}</button>`;
-    }
+    // Thuật toán tính toán mảng phân trang
+    const getPages = (current, total) => {
+        if (total <= 6) return Array.from({length: total}, (_, i) => i + 1);
+        if (current <= 3) return [1, 2, 3, 4, '...', total];
+        if (current >= total - 2) return [1, '...', total - 3, total - 2, total - 1, total];
+        return [1, '...', current - 1, current, current + 1, '...', total];
+    };
 
-    // Nút "Trang sau" (Mũi tên phải)
-    const nextDisabled = currentGDPage === totalPages ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : '';
-    html += `<button class="btn-outline-sm" ${nextDisabled} onclick="changeGDPage(${currentGDPage + 1})" style="padding: 6px 12px; border-color: var(--border); color: var(--text-dark);"><i class="fa-solid fa-chevron-right"></i></button>`;
+    getPages(currentGDPage, totalPages).forEach(i => {
+        if (i === '...') {
+            html += `<span style="padding: 6px 10px; color: var(--text-muted); font-weight: bold;">...</span>`;
+        } else {
+            const btnClass = i === currentGDPage ? 'btn-primary' : 'btn-outline-sm';
+            const style = i === currentGDPage ? 'padding: 6px 14px;' : 'padding: 6px 14px; border-color: var(--border); color: var(--text-dark);';
+            html += `<button class="${btnClass}" style="${style}" onclick="changeGDPage(${i})">${i}</button>`;
+        }
+    });
+
+    html += `<button class="btn-outline-sm" ${currentGDPage === totalPages ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''} onclick="changeGDPage(${currentGDPage + 1})" style="padding: 6px 12px; border-color: var(--border); color: var(--text-dark);"><i class="fa-solid fa-chevron-right"></i></button>`;
 
     paginationDiv.innerHTML = html;
 }
@@ -1705,10 +1705,24 @@ function renderRTTable(data) {
 function renderRTPagination(totalPages) {
     const div = document.getElementById('rt-pagination');
     if (totalPages <= 1) return div.innerHTML = '';
+    
     let html = `<button class="btn-outline-sm" ${currentRTPage === 1 ? 'disabled style="opacity:0.5;"' : ''} onclick="currentRTPage--; applyRTFiltersAndRender()"><i class="fa-solid fa-chevron-left"></i></button>`;
-    for (let i = 1; i <= totalPages; i++) {
-        html += `<button class="${i === currentRTPage ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="currentRTPage=${i}; applyRTFiltersAndRender()">${i}</button>`;
-    }
+    
+    const getPages = (current, total) => {
+        if (total <= 6) return Array.from({length: total}, (_, i) => i + 1);
+        if (current <= 3) return [1, 2, 3, 4, '...', total];
+        if (current >= total - 2) return [1, '...', total - 3, total - 2, total - 1, total];
+        return [1, '...', current - 1, current, current + 1, '...', total];
+    };
+
+    getPages(currentRTPage, totalPages).forEach(i => {
+        if (i === '...') {
+            html += `<span style="padding: 6px 10px; color: var(--text-muted); font-weight: bold;">...</span>`;
+        } else {
+            html += `<button class="${i === currentRTPage ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="currentRTPage=${i}; applyRTFiltersAndRender()">${i}</button>`;
+        }
+    });
+
     html += `<button class="btn-outline-sm" ${currentRTPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="currentRTPage++; applyRTFiltersAndRender()"><i class="fa-solid fa-chevron-right"></i></button>`;
     div.innerHTML = html;
 }
@@ -1942,6 +1956,7 @@ function renderQuanLyDatSan() {
                 <table class="admin-table">
                     <thead style="background: #F8FAFC;">
                         <tr>
+                            <th style="text-align: center; width: 100px; white-space: nowrap;">Mã vé</th>
                             <th>Khách hàng</th>
                             <th>Thông tin Sân</th>
                             <th>Khung giờ</th>
@@ -1986,12 +2001,16 @@ async function loadDanhSachDatSanAdmin() {
 function applyDSFiltersAndRender() {
     let filteredData = allDatSanData.filter(item => {
         const matchStatus = (currentDSFilter === 'All' || item.TrangThai === currentDSFilter);
+        const maVeSearch = item.ID_GiaiDau ? `gd-${item.ID_GiaiDau}` : `pt-${item.ID}`;
         const sdt = item.nguoi_dung ? item.nguoi_dung.SoDienThoai.toLowerCase() : '';
         const tenKhach = item.nguoi_dung ? item.nguoi_dung.HoTen.toLowerCase() : '';
         const tenSan = item.san_bong ? item.san_bong.TenSan.toLowerCase() : '';
         const cumSan = (item.san_bong && item.san_bong.cum_san) ? item.san_bong.cum_san.TenCumSan.toLowerCase() : '';
         const tenGiai = (item.ID_GiaiDau !== null && item.giai_dau) ? item.giai_dau.TenGiaiDau.toLowerCase() : '';
-        const matchSearch = sdt.includes(currentDSSearch) 
+
+        const searchTerm = currentDSSearch.toLowerCase().trim();
+        const matchSearch = maVeSearch.includes(searchTerm)
+                         ||sdt.includes(currentDSSearch) 
                          || tenKhach.includes(currentDSSearch) 
                          || tenSan.includes(currentDSSearch)
                          || cumSan.includes(currentDSSearch)
@@ -2024,6 +2043,10 @@ function renderDSTable(data) {
 
         const badgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${viStatus}</span>`;
         
+        const maVeDisplay = item.ID_GiaiDau ? `GD-${item.ID_GiaiDau}` : `PT-${item.ID}`;
+        const badgeClassVe = item.ID_GiaiDau 
+            ? 'background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; box-shadow: 0 2px 4px rgba(67, 56, 202, 0.1);' 
+            : 'background: #f8fafc; color: #475569; border: 1px solid #e2e8f0; box-shadow: 0 2px 4px rgba(71, 85, 105, 0.08);';        
         const isGiaiDau = item.ID_GiaiDau !== null;
         const tenGiaiDau = isGiaiDau && item.giai_dau ? item.giai_dau.TenGiaiDau : '';
         const tagLoai = isGiaiDau 
@@ -2046,6 +2069,11 @@ function renderDSTable(data) {
         }
 
         return `<tr>
+            <td style="text-align: center;">
+                <span style="padding: 6px 12px; border-radius: 8px; font-weight: 700; font-family: 'Courier New', Courier, monospace; font-size: 0.95rem; display: inline-block; white-space: nowrap; letter-spacing: 1px; ${badgeClassVe}">
+                    ${maVeDisplay}
+                </span>
+            </td>
             <td>
                 <strong>${item.nguoi_dung?.HoTen || 'N/A'}</strong><br>
                 <span style="font-size: 0.85rem; color: var(--text-muted);">${item.nguoi_dung?.SoDienThoai || ''}</span>
@@ -2069,10 +2097,24 @@ function renderDSTable(data) {
 function renderDSPagination(totalPages) {
     const div = document.getElementById('ds-pagination');
     if (totalPages <= 1) return div.innerHTML = '';
+    
     let html = `<button class="btn-outline-sm" ${currentDSPage === 1 ? 'disabled style="opacity:0.5;"' : ''} onclick="currentDSPage--; applyDSFiltersAndRender()"><i class="fa-solid fa-chevron-left"></i></button>`;
-    for (let i = 1; i <= totalPages; i++) {
-        html += `<button class="${i === currentDSPage ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="currentDSPage=${i}; applyDSFiltersAndRender()">${i}</button>`;
-    }
+    
+    const getPages = (current, total) => {
+        if (total <= 6) return Array.from({length: total}, (_, i) => i + 1);
+        if (current <= 3) return [1, 2, 3, 4, '...', total];
+        if (current >= total - 2) return [1, '...', total - 3, total - 2, total - 1, total];
+        return [1, '...', current - 1, current, current + 1, '...', total];
+    };
+
+    getPages(currentDSPage, totalPages).forEach(i => {
+        if (i === '...') {
+            html += `<span style="padding: 6px 10px; color: var(--text-muted); font-weight: bold;">...</span>`;
+        } else {
+            html += `<button class="${i === currentDSPage ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="currentDSPage=${i}; applyDSFiltersAndRender()">${i}</button>`;
+        }
+    });
+
     html += `<button class="btn-outline-sm" ${currentDSPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="currentDSPage++; applyDSFiltersAndRender()"><i class="fa-solid fa-chevron-right"></i></button>`;
     div.innerHTML = html;
 }
@@ -2325,10 +2367,24 @@ function renderUCTable(data) {
 function renderUCPagination(totalPages) {
     const div = document.getElementById('uc-pagination');
     if (totalPages <= 1) return div.innerHTML = '';
+    
     let html = `<button class="btn-outline-sm" ${currentUCPage === 1 ? 'disabled style="opacity:0.5;"' : ''} onclick="currentUCPage--; applyUCFiltersAndRender()"><i class="fa-solid fa-chevron-left"></i></button>`;
-    for (let i = 1; i <= totalPages; i++) {
-        html += `<button class="${i === currentUCPage ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="currentUCPage=${i}; applyUCFiltersAndRender()">${i}</button>`;
-    }
+    
+    const getPages = (current, total) => {
+        if (total <= 6) return Array.from({length: total}, (_, i) => i + 1);
+        if (current <= 3) return [1, 2, 3, 4, '...', total];
+        if (current >= total - 2) return [1, '...', total - 3, total - 2, total - 1, total];
+        return [1, '...', current - 1, current, current + 1, '...', total];
+    };
+
+    getPages(currentUCPage, totalPages).forEach(i => {
+        if (i === '...') {
+            html += `<span style="padding: 6px 10px; color: var(--text-muted); font-weight: bold;">...</span>`;
+        } else {
+            html += `<button class="${i === currentUCPage ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="currentUCPage=${i}; applyUCFiltersAndRender()">${i}</button>`;
+        }
+    });
+
     html += `<button class="btn-outline-sm" ${currentUCPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="currentUCPage++; applyUCFiltersAndRender()"><i class="fa-solid fa-chevron-right"></i></button>`;
     div.innerHTML = html;
 }

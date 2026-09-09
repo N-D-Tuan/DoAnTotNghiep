@@ -1459,14 +1459,13 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
             </div>
             
             <div class="schedule-container">
-                <!-- Bọc thẻ table-responsive cho phép cuộn ngang (Scroll) khi lịch giải đấu dài -->
-                <div class="table-responsive" style="overflow-x: auto; white-space: nowrap;"> 
-                    <table class="schedule-table" style="min-width: 100%;">
-                        <thead style="position: sticky; top: 0; background: #F8FAFC; z-index: 1;">
+                <div class="table-responsive" style="max-height: 480px; overflow-y: auto; overflow-x: auto; white-space: nowrap; border: 1px solid var(--border); border-radius: 8px;"> 
+                    <table class="schedule-table" style="min-width: 100%; border-collapse: separate; border-spacing: 0;">
+                        <thead style="position: sticky; top: 0; background: #F8FAFC; z-index: 10; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
                             <tr>
-                                <th style="min-width: 120px;">Khung giờ</th>
-                                <th style="min-width: 100px;">Giá tiền</th>
-                                ${dateArray.map(d => `<th style="min-width: 90px;">${d.short}</th>`).join('')}
+                                <th style="min-width: 120px; border-bottom: 1px solid #cbd5e1;">Khung giờ</th>
+                                <th style="min-width: 100px; border-bottom: 1px solid #cbd5e1;">Giá tiền</th>
+                                ${dateArray.map(d => `<th style="min-width: 90px; border-bottom: 1px solid #cbd5e1;">${d.short}</th>`).join('')}
                             </tr>
                         </thead>
                         <tbody>
@@ -1692,12 +1691,18 @@ function applyBookingFiltersAndRender() {
             const khungGio = item.khung_gio ? `${item.khung_gio.GioBatDau.substring(0,5)} - ${item.khung_gio.GioKetThuc.substring(0,5)}` : 'N/A';
             
             let actionHtml = '';
+            let cardClick = ''; // Sự kiện mở vé
+            let cursorStyle = 'default'; // Con trỏ chuột
+
             if (item.TrangThai === 'DaCoc') {
-                actionHtml = `<button class="btn-outline-sm cancel-booking-btn" onclick="openCancelModal(${item.ID})"><i class="fa-solid fa-ban"></i><span>Hủy sân</span></button>`;
+                // Thêm event.stopPropagation() để bấm nút Hủy không bị mở vé
+                actionHtml = `<button class="btn-outline-sm cancel-booking-btn" onclick="event.stopPropagation(); openCancelModal(${item.ID})"><i class="fa-solid fa-ban"></i><span>Hủy sân</span></button>`;
+                cardClick = `onclick="openTicketModal('phong_trao', ${item.ID})" title="Nhấn vào để xem Vé điện tử"`;
+                cursorStyle = 'pointer';
             }
 
             html += `
-                <div style="background: white; border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: var(--shadow-sm); transition: 0.2s;">
+                <div ${cardClick} style="cursor: ${cursorStyle}; background: white; border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: var(--shadow-sm); transition: 0.2s;">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
                         <div>
                             <h3 style="margin: 0 0 4px 0; font-size: 1.15rem; color: var(--text-dark);">${sanBong}</h3>
@@ -1777,8 +1782,14 @@ function applyBookingFiltersAndRender() {
         // 3. Render HTML Giải đấu
         validTournaments.forEach(gd => {
             let actionTourHtml = '';
+            let cardClick = '';
+            let cursorStyle = 'default';
+
             if (gd.canCancel) {
-                actionTourHtml = `<button class="btn-cancel-tour" onclick="openCancelTourModal(${gd.idGiaiDau})"><i class="fa-solid fa-ban"></i><span>Hủy toàn bộ giải</span></button>`;
+                // Thêm event.stopPropagation()
+                actionTourHtml = `<button class="btn-cancel-tour" onclick="event.stopPropagation(); openCancelTourModal(${gd.idGiaiDau})"><i class="fa-solid fa-ban"></i><span>Hủy toàn bộ giải</span></button>`;
+                cardClick = `onclick="openTicketModal('giai_dau', ${gd.idGiaiDau})" title="Nhấn vào để xem Vé Tổng Giải Đấu"`;
+                cursorStyle = 'pointer';
             } else {
                 actionTourHtml = `<div class="cancel-tour-disabled"><i class="fa-solid fa-lock"></i><span>Không thể hủy tự động</span></div>`;
             }
@@ -1816,7 +1827,7 @@ function applyBookingFiltersAndRender() {
             if (gd.matches.length > 4) {
                 toggleBtnHtml = `
                 <div style="text-align: center; padding: 12px; background: #f8fafc; border-top: 1px dashed var(--border);">
-                    <button type="button" class="btn-outline-sm" data-expanded="false" onclick="toggleTourMatches(${gd.idGiaiDau}, this)" style="border-radius: 20px; padding: 6px 16px; font-size: 0.85rem; background: white;">
+                    <button type="button" class="btn-outline-sm" data-expanded="false" onclick="event.stopPropagation(); toggleTourMatches(${gd.idGiaiDau}, this)" style="border-radius: 20px; padding: 6px 16px; font-size: 0.85rem; background: white;">
                         Hiển thị tất cả (${gd.matches.length} trận) <i class="fa-solid fa-chevron-down" style="margin-left: 4px;"></i>
                     </button>
                 </div>
@@ -1824,7 +1835,7 @@ function applyBookingFiltersAndRender() {
             }
 
             html += `
-                <div style="background: white; border: 1px solid var(--border); border-left: 4px solid #4338ca; border-radius: 12px; padding: 20px; margin-bottom: 24px; box-shadow: var(--shadow-sm);">
+                <div ${cardClick} style="cursor: ${cursorStyle}; background: white; border: 1px solid var(--border); border-left: 4px solid #4338ca; border-radius: 12px; padding: 20px; margin-bottom: 24px; box-shadow: var(--shadow-sm);">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; border-bottom: 1px dashed var(--border); padding-bottom: 16px;">
                         <div>
                             <h3 style="margin: 0 0 6px 0; font-size: 1.25rem; color: #4338ca;"><i class="fa-solid fa-trophy"></i> Giải đấu: ${gd.tenGiaiDau}</h3>
@@ -3250,3 +3261,202 @@ async function submitUrgentCancelRequest() {
         btn.innerHTML = 'Gửi yêu cầu';
     }
 }
+
+// ======================================================
+// MODULE: VÉ ĐIỆN TỬ (E-TICKET) & XUẤT ẢNH
+// ======================================================
+
+function closeTicketModal() {
+    document.getElementById('ticket-modal').style.display = 'none';
+}
+
+function openTicketModal(type, id) {
+    const container = document.getElementById('ticket-container');
+    let ticketHtml = '';
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+
+    // Hàm tiện ích format ngày
+    const formatDate = (dateString) => {
+        const d = new Date(dateString);
+        return `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
+    };
+
+    if (type === 'phong_trao') {
+        // Lấy dữ liệu của 1 trận duy nhất
+        const item = allMyBookingsData.find(b => b.ID === id);
+        if(!item) return;
+
+        const tenSan = item.san_bong ? item.san_bong.TenSan : 'N/A';
+        const cumSan = item.san_bong && item.san_bong.cum_san ? item.san_bong.cum_san.TenCumSan : 'N/A';
+        const gioDa = item.khung_gio ? `${item.khung_gio.GioBatDau.substring(0,5)} - ${item.khung_gio.GioKetThuc.substring(0,5)}` : 'N/A';
+        const tongTien = Number(item.TongTien);
+        const tienCoc = Number(item.TienCoc);
+        const conLai = tongTien - tienCoc;
+
+        ticketHtml = `
+            <!-- Nửa trên của vé -->
+            <div style="background: linear-gradient(135deg, var(--primary) 0%, #047857 100%); color: white; padding: 25px 20px; text-align: center;">
+                <div style="font-size: 0.9rem; letter-spacing: 2px; opacity: 0.8; margin-bottom: 5px;">DN FOOTBALL</div>
+                <h2 style="margin: 0; font-size: 1.8rem; font-weight: 800;">VÉ ĐẶT SÂN</h2>
+                <div style="margin-top: 10px; background: rgba(255,255,255,0.2); display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: bold;">MÃ VÉ: #PT-${item.ID}</div>
+            </div>
+            
+            <!-- Phần thân chứa thông tin -->
+            <div style="padding: 25px 20px; background: #fff; position: relative;">
+                <div style="margin-bottom: 20px;">
+                    <div style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 4px;">Khách hàng</div>
+                    <div style="font-weight: bold; font-size: 1.1rem; color: var(--text-dark);">${currentUser.HoTen} - ${currentUser.SoDienThoai}</div>
+                </div>
+
+                <div style="background: #f8fafc; border-radius: 12px; padding: 15px; border: 1px solid var(--border); margin-bottom: 20px;">
+                    <div style="color: var(--primary); font-weight: 800; font-size: 1.3rem; margin-bottom: 5px;">${tenSan}</div>
+                    <div style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 12px;"><i class="fa-solid fa-location-dot"></i> ${cumSan}</div>
+                    <div style="display: flex; gap: 15px;">
+                        <div>
+                            <div style="color: var(--text-muted); font-size: 0.8rem;">Ngày đá</div>
+                            <div style="font-weight: bold; color: var(--text-dark);">${formatDate(item.NgayDa)}</div>
+                        </div>
+                        <div>
+                            <div style="color: var(--text-muted); font-size: 0.8rem;">Khung giờ</div>
+                            <div style="font-weight: bold; color: var(--text-dark);">${gioDa}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Đường đứt nét chia vé -->
+                <div style="border-top: 2px dashed #cbd5e1; margin: 0 -20px 20px -20px; position: relative;">
+                    <!-- Nửa vòng tròn khoét 2 bên mép vé -->
+                    <div style="position: absolute; width: 20px; height: 20px; background: rgba(0,0,0,0.6); border-radius: 50%; top: -11px; left: -10px;"></div>
+                    <div style="position: absolute; width: 20px; height: 20px; background: rgba(0,0,0,0.6); border-radius: 50%; top: -11px; right: -10px;"></div>
+                </div>
+
+                <!-- Tài chính -->
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                    <span style="color: var(--text-muted);">Tổng tiền:</span>
+                    <strong style="color: var(--text-dark);">${tongTien.toLocaleString('vi-VN')}đ</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                    <span style="color: var(--text-muted);">Đã thanh toán (Cọc):</span>
+                    <strong style="color: var(--text-dark);">${tienCoc.toLocaleString('vi-VN')}đ</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #fff1f2; padding: 12px; border-radius: 8px; border: 1px dashed #fecdd3;">
+                    <span style="color: #be123c; font-weight: bold; font-size: 0.9rem;">CẦN THU THÊM:</span>
+                    <strong style="color: #e11d48; font-size: 1.4rem;">${conLai.toLocaleString('vi-VN')}đ</strong>
+                </div>
+            </div>
+        `;
+    } 
+    else if (type === 'giai_dau') {
+        // Lọc tất cả trận đấu thuộc Giải này
+        const matches = allMyBookingsData.filter(b => b.ID_GiaiDau === id && b.TrangThai === 'DaCoc');
+        if(matches.length === 0) return;
+        
+        // Mặc định trận đầu tiên để lấy Tên giải, Cụm sân
+        const firstMatch = matches[0];
+        const tenGiai = firstMatch.giai_dau ? firstMatch.giai_dau.TenGiaiDau : 'N/A';
+        const cumSan = firstMatch.san_bong && firstMatch.san_bong.cum_san ? firstMatch.san_bong.cum_san.TenCumSan : 'N/A';
+        const tongTrận = matches.length;
+        
+        const tongTien = matches.reduce((sum, item) => sum + Number(item.TongTien), 0);
+        const tienCoc = matches.reduce((sum, item) => sum + Number(item.TienCoc), 0);
+        const conLai = tongTien - tienCoc;
+
+        ticketHtml = `
+            <!-- Nửa trên của vé tổng -->
+            <div style="background: linear-gradient(135deg, #4338ca 0%, #312e81 100%); color: white; padding: 25px 20px; text-align: center;">
+                <div style="font-size: 0.9rem; letter-spacing: 2px; opacity: 0.8; margin-bottom: 5px;">DN FOOTBALL</div>
+                <h2 style="margin: 0; font-size: 1.6rem; font-weight: 800;">THẺ TỔNG GIẢI ĐẤU</h2>
+                <div style="margin-top: 10px; background: rgba(255,255,255,0.2); display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: bold;">MÃ GIẢI: #GD-${id}</div>
+            </div>
+            
+            <div style="padding: 25px 20px; background: #fff; position: relative;">
+                <div style="margin-bottom: 20px;">
+                    <div style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 4px;">Khách hàng / Đại diện</div>
+                    <div style="font-weight: bold; font-size: 1.1rem; color: var(--text-dark);">${currentUser.HoTen} - ${currentUser.SoDienThoai}</div>
+                </div>
+
+                <div style="background: #eef2ff; border-radius: 12px; padding: 15px; border: 1px solid #c7d2fe; margin-bottom: 20px;">
+                    <div style="color: #4338ca; font-weight: 800; font-size: 1.2rem; margin-bottom: 5px;"><i class="fa-solid fa-trophy"></i> ${tenGiai}</div>
+                    <div style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 12px;"><i class="fa-solid fa-location-dot"></i> ${cumSan}</div>
+                    <div style="display: flex; gap: 15px;">
+                        <div>
+                            <div style="color: var(--text-muted); font-size: 0.8rem;">Thời gian</div>
+                            <div style="font-weight: bold; color: var(--text-dark);">${formatDate(firstMatch.giai_dau.NgayBatDau)} - ${formatDate(firstMatch.giai_dau.NgayKetThuc)}</div>
+                        </div>
+                        <div>
+                            <div style="color: var(--text-muted); font-size: 0.8rem;">Quy mô</div>
+                            <div style="font-weight: bold; color: var(--text-dark);">${tongTrận} trận đấu</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="border-top: 2px dashed #cbd5e1; margin: 0 -20px 20px -20px; position: relative;">
+                    <div style="position: absolute; width: 20px; height: 20px; background: rgba(0,0,0,0.6); border-radius: 50%; top: -11px; left: -10px;"></div>
+                    <div style="position: absolute; width: 20px; height: 20px; background: rgba(0,0,0,0.6); border-radius: 50%; top: -11px; right: -10px;"></div>
+                </div>
+
+                <!-- Tài chính -->
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                    <span style="color: var(--text-muted);">Tổng tiền hợp đồng:</span>
+                    <strong style="color: var(--text-dark);">${tongTien.toLocaleString('vi-VN')}đ</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                    <span style="color: var(--text-muted);">Đã thanh toán (Cọc 50%):</span>
+                    <strong style="color: var(--text-dark);">${tienCoc.toLocaleString('vi-VN')}đ</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #fff1f2; padding: 12px; border-radius: 8px; border: 1px dashed #fecdd3;">
+                    <span style="color: #be123c; font-weight: bold; font-size: 0.9rem;">CẦN THU THÊM:</span>
+                    <strong style="color: #e11d48; font-size: 1.4rem;">${conLai.toLocaleString('vi-VN')}đ</strong>
+                </div>
+            </div>
+        `;
+    }
+
+    container.innerHTML = ticketHtml;
+    document.getElementById('ticket-modal').style.display = 'flex';
+}
+
+function downloadTicket() {
+    const ticketElement = document.getElementById('ticket-container');
+    const btnDownload = document.getElementById('btn-download-ticket');
+    
+    // Đổi UI báo đang tải
+    btnDownload.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+    btnDownload.disabled = true;
+
+    // Sử dụng html2canvas để chụp ảnh khối div
+    html2canvas(ticketElement, { 
+        scale: 2, // Tăng độ nét gấp đôi cho ảnh tải về
+        backgroundColor: null // Giữ nguyên bo góc nếu có
+    }).then(canvas => {
+        // Chuyển canvas thành đường dẫn ảnh PNG
+        const imageURI = canvas.toDataURL("image/png");
+
+        const now = new Date();
+        const pad = n => n < 10 ? '0' + n : n;
+        const timeString = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+        
+        // Tạo thẻ a ảo để trigger download
+        const a = document.createElement("a");
+        a.href = imageURI;
+        a.download = `Ve_DNFootball_${timeString}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        // Khôi phục nút bấm
+        btnDownload.innerHTML = '<i class="fa-solid fa-download"></i> Tải ảnh vé';
+        btnDownload.disabled = false;
+    });
+}
+
+window.addEventListener('click', function(event) {
+    const ticketModal = document.getElementById('ticket-modal');
+    
+    // Nếu màn hình vé đang mở VÀ vị trí click chuột nằm chính xác trên lớp nền mờ (overlay)
+    if (ticketModal && ticketModal.style.display === 'flex') {
+        if (event.target === ticketModal) {
+            closeTicketModal();
+        }
+    }
+});
