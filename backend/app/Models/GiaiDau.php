@@ -25,6 +25,7 @@ class GiaiDau extends Model
         'NgayKetThuc',
         'NoiDung',
         'TrangThai',
+        'LyDoHuy',
         'NgayDuyet'
     ];
 

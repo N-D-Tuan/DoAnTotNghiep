@@ -23,6 +23,7 @@ class YeuCauRutTien extends Model
         'SoTien',
         'NoiDung',
         'TrangThai',
+        'LyDoHuy',
         'NgayDuyet'
     ];
 

@@ -98,7 +98,12 @@ class YeuCauHuyGapController extends Controller
     // =========================================================
     public function xuLyYeuCau(Request $request, $id)
     {
-        $request->validate(['trang_thai' => 'required|in:DaDuyet,TuChoi']);
+        $request->validate([
+            'trang_thai' => 'required|in:DaDuyet,TuChoi',
+            'ly_do_huy'  => 'required_if:trang_thai,TuChoi|string|nullable'
+        ], [
+            'ly_do_huy.required_if' => 'Vui lòng nhập lý do từ chối.'
+        ]);
         
         DB::beginTransaction();
         try {
@@ -107,10 +112,11 @@ class YeuCauHuyGapController extends Controller
                 return response()->json(['success' => false, 'message' => 'Yêu cầu không tồn tại hoặc đã được xử lý trước đó!']);
             }
 
-            // Cập nhật trạng thái và ngày duyệt
+            // Lưu trạng thái, ngày duyệt và Lý do hủy
             $yeuCau->update([
                 'TrangThai' => $request->trang_thai,
-                'NgayDuyet' => now()
+                'NgayDuyet' => now(),
+                'LyDoHuy'   => $request->trang_thai === 'TuChoi' ? $request->ly_do_huy : null
             ]);
 
             $datSan = $yeuCau->datSan;
@@ -172,7 +178,7 @@ class YeuCauHuyGapController extends Controller
             } else {
                 // TRƯỜNG HỢP TỪ CHỐI
                 $tieuDeTB = "Yêu cầu hủy sân bị từ chối";
-                $noiDungTB = "Yêu cầu hủy sân gấp của bạn không được Admin chấp thuận. Lịch đặt vẫn được giữ nguyên.";
+                $noiDungTB = "Yêu cầu hủy sân gấp của bạn không được Admin chấp thuận. Lý do: " . $request->ly_do_huy . ". Lịch đặt vẫn được giữ nguyên.";
             }
 
             // Gửi thông báo cho Customer

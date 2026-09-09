@@ -1313,7 +1313,14 @@ function renderQuanLyGiaiDau() {
             <div class="modal-content" style="max-width: 400px; text-align: center; padding: 30px 20px;">
                 <div style="font-size: 3.5rem; color: #f59e0b; margin-bottom: 15px;"><i class="fa-solid fa-circle-exclamation"></i></div>
                 <h3 id="gd-confirm-title" style="margin-bottom: 10px; font-size: 1.4rem;">Xác nhận</h3>
-                <p id="gd-confirm-msg" style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5;"></p>
+                <p id="gd-confirm-msg" style="color: var(--text-muted); margin-bottom: 15px; line-height: 1.5;"></p>
+                
+                <div id="gd-reason-container" style="display: none; margin-bottom: 20px; text-align: left;">
+                    <label style="font-size: 0.9rem; font-weight: 600; color: var(--text-dark); margin-bottom: 8px; display: block;">Lý do từ chối <span style="color: red;">*</span></label>
+                    <textarea id="gd-reject-reason" class="form-control" rows="3" placeholder="Nhập lý do từ chối giải đấu này..." style="width: 100%; resize: none;" oninput="document.getElementById('gd-reason-error').style.display='none'"></textarea>
+                    <div id="gd-reason-error" style="color: #ef4444; font-size: 0.85rem; margin-top: 8px; display: none;"><i class="fa-solid fa-circle-exclamation"></i> Vui lòng nhập lý do từ chối!</div>
+                </div>
+
                 <div style="display: flex; justify-content: center; gap: 12px;">
                     <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="closeGDConfirmModal()">Hủy bỏ</button>
                     <button id="gd-confirm-btn" class="btn-primary" style="width: auto; padding: 10px 24px;" onclick="executeCapNhatTrangThai()">Đồng ý</button>
@@ -1516,6 +1523,9 @@ function openGDConfirmModal(id, trangThaiMoi) {
     btnConfirm.style.backgroundColor = isApprove ? 'var(--primary)' : '#ef4444'; // Xanh lá hoặc Đỏ
     btnConfirm.style.borderColor = isApprove ? 'var(--primary)' : '#ef4444';
 
+    document.getElementById('gd-reason-container').style.display = isApprove ? 'none' : 'block';
+    document.getElementById('gd-reject-reason').value = '';
+    document.getElementById('gd-reason-error').style.display = 'none';
     document.getElementById('gd-confirm-modal').style.display = 'flex';
 }
 
@@ -1527,6 +1537,16 @@ function closeGDConfirmModal() {
 
 async function executeCapNhatTrangThai() {
     if (!pendingActionId || !pendingActionStatus) return;
+
+    let lyDoHuy = null;
+    if (pendingActionStatus === 'TuChoi') {
+        lyDoHuy = document.getElementById('gd-reject-reason').value.trim();
+        if (!lyDoHuy) {
+            document.getElementById('gd-reason-error').style.display = 'block';
+            document.getElementById('gd-reject-reason').focus();
+            return;
+        }
+    }
     
     const btn = document.getElementById('gd-confirm-btn');
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
@@ -1537,7 +1557,7 @@ async function executeCapNhatTrangThai() {
             method: 'PUT',
             credentials: 'include',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-            body: JSON.stringify({ trang_thai: pendingActionStatus })
+            body: JSON.stringify({ trang_thai: pendingActionStatus, ly_do_huy: lyDoHuy })
         });
 
         const data = await response.json();
@@ -1627,6 +1647,13 @@ function renderQuanLyRutTien() {
                 <div style="font-size: 3.5rem; color: #f59e0b; margin-bottom: 15px;"><i class="fa-solid fa-circle-exclamation"></i></div>
                 <h3 id="rt-confirm-title" style="margin-bottom: 10px; font-size: 1.4rem;">Xác nhận</h3>
                 <p id="rt-confirm-msg" style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5;"></p>
+
+                <div id="rt-reason-container" style="display: none; margin-bottom: 20px; text-align: left;">
+                    <label style="font-size: 0.9rem; font-weight: 600; color: var(--text-dark); margin-bottom: 8px; display: block;">Lý do từ chối <span style="color: red;">*</span></label>
+                    <textarea id="rt-reject-reason" class="form-control" rows="3" placeholder="Nhập lý do từ chối giao dịch này..." style="width: 100%; resize: none;" oninput="document.getElementById('rt-reason-error').style.display='none'"></textarea>
+                    <div id="rt-reason-error" style="color: #ef4444; font-size: 0.85rem; margin-top: 8px; display: none;"><i class="fa-solid fa-circle-exclamation"></i> Vui lòng nhập lý do từ chối!</div>
+                </div>
+
                 <div style="display: flex; justify-content: center; gap: 12px;">
                     <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="closeRTConfirmModal()">Hủy bỏ</button>
                     <button id="rt-confirm-btn" class="btn-primary" style="width: auto; padding: 10px 24px;" onclick="executeCapNhatTrangThaiRT()">Đồng ý</button>
@@ -1736,19 +1763,33 @@ function openRTConfirmModal(id, status) {
     const btn = document.getElementById('rt-confirm-btn');
     btn.style.backgroundColor = isApprove ? 'var(--primary)' : '#ef4444';
     btn.style.borderColor = isApprove ? 'var(--primary)' : '#ef4444';
+
+    document.getElementById('rt-reason-container').style.display = isApprove ? 'none' : 'block';
+    document.getElementById('rt-reject-reason').value = '';
+    document.getElementById('rt-reason-error').style.display = 'none';
     document.getElementById('rt-confirm-modal').style.display = 'flex';
 }
 
 function closeRTConfirmModal() { document.getElementById('rt-confirm-modal').style.display = 'none'; }
 
 async function executeCapNhatTrangThaiRT() {
+    let lyDoHuy = null;
+    if (pendingRTStatus === 'TuChoi') {
+        lyDoHuy = document.getElementById('rt-reject-reason').value.trim();
+        if (!lyDoHuy) {
+            document.getElementById('rt-reason-error').style.display = 'block';
+            document.getElementById('rt-reject-reason').focus();
+            return;
+        }
+    }
+
     const btn = document.getElementById('rt-confirm-btn');
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...'; btn.disabled = true;
 
     try {
         const response = await fetch(`${API_BASE_URL}/admin/yeu-cau-rut-tien/${pendingRTId}/xu-ly`, {
             method: 'PUT', credentials: 'include', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-            body: JSON.stringify({ trang_thai: pendingRTStatus })
+            body: JSON.stringify({ trang_thai: pendingRTStatus, ly_do_huy: lyDoHuy })
         });
         const data = await response.json();
         if (response.ok && data.success) {
@@ -2404,6 +2445,13 @@ function openUCConfirmModal(id, status) {
                 <div style="font-size: 3.5rem; color: #f59e0b; margin-bottom: 15px;"><i class="fa-solid fa-circle-exclamation"></i></div>
                 <h3 id="uc-confirm-title" style="margin-bottom: 10px; font-size: 1.4rem;">Xác nhận</h3>
                 <p id="uc-confirm-msg" style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5;"></p>
+                
+                <div id="uc-reason-container" style="display: none; margin-bottom: 20px; text-align: left;">
+                    <label style="font-size: 0.9rem; font-weight: 600; color: var(--text-dark); margin-bottom: 8px; display: block;">Lý do từ chối <span style="color: red;">*</span></label>
+                    <textarea id="uc-reject-reason" class="form-control" rows="3" placeholder="Nhập lý do từ chối hủy sân..." style="width: 100%; resize: none;" oninput="document.getElementById('uc-reason-error').style.display='none'"></textarea>
+                    <div id="uc-reason-error" style="color: #ef4444; font-size: 0.85rem; margin-top: 8px; display: none;"><i class="fa-solid fa-circle-exclamation"></i> Vui lòng nhập lý do từ chối!</div>
+                </div>
+
                 <div style="display: flex; justify-content: center; gap: 12px;">
                     <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="closeUCConfirmModal()">Hủy bỏ</button>
                     <button id="uc-confirm-btn" class="btn-primary" style="width: auto; padding: 10px 24px;" onclick="executeCapNhatTrangThaiUC()">Đồng ý</button>
@@ -2422,7 +2470,10 @@ function openUCConfirmModal(id, status) {
     const btn = document.getElementById('uc-confirm-btn');
     btn.style.backgroundColor = isApprove ? 'var(--primary)' : '#ef4444';
     btn.style.borderColor = isApprove ? 'var(--primary)' : '#ef4444';
-    
+
+    document.getElementById('uc-reason-container').style.display = isApprove ? 'none' : 'block';
+    document.getElementById('uc-reject-reason').value = '';
+    document.getElementById('uc-reason-error').style.display = 'none';
     modal.style.display = 'flex';
 }
 
@@ -2432,6 +2483,18 @@ function closeUCConfirmModal() {
 }
 
 async function executeCapNhatTrangThaiUC() {
+    if (!pendingUCId || !pendingUCStatus) return;
+
+    let lyDoHuy = null;
+    if (pendingUCStatus === 'TuChoi') {
+        lyDoHuy = document.getElementById('uc-reject-reason').value.trim();
+        if (!lyDoHuy) {
+            document.getElementById('uc-reason-error').style.display = 'block';
+            document.getElementById('uc-reject-reason').focus();
+            return;
+        }
+    }
+
     const btn = document.getElementById('uc-confirm-btn');
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...'; 
     btn.disabled = true;
@@ -2439,7 +2502,7 @@ async function executeCapNhatTrangThaiUC() {
     try {
         const response = await fetch(`${API_BASE_URL}/admin/yeu-cau-huy-gap/${pendingUCId}/xu-ly`, {
             method: 'PUT', credentials: 'include', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-            body: JSON.stringify({ trang_thai: pendingUCStatus })
+            body: JSON.stringify({ trang_thai: pendingUCStatus, ly_do_huy: lyDoHuy })
         });
         const data = await response.json();
         

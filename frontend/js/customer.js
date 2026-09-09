@@ -2373,6 +2373,13 @@ async function renderRequests(activeTab = 'giai_dau') {
                                 </span>
                             </p>
                         `;
+                    } else if (item.TrangThai === 'TuChoi' && item.LyDoHuy) {
+                        // Bổ sung khối hiển thị Lý do hủy
+                        approvalInfoHtml = `
+                            <div style="margin-top: 8px; padding: 8px 12px; font-size: 0.85rem; color: #b91c1c; background: #fef2f2; border-radius: 6px; border: 1px dashed #fca5a5;">
+                                <i class="fa-solid fa-circle-exclamation"></i> Lý do từ chối: <strong>${item.LyDoHuy}</strong>
+                            </div>
+                        `;
                     }
 
                     // 2. Chèn biến approvalInfoHtml vào cấu trúc HTML
@@ -2433,6 +2440,15 @@ async function renderRequests(activeTab = 'giai_dau') {
                     const isGiaiDau = item.dat_san && item.dat_san.ID_GiaiDau != null;
                     const loaiTag = isGiaiDau ? `<span style="font-size: 0.7rem; background: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: 4px; margin-left: 8px;"><i class="fa-solid fa-trophy"></i> Giải đấu</span>` : `<span style="font-size: 0.7rem; background: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">Phong trào</span>`;
 
+                    let rejectReasonHtml = '';
+                    if (item.TrangThai === 'TuChoi' && item.LyDoHuy) {
+                        rejectReasonHtml = `
+                            <div style="margin-top: 8px; padding: 8px 12px; font-size: 0.85rem; color: #b91c1c; background: #fef2f2; border-radius: 6px; border: 1px dashed #fca5a5;">
+                                <i class="fa-solid fa-circle-exclamation"></i> Lý do từ chối: <strong>${item.LyDoHuy}</strong>
+                            </div>
+                        `;
+                    }
+
                     html += `
                         <div style="border: 1px solid var(--border); border-radius: 8px; padding: 16px; background: #fff; display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
                             <div>
@@ -2441,6 +2457,7 @@ async function renderRequests(activeTab = 'giai_dau') {
                                 <p style="margin: 0 0 6px 0; font-size: 0.9rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> Lịch đá: <strong style="color: var(--primary);">${khungGio}</strong> ngày <strong>${dateStr}</strong></p>
                                 <p style="margin: 0 0 6px 0; font-size: 0.9rem; color: var(--text-muted);">Lý do: <span style="font-style: italic;">"${item.NoiDung}"</span></p>
                                 <p style="margin: 0; font-size: 0.8rem; color: #94a3b8;">Ngày gửi: ${item.NgayTao ? item.NgayTao.substring(0, 16).replace('T', ' ') : ''}</p>
+                                ${rejectReasonHtml}
                             </div>
                             <div>
                                 <span style="padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${statusText}</span>
@@ -2468,12 +2485,23 @@ async function renderRequests(activeTab = 'giai_dau') {
                     if(item.TrangThai === 'TuChoi') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; statusText = 'Từ chối'; }
 
                     const dateStr = item.NgayTao ? item.NgayTao.substring(0, 10) : '';
+
+                    let rejectReasonHtml = '';
+                    if (item.TrangThai === 'TuChoi' && item.LyDoHuy) {
+                        rejectReasonHtml = `
+                            <div style="margin-top: 8px; padding: 8px 12px; font-size: 0.85rem; color: #b91c1c; background: #fef2f2; border-radius: 6px; border: 1px dashed #fca5a5;">
+                                <i class="fa-solid fa-circle-exclamation"></i> Lý do từ chối: <strong>${item.LyDoHuy}</strong>
+                            </div>
+                        `;
+                    }
+
                     html += `
                         <div style="border: 1px solid var(--border); border-radius: 8px; padding: 16px; background: #fff; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                             <div>
                                 <h4 style="margin: 0 0 8px 0; color: var(--text-dark); font-size: 1.1rem;">Rút ${Number(item.SoTien).toLocaleString('vi-VN')}đ</h4>
                                 <p style="margin: 0 0 4px 0; font-size: 0.9rem; color: var(--text-muted); white-space: pre-line;">${item.NoiDung}</p>
                                 <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> Ngày tạo: ${dateStr}</p>
+                                ${rejectReasonHtml}
                             </div>
                             <span style="padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${statusText}</span>
                         </div>

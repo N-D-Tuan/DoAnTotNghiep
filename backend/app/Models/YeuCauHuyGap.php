@@ -22,6 +22,7 @@ class YeuCauHuyGap extends Model
         'ID_DatSan', 
         'NoiDung', 
         'TrangThai', 
+        'LyDoHuy', 
         'NgayDuyet'
     ];
 
