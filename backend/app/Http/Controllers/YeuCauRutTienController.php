@@ -83,6 +83,13 @@ class YeuCauRutTienController extends Controller
     // 4. XỬ LÝ DUYỆT/TỪ CHỐI (ADMIN)
     public function xuLyYeuCau(Request $request, $id)
     {
+        $request->validate([
+            'trang_thai' => 'required|in:DaDuyet,TuChoi',
+            'ly_do_huy'  => 'required_if:trang_thai,TuChoi|string|nullable'
+        ], [
+            'ly_do_huy.required_if' => 'Vui lòng nhập lý do từ chối.'
+        ]);
+
         $yeuCau = YeuCauRutTien::find($id);
         if (!$yeuCau || $yeuCau->TrangThai !== 'ChoDuyet') {
             return response()->json(['success' => false, 'message' => 'Yêu cầu không hợp lệ hoặc đã được xử lý!']);
@@ -124,7 +131,11 @@ class YeuCauRutTienController extends Controller
                     'NgayDuyet'   => now()
                 ]);
             } else {
-                $yeuCau->update(['TrangThai' => 'TuChoi', 'NgayDuyet' => now()]);
+                $yeuCau->update([
+                    'TrangThai' => 'TuChoi', 
+                    'NgayDuyet' => now(),
+                    'LyDoHuy'   => $request->ly_do_huy
+                ]);
             }
 
             // -----------------------------------------
@@ -133,7 +144,7 @@ class YeuCauRutTienController extends Controller
             $tieuDe = $trangThaiMoi === 'DaDuyet' ? 'Rút tiền thành công' : 'Rút tiền bị từ chối';
             $noiDung = $trangThaiMoi === 'DaDuyet'
                 ? 'Yêu cầu rút ' . number_format($yeuCau->SoTien) . 'đ về tài khoản của bạn đã được xử lý thành công.'
-                : 'Yêu cầu rút ' . number_format($yeuCau->SoTien) . 'đ của bạn không hợp lệ hoặc đã bị từ chối.';
+                : 'Yêu cầu rút ' . number_format($yeuCau->SoTien) . 'đ của bạn đã bị từ chối. Lý do: ' . $request->ly_do_huy;
 
             ThongBao::create([
                 'ID_NguoiDung' => $yeuCau->ID_NguoiDung,

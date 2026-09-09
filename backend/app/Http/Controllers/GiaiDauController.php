@@ -91,6 +91,13 @@ class GiaiDauController extends Controller
     // 4. API Cập nhật trạng thái duyệt/từ chối
     public function xuLyYeuCau(Request $request, $id)
     {
+        $request->validate([
+            'trang_thai' => 'required|in:DaDuyet,TuChoi',
+            'ly_do_huy'  => 'required_if:trang_thai,TuChoi|string|nullable'
+        ], [
+            'ly_do_huy.required_if' => 'Vui lòng nhập lý do từ chối.'
+        ]);
+
         $giaiDau = GiaiDau::find($id);
         
         if (!$giaiDau) {
@@ -104,6 +111,8 @@ class GiaiDauController extends Controller
         // Nếu duyệt, hệ thống tự động ghi nhận mốc thời gian hiện tại vào cột NgayDuyet
         if ($trangThaiMoi === 'DaDuyet') {
             $giaiDau->NgayDuyet = now();
+        } else {
+            $giaiDau->LyDoHuy = $request->ly_do_huy;
         }
 
         $giaiDau->save();
@@ -114,7 +123,7 @@ class GiaiDauController extends Controller
         $tieuDe = $trangThaiMoi === 'DaDuyet' ? 'Giải đấu đã được duyệt' : 'Giải đấu bị từ chối';
         $noiDung = $trangThaiMoi === 'DaDuyet' 
             ? 'Yêu cầu tổ chức giải đấu "' . $giaiDau->TenGiaiDau . '" của bạn đã được duyệt thành công.' 
-            : 'Yêu cầu tổ chức giải đấu "' . $giaiDau->TenGiaiDau . '" của bạn đã bị từ chối.';
+            : 'Yêu cầu tổ chức giải đấu "' . $giaiDau->TenGiaiDau . '" của bạn đã bị từ chối. Lý do: ' . $request->ly_do_huy;
 
         ThongBao::create([
             'ID_NguoiDung' => $giaiDau->ID_NguoiDung,
