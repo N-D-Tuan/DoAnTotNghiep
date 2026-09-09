@@ -736,14 +736,9 @@ function updateFloatingCart() {
         cartDeposit.innerText = depositAmount.toLocaleString('vi-VN') + 'đ';
     }
     
-    const btnFloatingCheckout = document.querySelector('.cart-actions .btn-primary'); // Nút Tiến hành đặt sân
     const btnFloatingClear = document.querySelector('.cart-actions button[onclick="clearAllSlots()"]'); // Nút Xóa tất cả (nếu có)
     const isEmpty = selectedSlots.length === 0;
 
-    if (btnFloatingCheckout) {
-        btnFloatingCheckout.disabled = isEmpty;
-        isEmpty ? btnFloatingCheckout.classList.add('btn-disabled') : btnFloatingCheckout.classList.remove('btn-disabled');
-    }
     if (btnFloatingClear) {
         btnFloatingClear.disabled = isEmpty;
         isEmpty ? btnFloatingClear.classList.add('btn-disabled') : btnFloatingClear.classList.remove('btn-disabled');
@@ -998,8 +993,6 @@ function showCartAlert(message, isSuccess) {
 
 // Hàm tiến hành đặt sân
 async function checkoutBooking() {
-    if (selectedSlots.length === 0) return;
-
     openCartModal();
 
     // Đổi trạng thái UI sang Loading để ngăn click nhiều lần
@@ -1458,14 +1451,27 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                 </div>
             </div>
             
-            <div class="schedule-container">
-                <div class="table-responsive" style="max-height: 480px; overflow-y: auto; overflow-x: auto; white-space: nowrap; border: 1px solid var(--border); border-radius: 8px;"> 
-                    <table class="schedule-table" style="min-width: 100%; border-collapse: separate; border-spacing: 0;">
-                        <thead style="position: sticky; top: 0; background: #F8FAFC; z-index: 10; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+            <div class="schedule-container" style="margin-bottom: 40px;">
+                <div style="width: 100%; max-width: 100%; max-height: calc(100vh - 240px); overflow-y: auto; overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.03);"> 
+                    <table class="schedule-table" style="width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0;">
+                        <thead>
                             <tr>
-                                <th style="min-width: 120px; border-bottom: 1px solid #cbd5e1;">Khung giờ</th>
-                                <th style="min-width: 100px; border-bottom: 1px solid #cbd5e1;">Giá tiền</th>
-                                ${dateArray.map(d => `<th style="min-width: 90px; border-bottom: 1px solid #cbd5e1;">${d.short}</th>`).join('')}
+                                <!-- 1. KHUNG GIỜ-->
+                                <th style="box-sizing: border-box; width: 140px; min-width: 140px; max-width: 140px; padding: 14px 10px; text-align: center; border-bottom: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; background: #F8FAFC; position: sticky; top: 0; left: 0; z-index: 60; box-shadow: 2px 2px 5px rgba(0,0,0,0.05);">
+                                    Khung giờ
+                                </th>
+
+                                <!-- 2. GIÁ TIỀN-->
+                                <th style="box-sizing: border-box; width: 110px; min-width: 110px; max-width: 110px; padding: 14px 10px; text-align: center; border-bottom: 1px solid #cbd5e1; border-right: 2px solid #cbd5e1; background: #F8FAFC; position: sticky; top: 0; left: 140px; z-index: 59; box-shadow: 4px 2px 5px rgba(0,0,0,0.05);">
+                                    Giá tiền
+                                </th>
+
+                                <!-- 3. CÁC NGÀY-->
+                                ${dateArray.map(d => `
+                                    <th style="min-width: 110px; padding: 14px 10px; text-align: center; border-bottom: 1px solid #cbd5e1; background: #F8FAFC; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                                        ${d.short}
+                                    </th>
+                                `).join('')}
                             </tr>
                         </thead>
                         <tbody>
@@ -1478,9 +1484,16 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
             const priceValue = priceInfo ? priceInfo.SoTien : 0;
             const timeStr = `${kg.GioBatDau.substring(0,5)} - ${kg.GioKetThuc.substring(0,5)}`;
 
-            html += `<tr>
-                        <td><strong>${timeStr}</strong></td>
-                        <td style="color: var(--primary); font-weight: 600;">${Number(priceValue).toLocaleString('vi-VN')}đ</td>`;
+            html += `
+                <tr>
+                    <td style="box-sizing: border-box; width: 140px; min-width: 140px; max-width: 140px; text-align: center; background: #fff; position: sticky; left: 0; z-index: 20; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #f1f5f9; box-shadow: 2px 0 5px rgba(0,0,0,0.02);">
+                        <strong>${timeStr}</strong>
+                    </td>
+
+                    <td style="box-sizing: border-box; width: 110px; min-width: 110px; max-width: 110px; text-align: center; background: #fff; position: sticky; left: 140px; z-index: 19; color: var(--primary); font-weight: 600; border-right: 2px solid #e2e8f0; border-bottom: 1px solid #f1f5f9; box-shadow: 4px 0 5px rgba(0,0,0,0.02);">
+                        ${Number(priceValue).toLocaleString('vi-VN')}đ
+                    </td>
+            `;
                         
             dateArray.forEach((date) => {
                 const slotId = `${clusterName}-${pitchName}-${date.full}-${timeStr}`;
@@ -1513,7 +1526,7 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                 }
                 
                 html += `
-                    <td>
+                    <td style="border-bottom: 1px solid #f1f5f9; padding: 6px;">
                         <div class="slot ${statusClass}" 
                              ${(!isBooked && !isPast) ? `onclick="toggleSlot(this, ${clusterId}, '${clusterName}', ${pitchId}, '${pitchName}', '${date.full}', '${timeStr}', ${priceValue})"` : ''}>
                             ${statusText}
