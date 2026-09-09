@@ -149,8 +149,6 @@ button { cursor: pointer; font-family: var(--font-main); border: none; }
 .cart-info { display: flex; align-items: center; gap: 12px; font-size: 1.05rem; font-weight: 500; }
 .cart-info i { color: var(--primary); font-size: 1.3rem; }
 .cart-actions { display: flex; gap: 12px; }
-.btn-outline-white { background: transparent; border: 1px solid rgba(255,255,255,0.3); color: white; padding: 10px 20px; border-radius: 8px; font-weight: 500; transition: border-color 0.2s; }
-.btn-outline-white:hover { border-color: white; }
 
 @keyframes slideUp {
     from { transform: translateY(100%); }
