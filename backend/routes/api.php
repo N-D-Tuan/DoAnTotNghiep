@@ -17,6 +17,7 @@ use App\Http\Controllers\ThongBaoController;
 use App\Http\Controllers\DatSanController;
 use App\Http\Controllers\YeuCauHuyGapController;
 use App\Http\Controllers\KhachHangController;
+use App\Http\Controllers\DashboardController;
 
 // Bọc TẤT CẢ trong middleware 'web' để đồng bộ Session Cookie
 Route::middleware('web')->group(function () {
@@ -40,6 +41,9 @@ Route::middleware('web')->group(function () {
 });
 
 Route::middleware('web')->group(function () {
+    //Admin Dashboard
+    Route::get('/admin/thong-ke', [DashboardController::class, 'layThongKe']);
+
     //Admin quản lý khách hàng
     Route::prefix('admin/khach-hang')->group(function () {
         Route::get('/', [KhachHangController::class, 'layDanhSach']);

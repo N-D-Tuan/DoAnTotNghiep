@@ -104,70 +104,9 @@ document.addEventListener(
         }
 
         // ==============================================
-        // KHỞI TẠO BIỂU ĐỒ
+        // RENDER TỔNG QUAN KHI ĐĂNG NHẬP
         // ==============================================
-        const chartElement =
-            document.getElementById(
-                'revenueChart'
-            );
-
-        if (chartElement) {
-            const ctx =
-                chartElement.getContext(
-                    '2d'
-                );
-
-            new Chart(
-                ctx,
-                {
-                    type: 'line',
-                    data: {
-                        labels: [
-                            '25/08',
-                            '26/08',
-                            '27/08',
-                            '28/08',
-                            '29/08',
-                            '30/08',
-                            '31/08'
-                        ],
-
-                        datasets: [{
-                            label: 'Doanh thu (VNĐ)',
-                            data: [
-                                1500000,
-                                2200000,
-                                1800000,
-                                3000000,
-                                2800000,
-                                4500000,
-                                2500000
-                            ],
-                            borderColor: '#16A34A',
-                            backgroundColor: 'rgba(22, 163, 74, 0.1)',
-                            borderWidth: 2,
-                            fill: true,
-                            tension: 0.3
-                        }]
-                    },
-
-                    options: {
-                        responsive: true,
-                        plugins: {
-                            legend: {
-                                display: false
-                            }
-                        },
-
-                        scales: {
-                            y: {
-                                beginAtZero: true
-                            }
-                        }
-                    }
-                }
-            );
-        }
+        renderTongQuan();
 
         // ==========================================
         // KẾT NỐI WEBSOCKET DÀNH CHO ADMIN
@@ -2129,9 +2068,14 @@ let currentDSFilter = 'DaCoc';
 let currentDSDate = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10); // Mặc định hiển thị ngày hôm nay
 let currentDSSearch = '';
 
-function renderQuanLyDatSan() {
-    currentDSPage = 1; currentDSFilter = 'DaCoc'; currentDSSearch = ''; 
-    currentDSDate = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10);
+function renderQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = null) {
+    currentDSPage = 1; currentDSFilter = defaultStatus; currentDSSearch = ''; 
+
+    if (defaultDate !== null) {
+        currentDSDate = defaultDate;
+    } else {
+        currentDSDate = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10);
+    }
 
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
     const menuLink = Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('LỊCH ĐẶT SÂN'));
@@ -2154,11 +2098,11 @@ function renderQuanLyDatSan() {
                 </div>
                 <input type="date" class="form-control" style="width: 150px;" id="ds-date-input" onchange="handleDSDate(this.value)">
                 <select class="form-control" style="width: 180px;" onchange="handleDSFilter(this.value)">
-                    <option value="All">Tất cả trạng thái</option>
-                    <option value="DaCoc" selected>Đã cọc</option>
-                    <option value="HoanThanh">Hoàn thành</option>
-                    <option value="DaHuy">Đã hủy</option>
-                    <option value="KhongDen">Không đến</option>
+                    <option value="All" ${defaultStatus === 'All' ? 'selected' : ''}>Tất cả trạng thái</option>
+                    <option value="DaCoc" ${defaultStatus === 'DaCoc' ? 'selected' : ''}>Đã cọc</option>
+                    <option value="HoanThanh" ${defaultStatus === 'HoanThanh' ? 'selected' : ''}>Hoàn thành</option>
+                    <option value="DaHuy" ${defaultStatus === 'DaHuy' ? 'selected' : ''}>Đã hủy</option>
+                    <option value="KhongDen" ${defaultStatus === 'KhongDen' ? 'selected' : ''}>Không đến</option>
                 </select>                
             </div>
 
@@ -3177,5 +3121,169 @@ async function executeToggleKhoaKhachHang() {
         // Lỗi thì phục hồi nút bấm
         btn.innerHTML = 'Đồng ý';
         btn.disabled = false;
+    }
+}
+
+// ======================================================
+// MODULE: ADMIN - TỔNG QUAN (DASHBOARD)
+// ======================================================
+async function renderTongQuan() {
+    // 1. Cập nhật trạng thái Menu
+    document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+    const menuLink = Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('TỔNG QUAN'));
+    if (menuLink) menuLink.classList.add('active');
+
+    const contentArea = document.querySelector('.admin-content');
+    contentArea.innerHTML = `<div style="text-align:center; padding: 50px;"><i class="fa-solid fa-spinner fa-spin text-primary" style="font-size: 2rem;"></i><br><br>Đang tải dữ liệu tổng quan...</div>`;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/thong-ke`, { credentials: 'include' });
+        const res = await response.json();
+
+        if (!res.success) throw new Error('Không thể tải dữ liệu');
+        const data = res.data;
+
+        // 2. Logic Cảnh Báo Quên Chốt Sân
+        let alertHtml = '';
+        if (data.so_san_quen_chot > 0) {
+
+            const d = new Date();
+            d.setDate(d.getDate() - 1);
+            const pad = n => n < 10 ? '0' + n : n;
+            const yesterday = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+            alertHtml = `
+                <div style="background: #fef2f2; border: 1px solid #f87171; border-left: 4px solid #ef4444; color: #b91c1c; padding: 16px 20px; border-radius: 8px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px rgba(239, 68, 68, 0.1);">
+                    <div>
+                        <h4 style="margin: 0 0 4px 0; font-size: 1.05rem;"><i class="fa-solid fa-triangle-exclamation"></i> CẢNH BÁO: CHƯA CHỐT SÂN NGÀY HÔM QUA</h4>
+                        <p style="margin: 0; font-size: 0.9rem;">Hệ thống phát hiện có <strong>${data.so_san_quen_chot}</strong> lịch đặt sân của ngày hôm qua vẫn đang ở trạng thái "Đã cọc". Vui lòng kiểm tra và chốt sân để không ảnh hưởng dữ liệu thống kê!</p>
+                    </div>
+                    <button onclick="renderQuanLyDatSan('DaCoc', '${yesterday}')" style="background: #ef4444; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; white-space: nowrap;">Xử lý ngay</button>
+                </div>
+            `;
+        }
+
+        // 3. Render Lưới 5 Booking mới nhất
+        let recentBookingsHtml = '';
+        if (data.recent_bookings.length === 0) {
+            recentBookingsHtml = `<tr><td colspan="6" class="text-center" style="padding: 20px; color: var(--text-muted);">Chưa có dữ liệu.</td></tr>`;
+        } else {
+            recentBookingsHtml = data.recent_bookings.map(bk => {
+                let badgeColor = '#6b7280', badgeBg = '#f3f4f6', viStatus = bk.TrangThai;
+                if(bk.TrangThai === 'DaCoc') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; viStatus = 'Đã cọc'; }
+                else if(bk.TrangThai === 'DaHuy') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; viStatus = 'Đã hủy'; }
+                else if(bk.TrangThai === 'HoanThanh') { badgeColor = '#047857'; badgeBg = '#d1fae5'; viStatus = 'Hoàn thành'; }
+                else if(bk.TrangThai === 'KhongDen') { badgeColor = '#6b7280'; badgeBg = '#f3f4f6'; viStatus = 'Không đến'; }
+                const badgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${viStatus}</span>`;
+
+                const d = new Date(bk.NgayDa);
+                const dateStr = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
+                const timeStr = bk.khung_gio ? `${bk.khung_gio.GioBatDau.substring(0,5)} - ${bk.khung_gio.GioKetThuc.substring(0,5)}` : '';
+                
+                return `
+                    <tr>
+                        <td><strong style="font-family: monospace;">#${bk.ID_GiaiDau ? 'GD-'+bk.ID_GiaiDau : 'PT-'+bk.ID}</strong></td>
+                        <td>${bk.nguoi_dung ? bk.nguoi_dung.HoTen : 'N/A'}</td>
+                        <td><strong style="color: var(--primary);">${bk.san_bong ? bk.san_bong.TenSan : 'N/A'}</strong><br><span style="font-size:0.8rem;color:var(--text-muted);"><i class="fa-solid fa-location-dot"></i> ${bk.san_bong && bk.san_bong.cum_san ? bk.san_bong.cum_san.TenCumSan : ''}</span></td>
+                        <td>${dateStr}<br><strong style="font-size:0.85rem;color:var(--text-dark);">${timeStr}</strong></td>
+                        <td>${badgeHtml}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // 4. Bơm HTML vào Giao diện
+        contentArea.innerHTML = `
+            <div class="page-header" style="margin-bottom: 24px;">
+                <h1 class="page-title">Tổng quan hệ thống</h1>
+                <p class="text-muted">Thống kê nhanh các chỉ số hoạt động của DN FOOTBALL</p>
+            </div>
+            
+            ${alertHtml}
+
+            <div class="stat-grid" style="margin-bottom: 24px;">
+                <div class="stat-card">
+                    <div class="stat-title">Doanh thu hôm nay</div>
+                    <div class="stat-value" style="color: #047857;">${Number(data.doanh_thu_hom_nay).toLocaleString('vi-VN')}đ</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Tổng số trận hôm nay</div>
+                    <div class="stat-value" style="color: #2563eb;">${data.booking_hoan_thanh_hom_nay}/${data.booking_hom_nay} trận</div>
+                    <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">(Hoàn thành / Đã chốt)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Tổng Khách Hàng</div>
+                    <div class="stat-value" style="color: #8b5cf6;">${data.tong_khach_hang} người</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Yêu cầu chờ xử lý</div>
+                    <div class="stat-value" style="color: #ea580c;">${data.cho_duyet} đơn</div>
+                </div>
+            </div>
+
+            <div class="chart-layout" style="margin-bottom: 24px;">
+                <div class="panel">
+                    <div class="panel-header">Biểu đồ doanh thu 7 ngày gần nhất</div>
+                    <canvas id="revenueChart" height="100"></canvas>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    Booking mới nhất
+                    <button class="btn-outline-sm" onclick="renderQuanLyDatSan('All', '')">Xem tất cả</button>
+                </div>
+                <div class="table-responsive">
+                    <table class="admin-table">
+                        <thead style="background: #F8FAFC;">
+                            <tr>
+                                <th>Mã Đặt</th>
+                                <th>Khách hàng</th>
+                                <th>Thông tin Sân</th>
+                                <th>Ngày & Giờ</th>
+                                <th>Trạng thái</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${recentBookingsHtml}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        // 5. Cấu hình vẽ Chart.js
+        const ctx = document.getElementById('revenueChart').getContext('2d');
+        const labels = data.chart.map(c => c.ngay);
+        const chartData = data.chart.map(c => c.doanh_thu);
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Doanh thu (VNĐ)',
+                    data: chartData,
+                    borderColor: '#16A34A',
+                    backgroundColor: 'rgba(22, 163, 74, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { 
+                        beginAtZero: true, 
+                        ticks: { callback: function(value) { return value.toLocaleString('vi-VN') + 'đ'; } } 
+                    }
+                }
+            }
+        });
+
+    } catch (e) {
+        contentArea.innerHTML = `<div style="text-align:center; color:red; padding: 50px;">Lỗi kết nối máy chủ! Không thể tải dữ liệu thống kê.</div>`;
     }
 }
