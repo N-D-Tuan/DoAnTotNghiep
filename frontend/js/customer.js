@@ -208,6 +208,12 @@ async function syncUserTournaments() {
                             </span>
                         </p>
                     `;
+                } else if (item.TrangThai === 'TuChoi' && item.LyDoHuy) {
+                    approvalInfoHtml = `
+                        <div style="margin-top: 8px; padding: 8px 12px; font-size: 0.85rem; color: #b91c1c; background: #fef2f2; border-radius: 6px; border: 1px dashed #fca5a5;">
+                            <i class="fa-solid fa-circle-exclamation"></i> Lý do từ chối: <strong>${item.LyDoHuy}</strong>
+                        </div>
+                    `;
                 }
 
                 html += `
@@ -286,6 +292,15 @@ async function syncUserUrgentCancels() {
                 const isGiaiDau = item.dat_san && item.dat_san.ID_GiaiDau != null;
                 const loaiTag = isGiaiDau ? `<span style="font-size: 0.7rem; background: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: 4px; margin-left: 8px;"><i class="fa-solid fa-trophy"></i> Giải đấu</span>` : `<span style="font-size: 0.7rem; background: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">Phong trào</span>`;
 
+                let rejectReasonHtml = '';
+                if (item.TrangThai === 'TuChoi' && item.LyDoHuy) {
+                    rejectReasonHtml = `
+                        <div style="margin-top: 8px; padding: 8px 12px; font-size: 0.85rem; color: #b91c1c; background: #fef2f2; border-radius: 6px; border: 1px dashed #fca5a5;">
+                            <i class="fa-solid fa-circle-exclamation"></i> Lý do từ chối: <strong>${item.LyDoHuy}</strong>
+                        </div>
+                    `;
+                }
+
                 html += `
                     <div style="border: 1px solid var(--border); border-radius: 8px; padding: 16px; background: #fff; display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
                         <div>
@@ -294,6 +309,7 @@ async function syncUserUrgentCancels() {
                             <p style="margin: 0 0 6px 0; font-size: 0.9rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> Lịch đá: <strong style="color: var(--primary);">${khungGio}</strong> ngày <strong>${dateStr}</strong></p>
                             <p style="margin: 0 0 6px 0; font-size: 0.9rem; color: var(--text-muted);">Lý do: <span style="font-style: italic;">"${item.NoiDung}"</span></p>
                             <p style="margin: 0; font-size: 0.8rem; color: #94a3b8;">Ngày gửi: ${item.NgayTao ? item.NgayTao.substring(0, 16).replace('T', ' ') : ''}</p>
+                            ${rejectReasonHtml}
                         </div>
                         <div>
                             <span style="padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${statusText}</span>
@@ -345,12 +361,23 @@ async function syncUserWithdrawals() {
                 if(item.TrangThai === 'TuChoi') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; statusText = 'Từ chối'; }
 
                 const dateStr = item.NgayTao ? item.NgayTao.substring(0, 10) : '';
+
+                let rejectReasonHtml = '';
+                if (item.TrangThai === 'TuChoi' && item.LyDoHuy) {
+                    rejectReasonHtml = `
+                        <div style="margin-top: 8px; padding: 8px 12px; font-size: 0.85rem; color: #b91c1c; background: #fef2f2; border-radius: 6px; border: 1px dashed #fca5a5;">
+                            <i class="fa-solid fa-circle-exclamation"></i> Lý do từ chối: <strong>${item.LyDoHuy}</strong>
+                        </div>
+                    `;
+                }
+
                 html += `
                     <div style="border: 1px solid var(--border); border-radius: 8px; padding: 16px; background: #fff; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                         <div>
                             <h4 style="margin: 0 0 8px 0; color: var(--text-dark); font-size: 1.1rem;">Rút ${Number(item.SoTien).toLocaleString('vi-VN')}đ</h4>
                             <p style="margin: 0 0 4px 0; font-size: 0.9rem; color: var(--text-muted); white-space: pre-line;">${item.NoiDung}</p>
                             <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> Ngày tạo: ${dateStr}</p>
+                            ${rejectReasonHtml}
                         </div>
                         <span style="padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${statusText}</span>
                     </div>
@@ -529,6 +556,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         setupDropdowns();
         updateFloatingCart();
+
+        setupFloatingContacts();
 
         // ==========================================
         // LOGOUT
@@ -2612,8 +2641,7 @@ async function submitTournamentRequest() {
 
         const data = await response.json();
 
-        if (!response.ok) {
-            // Lấy thông báo lỗi đầu tiên từ validation của Laravel (nếu có)
+        if (!response.ok || !data.success) {
             let errorMsg = data.message || 'Có lỗi xảy ra!';
             if (data.errors) {
                 errorMsg = Object.values(data.errors)[0][0];
@@ -2625,7 +2653,7 @@ async function submitTournamentRequest() {
         }
 
         // Thành công: Hiển thị thông báo xanh
-        showTournamentAlert('Gửi yêu cầu thành công! Vui lòng chờ Admin duyệt.', true);
+        showTournamentAlert(data.message || 'Gửi yêu cầu thành công! Vui lòng chờ Admin duyệt.', true);
         
         // Tự động đóng Modal sau 2 giây và vẽ lại danh sách yêu cầu
         setTimeout(() => {
@@ -3501,3 +3529,44 @@ window.addEventListener('click', function(event) {
         }
     }
 });
+
+// ======================================================
+// HIỂN THỊ NÚT LIÊN HỆ ZALO / HOTLINE
+// ======================================================
+function setupFloatingContacts() {
+    // Không chèn lại nếu đã có trên màn hình
+    if (document.getElementById('floating-contacts')) return;
+
+    // 1. Tạo thẻ Style chứa CSS hiệu ứng sóng tỏa ra (Pulse)
+    const style = document.createElement('style');
+    style.innerHTML = `
+        .floating-contact-wrapper { position: fixed; bottom: 30px; left: 30px; display: flex; flex-direction: column; gap: 15px; z-index: 9998; }
+        .btn-contact-float { width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.25rem; text-decoration: none; box-shadow: 0 4px 10px rgba(0,0,0,0.25); position: relative; transition: all 0.3s ease; }
+        .btn-contact-float:hover { transform: scale(1.1); color: white; }
+        .btn-zalo { background-color: #0068FF; font-family: Arial, sans-serif; font-weight: bold; font-size: 1.05rem; letter-spacing: 0.5px; }
+        
+        /* Hiệu ứng sóng */
+        .pulse-ring { position: absolute; width: 100%; height: 100%; border-radius: 50%; animation: pulse-animation 1.5s infinite; z-index: -1; }
+        .btn-zalo .pulse-ring { background-color: rgba(0, 104, 255, 0.4); }
+        
+        @keyframes pulse-animation { 
+            0% { transform: scale(1); opacity: 1; } 
+            100% { transform: scale(1.6); opacity: 0; } 
+        }
+    `;
+    document.head.appendChild(style);
+
+    // 2. Tạo cụm nút HTML
+    const contactDiv = document.createElement('div');
+    contactDiv.id = 'floating-contacts';
+    contactDiv.className = 'floating-contact-wrapper';
+    
+    // Lưu ý: Đổi số điện thoại trong href thành số thật của Admin
+    contactDiv.innerHTML = `
+        <a href="https://zalo.me/0899244124" target="_blank" class="btn-contact-float btn-zalo" style="margin-bottom: 50px;" title="Nhắn tin Zalo cho Admin">
+            <div class="pulse-ring"></div>
+            Zalo
+        </a>
+    `;
+    document.body.appendChild(contactDiv);
+}

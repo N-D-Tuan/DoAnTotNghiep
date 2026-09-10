@@ -16,6 +16,7 @@ use App\Http\Controllers\YeuCauRutTienController;
 use App\Http\Controllers\ThongBaoController;
 use App\Http\Controllers\DatSanController;
 use App\Http\Controllers\YeuCauHuyGapController;
+use App\Http\Controllers\KhachHangController;
 
 // Bọc TẤT CẢ trong middleware 'web' để đồng bộ Session Cookie
 Route::middleware('web')->group(function () {
@@ -39,6 +40,13 @@ Route::middleware('web')->group(function () {
 });
 
 Route::middleware('web')->group(function () {
+    //Admin quản lý khách hàng
+    Route::prefix('admin/khach-hang')->group(function () {
+        Route::get('/', [KhachHangController::class, 'layDanhSach']);
+        Route::get('/{id}', [KhachHangController::class, 'layChiTiet']);
+        Route::put('/{id}/khoa', [KhachHangController::class, 'thayDoiTrangThaiKhoa']);
+    });
+
     // API Đặt Sân
     Route::post('/dat-san', [DatSanController::class, 'datSan']);
     Route::get('/dat-san/da-dat', [DatSanController::class, 'layDanhSachDaDat']);
@@ -59,6 +67,7 @@ Route::middleware('web')->group(function () {
     Route::post('/giai-dau/tao-yeu-cau', [GiaiDauController::class, 'taoYeuCau']);
     Route::get('/admin/giai-dau', [GiaiDauController::class, 'layDanhSachAdmin']);
     Route::put('/admin/giai-dau/{id}/xu-ly', [GiaiDauController::class, 'xuLyYeuCau']);
+    Route::get('/admin/giai-dau/{id}/ma-tran', [GiaiDauController::class, 'layMaTranLich']);
     
     // API Cụm Sân
     Route::get('/cum-san', [CumSanController::class, 'index']);

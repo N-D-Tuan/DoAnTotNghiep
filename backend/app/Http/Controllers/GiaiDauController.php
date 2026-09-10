@@ -7,6 +7,9 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\GiaiDau;
 use App\Models\CumSan;
+use App\Models\SanBong;
+use App\Models\KhungGio;
+use App\Models\DatSan;
 use App\Models\ThongBao;
 use App\Models\NguoiDung;
 
@@ -42,6 +45,14 @@ class GiaiDauController extends Controller
             'ngay_bat_dau.after_or_equal' => 'Ngày bắt đầu không được trong quá khứ.',
             'ngay_ket_thuc.after_or_equal' => 'Ngày kết thúc phải sau hoặc bằng ngày bắt đầu.'
         ]);
+
+        $user = NguoiDung::find(Auth::id());
+        if ($user && $user->TrangThaiKhoa) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Tài khoản của bạn đang bị khóa. Không thể tạo yêu cầu tổ chức giải đấu!'
+            ]); 
+        }
 
         // Trạng thái 'ChoDuyet' và 'NgayTao' đã được tự động xử lý ở DB và Model
         $giaiDau = GiaiDau::create([
@@ -139,5 +150,47 @@ class GiaiDauController extends Controller
             'success' => true,
             'message' => 'Đã xử lý yêu cầu thành công!'
         ], 200);
+    }
+
+    // API 5: Lấy ma trận lịch sân để Admin kiểm tra trước khi duyệt
+    public function layMaTranLich($id)
+    {
+        $giaiDau = GiaiDau::find($id);
+        if (!$giaiDau) {
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy giải đấu!'], 404);
+        }
+
+        // 1. Lấy thông tin Cụm sân
+        $cumSan = CumSan::find($giaiDau->ID_CumSan);
+        if (!$cumSan) {
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy thông tin cụm sân!'], 404);
+        }
+
+        $sanBongs = SanBong::where('ID_CumSan', $giaiDau->ID_CumSan)
+            ->where('TrangThai', 'HoatDong')
+            ->get();
+
+        // 2. Lấy danh sách Khung giờ nằm trong khoảng Giờ hoạt động của Cụm sân
+        $khungGios = KhungGio::where('GioBatDau', '>=', $cumSan->GioMoCua)
+            ->where('GioKetThuc', '<=', $cumSan->GioDongCua)
+            ->orderBy('GioBatDau')
+            ->get();
+
+        // Lấy danh sách các ID sân con
+        $sanBongIds = $sanBongs->pluck('ID');
+
+        // 3. Lấy tất cả các lịch Đã Đặt trong khoảng thời gian diễn ra giải đấu của các sân này
+        $datSans = DatSan::whereIn('ID_SanBong', $sanBongIds)
+            ->whereBetween('NgayDa', [$giaiDau->NgayBatDau, $giaiDau->NgayKetThuc])
+            ->whereIn('TrangThai', ['DaCoc', 'HoanThanh', 'KhongDen']) // Chỉ lấy các lịch đã chốt
+            ->get(['ID_SanBong', 'ID_KhungGio', 'NgayDa']);
+
+        return response()->json([
+            'success' => true,
+            'giai_dau' => $giaiDau,
+            'san_bongs' => $sanBongs,
+            'khung_gios' => $khungGios,
+            'dat_sans' => $datSans 
+        ]);
     }
 }
