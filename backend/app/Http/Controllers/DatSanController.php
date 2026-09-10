@@ -17,6 +17,14 @@ class DatSanController extends Controller
     public function datSan(Request $request)
     {
         $user = NguoiDung::find(Auth::id() ?? $request->user()->ID);
+
+        if ($user && $user->TrangThaiKhoa) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Tài khoản của bạn đã bị hạn chế chức năng đặt sân do vi phạm quy định. Vui lòng liên hệ Hotline để được hỗ trợ!'
+            ]);
+        }
+
         $slots = $request->slots;
         $purpose = $request->purpose; // 'normal' hoặc ID của Giải đấu
 

@@ -204,6 +204,16 @@ document.addEventListener(
 
                 loadNotifications();
 
+                // NẾU ADMIN ĐANG MỞ TAB DANH SÁCH KHÁCH HÀNG -> TỰ REFRESH BẢNG
+                if (document.getElementById('khachhang-table-body')) {
+                    loadDanhSachKhachHangAdmin();
+                }
+
+                // NẾU ADMIN ĐANG MỞ TAB CHI TIẾT KHÁCH HÀNG -> TỰ REFRESH CHÍNH KHÁCH HÀNG ĐÓ                
+                if (document.getElementById('tab-ls-datsan') && currentViewedKhachHangId !== null) {
+                    renderChiTietKhachHang(currentViewedKhachHangId);
+                }
+
                 // Nếu Admin đang mở tab Quản lý Đặt sân -> tự refresh bảng
                 if (document.getElementById('datsan-table-body')) {
                     loadDanhSachDatSanAdmin();
@@ -1299,7 +1309,7 @@ function renderQuanLyGiaiDau() {
                         </tr>
                     </thead>
                     <tbody id="giaidau-table-body">
-                        <tr><td colspan="6" class="text-center">Đang tải dữ liệu...</td></tr>
+                        <tr><td colspan="6" class="text-center" style="text-align:center;">Đang tải dữ liệu...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -1441,6 +1451,8 @@ function renderGDTable(data) {
         let actionHtml = '';
         if (item.TrangThai === 'ChoDuyet') {
             actionHtml = `
+                <button class="btn-outline-sm" style="color: #2563eb; border-color: #bfdbfe; background: #eff6ff; margin-right: 5px; margin-bottom: 5px; text-align: center; width: 95%;" onclick="openMaTranLichModal(${item.ID})"><i class="fa-regular fa-calendar-days"></i> Kiểm tra Lịch</button>
+                <br>
                 <button class="btn-outline-sm" style="color: #047857; border-color: #047857;" onclick="openGDConfirmModal(${item.ID}, 'DaDuyet')"><i class="fa-solid fa-check"></i> Duyệt</button>
                 <button class="btn-outline-sm" style="color: #b91c1c; border-color: #b91c1c; margin-left: 5px;" onclick="openGDConfirmModal(${item.ID}, 'TuChoi')"><i class="fa-solid fa-xmark"></i> Từ chối</button>
             `;
@@ -1580,6 +1592,163 @@ async function executeCapNhatTrangThai() {
 }
 
 // ======================================================
+// HIỂN THỊ MA TRẬN LỊCH SÂN (KIỂM TRA TRƯỚC KHI DUYỆT)
+// ======================================================
+let maTranDataCache = null; // Lưu cache để chuyển tab không bị gọi lại API
+
+async function openMaTranLichModal(giaiDauId) {
+    // 1. Khởi tạo Modal nếu chưa có
+    let modal = document.getElementById('ma-tran-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'ma-tran-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 9999;';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 900px; width: 90%; padding: 0; overflow: hidden; border-radius: 12px;">
+                <div class="modal-header" style="padding: 20px 24px; background: #F8FAFC; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+                    <h3 style="margin: 0; font-size: 1.25rem; color: var(--primary);"><i class="fa-solid fa-table-cells"></i> Ma trận Lịch Cụm Sân</h3>
+                    <i class="fa-solid fa-xmark" style="cursor: pointer; font-size: 1.2rem; color: var(--text-muted);" onclick="document.getElementById('ma-tran-modal').style.display='none'"></i>
+                </div>
+                
+                <div id="ma-tran-loading" style="padding: 50px; text-align: center; color: var(--primary);">
+                    <i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem;"></i><br><br>Đang tải dữ liệu lịch...
+                </div>
+
+                <div id="ma-tran-content" style="display: none; padding: 20px 24px;">
+                    <!-- Thanh Tab Ngày -->
+                    <div id="ma-tran-tabs" style="display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px; border-bottom: 2px solid #e2e8f0; margin-bottom: 20px; scrollbar-width: thin;">
+                    </div>
+
+                    <!-- Bảng Ma trận -->
+                    <div class="table-responsive" style="max-height: 50vh; overflow-y: auto; overflow-x: auto; border: 1px solid var(--border); border-radius: 8px;">
+                        <table class="admin-table" style="min-width: max-content; margin: 0; border: none;">
+                            <thead id="ma-tran-thead"></thead>
+                            <tbody id="ma-tran-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+
+    modal.style.display = 'flex';
+    document.getElementById('ma-tran-loading').style.display = 'block';
+    document.getElementById('ma-tran-content').style.display = 'none';
+
+    try {
+        // 2. Fetch Data
+        const response = await fetch(`${API_BASE_URL}/admin/giai-dau/${giaiDauId}/ma-tran`, { credentials: 'include' });
+        const res = await response.json();
+
+        if (!res.success) {
+            document.getElementById('ma-tran-loading').innerHTML = `<span style="color: red;">${res.message}</span>`;
+            return;
+        }
+
+        maTranDataCache = res;
+
+        // 3. Tính toán dải ngày (Từ Ngày Bắt Đầu -> Ngày Kết Thúc)
+        const dStart = new Date(res.giai_dau.NgayBatDau);
+        const dEnd = new Date(res.giai_dau.NgayKetThuc);
+        const dateArray = [];
+
+        // Vòng lặp +1 ngày cho đến khi bằng dEnd
+        for (let d = new Date(dStart); d <= dEnd; d.setDate(d.getDate() + 1)) {
+            const pad = n => n < 10 ? '0' + n : n;
+            const yyyy = d.getFullYear();
+            const mm = pad(d.getMonth() + 1);
+            const dd = pad(d.getDate());
+            
+            dateArray.push({
+                dbFormat: `${yyyy}-${mm}-${dd}`,
+                displayFormat: `${dd}/${mm}` // Chỉ hiện Ngày/Tháng trên Tab cho gọn
+            });
+        }
+
+        // 4. Sinh các Tabs và tính toán tỷ lệ Đỏ/Trắng
+        const totalSlotsPerDay = res.san_bongs.length * res.khung_gios.length;
+        let tabsHtml = '';
+
+        dateArray.forEach((date, index) => {
+            // Đếm xem ngày này có bao nhiêu slot đã bị đặt
+            const bookedCount = res.dat_sans.filter(ds => ds.NgayDa === date.dbFormat).length;
+            const bookingRate = totalSlotsPerDay > 0 ? (bookedCount / totalSlotsPerDay) * 100 : 0;
+            
+            // Nếu sân đã bị đặt >= 50%, tô viền đỏ và icon cảnh báo
+            let btnStyle = `padding: 8px 20px; border-radius: 20px; font-weight: 600; cursor: pointer; white-space: nowrap; border: 1px solid #cbd5e1; background: white; color: #64748b;`;
+            let iconHtml = '';
+            
+            if (bookingRate >= 50) {
+                btnStyle = `padding: 8px 20px; border-radius: 20px; font-weight: 600; cursor: pointer; white-space: nowrap; border: 1px solid #fca5a5; background: #fef2f2; color: #ef4444;`;
+                iconHtml = `<i class="fa-solid fa-triangle-exclamation" style="margin-right: 5px;"></i>`;
+            }
+
+            tabsHtml += `<button class="ma-tran-tab-btn" data-date="${date.dbFormat}" style="${btnStyle}" onclick="renderMaTranTab('${date.dbFormat}', this)">${iconHtml}${date.displayFormat}</button>`;
+        });
+
+        document.getElementById('ma-tran-tabs').innerHTML = tabsHtml;
+
+        // 5. Ẩn Loading, Hiện Content
+        document.getElementById('ma-tran-loading').style.display = 'none';
+        document.getElementById('ma-tran-content').style.display = 'block';
+
+        // Tự động click vào Tab đầu tiên (Ngày khai mạc)
+        const firstTab = document.querySelector('.ma-tran-tab-btn');
+        if (firstTab) firstTab.click();
+
+    } catch (e) {
+        document.getElementById('ma-tran-loading').innerHTML = `<span style="color: red;">Lỗi tải dữ liệu máy chủ!</span>`;
+    }
+}
+
+// Render dữ liệu ma trận khi click vào 1 Tab Ngày cụ thể
+function renderMaTranTab(dateDbFormat, btnElement) {
+    // 1. Xử lý Active/Inactive cho các nút Tab
+    document.querySelectorAll('.ma-tran-tab-btn').forEach(btn => {
+        // Reset về giao diện mờ (opacity) nếu không được chọn
+        btn.style.opacity = '0.5'; 
+        btn.style.boxShadow = 'none';
+    });
+    btnElement.style.opacity = '1';
+    btnElement.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+
+    const data = maTranDataCache;
+
+    // 2. Vẽ Tiêu đề cột (Tên các Sân bóng)
+    let theadHtml = `<tr>
+        <th style="background: #e2e8f0; position: sticky; left: 0; z-index: 2; width: 120px; text-align: center;">KHUNG GIỜ</th>`;
+    data.san_bongs.forEach(sb => {
+        theadHtml += `<th style="background: #f8fafc; text-align: center; border-left: 1px solid #e2e8f0;">${sb.TenSan}</th>`;
+    });
+    theadHtml += `</tr>`;
+    document.getElementById('ma-tran-thead').innerHTML = theadHtml;
+
+    // 3. Vẽ Dữ liệu hàng (Khung giờ) và Cột (Trạng thái đặt)
+    let tbodyHtml = '';
+    data.khung_gios.forEach(kg => {
+        const timeStr = `${kg.GioBatDau.substring(0,5)} - ${kg.GioKetThuc.substring(0,5)}`;
+        tbodyHtml += `<tr>
+            <td style="background: #f8fafc; position: sticky; left: 0; font-weight: bold; text-align: center; color: var(--primary); border-right: 2px solid #e2e8f0;">${timeStr}</td>`;
+        
+        // Quét từng sân xem ở khung giờ này, ngày này đã bị đặt chưa
+        data.san_bongs.forEach(sb => {
+            const isBooked = data.dat_sans.some(ds => ds.NgayDa === dateDbFormat && ds.ID_KhungGio === kg.ID && ds.ID_SanBong === sb.ID);
+            
+            if (isBooked) {
+                tbodyHtml += `<td style="background: #fee2e2; color: #b91c1c; text-align: center; font-size: 0.85rem; border-left: 1px solid #e2e8f0;"><i class="fa-solid fa-lock"></i> Đã kẹt</td>`;
+            } else {
+                tbodyHtml += `<td style="background: #fff; color: #10b981; text-align: center; font-size: 0.85rem; border-left: 1px solid #e2e8f0;"><i class="fa-solid fa-check"></i> Trống</td>`;
+            }
+        });
+        tbodyHtml += `</tr>`;
+    });
+    
+    document.getElementById('ma-tran-tbody').innerHTML = tbodyHtml;
+}
+
+// ======================================================
 // MODULE: QUẢN LÝ YÊU CẦU RÚT TIỀN
 // ======================================================
 let allRutTienData = []; 
@@ -1634,7 +1803,7 @@ function renderQuanLyRutTien() {
                         </tr>
                     </thead>
                     <tbody id="ruttien-table-body">
-                        <tr><td colspan="6" class="text-center">Đang tải dữ liệu...</td></tr>
+                        <tr><td colspan="6" class="text-center" style="text-align: center;">Đang tải dữ liệu...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -2007,7 +2176,7 @@ function renderQuanLyDatSan() {
                         </tr>
                     </thead>
                     <tbody id="datsan-table-body">
-                        <tr><td colspan="6" class="text-center" style="text-align: center;">Đang tải dữ liệu...</td></tr>
+                        <tr><td colspan="7" class="text-center" style="text-align: center;">Đang tải dữ liệu...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -2073,7 +2242,7 @@ function applyDSFiltersAndRender() {
 
 function renderDSTable(data) {
     const tbody = document.getElementById('datsan-table-body');
-    if (data.length === 0) return tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="text-align: center; padding: 40px;">Không có dữ liệu.</td></tr>`;
+    if (data.length === 0) return tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="text-align: center; padding: 40px;">Không có dữ liệu.</td></tr>`;
 
     tbody.innerHTML = data.map(item => {
         let badgeColor = '#6b7280', badgeBg = '#f3f4f6', viStatus = item.TrangThai;
@@ -2385,7 +2554,7 @@ function renderUCTable(data) {
 
         return `<tr>
             <td>
-                <strong>${item.nguoi_dung?.HoTen || 'N/A'}</strong><br>
+                <strong style="white-space: nowrap;">${item.nguoi_dung?.HoTen || 'N/A'}</strong><br>
                 <span style="font-size: 0.85rem; color: var(--text-muted);">${item.nguoi_dung?.SoDienThoai || ''}</span>
             </td>
             <td>
@@ -2395,7 +2564,7 @@ function renderUCTable(data) {
                 ${htmlTenGiai}
                 <div style="font-size: 0.85rem; margin-top: 4px;">Đá lúc: <strong style="color:var(--primary);">${gioDaStr}</strong> (${ngayDaStr})</div>
             </td>
-            <td style="max-width: 250px;">
+            <td style="max-width: 200px;">
                 <span style="font-size: 0.9rem; white-space: pre-line; color: var(--text-dark);">"${item.NoiDung}"</span>
             </td>
             <td><span style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> ${dateStr}</span></td>
@@ -2520,5 +2689,493 @@ async function executeCapNhatTrangThaiUC() {
     } finally { 
         btn.innerHTML = 'Đồng ý'; 
         btn.disabled = false; 
+    }
+}
+
+// ======================================================
+// MODULE: ADMIN - QUẢN LÝ KHÁCH HÀNG
+// ======================================================
+let allKhachHangData = [];
+let currentViewedKhachHangId = null;
+let currentKhachHangDatSan = [];
+
+// 1. Render màn hình Danh sách Khách hàng
+function renderQuanLyKhachHang() {
+    currentViewedKhachHangId = null;
+
+    // Active menu
+    document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+    const menuLink = Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('QUẢN LÝ KHÁCH HÀNG'));
+    if (menuLink) menuLink.classList.add('active');
+
+    const contentArea = document.querySelector('.admin-content');
+    contentArea.innerHTML = `
+        <div class="page-header" style="margin-bottom: 24px;">
+            <h1 class="page-title">Quản lý Khách Hàng</h1>
+            <p class="text-muted">Theo dõi thông tin, lịch sử đặt sân và uy tín của khách hàng</p>
+        </div>
+
+        <!-- Khung tìm kiếm -->
+        <div class="panel" style="margin-bottom: 20px; max-width: 400px;">
+            <div style="position: relative; max-width: 400px;">
+                <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
+                <input type="text" id="kh-search-input" class="form-control" style="padding-left: 35px;" placeholder="Tìm theo Tên, SĐT, Email..." oninput="handleKHSearch(this.value)">
+            </div>
+        </div>
+
+        <!-- Bảng danh sách -->
+        <div class="panel">
+            <div class="table-responsive" style="max-height: 60vh; overflow-y: auto;">
+                <table class="admin-table" style="position: relative;">
+                    <thead style="position: sticky; top: 0; z-index: 10; background: #F8FAFC;">
+                        <tr>
+                            <th>Khách hàng</th>
+                            <th>Liên hệ</th>
+                            <th style="text-align: center;">Số dư ví</th>
+                            <th style="text-align: center;">Tỷ lệ Bùng sân</th>
+                            <th style="text-align: center;">Trạng thái</th>
+                            <th style="text-align: center;">Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody id="khachhang-table-body">
+                        <tr><td colspan="6" class="text-center" style="text-align: center;">Đang tải dữ liệu...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+
+    loadDanhSachKhachHangAdmin();
+}
+
+async function loadDanhSachKhachHangAdmin() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/khach-hang`, { credentials: 'include' });
+        const res = await response.json();
+        if (res.success) {
+            allKhachHangData = res.data;
+            renderKHTable(allKhachHangData);
+        }
+    } catch (error) {
+        document.getElementById('khachhang-table-body').innerHTML = `<tr><td colspan="6" class="text-center text-danger" style="text-align: center;">Lỗi kết nối máy chủ!</td></tr>`;
+    }
+}
+
+function handleKHSearch(value) {
+    const searchTerm = value.toLowerCase().trim();
+    const filtered = allKhachHangData.filter(kh => 
+        kh.HoTen.toLowerCase().includes(searchTerm) || 
+        kh.SoDienThoai.includes(searchTerm) || 
+        (kh.Email && kh.Email.toLowerCase().includes(searchTerm))
+    );
+    renderKHTable(filtered);
+}
+
+function renderKHTable(data) {
+    const tbody = document.getElementById('khachhang-table-body');
+    if (data.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="padding: 40px; text-align: center;">Không tìm thấy khách hàng nào.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = data.map(kh => {
+        // Trạng thái Khóa
+        const statusBadge = kh.TrangThaiKhoa 
+            ? `<span class="badge badge-danger"><i class="fa-solid fa-lock"></i> Bị khóa</span>` 
+            : `<span class="badge badge-success"><i class="fa-solid fa-check-circle"></i> Hoạt động</span>`;
+        
+        // Tỷ lệ bùng sân
+        let tyLeBungHtml = `<span style="color: #64748b; font-size: 0.85rem;">Chưa có dữ liệu</span>`;
+        if (kh.tong_tran_da_chot > 0) {
+            // Rủi ro cao nếu tỷ lệ >= 30% HOẶC đã bùng >= 3 trận
+            const isNguyHiem = kh.ty_le_bung >= 30 || kh.tong_bung_san >= 3; 
+            const color = isNguyHiem ? '#ef4444' : (kh.ty_le_bung > 0 ? '#f59e0b' : '#16a34a'); // Đỏ, Vàng, Xanh lá
+            
+            tyLeBungHtml = `
+                <div style="font-size: 1.1rem; font-weight: bold; color: ${color};">${kh.ty_le_bung}%</div>
+                <div style="font-size: 0.8rem; color: var(--text-muted);">${kh.tong_bung_san} bùng / ${kh.tong_tran_da_chot} chốt</div>
+                ${isNguyHiem ? `<div style="font-size:0.75rem; color:#ef4444; margin-top:2px;"><i class="fa-solid fa-triangle-exclamation"></i> Rủi ro cao</div>` : ''}
+            `;
+        }
+
+        return `
+            <tr>
+                <td>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div style="width: 40px; height: 40px; border-radius: 50%; background: #e2e8f0; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #64748b;">
+                            ${kh.HoTen.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                            <strong style="color: var(--text-dark);">${kh.HoTen}</strong><br>
+                            <span style="font-size: 0.8rem; color: var(--text-muted);">ID: KH-${kh.ID}</span>
+                        </div>
+                    </div>
+                </td>
+                <td>
+                    <div><i class="fa-solid fa-phone" style="width: 16px; color: #94a3b8;"></i> ${kh.SoDienThoai}</div>
+                    <div style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-solid fa-envelope" style="width: 16px; color: #94a3b8;"></i> ${kh.Email || 'Chưa cập nhật'}</div>
+                </td>
+                <td style="text-align: center;"><strong style="color: #047857; font-size: 1.05rem;">${Number(kh.SoDuVi).toLocaleString('vi-VN')}đ</strong></td>
+                <td style="text-align: center;">${tyLeBungHtml}</td>
+                <td style="text-align: center;">${statusBadge}</td>
+                <td style="text-align: center;">
+                    <button class="btn-outline-sm" onclick="renderChiTietKhachHang(${kh.ID})"><i class="fa-solid fa-eye"></i> Chi tiết</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// 2. Render Màn hình Chi tiết Khách hàng
+async function renderChiTietKhachHang(id) {
+    currentViewedKhachHangId = id;
+
+    const contentArea = document.querySelector('.admin-content');
+    contentArea.innerHTML = `<div style="text-align:center; padding: 50px;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải thông tin...</div>`;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/khach-hang/${id}`, { credentials: 'include' });
+        const res = await response.json();
+        
+        if (!res.success) {
+            contentArea.innerHTML = `<button class="btn-back" onclick="renderQuanLyKhachHang()"><i class="fa-solid fa-arrow-left"></i> Quay lại</button><div style="text-align:center; color:red; padding: 20px;">Lỗi: ${res.message}</div>`;
+            return;
+        }
+
+        const kh = res.khach_hang;
+        const dsDatSan = res.lich_su_dat_san;
+        const dsGiaoDich = res.lich_su_giao_dich;
+
+        currentKhachHangDatSan = dsDatSan;
+
+        // Thống kê
+        const tongTienNap = dsGiaoDich.filter(gd => gd.LoaiGiaoDich === 'NapTien' && gd.DongTien === 'Cong').reduce((sum, gd) => sum + Number(gd.SoTien), 0);
+        
+        // Cập nhật lại cách đếm dựa vào dữ liệu mới
+        const soLanHoanThanh = dsDatSan.filter(ds => ds.TrangThai === 'HoanThanh').length;
+        const soLanBung = dsDatSan.filter(ds => ds.TrangThai === 'KhongDen').length;
+        const tongDaChot = soLanHoanThanh + soLanBung;
+        const tyLeBung = tongDaChot > 0 ? Math.round((soLanBung / tongDaChot) * 100) : 0;
+
+        // Nút Khóa/Mở Khóa
+        const lockBtnHtml = kh.TrangThaiKhoa 
+            ? `<button class="btn-primary" style="background: #16a34a; border-color: #16a34a;" onclick="openKhoaKhachHangModal(${kh.ID}, true)"><i class="fa-solid fa-unlock"></i> Mở khóa tài khoản</button>`
+            : `<button class="btn-primary" style="background: #ef4444; border-color: #ef4444;" onclick="openKhoaKhachHangModal(${kh.ID}, false)"><i class="fa-solid fa-lock"></i> Khóa tài khoản</button>`;
+
+        // Render HTML
+        contentArea.innerHTML = `
+            <button class="btn-back" onclick="renderQuanLyKhachHang()"><i class="fa-solid fa-arrow-left"></i> Quay lại danh sách</button>
+            
+            <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding: 24px; background: white; border-radius: 12px; box-shadow: var(--shadow-sm); border: 1px solid var(--border);">
+                <div style="display: flex; align-items: center; gap: 20px;">
+                    <div style="width: 70px; height: 70px; border-radius: 50%; background: var(--primary-light); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: bold;">
+                        ${kh.HoTen.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                        <h1 class="page-title" style="margin-bottom: 4px;">${kh.HoTen} ${kh.TrangThaiKhoa ? '<span class="badge badge-danger" style="vertical-align: middle; font-size: 0.8rem; margin-left: 8px;">Bị khóa</span>' : ''}</h1>
+                        <div style="color: var(--text-muted); font-size: 0.95rem; display: flex; gap: 15px;">
+                            <span><i class="fa-solid fa-phone"></i> ${kh.SoDienThoai}</span>
+                            <span><i class="fa-solid fa-envelope"></i> ${kh.Email || 'N/A'}</span>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    ${lockBtnHtml}
+                </div>
+            </div>
+
+            <!-- Thống kê nhanh -->
+            <div class="stat-grid" style="margin-bottom: 24px;">
+                <div class="stat-card">
+                    <div class="stat-title">Số dư ví hiện tại</div>
+                    <div class="stat-value" style="color: #047857;">${Number(kh.SoDuVi).toLocaleString('vi-VN')}đ</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Tổng tiền đã nạp</div>
+                    <div class="stat-value" style="color: #4338ca;">${tongTienNap.toLocaleString('vi-VN')}đ</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Tổng số trận đặt</div>
+                    <div class="stat-value">${dsDatSan.length} trận</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Tỷ lệ bùng sân</div>
+                    <div class="stat-value" style="color: ${tyLeBung >= 30 ? '#ef4444' : '#047857'};">${tyLeBung}%</div>
+                    <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">(${soLanBung} bùng / ${tongDaChot} chốt)</div>
+                </div>
+            </div>
+
+            <!-- Tabs Lịch sử -->
+            <div class="panel">
+                <div style="display: flex; gap: 20px; border-bottom: 1px solid var(--border);">
+                    <button class="nav-tab active" onclick="switchKhachHangTab('tab-ls-datsan', this)" style="margin-left: 20px; padding: 12px 0; border: none; background: transparent; font-weight: 600; cursor: pointer; border-bottom: 2px solid var(--primary); color: var(--primary);">Lịch sử Đặt sân</button>
+                    <button class="nav-tab" onclick="switchKhachHangTab('tab-ls-giaodich', this)" style="padding: 12px 0; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Lịch sử Giao dịch Ví</button>
+
+                    <div id="kh-filter-container" style="display: flex; justify-content: flex-end; align-items: center; margin-left: auto; margin-right: 20px;">
+                        <select class="form-control" style="width: 200px;" onchange="filterKHDatsan(this.value)">
+                            <option value="All">Tất cả trạng thái</option>
+                            <option value="DaCoc">Đã cọc</option>
+                            <option value="HoanThanh">Hoàn thành</option>
+                            <option value="DaHuy">Đã hủy</option>
+                            <option value="KhongDen">Không đến</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Tab 1: Đặt Sân -->
+                <div id="tab-ls-datsan" class="tab-pane active">
+                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                        <table class="admin-table">
+                            <thead style="position: sticky; top: 0; background: #F8FAFC;">
+                                <tr>
+                                    <th>Thông tin sân</th>
+                                    <th>Khung giờ & Ngày đá</th>
+                                    <th>Tổng tiền</th>
+                                    <th>Trạng thái</th>
+                                </tr>
+                            </thead>
+                            <tbody id="kh-datsan-tbody">
+                                ${renderKhachHangDatSanTable(dsDatSan)}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Tab 2: Giao Dịch -->
+                <div id="tab-ls-giaodich" class="tab-pane" style="display: none;">
+                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                        <table class="admin-table">
+                            <thead style="position: sticky; top: 0; background: #F8FAFC;">
+                                <tr>
+                                    <th>Mã GD</th>
+                                    <th>Nội dung</th>
+                                    <th>Ngày Giao Dịch</th>
+                                    <th>Biến động</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${renderKhachHangGiaoDichTable(dsGiaoDich)}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
+    } catch (e) {
+        console.error(e);
+        contentArea.innerHTML = `<div style="text-align:center; color:red; padding: 20px;">Lỗi kết nối máy chủ!</div>`;
+    }
+}
+
+// Hàm hỗ trợ Render dòng trong Bảng Đặt Sân của chi tiết KH
+function renderKhachHangDatSanTable(dsDatSan) {
+    if (dsDatSan.length === 0) return `<tr><td colspan="4" class="text-center">Khách hàng chưa đặt sân nào.</td></tr>`;
+    
+    return dsDatSan.map(item => {
+        let badgeColor = '#6b7280', badgeBg = '#f3f4f6', viStatus = item.TrangThai;
+        if(item.TrangThai === 'DaCoc') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; viStatus = 'Đã cọc'; }
+        else if(item.TrangThai === 'DaHuy') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; viStatus = 'Đã hủy'; }
+        else if(item.TrangThai === 'HoanThanh') { badgeColor = '#047857'; badgeBg = '#d1fae5'; viStatus = 'Hoàn thành'; }
+        else if(item.TrangThai === 'KhongDen') { badgeColor = '#6b7280'; badgeBg = '#f3f4f6'; viStatus = 'Không đến'; }
+
+        const badgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${viStatus}</span>`;
+        const timeStr = item.khung_gio ? `${item.khung_gio.GioBatDau.substring(0,5)} - ${item.khung_gio.GioKetThuc.substring(0,5)}` : '';
+        const d = new Date(item.NgayDa);
+        const dateStr = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
+
+        return `<tr>
+            <td>
+                <strong>${item.san_bong ? item.san_bong.TenSan : 'N/A'}</strong> ${item.ID_GiaiDau ? `<span style="font-size:0.7rem; background:#e0e7ff; color:#4338ca; padding:2px 6px; border-radius:4px;">Giải đấu</span>` : ''}<br>
+                <span style="font-size:0.85rem; color:var(--text-muted);"><i class="fa-solid fa-location-dot"></i> ${item.san_bong && item.san_bong.cum_san ? item.san_bong.cum_san.TenCumSan : ''}</span>
+            </td>
+            <td>
+                <span style="font-size: 0.9rem;">${dateStr}</span><br>
+                <strong style="color: var(--primary);">${timeStr}</strong>
+            </td>
+            <td><strong style="color: #ea580c;">${Number(item.TongTien).toLocaleString('vi-VN')}đ</strong></td>
+            <td>${badgeHtml}</td>
+        </tr>`;
+    }).join('');
+}
+
+function filterKHDatsan(status) {
+    const tbody = document.getElementById('kh-datsan-tbody');
+    if (!tbody) return;
+
+    let filteredData = currentKhachHangDatSan;
+    
+    // Nếu không phải chọn 'All', thì lọc theo đúng trạng thái được chọn
+    if (status !== 'All') {
+        filteredData = currentKhachHangDatSan.filter(item => item.TrangThai === status);
+    }
+
+    // Tận dụng lại hàm renderKhachHangDatSanTable đã viết để vẽ lại ruột bảng
+    tbody.innerHTML = renderKhachHangDatSanTable(filteredData);
+}
+
+// Hàm hỗ trợ Render dòng trong Bảng Giao Dịch của chi tiết KH
+function renderKhachHangGiaoDichTable(dsGiaoDich) {
+    if (dsGiaoDich.length === 0) return `<tr><td colspan="4" class="text-center">Khách hàng chưa có giao dịch nào.</td></tr>`;
+    
+    return dsGiaoDich.map(item => {
+        const isCong = item.DongTien === 'Cong';
+        const sign = isCong ? '+' : '-';
+        const color = isCong ? '#047857' : '#b91c1c';
+        
+        let dateStr = '';
+        if (item.NgayTao) {
+            const d = new Date(item.NgayTao);
+            const pad = n => n < 10 ? '0' + n : n;
+            dateStr = `${pad(d.getHours())}:${pad(d.getMinutes())} ${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
+        }
+
+        return `<tr>
+            <td style="font-family: monospace; color: var(--text-muted);">#GD${item.ID}</td>
+            <td><strong>${item.NoiDung || item.LoaiGiaoDich}</strong></td>
+            <td><span style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> ${dateStr}</span></td>
+            <td><strong style="color: ${color}; font-size: 1.05rem;">${sign}${Number(item.SoTien).toLocaleString('vi-VN')}đ</strong></td>
+        </tr>`;
+    }).join('');
+}
+
+// 3. Hàm chuyển Tab nội bộ trong màn hình chi tiết KH
+function switchKhachHangTab(tabId, btnElement) {
+    const tabs = btnElement.parentElement.children;
+    for (let i = 0; i < tabs.length; i++) {
+        tabs[i].classList.remove('active');
+        tabs[i].style.borderBottom = 'none';
+        tabs[i].style.color = 'var(--text-muted)';
+    }
+    btnElement.classList.add('active');
+    btnElement.style.borderBottom = '2px solid var(--primary)';
+    btnElement.style.color = 'var(--primary)';
+
+    document.getElementById('tab-ls-datsan').style.display = 'none';
+    document.getElementById('tab-ls-giaodich').style.display = 'none';
+    
+    document.getElementById(tabId).style.display = 'block';
+
+    const filterContainer = document.getElementById('kh-filter-container');
+    if (filterContainer) {
+        if (tabId === 'tab-ls-datsan') {
+            filterContainer.style.display = 'flex';
+        } else {
+            filterContainer.style.display = 'none';
+        }
+    }
+}
+
+// 4. API Gọi lệnh Khóa / Mở Khóa tài khoản
+let pendingKhoaUserId = null;
+let pendingKhoaStatus = null;
+
+function openKhoaKhachHangModal(id, isCurrentlyLocked) {
+    pendingKhoaUserId = id;
+    pendingKhoaStatus = isCurrentlyLocked;
+
+    // Tự động tạo Modal bám vào body nếu chưa tồn tại
+    let modal = document.getElementById('khoa-kh-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'khoa-kh-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 9999;';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 400px; text-align: center; padding: 30px 20px;">
+                <div style="font-size: 3.5rem; color: #f59e0b; margin-bottom: 15px;"><i class="fa-solid fa-circle-exclamation"></i></div>
+                <h3 id="khoa-kh-title" style="margin-bottom: 10px; font-size: 1.4rem;">Xác nhận</h3>
+                <p id="khoa-kh-msg" style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5;"></p>
+                
+                <div id="khoa-kh-alert" class="modal-alert" style="display: none; margin-bottom: 15px; text-align: left;"></div>
+
+                <div style="display: flex; justify-content: center; gap: 12px;">
+                    <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="closeKhoaKhachHangModal()">Hủy bỏ</button>
+                    <button id="khoa-kh-btn" class="btn-primary" style="width: auto; padding: 10px 24px;" onclick="executeToggleKhoaKhachHang()">Đồng ý</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+
+    // Reset thông báo lỗi nếu có từ lần trước
+    const alertBox = document.getElementById('khoa-kh-alert');
+    if (alertBox) alertBox.style.display = 'none';
+
+    // Đổi Tiêu đề, Lời nhắn và Màu Nút tùy theo trạng thái
+    document.getElementById('khoa-kh-title').innerText = isCurrentlyLocked ? 'Mở Khóa Tài Khoản' : 'Khóa Tài Khoản';
+    document.getElementById('khoa-kh-msg').innerHTML = isCurrentlyLocked 
+        ? 'Bạn có chắc chắn muốn <strong style="color: #16a34a;">MỞ KHÓA</strong> chức năng đặt sân cho khách hàng này không?' 
+        : 'Khách hàng này sẽ bị <strong style="color: #ef4444;">KHÓA</strong> chức năng đặt sân. Bạn có chắc chắn?';
+    
+    const btnConfirm = document.getElementById('khoa-kh-btn');
+    btnConfirm.style.backgroundColor = isCurrentlyLocked ? '#16a34a' : '#ef4444';
+    btnConfirm.style.borderColor = isCurrentlyLocked ? '#16a34a' : '#ef4444';
+
+    modal.style.display = 'flex';
+}
+
+function closeKhoaKhachHangModal() {
+    const modal = document.getElementById('khoa-kh-modal');
+    if (modal) modal.style.display = 'none';
+    pendingKhoaUserId = null;
+    pendingKhoaStatus = null;
+}
+
+async function executeToggleKhoaKhachHang() {
+    if (!pendingKhoaUserId) return;
+
+    const btn = document.getElementById('khoa-kh-btn');
+    const alertBox = document.getElementById('khoa-kh-alert');
+    
+    // Đổi UI báo đang tải
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+    btn.disabled = true;
+    alertBox.style.display = 'none';
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/khach-hang/${pendingKhoaUserId}/khoa`, {
+            method: 'PUT',
+            credentials: 'include',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        });
+        
+        const res = await response.json();
+        
+        if (response.ok && res.success) {
+            alertBox.textContent = res.message;
+            alertBox.className = 'modal-alert success';
+            alertBox.style.display = 'block';
+            alertBox.style.textAlign = 'center';
+
+            // 1. Phục hồi ngay lập tức trạng thái nút bấm để lần sau không bị kẹt
+            btn.innerHTML = 'Đồng ý';
+            btn.disabled = false;
+
+            // 2. Lưu lại ID khách hàng ra 1 biến tạm (tránh bị reset mất)
+            const idToRender = pendingKhoaUserId;
+
+            // 3. Đợi 1.5 giây cho Admin đọc thông báo rồi đóng Modal & Tải lại Profile
+            setTimeout(() => {
+                closeKhoaKhachHangModal(); // Đóng Modal và gán pendingKhoaUserId = null
+                renderChiTietKhachHang(idToRender); // Dùng biến tạm để gọi API
+            }, 1500);
+
+        } else {
+            alertBox.textContent = res.message || 'Có lỗi xảy ra!';
+            alertBox.className = 'modal-alert error';
+            alertBox.style.display = 'block';
+            
+            // Lỗi thì phục hồi nút bấm
+            btn.innerHTML = 'Đồng ý';
+            btn.disabled = false;
+        }
+    } catch (e) {
+        alertBox.textContent = 'Lỗi kết nối máy chủ!';
+        alertBox.className = 'modal-alert error';
+        alertBox.style.display = 'block';
+        
+        // Lỗi thì phục hồi nút bấm
+        btn.innerHTML = 'Đồng ý';
+        btn.disabled = false;
     }
 }

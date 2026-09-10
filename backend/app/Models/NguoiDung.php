@@ -14,7 +14,11 @@ class NguoiDung extends Authenticatable
     public $timestamps = false;
 
     protected $fillable = [
-        'HoTen', 'SoDienThoai', 'Email', 'MatKhau', 'VaiTro', 'SoDuVi', 'MaOTP', 'ThoiGianHetHanOTP'
+        'HoTen', 'SoDienThoai', 'Email', 'MatKhau', 'VaiTro', 'SoDuVi', 'MaOTP', 'ThoiGianHetHanOTP', 'TrangThaiKhoa'
+    ];
+
+    protected $casts = [
+        'TrangThaiKhoa' => 'boolean',
     ];
 
     protected $hidden = [
