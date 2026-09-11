@@ -18,6 +18,7 @@ use App\Http\Controllers\DatSanController;
 use App\Http\Controllers\YeuCauHuyGapController;
 use App\Http\Controllers\KhachHangController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\ChatbotController;
 
 // Bọc TẤT CẢ trong middleware 'web' để đồng bộ Session Cookie
 Route::middleware('web')->group(function () {
@@ -41,6 +42,13 @@ Route::middleware('web')->group(function () {
 });
 
 Route::middleware('web')->group(function () {
+    // Chatbot API
+    Route::post('/chatbot/chat', [ChatbotController::class, 'nhanTinNhan']);
+    Route::get('/chatbot/phien-chat', [ChatbotController::class, 'layDanhSachPhienChat']);
+    Route::put('/chatbot/phien-chat/{id}/doi-ten', [ChatbotController::class, 'doiTenPhienChat']);
+    Route::delete('/chatbot/phien-chat/{id}', [ChatbotController::class, 'xoaPhienChat']);
+    Route::get('/chatbot/phien-chat/{id}', [ChatbotController::class, 'layChiTietPhienChat']);
+
     //Admin Dashboard
     Route::get('/admin/thong-ke', [DashboardController::class, 'layThongKe']);
 
