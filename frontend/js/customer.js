@@ -3570,3 +3570,347 @@ function setupFloatingContacts() {
     `;
     document.body.appendChild(contactDiv);
 }
+
+// ======================================================
+// MODULE: TRỢ LÝ ẢO AI CHATBOT (GEMINI)
+// ======================================================
+let isChatOpen = false;
+
+// 1. Mở / Đóng cửa sổ Chat
+function toggleChatWindow() {
+    const container = document.getElementById('chatbot-container');
+    isChatOpen = !isChatOpen;
+    
+    if (isChatOpen) {
+        container.style.display = 'flex';
+        loadChatSessions(); // Tải danh sách phiên chat bên cột trái
+        
+        // Nếu mới mở lên mà chưa có phiên nào đang active, thì tạo phiên mới màn hình sạch
+        if (!document.getElementById('current-active-chat-id').value) {
+            createNewChatSession();
+        }
+    } else {
+        container.style.display = 'none';
+    }
+}
+
+// 2. Tải danh sách các Phiên Chat (Sidebar)
+async function loadChatSessions() {
+    const sidebarList = document.getElementById('chat-sidebar-list');
+    try {
+        const response = await fetch(`${API_BASE_URL}/chatbot/phien-chat`, { credentials: 'include' });
+        const res = await response.json();
+
+        if (res.success && res.data.length > 0) {
+            let html = '';
+            res.data.forEach(phien => {
+                const activeId = document.getElementById('current-active-chat-id').value;
+                const isActive = (String(phien.ID) === String(activeId)) ? 'background: #e2e8f0; border-left: 4px solid var(--primary);' : 'background: transparent; border-left: 4px solid transparent;';
+                
+                // Tiêu đề: Lấy 30 ký tự đầu tiên
+                let tieuDe = phien.TieuDe ? phien.TieuDe : 'Cuộc trò chuyện mới';
+                if (tieuDe.length > 30) tieuDe = tieuDe.substring(0, 30) + '...';
+
+                html += `
+                    <div style="padding: 12px; margin-bottom: 8px; border-radius: 8px; cursor: pointer; transition: 0.2s; position: relative; ${isActive}" onclick="loadChatDetails(${phien.ID})">
+                        <div style="font-weight: 600; font-size: 0.95rem; color: var(--text-dark); margin-bottom: 4px; padding-right: 20px;">${tieuDe}</div>
+                        
+                        <!-- Nút 3 chấm (Dropdown thao tác) -->
+                        <div class="chat-action-menu" style="position: absolute; right: 10px; top: 12px;" onclick="event.stopPropagation()">
+                            <i class="fa-solid fa-ellipsis-vertical" style="color: var(--text-muted); padding: 4px 8px; cursor: pointer;" onclick="toggleChatDropdown(${phien.ID})"></i>
+                            <div id="chat-dropdown-${phien.ID}" style="display: none; position: absolute; right: 0; top: 25px; background: white; border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.1); border-radius: 8px; width: 120px; z-index: 10;">
+                                <div style="padding: 8px 12px; font-size: 0.85rem; cursor: pointer; border-bottom: 1px solid #f1f5f9; color: var(--text-dark);" onclick="openRenameChatModal(${phien.ID}, '${tieuDe.replace(/'/g, "\\'")}')"><i class="fa-solid fa-pen" style="margin-right: 6px;"></i> Đổi tên</div>
+                                <div style="padding: 8px 12px; font-size: 0.85rem; cursor: pointer; color: #ef4444;" onclick="openDeleteChatModal(${phien.ID})"><i class="fa-solid fa-trash-can" style="margin-right: 6px;"></i> Xóa</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            sidebarList.innerHTML = html;
+        } else {
+            sidebarList.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 0.9rem; margin-top: 20px;">Chưa có lịch sử chat</div>`;
+        }
+    } catch (e) {
+        sidebarList.innerHTML = `<div style="text-align: center; color: red; font-size: 0.9rem; margin-top: 20px;">Lỗi kết nối</div>`;
+    }
+}
+
+// Hàm tắt/bật menu 3 chấm
+function toggleChatDropdown(id) {
+    const allDropdowns = document.querySelectorAll('[id^="chat-dropdown-"]');
+    allDropdowns.forEach(d => {
+        if (d.id !== `chat-dropdown-${id}`) d.style.display = 'none';
+    });
+    const dropdown = document.getElementById(`chat-dropdown-${id}`);
+    dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+}
+
+// Click ra ngoài tự đóng menu 3 chấm
+window.addEventListener('click', () => {
+    document.querySelectorAll('[id^="chat-dropdown-"]').forEach(d => d.style.display = 'none');
+});
+
+// 3. Tạo màn hình chat mới tinh
+function createNewChatSession() {
+    document.getElementById('current-active-chat-id').value = '';
+    document.getElementById('chat-header-title').innerText = 'Cuộc trò chuyện mới';
+    
+    const msgArea = document.getElementById('chat-messages-area');
+    msgArea.innerHTML = `
+        <div class="chat-msg bot" style="align-self: flex-start; max-width: 80%;">
+            <div style="background: white; padding: 12px 16px; border-radius: 0 12px 12px 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); color: var(--text-dark); line-height: 1.5;">
+                Chào bạn! Mình là Trợ lý ảo của DN FOOTBALL. Mình có thể giúp gì cho bạn hôm nay?
+            </div>
+        </div>
+    `;
+    // Xóa màu active bên sidebar
+    loadChatSessions(); 
+}
+
+// 4. Tải chi tiết nội dung 1 Phiên Chat
+async function loadChatDetails(id) {
+    document.getElementById('current-active-chat-id').value = id;
+    const msgArea = document.getElementById('chat-messages-area');
+    msgArea.innerHTML = `<div style="text-align:center; padding:20px; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải tin nhắn...</div>`;
+    
+    // Cập nhật lại màu active sidebar
+    loadChatSessions();
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/chatbot/phien-chat/${id}`, { credentials: 'include' });
+        const res = await response.json();
+
+        if (res.success) {
+            document.getElementById('chat-header-title').innerText = res.phien_chat.TieuDe || 'Cuộc trò chuyện';
+            msgArea.innerHTML = ''; // Clear loading
+            
+            res.data.forEach(msg => {
+                appendMessageToUI(msg.NguoiGui, msg.NoiDung);
+            });
+            scrollToBottomChat();
+        }
+    } catch (e) {
+        msgArea.innerHTML = `<div style="text-align:center; color: red;">Lỗi kết nối máy chủ!</div>`;
+    }
+}
+
+// 5. Gửi tin nhắn lên AI
+async function sendChatMessage() {
+    const inputEl = document.getElementById('chat-input-text');
+    const text = inputEl.value.trim();
+    if (!text) return;
+
+    const activeChatId = document.getElementById('current-active-chat-id').value;
+    const btnSend = document.getElementById('btn-send-chat');
+
+    // 1. Cập nhật UI ngay lập tức
+    inputEl.value = '';
+    inputEl.disabled = true;
+    btnSend.disabled = true;
+    
+    // Vẽ tin nhắn của User
+    appendMessageToUI('User', text);
+    scrollToBottomChat();
+
+    // Vẽ hiệu ứng "Bot đang gõ..."
+    const loadingId = 'typing-' + Date.now();
+    const msgArea = document.getElementById('chat-messages-area');
+    msgArea.innerHTML += `
+        <div id="${loadingId}" class="chat-msg bot" style="align-self: flex-start; max-width: 80%;">
+            <div style=" background: white; padding: 7px 10px; border-radius: 0 9px 9px 9px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); color: var(--text-muted); display: flex; align-items: center; gap: 3px;">
+                <i class="fa-solid fa-circle fa-2xs fa-fade"></i>
+                <i class="fa-solid fa-circle fa-2xs fa-fade" style="animation-delay: 0.2s;"></i>
+                <i class="fa-solid fa-circle fa-2xs fa-fade" style="animation-delay: 0.4s;"></i>
+            </div>
+        </div>
+    `;
+    scrollToBottomChat();
+
+    // 2. GỌI API BACKEND
+    try {
+        const payload = { noi_dung: text };
+        if (activeChatId) payload.id_phien_chat = activeChatId;
+
+        const response = await fetch(`${API_BASE_URL}/chatbot/chat`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+        
+        // Gỡ bỏ hiệu ứng đang gõ
+        document.getElementById(loadingId).remove();
+
+        if (response.ok && data.success) {
+            // Nếu là chat mới thì gán ID phiên vừa tạo vào hidden input
+            if (!activeChatId && data.id_phien_chat) {
+                document.getElementById('current-active-chat-id').value = data.id_phien_chat;
+            }
+            
+            // Vẽ tin nhắn của AI
+            appendMessageToUI('Bot', data.reply);
+            
+            // Render lại sidebar để đẩy phiên này lên trên cùng
+            loadChatSessions();
+        } else {
+            appendMessageToUI('Bot', '<span style="color:red"><i class="fa-solid fa-triangle-exclamation"></i> Lỗi: ' + (data.message || 'Hệ thống bận') + '</span>');
+        }
+
+    } catch (e) {
+        document.getElementById(loadingId)?.remove();
+        appendMessageToUI('Bot', '<span style="color:red"><i class="fa-solid fa-wifi"></i> Mất kết nối đến máy chủ!</span>');
+    } finally {
+        inputEl.disabled = false;
+        btnSend.disabled = false;
+        inputEl.focus();
+        scrollToBottomChat();
+    }
+}
+
+// Hàm hỗ trợ vẽ bong bóng chat (Xử lý cả xuống dòng và Markdown in đậm)
+function appendMessageToUI(role, text) {
+    const msgArea = document.getElementById('chat-messages-area');
+    
+    // Xử lý Markdown cơ bản của Gemini: **text** thành <strong>text</strong> và xuống dòng
+    let formattedText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    formattedText = formattedText.replace(/\n/g, '<br>');
+
+    if (role === 'User') {
+        msgArea.innerHTML += `
+            <div class="chat-msg user" style="align-self: flex-end; max-width: 80%;">
+                <div style="background: var(--primary); color: white; padding: 12px 16px; border-radius: 12px 12px 0 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); line-height: 1.5;">
+                    ${formattedText}
+                </div>
+            </div>
+        `;
+    } else {
+        msgArea.innerHTML += `
+            <div class="chat-msg bot" style="align-self: flex-start; max-width: 80%;">
+                <div style="background: white; color: var(--text-dark); padding: 12px 16px; border-radius: 0 12px 12px 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); border: 1px solid var(--border); line-height: 1.6;">
+                    ${formattedText}
+                </div>
+            </div>
+        `;
+    }
+}
+
+function scrollToBottomChat() {
+    const msgArea = document.getElementById('chat-messages-area');
+    msgArea.scrollTop = msgArea.scrollHeight;
+}
+
+// ==========================================
+// CÁC MODAL QUẢN LÝ PHIÊN CHAT (ĐỔI TÊN/XÓA)
+// ==========================================
+function openRenameChatModal(id, currentName) {
+    document.getElementById('rename-chat-id').value = id;
+    document.getElementById('rename-chat-original').value = currentName;
+    document.getElementById('rename-chat-input').value = currentName;
+    
+    const btnRename = document.getElementById('btn-confirm-rename');
+    btnRename.disabled = true;
+    btnRename.style.opacity = '0.5';
+    btnRename.style.cursor = 'not-allowed';
+
+    document.getElementById('rename-chat-modal').style.display = 'flex';
+}
+
+function openDeleteChatModal(id) {
+    document.getElementById('delete-chat-id').value = id;
+    document.getElementById('delete-chat-modal').style.display = 'flex';
+}
+
+function closeChatModal(type) {
+    if (type === 'rename') {
+        document.getElementById('rename-chat-modal').style.display = 'none';
+    } else if (type === 'delete') {
+        document.getElementById('delete-chat-modal').style.display = 'none';
+    }
+}
+
+function checkRenameChange() {
+    const inputVal = document.getElementById('rename-chat-input').value.trim();
+    const originalVal = document.getElementById('rename-chat-original').value;
+    const btnRename = document.getElementById('btn-confirm-rename');
+
+    if (inputVal !== '' && inputVal !== originalVal) {
+        btnRename.disabled = false;
+        btnRename.style.opacity = '1';
+        btnRename.style.cursor = 'pointer';
+    } else {
+        btnRename.disabled = true;
+        btnRename.style.opacity = '0.5';
+        btnRename.style.cursor = 'not-allowed';
+    }
+}
+
+async function executeRenameChat() {
+    const id = document.getElementById('rename-chat-id').value;
+    const newName = document.getElementById('rename-chat-input').value.trim();
+    const btn = document.getElementById('btn-confirm-rename');
+
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang lưu...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/chatbot/phien-chat/${id}/doi-ten`, {
+            method: 'PUT',
+            credentials: 'include',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tieu_de: newName })
+        });
+
+        const data = await response.json();
+        if (response.ok && data.success) {
+            closeChatModal('rename');
+            loadChatSessions(); // Update UI
+            
+            // Cập nhật tiêu đề bên phải nếu đang mở đúng phiên này
+            if(document.getElementById('current-active-chat-id').value === id) {
+                document.getElementById('chat-header-title').innerText = newName;
+            }
+        } else {
+            showToast(data.message || 'Lỗi khi đổi tên!');
+        }
+    } catch (e) {
+        showToast('Lỗi kết nối máy chủ!');
+    } finally {
+        btn.innerHTML = 'Đổi tên';
+    }
+}
+
+async function executeDeleteChat() {
+    const id = document.getElementById('delete-chat-id').value;
+    const btn = document.getElementById('btn-confirm-delete');
+
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xóa...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/chatbot/phien-chat/${id}`, {
+            method: 'DELETE',
+            credentials: 'include',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        });
+
+        const data = await response.json();
+        if (response.ok && data.success) {
+            closeChatModal('delete');
+            loadChatSessions();
+            
+            // Nếu phiên vừa xóa là phiên đang mở -> clear màn hình
+            if (document.getElementById('current-active-chat-id').value === id) {
+                createNewChatSession();
+            }
+        } else {
+            showToast(data.message || 'Lỗi khi xóa!');
+        }
+    } catch (e) {
+        showToast('Lỗi kết nối máy chủ!');
+    } finally {
+        btn.innerHTML = 'Xóa';
+        btn.disabled = false;
+    }
+}
