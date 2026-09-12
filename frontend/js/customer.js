@@ -984,19 +984,43 @@ function closeCartModal() {
 }
 
 function removeSlotByIndex(index) {
+
+    // Lưu slot trước khi xóa để biết slot nào cần cập nhật UI
+    const removedSlot = selectedSlots[index];
+
+    if (!removedSlot) return;
+
+    // Xóa khỏi mảng
     selectedSlots.splice(index, 1);
-    saveToSession(); openCartModal();
-    if (currentClusterId !== null && currentPitchId !== null) {
-        renderSchedule(currentClusterId, currentClusterName, currentPitchId, currentPitchName, currentLoaiSanId, currentPitchType);
-    }
+
+    // Cập nhật trực tiếp slot trên giao diện lịch
+    updateSlotUI(removedSlot, false);
+
+    // Lưu session + cập nhật Floating Cart
+    saveToSession();
+
+    // Render lại danh sách bên trong giỏ hàng
+    openCartModal();
 }
 
 function clearAllSlots() {
+
+    // Lưu danh sách slot trước khi xóa
+    const slotsToRemove = [...selectedSlots];
+
+    // Xóa toàn bộ dữ liệu giỏ hàng
     selectedSlots = [];
-    saveToSession(); closeCartModal();
-    if (currentClusterId !== null && currentPitchId !== null) {
-        renderSchedule(currentClusterId, currentClusterName, currentPitchId, currentPitchName, currentLoaiSanId, currentPitchType);
-    }
+
+    // Cập nhật trực tiếp tất cả slot đang hiển thị
+    slotsToRemove.forEach(slot => {
+        updateSlotUI(slot, false);
+    });
+
+    // Lưu session và cập nhật Floating Cart
+    saveToSession();
+
+    // Đóng modal
+    closeCartModal();
 }
 
 function showCartAlert(message, isSuccess) {
@@ -1556,7 +1580,7 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                 
                 html += `
                     <td style="border-bottom: 1px solid #f1f5f9; padding: 6px;">
-                        <div class="slot ${statusClass}" 
+                        <div class="slot ${statusClass}" data-slot-id="${clusterName}-${pitchName}-${date.full}-${timeStr}"
                              ${(!isBooked && !isPast) ? `onclick="toggleSlot(this, ${clusterId}, '${clusterName}', ${pitchId}, '${pitchName}', '${date.full}', '${timeStr}', ${priceValue})"` : ''}>
                             ${statusText}
                         </div>
@@ -1583,6 +1607,22 @@ function toggleSlot(element, clusterId, clusterName, pitchId, pitchName, date, t
         element.classList.add('selected'); element.innerText = 'ĐÃ CHỌN ✓';
     }
     saveToSession();
+}
+
+function updateSlotUI(slot, isSelected) {
+    const slotElement = document.querySelector(
+        `[data-slot-id="${slot.id}"]`
+    );
+
+    if (!slotElement) return;
+
+    if (isSelected) {
+        slotElement.classList.add('selected');
+        slotElement.innerText = 'ĐÃ CHỌN ✓';
+    } else {
+        slotElement.classList.remove('selected');
+        slotElement.innerText = 'CÒN TRỐNG';
+    }
 }
 
 // ======================================================
