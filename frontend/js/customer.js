@@ -3594,6 +3594,27 @@ function toggleChatWindow() {
     }
 }
 
+document.addEventListener('pointerdown', function (event) {
+
+    const chatbotContainer = document.getElementById('chatbot-container');
+    const openChatbotButton = document.getElementById('btn-open-chatbot');
+
+    // Chatbot chưa mở
+    if (!isChatOpen || !chatbotContainer) return;
+
+    // Click bên trong chatbot -> không đóng
+    if (chatbotContainer.contains(event.target)) return;
+
+    // Click nút chatbot -> không đóng tại đây
+    // toggleChatWindow() sẽ tự xử lý việc mở/tắt
+    if (openChatbotButton && openChatbotButton.contains(event.target)) return;
+
+    // Click bất kỳ đâu ngoài chatbot
+    chatbotContainer.style.display = 'none';
+    isChatOpen = false;
+
+}, true);
+
 // 2. Tải danh sách các Phiên Chat (Sidebar)
 async function loadChatSessions() {
     const sidebarList = document.getElementById('chat-sidebar-list');
