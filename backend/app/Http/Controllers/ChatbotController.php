@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\PhienChat;
 use App\Models\TinNhan;
 use App\Models\NguoiDung;
+use App\Models\Phuong;
 use App\Models\CumSan;
 use App\Models\LoaiSan;
 use App\Models\GiaTien;
@@ -97,7 +98,7 @@ class ChatbotController extends Controller
                     ],
                     [
                         'name' => 'traCuuDanhSachCumSan',
-                        'description' => 'Tra cứu và liệt kê danh sách tất cả các cụm sân bóng hiện đang hoạt động trong hệ thống DN FOOTBALL.'
+                        'description' => 'Tra cứu danh sách tất cả các cụm sân bóng hiện đang hoạt động. Dữ liệu trả về bao gồm thông tin chi tiết về địa chỉ, và khu vực (phường/quận). Hãy gọi hàm này nếu khách hỏi sân ở một khu vực cụ thể.'
                     ],
                     [
                         'name' => 'traCuuChiTietCumSan',
@@ -171,10 +172,10 @@ class ChatbotController extends Controller
                         2. BẢO MẬT TUYỆT ĐỐI (QUAN TRỌNG): 
                            - Không bao giờ được tiết lộ thông tin cá nhân (tên, SĐT, ID...) của người đã đặt sân. 
                            - ĐỐI VỚI LỊCH SỬ GIAO DỊCH VÀ GIẢI ĐẤU: Tuyệt đối từ chối nếu khách hàng yêu cầu kiểm tra giao dịch, số dư hoặc giải đấu của người khác. BẠN CHỈ ĐƯỢC PHÉP trả lời thông tin giao dịch/giải đấu của CHÍNH KHÁCH HÀNG đang trò chuyện (dựa vào tool đã cung cấp).
-                        3. Luôn trả lời ngắn gọn, súc tích, xuống dòng rõ ràng, sử dụng emoji phù hợp để tạo sự thân thiện.
+                        3. Luôn trả lời ngắn gọn, súc tích, xuống dòng rõ ràng, sử dụng emoji phù hợp để tạo sự thân thiện. Nếu người dùng hỏi về các vấn đề không liên quan thì hãy từ chối 1 cách khéo léo và nhẹ nhàng.
                         4. Tuyệt đối KHÔNG tự bịa đặt dữ liệu sân bãi. Phải luôn dùng Tool để tra cứu MySQL. (Lưu ý: Chỉ dùng câu 'Hiện tại mình chưa có thông tin...' đối với các câu hỏi về dữ liệu sân bãi mà Tool không tìm ra. Còn các câu hỏi giao tiếp thông thường hoặc hỏi về ngày tháng thì cứ trả lời tự nhiên).
                         5. CÁCH SỬ DỤNG TOOL CHUẨN XÁC:
-                           - Khách hỏi hệ thống có những cụm sân nào -> Gọi `traCuuDanhSachCumSan`.
+                           - Khách hỏi hệ thống có những cụm sân nào, HOẶC hỏi sân bóng ở một khu vực/phường/quận cụ thể (VD: Hải Châu có sân nào) -> Gọi `traCuuDanhSachCumSan`. (LƯU Ý: Hãy tự động quét mảng JSON trả về, đối chiếu trường 'khu_vuc' hoặc 'dia_chi' để lọc ra đúng các sân thuộc khu vực khách hỏi rồi mới trả lời).
                            - Khách hỏi giờ mở cửa, địa chỉ, hoặc có các sân con nào ở 1 cụm -> Gọi `traCuuChiTietCumSan`.
                            - Khách hỏi giá tiền -> Gọi `traCuuGiaTien`.
                            - Khách hỏi lịch trống (VD: 15h sân 2 Đa Phước trống không?) -> Gọi `kiemTraLichTrong`.
@@ -489,7 +490,15 @@ class ChatbotController extends Controller
 
     private function thucHienTraCuuDanhSachCumSan()
     {
-        $danhSach = CumSan::whereNull('deleted_at')->get(['TenCumSan', 'DiaChi', 'GioMoCua', 'GioDongCua']);
+        $danhSach = CumSan::whereNull('CumSan.deleted_at')
+            ->join('Phuong', 'CumSan.ID_Phuong', '=', 'Phuong.ID')
+            ->get([
+                'CumSan.TenCumSan', 
+                'CumSan.DiaChi', 
+                'CumSan.GioMoCua', 
+                'CumSan.GioDongCua',
+                'Phuong.TenPhuong'
+            ]);
 
         if ($danhSach->isEmpty()) {
             return [
@@ -504,7 +513,8 @@ class ChatbotController extends Controller
             'du_lieu' => $danhSach->map(function ($item) {
                 return [
                     'ten_cum_san' => $item->TenCumSan,
-                    'dia_chi' => $item->DiaChi,
+                    'dia_chi' => $item->DiaChi . ', ' . $item->TenPhuong,
+                    'khu_vuc' => $item->TenPhuong,
                     'thoi_gian_hoat_dong' => substr($item->GioMoCua, 0, 5) . ' đến ' . substr($item->GioDongCua, 0, 5)
                 ];
             })->toArray()
