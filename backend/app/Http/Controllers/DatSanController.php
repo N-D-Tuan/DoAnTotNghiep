@@ -290,7 +290,7 @@ class DatSanController extends Controller
 
     public function chotTrangThaiAdmin(Request $request, $id)
     {
-        $request->validate(['trang_thai' => 'required|in:HoanThanh,KhongDen']);
+        $request->validate(['trang_thai' => 'required|in:HoanThanh,KhongDen,DaHuy']);
 
         DB::beginTransaction();
         try {
@@ -304,6 +304,26 @@ class DatSanController extends Controller
 
             // 1. Cập nhật trận đấu lẻ
             $datSan->update(['TrangThai' => $request->trang_thai]);
+
+            if ($request->trang_thai === 'DaHuy') {
+                $user = NguoiDung::find($datSan->ID_NguoiDung);
+                
+                $soDuTruoc = $user->SoDuVi;
+                $tienHoan = $datSan->TienCoc;
+                $soDuSau = $soDuTruoc + $tienHoan;
+                
+                $user->update(['SoDuVi' => $soDuSau]);
+
+                GiaoDich::create([
+                    'ID_NguoiDung' => $user->ID,
+                    'LoaiGiaoDich' => 'HoanTienHuySan',
+                    'DongTien'     => 'Cong',
+                    'SoTien'       => $tienHoan,
+                    'SoDuTruoc'    => $soDuTruoc,
+                    'SoDuSau'      => $soDuSau,
+                    'NoiDung'      => "Admin hỗ trợ hủy lịch gấp và hoàn cọc: " . ($datSan->sanBong ? $datSan->sanBong->TenSan : 'Sân bóng')
+                ]);
+            }
 
             // 2. KÍCH HOẠT AUTO-CHỐT GIẢI ĐẤU
             if ($datSan->ID_GiaiDau != null) {
@@ -335,6 +355,9 @@ class DatSanController extends Controller
             } else if ($request->trang_thai === 'KhongDen') {
                 $tieuDe = 'Vắng mặt và mất cọc';
                 $noiDung = "Hệ thống ghi nhận bạn đã không đến nhận sân tại {$tenSan} lúc {$gioDa} ngày {$ngayDa}. Tiền cọc của lịch đặt này sẽ không được hoàn lại theo quy định.";
+            } else if ($request->trang_thai === 'DaHuy') {
+                $tieuDe = 'Lịch đặt sân đã bị hủy';
+                $noiDung = "Ban quản lý đã hỗ trợ hủy lịch đặt sân tại {$tenSan} lúc {$gioDa} ngày {$ngayDa}. Số tiền cọc " . number_format($datSan->TienCoc, 0, ',', '.') . "đ đã được hoàn lại vào ví của bạn.";
             }
 
             // Lưu thông báo vào CSDL
