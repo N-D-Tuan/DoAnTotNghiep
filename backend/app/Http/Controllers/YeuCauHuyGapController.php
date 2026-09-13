@@ -193,6 +193,7 @@ class YeuCauHuyGapController extends Controller
 
             // Phát tín hiệu cho Customer cập nhật UI ngầm
             broadcast(new \App\Events\UserDataUpdated($user->ID))->toOthers();
+            broadcast(new \App\Events\SystemDataUpdated())->toOthers();
 
             return response()->json(['success' => true, 'message' => 'Đã xử lý yêu cầu hủy sân!']);
         } catch (\Exception $e) {

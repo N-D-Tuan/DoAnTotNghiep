@@ -2850,6 +2850,9 @@ async function renderChiTietKhachHang(id) {
         // Thống kê
         const tongTienNap = dsGiaoDich.filter(gd => gd.LoaiGiaoDich === 'NapTien' && gd.DongTien === 'Cong').reduce((sum, gd) => sum + Number(gd.SoTien), 0);
         
+        // Tổng số trận đặt (chỉ tính đặt thành công, không hủy)
+        const totalBooking = dsDatSan.filter(ds => ds.TrangThai === 'HoanThanh' || ds.TrangThai === 'KhongDen' || ds.TrangThai === 'DaCoc').length;
+
         // Cập nhật lại cách đếm dựa vào dữ liệu mới
         const soLanHoanThanh = dsDatSan.filter(ds => ds.TrangThai === 'HoanThanh').length;
         const soLanBung = dsDatSan.filter(ds => ds.TrangThai === 'KhongDen').length;
@@ -2895,7 +2898,7 @@ async function renderChiTietKhachHang(id) {
                 </div>
                 <div class="stat-card">
                     <div class="stat-title">Tổng số trận đặt</div>
-                    <div class="stat-value">${dsDatSan.length} trận</div>
+                    <div class="stat-value">${totalBooking} trận</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-title">Tỷ lệ bùng sân</div>
