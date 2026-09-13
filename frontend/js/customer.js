@@ -3639,17 +3639,48 @@ document.addEventListener('pointerdown', function (event) {
     const chatbotContainer = document.getElementById('chatbot-container');
     const openChatbotButton = document.getElementById('btn-open-chatbot');
 
+    const renameModal = document.getElementById('rename-chat-modal');
+    const deleteModal = document.getElementById('delete-chat-modal');
+
     // Chatbot chưa mở
     if (!isChatOpen || !chatbotContainer) return;
 
-    // Click bên trong chatbot -> không đóng
-    if (chatbotContainer.contains(event.target)) return;
+    // ==================================================
+    // 1. ĐANG CLICK TRONG MODAL ĐỔI TÊN
+    //    → KHÔNG ĐÓNG CHATBOT
+    // ==================================================
+    if (renameModal && renameModal.style.display !== 'none' && renameModal.contains(event.target)) {
+        return;
+    }
 
-    // Click nút chatbot -> không đóng tại đây
-    // toggleChatWindow() sẽ tự xử lý việc mở/tắt
-    if (openChatbotButton && openChatbotButton.contains(event.target)) return;
+    // ==================================================
+    // 2. ĐANG CLICK TRONG MODAL XÓA
+    //    → KHÔNG ĐÓNG CHATBOT
+    // ==================================================
+    if (deleteModal && deleteModal.style.display !== 'none' && deleteModal.contains(event.target)) {
+        return;
+    }
 
-    // Click bất kỳ đâu ngoài chatbot
+    // ==================================================
+    // 3. CLICK BÊN TRONG CHATBOT
+    //    → KHÔNG ĐÓNG
+    // ==================================================
+    if (chatbotContainer.contains(event.target)) {
+        return;
+    }
+
+    // ==================================================
+    // 4. CLICK NÚT MỞ CHATBOT
+    //    → ĐỂ toggleChatWindow() TỰ XỬ LÝ
+    // ==================================================
+    if (openChatbotButton && openChatbotButton.contains(event.target)) {
+        return;
+    }
+
+    // ==================================================
+    // 5. CÒN LẠI → CLICK RA NGOÀI
+    //    → ĐÓNG CHATBOT
+    // ==================================================
     chatbotContainer.style.display = 'none';
     isChatOpen = false;
 
