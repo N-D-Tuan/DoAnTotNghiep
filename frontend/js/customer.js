@@ -456,6 +456,13 @@ async function revalidateCartPrices() {
 
                 // 3. Đối chiếu giá mới nhất
                 const priceInfo = prices.find(p => p.ID_LoaiSan == pitch.ID_LoaiSan && p.ID_KhungGio == matchingKhungGio.ID);
+
+                // Loại bỏ các khung giờ bị Admin ngừng kinh doanh (Xóa giá)
+                if (!priceInfo || priceInfo.SoTien <= 0) {
+                    isChanged = true;
+                    continue; // Bỏ qua không gán _isValid -> Lát nữa sẽ bị filter xóa
+                }
+
                 const newRealPrice = priceInfo ? priceInfo.SoTien : 0;
 
                 // 4. Nếu giá thay đổi -> Lưu lại
@@ -463,15 +470,28 @@ async function revalidateCartPrices() {
                     slot.price = newRealPrice;
                     isChanged = true;
                 }
+
+                slot._isValid = true;
             }
         }
 
         if (isChanged) {
+            const oldLength = selectedSlots.length;
+            selectedSlots = selectedSlots.filter(s => s._isValid);
+            selectedSlots.forEach(s => delete s._isValid);
+
             saveToSession(); // Cập nhật lại thanh nổi
-            if (document.getElementById('cart-modal').style.display === 'flex') {
-                openCartModal(); // Vẽ lại Modal nếu khách đang mở
+
+            if (document.getElementById('cart-modal')?.style.display === 'flex') {
+                if (selectedSlots.length > 0) openCartModal();
+                else closeCartModal();
             }
-            showToast('Giá tiền trong giỏ hàng vừa được tự động cập nhật!');
+            
+            if (selectedSlots.length < oldLength) {
+                showToast('Một số khung giờ trong giỏ đã bị ngừng kinh doanh và tự động gỡ!');
+            } else {
+                showToast('Giá tiền trong giỏ hàng vừa được tự động cập nhật!');
+            }
         }
     } catch (error) {
         console.error("Lỗi đồng bộ giá giỏ hàng ngầm:", error);
@@ -683,15 +703,214 @@ document.addEventListener('DOMContentLoaded', async () => {
                         filterClusters(); 
                     } catch(err) { console.error(err); }
                 } 
+
                 // Trạng thái 2: Khách đang xem trang chi tiết Sân con bên trong 1 Cụm
-                else if (currentClusterId !== null && document.querySelector('.pitch-section')) {
-                    renderPitches(currentClusterId, currentClusterName, currentClusterAddress, currentClusterGioMo, currentClusterGioDong);
+                else if (currentClusterId !== null && currentPitchId === null && document.querySelector('.cluster-detail-header')) {
+                    try {
+                        // 1. Gọi API ngầm lấy danh sách sân con mới nhất của cụm này
+                        const response = await fetch(`${API_BASE_URL}/san-bong?cum_san_id=${currentClusterId}`);
+                        const res = await response.json();
+                        
+                        if (res.success) {
+                            // 2. Lọc và gom nhóm sân con đang Hoạt Động
+                            const activePitches = res.data.filter(sb => sb.TrangThai === 'HoatDong');
+                            const grouped = {};
+                            
+                            activePitches.forEach(sb => {
+                                const loaiSanName = sb.loaiSan?.TenLoaiSan || sb.loai_san?.TenLoaiSan || 'Loại sân khác';
+                                const loaiSanId = sb.ID_LoaiSan;
+                                if(!grouped[loaiSanName]) grouped[loaiSanName] = { id: loaiSanId, pitches: [] };
+                                grouped[loaiSanName].pitches.push(sb);
+                            });
+
+                            // 3. Tạo cấu trúc HTML mới
+                            let newHtml = '';
+                            if (activePitches.length === 0) {
+                                newHtml = `<p style="text-align:center; color: var(--text-muted); margin-top: 40px;">Cụm sân này hiện chưa có sân con nào hoạt động.</p>`;
+                            } else {
+                                for (const [loaiSanName, data] of Object.entries(grouped)) {
+                                    newHtml += `<div class="pitch-section"><div class="pitch-section-title">${loaiSanName.toUpperCase()}</div><div class="pitch-grid">`;
+                                    data.pitches.forEach(sb => {
+                                        newHtml += `
+                                            <div class="pitch-card" onclick="renderSchedule(${currentClusterId}, '${currentClusterName}', ${sb.ID}, '${sb.TenSan}', ${data.id}, '${loaiSanName}')">
+                                                <div class="pitch-name">${sb.TenSan}</div>
+                                                <div class="pitch-type">${loaiSanName}</div>
+                                                <button class="btn-outline" style="width: 100%; padding: 8px;">XEM LỊCH &rarr;</button>
+                                            </div>`;
+                                    });
+                                    newHtml += `</div></div>`;
+                                }
+                            }
+
+                            // 4. Tìm thẻ Header của Cụm sân hiện tại
+                            const headerNode = document.querySelector('.cluster-detail-header');
+                            if (headerNode) {
+                                // Quét và xóa sạch các danh sách sân/thông báo trống cũ (nằm ngay dưới Header)
+                                let nextNode = headerNode.nextElementSibling;
+                                while (nextNode) {
+                                    const toRemove = nextNode;
+                                    nextNode = nextNode.nextElementSibling;
+                                    toRemove.remove();
+                                }
+                                
+                                // Chèn khối HTML danh sách sân mới mượt mà ngay bên dưới Header
+                                headerNode.insertAdjacentHTML('afterend', newHtml);
+                            }
+                        }
+                    } catch(err) { console.error("Lỗi cập nhật ngầm danh sách sân con:", err); }
                 }
 
                 // TRẠNG THÁI 3: Khách đang xem Lịch Sân
                 else if (currentPitchId !== null && document.querySelector('.schedule-table')) {
-                    // Tự động load lại lịch và cập nhật giỏ hàng ngầm
-                    renderSchedule(currentClusterId, currentClusterName, currentPitchId, currentPitchName, currentLoaiSanId, currentPitchType);
+                    try {
+                        // Gọi thêm API gia-tien để lấy bảng giá chính xác của cụm sân này
+                        const [kgRes, dsRes, gtRes] = await Promise.all([
+                            fetch(`${API_BASE_URL}/khung-gio`),
+                            fetch(`${API_BASE_URL}/dat-san/da-dat?id_san_bong=${currentPitchId}&_t=${new Date().getTime()}`),
+                            fetch(`${API_BASE_URL}/gia-tien?cum_san_id=${currentClusterId}`)
+                        ]);
+                        
+                        const allKhungGio = (await kgRes.json()).data || [];
+                        const bookedSlots = (await dsRes.json()).data || [];
+                        
+                        // Lọc ra bảng giá đúng với Loại sân hiện tại (Sân 5, Sân 7...)
+                        const giaTienData = (await gtRes.json()).data || [];
+                        const validPrices = giaTienData.filter(gt => gt.ID_LoaiSan == currentLoaiSanId);
+
+                        // BƯỚC 1 - CHỈ RESET NHỮNG Ô ĐANG BỊ "ĐÃ ĐẶT" TRỞ VỀ "CÒN TRỐNG"
+                        const allBookedElements = document.querySelectorAll('.schedule-table .slot.booked');
+                        allBookedElements.forEach(el => {
+                            if (el.innerText === 'Đã đặt') {
+                                el.classList.remove('booked');
+                                el.classList.add('available');
+                                el.innerText = 'CÒN TRỐNG';
+                            }
+                        });
+
+                        // BƯỚC 1.5 - ĐÃ SỬA LẠI HOÀN TOÀN: ẨN/HIỆN DÒNG TỰ ĐỘNG THEO GIÁ TIỀN
+                        const moCua = currentClusterGioMo.substring(0, 5);
+                        const dongCua = currentClusterGioDong.substring(0, 5);
+                        
+                        const tbody = document.querySelector('.schedule-table tbody');
+                        if (tbody) {
+                            const rows = tbody.querySelectorAll('tr');
+                            rows.forEach(tr => {
+                                const timeTd = tr.querySelector('td:first-child strong');
+                                if (!timeTd) return;
+                                
+                                const timeStr = timeTd.innerText.trim();
+                                const [gioBatDau, gioKetThuc] = timeStr.split(' - ');
+                                const start = gioBatDau.substring(0, 5);
+                                const end = gioKetThuc.substring(0, 5);
+
+                                const kgMatch = allKhungGio.find(k => k.GioBatDau.substring(0,5) === start);
+                                
+                                let isValid = false;
+                                let actualPrice = 0;
+
+                                if (kgMatch) {
+                                    const priceInfo = validPrices.find(p => p.ID_KhungGio == kgMatch.ID);
+                                    if (priceInfo && priceInfo.SoTien > 0) {
+                                        actualPrice = priceInfo.SoTien;
+                                        if (start >= moCua && end <= dongCua) {
+                                            isValid = true;
+                                        }
+                                    }
+                                }
+
+                                if (!isValid) {
+                                    // TRƯỜNG HỢP 1: BỊ XÓA GIÁ HOẶC ĐÓNG CỬA -> ẨN DÒNG
+                                    tr.style.display = 'none';
+                                    const priceTd = tr.querySelector('td:nth-child(2)');
+                                    if (priceTd) priceTd.innerText = '-';
+                                    
+                                    const slotsInRow = tr.querySelectorAll('.slot');
+                                    let removedSomething = false;
+                                    slotsInRow.forEach(slotEl => {
+                                        if (slotEl.innerText !== 'Quá giờ') {
+                                            slotEl.classList.remove('available', 'selected');
+                                            slotEl.classList.add('booked');
+                                            slotEl.innerText = 'Đóng';
+                                            slotEl.removeAttribute('onclick');
+                                        }
+                                        
+                                        const slotId = slotEl.getAttribute('data-slot-id');
+                                        const existingIndex = selectedSlots.findIndex(s => s.id === slotId);
+                                        if (existingIndex > -1) {
+                                            selectedSlots.splice(existingIndex, 1);
+                                            removedSomething = true;
+                                        }
+                                    });
+                                    
+                                    if (removedSomething) {
+                                        saveToSession();
+                                        if (document.getElementById('cart-modal')?.style.display === 'flex') {
+                                            if (selectedSlots.length > 0) openCartModal(); 
+                                            else closeCartModal();
+                                        }
+                                        showToast(`Khung giờ ${timeStr} đã bị ngừng kinh doanh!`);
+                                    }
+                                } else {
+                                    // TRƯỜNG HỢP 2: CÓ GIÁ TRỞ LẠI -> HIỂN THỊ DÒNG
+                                    tr.style.display = '';
+                                    const priceTd = tr.querySelector('td:nth-child(2)');
+                                    if (priceTd) priceTd.innerText = Number(actualPrice).toLocaleString('vi-VN') + 'đ';
+                                    
+                                    const slotsInRow = tr.querySelectorAll('.slot');
+                                    slotsInRow.forEach(slotEl => {
+                                        if (slotEl.innerText !== 'Quá giờ' && slotEl.innerText !== 'Đã đặt') {
+                                            // Biến các ô "Đóng" (do vừa bị ẩn) trở lại thành "CÒN TRỐNG"
+                                            if (slotEl.innerText === 'Đóng') {
+                                                slotEl.classList.remove('booked');
+                                                slotEl.classList.add('available');
+                                                slotEl.innerText = 'CÒN TRỐNG';
+                                            }
+                                            
+                                            // Set lại onclick mang theo mức giá mới
+                                            const slotIdParts = slotEl.getAttribute('data-slot-id').split('-');
+                                            const dateVal = slotIdParts[2];
+                                            const timeVal = `${slotIdParts[3]}-${slotIdParts[4]}`;
+                                            slotEl.setAttribute('onclick', `toggleSlot(this, ${currentClusterId}, '${currentClusterName}', ${currentPitchId}, '${currentPitchName}', '${dateVal}', '${timeVal}', ${actualPrice})`);
+                                        }
+                                    });
+                                }
+                            });
+                        }
+
+                        // BƯỚC 2 - TÔ MÀU XÁM LẠI CHO CÁC Ô THỰC SỰ ĐANG BỊ ĐẶT TRÊN DATABASE
+                        bookedSlots.forEach(booked => {
+                            const kg = allKhungGio.find(k => k.ID === booked.ID_KhungGio);
+                            if (!kg) return;
+
+                            const timeStr = `${kg.GioBatDau.substring(0,5)} - ${kg.GioKetThuc.substring(0,5)}`;
+                            const dateParts = booked.NgayDa.substring(0, 10).split('-'); 
+                            const dateFull = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+                            
+                            const targetSlotId = `${currentClusterName}-${currentPitchName}-${dateFull}-${timeStr}`;
+                            const slotEl = document.querySelector(`.schedule-table .slot[data-slot-id="${targetSlotId}"]`);
+                            
+                            if (slotEl && !slotEl.classList.contains('booked')) {
+                                slotEl.classList.remove('available', 'selected');
+                                slotEl.classList.add('booked');
+                                slotEl.innerText = 'Đã đặt';
+                                slotEl.removeAttribute('onclick');
+
+                                const existingIndex = selectedSlots.findIndex(s => s.id === targetSlotId);
+                                if (existingIndex > -1) {
+                                    selectedSlots.splice(existingIndex, 1);
+                                    saveToSession();
+                                    
+                                    if (document.getElementById('cart-modal')?.style.display === 'flex') {
+                                        openCartModal(); 
+                                    }
+                                    showToast(`Khung giờ ${timeStr} ngày ${dateFull} vừa bị khách khác đặt mất!`);
+                                }
+                            }
+                        });
+
+                        await revalidateCartPrices();
+
+                    } catch(err) { console.error("Lỗi cập nhật ngầm lịch:", err); }
                 }
             });
     }
@@ -1139,6 +1358,62 @@ async function checkoutBooking() {
                     return;
                 }
             }
+
+            // 3. KIỂM TRA KHUNG GIỜ CÒN HOẠT ĐỘNG (ĐƯỢC SET GIÁ) TRƯỚC KHI ĐẶT
+            const gtRes = await fetch(`${API_BASE_URL}/gia-tien?cum_san_id=${cId}`);
+            const kgRes = await fetch(`${API_BASE_URL}/khung-gio`);
+            const giaTienData = await gtRes.json();
+            const allKhungGio = await kgRes.json();
+            
+            const prices = giaTienData.data || [];
+            const khGioList = allKhungGio.data || [];
+
+            for (let pId of pitchesInCluster) {
+                const pitchInfo = pitchData.data.find(p => p.ID == pId);
+                if (!pitchInfo) continue;
+
+                const slotsOfThisPitch = selectedSlots.filter(s => s.pitchId == pId);
+                for (let slot of slotsOfThisPitch) {
+                    const kgMatch = khGioList.find(kg => `${kg.GioBatDau.substring(0,5)} - ${kg.GioKetThuc.substring(0,5)}` === slot.time);
+                    
+                    let isSlotValid = false;
+                    if (kgMatch) {
+                        const priceExists = prices.find(p => p.ID_LoaiSan == pitchInfo.ID_LoaiSan && p.ID_KhungGio == kgMatch.ID);
+                        // Chỉ hợp lệ nếu có giá > 0 VÀ nằm trong giờ hoạt động
+                        if (priceExists && priceExists.SoTien > 0) {
+                            const moCua = clusterData.data.GioMoCua.substring(0, 5);
+                            const dongCua = clusterData.data.GioDongCua.substring(0, 5);
+                            const start = kgMatch.GioBatDau.substring(0, 5);
+                            const end = kgMatch.GioKetThuc.substring(0, 5);
+                            
+                            if (start >= moCua && end <= dongCua) {
+                                isSlotValid = true;
+                            }
+                        }
+                    }
+
+                    if (!isSlotValid) {
+                        showCartAlert(`Khung giờ ${slot.time} của sân "${pitchInfo.TenSan}" hiện đang đóng hoặc ngừng kinh doanh. Hệ thống tự động gỡ khỏi giỏ!`, false);
+                        
+                        setTimeout(() => {
+                            selectedSlots = selectedSlots.filter(s => s.id !== slot.id);
+                            saveToSession();
+                            
+                            if (selectedSlots.length > 0) openCartModal(); 
+                            else closeCartModal();
+                            
+                            if (currentClusterId !== null && currentPitchId !== null) {
+                                renderSchedule(currentClusterId, currentClusterName, currentPitchId, currentPitchName, currentLoaiSanId, currentPitchType);
+                            } else if (currentClusterId !== null && document.querySelector('.pitch-section')) {
+                                renderPitches(cId, clusterData.data.TenCumSan, clusterData.data.DiaChi, clusterData.data.GioMoCua, clusterData.data.GioDongCua);
+                            } else {
+                                renderClusters();
+                            }
+                        }, 3000);
+                        return;
+                    }
+                }
+            }
         }
 
         const payload = {
@@ -1151,7 +1426,8 @@ async function checkoutBooking() {
             credentials: 'include',
             headers: { 
                 'Accept': 'application/json', 
-                'Content-Type': 'application/json' 
+                'Content-Type': 'application/json',
+                'X-Socket-ID': window.Echo.socketId()
             },
             body: JSON.stringify(payload)
         });
@@ -1160,121 +1436,84 @@ async function checkoutBooking() {
 
         if (data.success) {
 
-            // ============================================================
             // 1. LƯU NGAY DANH SÁCH SLOT VỪA THANH TOÁN
-            // ============================================================
-            // Phải snapshot trước khi thay đổi selectedSlots.
             const bookedSlots = [...selectedSlots];
-
             console.log('Các slot vừa thanh toán:', bookedSlots);
 
-
-            // ============================================================
             // 2. HIỂN THỊ THÔNG BÁO THANH TOÁN THÀNH CÔNG
-            // ============================================================
             showCartAlert(data.message, true);
 
-
-            // ============================================================
             // 3. ĐỒNG BỘ SỐ DƯ VÍ
-            // ============================================================
             await syncUserWallet();
 
-
-            // ============================================================
             // 4. RESET MỤC ĐÍCH ĐẶT SÂN
-            // ============================================================
             if (currentBookingPurpose !== 'normal') {
-
                 currentBookingPurpose = 'normal';
-
-                sessionStorage.setItem(
-                    'dn_football_booking_purpose',
-                    'normal'
-                );
+                sessionStorage.setItem('dn_football_booking_purpose','normal');
             }
 
+            // 5. CHUYỂN TỪ "ĐÃ CHỌN" -> "ĐÃ ĐẶT"
+            bookedSlots.forEach(slot => markSlotAsBooked(slot));
 
-            // ============================================================
-            // 5. ĐỢI 2 GIÂY CHO KHÁCH ĐỌC THÔNG BÁO
-            // ============================================================
-            setTimeout(() => {
+            // 6. XÓA SLOT KHỎI GIỎ HÀNG
+            selectedSlots = [];
 
-                console.log(
-                    'Bắt đầu cập nhật UI các slot vừa thanh toán...'
-                );
+            // 7. LƯU SESSION
+            saveToSession();
 
+            // 8. ĐỢI 2 GIÂY CHO KHÁCH ĐỌC THÔNG BÁO
+            setTimeout(() => {             
 
-                // ========================================================
-                // 6. CHUYỂN TỪ "ĐÃ CHỌN" -> "ĐÃ ĐẶT"
-                // ========================================================
-                bookedSlots.forEach(slot => {
-
-                    const success = markSlotAsBooked(slot);
-
-                    console.log(
-                        'Cập nhật slot:',
-                        slot.id,
-                        success ? 'THÀNH CÔNG' : 'KHÔNG TÌM THẤY'
-                    );
-                });
-
-
-                // ========================================================
-                // 7. XÓA SLOT KHỎI GIỎ HÀNG
-                // ========================================================
-                selectedSlots = [];
-
-
-                // ========================================================
-                // 8. LƯU SESSION
-                // ========================================================
-                saveToSession();
-
-
-                // ========================================================
                 // 9. ĐÓNG MODAL TRỰC TIẾP
-                // ========================================================
-                // KHÔNG gọi closeCartModal()
-                //
-                // Vì closeCartModal() có logic kiểm tra mục đích
-                // và có thể gọi renderSchedule().
-                //
-                // renderSchedule() sẽ rebuild toàn bộ DOM.
-                //
-                // Ta chỉ cần đóng modal bằng style trực tiếp.
-                // ========================================================
                 const cartModal = document.getElementById('cart-modal');
-
                 if (cartModal) {
                     cartModal.style.display = 'none';
                 }
 
-
-                // ========================================================
                 // 10. ẨN THÔNG BÁO TRONG MODAL
-                // ========================================================
                 const alertBox = document.getElementById('cart-alert');
-
                 if (alertBox) {
                     alertBox.style.display = 'none';
                 }
-
-
-                console.log(
-                    'Hoàn tất cập nhật UI. Không render lại lịch.'
-                );
-
             }, 2000);
+        } else {
+            // Thông báo màu đỏ (Lỗi hết tiền, lỗi sân bị người khác đặt...)
+            showCartAlert(data.message, false);
+
+            if (data.failed_slot_ids && data.failed_slot_ids.length > 0) {
+                
+                // 1. Dùng hàm includes() để xóa TẤT CẢ các ô nằm trong mảng lỗi khỏi giỏ hàng
+                selectedSlots = selectedSlots.filter(s => !data.failed_slot_ids.includes(s.id));
+                saveToSession(); // Lưu lại vào Session Storage
+
+                // 2. Đợi 3 giây cho khách đọc chữ đỏ rồi mới tự động gỡ UI
+                setTimeout(() => {
+                    // Nếu giỏ hàng vẫn còn ô hợp lệ -> Giữ Modal mở và vẽ lại danh sách
+                    if (selectedSlots.length > 0) {
+                        openCartModal(); 
+                    } else {
+                        // Nếu giỏ hàng đã trống -> Tự động đóng Modal
+                        closeCartModal();
+                    }
+
+                    // Quét lại lưới lịch để cập nhật các ô vừa mất thành màu xám "Đã đặt"
+                    // if (currentClusterId !== null && currentPitchId !== null) {
+                    //     renderSchedule(currentClusterId, currentClusterName, currentPitchId, currentPitchName, currentLoaiSanId, currentPitchType);
+                    // }
+                }, 3000);
+            }
         }
         
     } catch (error) {
         console.error('Lỗi xác thực:', error);
         showCartAlert('Lỗi kết nối máy chủ!', false);
     } finally {
-        // Khôi phục trạng thái nút bấm
-        if (btnFloating) { btnFloating.disabled = false; btnFloating.innerHTML = 'Tiến hành đặt sân'; }
-        if (btnModal) { btnModal.disabled = false; btnModal.innerHTML = 'Thanh toán ngay'; }
+        let isWaitingForRefresh = (typeof data !== 'undefined' && data !== null && data.success === false && data.failed_slot_ids && data.failed_slot_ids.length > 0);
+        
+        if (!isWaitingForRefresh) {
+            if (btnFloating) { btnFloating.disabled = false; btnFloating.innerHTML = 'Tiến hành đặt sân'; }
+            if (btnModal) { btnModal.disabled = false; btnModal.innerHTML = 'Thanh toán ngay'; }
+        }
     }
 }
 
@@ -1408,6 +1647,11 @@ async function renderPitches(clusterId, clusterName, clusterAddress, gioMo, gioD
     if (gioMo !== undefined) currentClusterGioMo = gioMo;
     if (gioDong !== undefined) currentClusterGioDong = gioDong;
 
+    currentPitchId = null;
+    currentPitchName = null;
+    currentLoaiSanId = null;
+    currentPitchType = null;
+
     appContent.innerHTML = `<div style="text-align:center; padding: 50px;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải danh sách sân con...</div>`;
 
     try {
@@ -1475,7 +1719,7 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
         await loadUserTournaments();
 
         // ====================================================
-        // BỔ SUNG: KIỂM TRA LẠI ĐỂ BẢO VỆ GIAO DIỆN LỊCH SÂN
+        // KIỂM TRA LẠI ĐỂ BẢO VỆ GIAO DIỆN LỊCH SÂN
         // ====================================================
         if (currentBookingPurpose !== 'normal') {
             const tour = userActiveTournaments.find(t => t.ID == currentBookingPurpose);
@@ -1499,7 +1743,15 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
 
         const validPrices = giaTienData.filter(gt => gt.ID_LoaiSan == loaiSanId);
         const validKhungGioIds = validPrices.map(gt => gt.ID_KhungGio);
-        const availableTimeSlots = allKhungGio.filter(kg => validKhungGioIds.includes(kg.ID));
+
+        const moCua = currentClusterGioMo.substring(0, 5);
+        const dongCua = currentClusterGioDong.substring(0, 5);
+
+        const availableTimeSlots = allKhungGio.filter(kg => {
+            const start = kg.GioBatDau.substring(0, 5);
+            const end = kg.GioKetThuc.substring(0, 5);
+            return (start >= moCua && end <= dongCua);
+        });
 
         if (availableTimeSlots.length === 0) {
             appContent.innerHTML = `
@@ -1630,17 +1882,23 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
 
         availableTimeSlots.forEach((kg) => {
             const priceInfo = validPrices.find(p => p.ID_KhungGio == kg.ID);
+
+            // Khung giờ chỉ hợp lệ nếu CÓ BẢNG GIÁ và GIÁ > 0
+            const isValid = priceInfo && priceInfo.SoTien > 0;
             const priceValue = priceInfo ? priceInfo.SoTien : 0;
+
+            const displayStyle = isValid ? '' : 'display: none;';
+            const displayPrice = isValid ? `${Number(priceValue).toLocaleString('vi-VN')}đ` : '-';
+
             const timeStr = `${kg.GioBatDau.substring(0,5)} - ${kg.GioKetThuc.substring(0,5)}`;
 
             html += `
-                <tr>
+                <tr style="${displayStyle}">
                     <td style="box-sizing: border-box; width: 140px; min-width: 140px; max-width: 140px; text-align: center; background: #fff; position: sticky; left: 0; z-index: 20; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #f1f5f9; box-shadow: 2px 0 5px rgba(0,0,0,0.02);">
                         <strong>${timeStr}</strong>
                     </td>
-
                     <td style="box-sizing: border-box; width: 110px; min-width: 110px; max-width: 110px; text-align: center; background: #fff; position: sticky; left: 140px; z-index: 19; color: var(--primary); font-weight: 600; border-right: 2px solid #e2e8f0; border-bottom: 1px solid #f1f5f9; box-shadow: 4px 0 5px rgba(0,0,0,0.02);">
-                        ${Number(priceValue).toLocaleString('vi-VN')}đ
+                        ${displayPrice}
                     </td>
             `;
                         
@@ -1666,6 +1924,9 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                 if (isPast) {
                     statusClass = 'booked'; 
                     statusText = 'Quá giờ';
+                } else if (!isValid) {
+                    statusClass = 'booked'; 
+                    statusText = 'Đóng';
                 } else if (isBooked) { 
                     statusClass = 'booked'; 
                     statusText = 'Đã đặt'; 
@@ -1767,6 +2028,21 @@ function markSlotAsBooked(slot) {
 // ======================================================
 // MODULE: LỊCH SỬ ĐẶT SÂN & HỦY SÂN PHONG TRÀO
 // ======================================================
+async function loadMyBookingsData() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/dat-san/cua-toi`, { credentials: 'include' });
+        const res = await response.json();
+        
+        allMyBookingsData = res.data || [];
+        applyBookingFiltersAndRender();
+    } catch (error) {
+        const container = document.getElementById('my-bookings-container');
+        if (container) {
+            container.innerHTML = `<div style="text-align:center; color:red; padding: 40px;">Lỗi kết nối đến máy chủ!</div>`;
+        }
+    }
+}
+
 async function renderMyBookings() {
     updateActiveNav('renderMyBookings');
     currentClusterId = null; currentPitchName = null; currentPitchType = null;
@@ -1800,15 +2076,15 @@ async function renderMyBookings() {
                 <div style="display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap;">
                     <div style="flex: 1; min-width: 200px; position: relative;">
                         <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
-                        <input type="text" id="search-booking" class="form-control" placeholder="Tìm tên sân, cụm sân, giải đấu..." style="padding-left: 40px;" oninput="handleBookingSearch(this.value)">
+                        <input type="text" id="search-booking" class="form-control" placeholder="Tìm tên sân, cụm sân, giải đấu..." style="padding-left: 40px;" oninput="handleBookingSearch(this.value)" value="${currentBookingSearch}">
                     </div>
-                    <input type="date" id="filter-booking-date" class="form-control" style="width: 150px;" onchange="handleBookingDate(this.value)">
+                    <input type="date" id="filter-booking-date" class="form-control" style="width: 150px;" onchange="handleBookingDate(this.value)" value="${currentBookingDate}">
                     <select id="filter-booking-status" class="form-control" style="width: 170px;" onchange="handleBookingStatus(this.value)">
-                        <option value="All">Tất cả trạng thái</option>
-                        <option value="DaCoc">Đã cọc</option>
-                        <option value="HoanThanh">Hoàn thành</option>
-                        <option value="DaHuy">Đã hủy</option>
-                        <option value="KhongDen">Không đến</option>
+                        <option value="All" ${currentBookingStatus === 'All' ? 'selected' : ''}>Tất cả trạng thái</option>
+                        <option value="DaCoc" ${currentBookingStatus === 'DaCoc' ? 'selected' : ''}>Đã cọc</option>
+                        <option value="HoanThanh" ${currentBookingStatus === 'HoanThanh' ? 'selected' : ''}>Hoàn thành</option>
+                        <option value="DaHuy" ${currentBookingStatus === 'DaHuy' ? 'selected' : ''}>Đã hủy</option>
+                        <option value="KhongDen" ${currentBookingStatus === 'KhongDen' ? 'selected' : ''}>Không đến</option>
                     </select>
                 </div>
 
@@ -1819,19 +2095,7 @@ async function renderMyBookings() {
         </div>
     `;
 
-    try {
-        const response = await fetch(`${API_BASE_URL}/dat-san/cua-toi`, { credentials: 'include' });
-        const res = await response.json();
-        
-        // Lưu toàn bộ dữ liệu gốc vào biến toàn cục để phục vụ lọc
-        allMyBookingsData = res.data || [];
-        
-        // Gọi hàm lọc và vẽ lưới ngay lần đầu tiên
-        applyBookingFiltersAndRender();
-
-    } catch (error) {
-        document.getElementById('my-bookings-container').innerHTML = `<div style="text-align:center; color:red; padding: 40px;">Lỗi kết nối đến máy chủ!</div>`;
-    }
+    loadMyBookingsData();
 }
 
 function switchBookingTab(tab) {
@@ -2139,7 +2403,7 @@ async function executeCancelTournament() {
         const response = await fetch(`${API_BASE_URL}/giai-dau/${pendingCancelTourId}/huy-lich`, {
             method: 'PUT',
             credentials: 'include',
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-Socket-ID': window.Echo.socketId() }
         });
 
         const data = await response.json();
@@ -2154,7 +2418,7 @@ async function executeCancelTournament() {
             
             setTimeout(() => {
                 closeCancelTourModal();
-                renderMyBookings(); // Tải lại trang Lịch sử
+                loadMyBookingsData();
                 btn.disabled = false;
                 btn.innerHTML = 'Đồng ý Hủy Giải';
             }, 2000);
@@ -2203,7 +2467,7 @@ async function executeCancelBooking() {
         const response = await fetch(`${API_BASE_URL}/dat-san/${pendingCancelId}/huy`, {
             method: 'PUT',
             credentials: 'include',
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-Socket-ID': window.Echo.socketId() }
         });
 
         const data = await response.json();
@@ -2219,7 +2483,7 @@ async function executeCancelBooking() {
             
             setTimeout(() => {
                 closeCancelModal();
-                renderMyBookings(); // Vẽ lại giao diện lưới
+                loadMyBookingsData();
                 btn.disabled = false;
                 btn.innerHTML = 'Đồng ý Hủy';
             }, 2000);

@@ -76,6 +76,9 @@ class DatSanController extends Controller
         // 3. BẮT ĐẦU TRANSACTION
         DB::beginTransaction();
         try {
+            $failed_slots = [];
+            $failed_messages = [];
+
             foreach ($slots as $slot) {
                 // Chuyển đổi định dạng ngày DD/MM/YYYY sang Y-m-d
                 $ngayDa = Carbon::createFromFormat('d/m/Y', $slot['date'])->format('Y-m-d');
@@ -95,20 +98,32 @@ class DatSanController extends Controller
                                ->lockForUpdate() 
                                ->first();
 
-                if ($daDat) {
-                    throw new \Exception("Khung giờ {$slot['time']} ngày {$slot['date']} tại {$slot['pitchName']} vừa bị người khác đặt mất. Vui lòng chọn giờ khác!");
+                if ($daDat) {   
+                    $failed_slots[] = isset($slot['id']) ? $slot['id'] : null;
+                    $failed_messages[] = "[{$slot['time']} ngày {$slot['date']}]";
+                } else if (empty($failed_slots)) {
+                    // Chỉ Insert nếu CHƯA phát hiện bất kỳ lỗi nào trong toàn bộ vòng lặp
+                    DatSan::create([
+                        'ID_NguoiDung' => $user->ID,
+                        'ID_SanBong'   => $slot['pitchId'],
+                        'ID_KhungGio'  => $khungGio->ID,
+                        'ID_GiaiDau'   => ($purpose !== 'normal') ? $purpose : null,
+                        'NgayDa'       => $ngayDa,
+                        'TongTien'     => $slot['price'],
+                        'TienCoc'      => $slot['price'] * $tyLeCoc,
+                        'TrangThai'    => 'DaCoc' 
+                    ]);
                 }
+            }
 
-                // Lưu dòng dữ liệu Đặt Sân với trạng thái 'DaCoc'
-                DatSan::create([
-                    'ID_NguoiDung' => $user->ID,
-                    'ID_SanBong'   => $slot['pitchId'],
-                    'ID_KhungGio'  => $khungGio->ID,
-                    'ID_GiaiDau'   => ($purpose !== 'normal') ? $purpose : null,
-                    'NgayDa'       => $ngayDa,
-                    'TongTien'     => $slot['price'],
-                    'TienCoc'      => $slot['price'] * $tyLeCoc,
-                    'TrangThai'    => 'DaCoc' 
+            // Nếu có bất kỳ slot nào bị trùng, Rollback và báo lỗi hàng loạt
+            if (!empty($failed_slots)) {
+                DB::rollBack();
+                $msg_gop = implode(', ', $failed_messages);
+                return response()->json([
+                    'success' => false,
+                    'message' => "Rất tiếc! Các khung giờ sau vừa bị khách khác đặt mất: {$msg_gop}. Hệ thống đã tự động gỡ chúng khỏi giỏ hàng!",
+                    'failed_slot_ids' => $failed_slots // Trả về dạng Mảng (Array)
                 ]);
             }
 
@@ -139,8 +154,8 @@ class DatSanController extends Controller
             // MỌI THỨ AN TOÀN -> LƯU VÀO DB
             DB::commit();
             
-            // Gửi tín hiệu để Frontend của Admin tự động Refresh giao diện
             broadcast(new \App\Events\AdminDataUpdated())->toOthers();
+            broadcast(new \App\Events\SystemDataUpdated())->toOthers();
 
             return response()->json(['success' => true, 'message' => 'Đặt sân thành công! Số dư đã được trừ.']);
 
@@ -214,7 +229,10 @@ class DatSanController extends Controller
             ]);
 
             DB::commit();
+
             broadcast(new \App\Events\AdminDataUpdated())->toOthers();
+            broadcast(new \App\Events\SystemDataUpdated())->toOthers();
+
             return response()->json(['success' => true, 'message' => 'Hủy sân thành công! Tiền cọc đã được hoàn vào ví.']);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -270,7 +288,10 @@ class DatSanController extends Controller
             ]);
 
             DB::commit();
+
             broadcast(new \App\Events\AdminDataUpdated())->toOthers();
+            broadcast(new \App\Events\SystemDataUpdated())->toOthers();
+            
             return response()->json(['success' => true, 'message' => 'Hủy giải đấu thành công! Toàn bộ cọc đã được hoàn vào ví.']);
         } catch (\Exception $e) {
             DB::rollBack();

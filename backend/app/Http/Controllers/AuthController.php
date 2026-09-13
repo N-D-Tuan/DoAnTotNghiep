@@ -111,6 +111,8 @@ class AuthController extends Controller
         $user->Email = $request->email;
         $user->save();
 
+        broadcast(new \App\Events\AdminDataUpdated())->toOthers();
+
         return response()->json([
             'message' => 'Cập nhật thông tin thành công',
             'user' => $user
