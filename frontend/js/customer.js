@@ -1019,8 +1019,17 @@ function clearAllSlots() {
     // Lưu session và cập nhật Floating Cart
     saveToSession();
 
-    // Đóng modal
-    closeCartModal();
+    const cartModal = document.getElementById('cart-modal');
+
+    if (cartModal) {
+        cartModal.style.display = 'none';
+    }
+
+    const alertBox = document.getElementById('cart-alert');
+
+    if (alertBox) {
+        alertBox.style.display = 'none';
+    }
 }
 
 function showCartAlert(message, isSuccess) {
@@ -1150,26 +1159,113 @@ async function checkoutBooking() {
         const data = await response.json();
 
         if (data.success) {
-            // Thông báo màu xanh báo thành công
+
+            // ============================================================
+            // 1. LƯU NGAY DANH SÁCH SLOT VỪA THANH TOÁN
+            // ============================================================
+            // Phải snapshot trước khi thay đổi selectedSlots.
+            const bookedSlots = [...selectedSlots];
+
+            console.log('Các slot vừa thanh toán:', bookedSlots);
+
+
+            // ============================================================
+            // 2. HIỂN THỊ THÔNG BÁO THANH TOÁN THÀNH CÔNG
+            // ============================================================
             showCartAlert(data.message, true);
-            
-            // Cập nhật ngay lập tức số dư Ví trên Header mà không cần tải lại trang
+
+
+            // ============================================================
+            // 3. ĐỒNG BỘ SỐ DƯ VÍ
+            // ============================================================
             await syncUserWallet();
 
-            // Nếu là đặt giải đấu, reset mục đích về mặc định để tránh lỗi giỏ hàng phiên tiếp theo
+
+            // ============================================================
+            // 4. RESET MỤC ĐÍCH ĐẶT SÂN
+            // ============================================================
             if (currentBookingPurpose !== 'normal') {
+
                 currentBookingPurpose = 'normal';
-                sessionStorage.setItem('dn_football_booking_purpose', 'normal');
+
+                sessionStorage.setItem(
+                    'dn_football_booking_purpose',
+                    'normal'
+                );
             }
-            
-            // Chờ 2 giây cho khách hàng đọc thông báo, sau đó xóa sạch giỏ và Load lại Lịch sân
+
+
+            // ============================================================
+            // 5. ĐỢI 2 GIÂY CHO KHÁCH ĐỌC THÔNG BÁO
+            // ============================================================
             setTimeout(() => {
-                clearAllSlots(); // Hàm này đã chứa sẵn closeCartModal() và renderSchedule()
+
+                console.log(
+                    'Bắt đầu cập nhật UI các slot vừa thanh toán...'
+                );
+
+
+                // ========================================================
+                // 6. CHUYỂN TỪ "ĐÃ CHỌN" -> "ĐÃ ĐẶT"
+                // ========================================================
+                bookedSlots.forEach(slot => {
+
+                    const success = markSlotAsBooked(slot);
+
+                    console.log(
+                        'Cập nhật slot:',
+                        slot.id,
+                        success ? 'THÀNH CÔNG' : 'KHÔNG TÌM THẤY'
+                    );
+                });
+
+
+                // ========================================================
+                // 7. XÓA SLOT KHỎI GIỎ HÀNG
+                // ========================================================
+                selectedSlots = [];
+
+
+                // ========================================================
+                // 8. LƯU SESSION
+                // ========================================================
+                saveToSession();
+
+
+                // ========================================================
+                // 9. ĐÓNG MODAL TRỰC TIẾP
+                // ========================================================
+                // KHÔNG gọi closeCartModal()
+                //
+                // Vì closeCartModal() có logic kiểm tra mục đích
+                // và có thể gọi renderSchedule().
+                //
+                // renderSchedule() sẽ rebuild toàn bộ DOM.
+                //
+                // Ta chỉ cần đóng modal bằng style trực tiếp.
+                // ========================================================
+                const cartModal = document.getElementById('cart-modal');
+
+                if (cartModal) {
+                    cartModal.style.display = 'none';
+                }
+
+
+                // ========================================================
+                // 10. ẨN THÔNG BÁO TRONG MODAL
+                // ========================================================
+                const alertBox = document.getElementById('cart-alert');
+
+                if (alertBox) {
+                    alertBox.style.display = 'none';
+                }
+
+
+                console.log(
+                    'Hoàn tất cập nhật UI. Không render lại lịch.'
+                );
+
             }, 2000);
-            
-        } else {
-            // Thông báo màu đỏ (Lỗi hết tiền, lỗi sân bị người khác đặt...)
-            showCartAlert(data.message, false);
         }
         
     } catch (error) {
@@ -1580,8 +1676,8 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                 
                 html += `
                     <td style="border-bottom: 1px solid #f1f5f9; padding: 6px;">
-                        <div class="slot ${statusClass}" data-slot-id="${clusterName}-${pitchName}-${date.full}-${timeStr}"
-                             ${(!isBooked && !isPast) ? `onclick="toggleSlot(this, ${clusterId}, '${clusterName}', ${pitchId}, '${pitchName}', '${date.full}', '${timeStr}', ${priceValue})"` : ''}>
+                        <div class="slot ${statusClass}" data-slot-id="${slotId}"
+                            ${(!isBooked && !isPast) ? `onclick="toggleSlot(this, ${clusterId}, '${clusterName}', ${pitchId}, '${pitchName}', '${date.full}', '${timeStr}', ${priceValue})"` : ''}>
                             ${statusText}
                         </div>
                     </td>
@@ -1623,6 +1719,49 @@ function updateSlotUI(slot, isSelected) {
         slotElement.classList.remove('selected');
         slotElement.innerText = 'CÒN TRỐNG';
     }
+}
+
+function markSlotAsBooked(slot) {
+    const slotElement = Array.from(
+        document.querySelectorAll('.schedule-table .slot[data-slot-id]')
+    ).find(element => element.dataset.slotId === slot.id);
+
+    if (!slotElement) {
+        console.warn('Không tìm thấy slot để chuyển sang Đã đặt:', slot);
+        return false;
+    }
+
+    // ==========================================
+    // 1. XÓA TRẠNG THÁI ĐÃ CHỌN
+    // ==========================================
+    slotElement.classList.remove('selected');
+
+    // ==========================================
+    // 2. XÓA TRẠNG THÁI CÒN TRỐNG
+    // ==========================================
+    slotElement.classList.remove('available');
+
+    // ==========================================
+    // 3. THÊM TRẠNG THÁI ĐÃ ĐẶT
+    // ==========================================
+    slotElement.classList.add('booked');
+
+    // ==========================================
+    // 4. ĐỔI CHỮ
+    // ==========================================
+    slotElement.textContent = 'Đã đặt';
+
+    // ==========================================
+    // 5. KHÔNG CHO CLICK ĐẶT LẠI
+    // ==========================================
+    slotElement.removeAttribute('onclick');
+
+    // Đánh dấu thêm bằng data attribute
+    slotElement.dataset.booked = 'true';
+
+    console.log('Đã chuyển slot sang Đã đặt:', slot.id);
+
+    return true;
 }
 
 // ======================================================

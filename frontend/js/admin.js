@@ -2078,7 +2078,7 @@ function renderQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = null) {
     }
 
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
-    const menuLink = Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('LỊCH ĐẶT SÂN'));
+    const menuLink = Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('QUẢN LÝ ĐẶT SÂN'));
     if (menuLink) menuLink.classList.add('active');
 
     const contentArea = document.querySelector('.admin-content');
@@ -2292,6 +2292,7 @@ function openDSConfirmModal(id) {
                 <p style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5;">Vui lòng xác nhận trạng thái cho khách hàng này.</p>
                 <div style="display: flex; justify-content: center; gap: 12px;">
                     <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="closeDSConfirmModal()">Hủy bỏ</button>
+                    <button class="btn-outline" style="padding: 10px 15px; color: #ef4444; border-color: #fecaca; background: #fef2f2;" onclick="openAdminCancelConfirmModal()"><i class="fa-solid fa-ban"></i> Hủy sân & Hoàn tiền</button>
                     <button class="btn-outline" style="width: auto; padding: 10px 24px; color: #64748b; border-color: #cbd5e1;" onclick="executeCapNhatDatSan('KhongDen')"><i class="fa-solid fa-user-slash"></i> Không đến</button>
                     <button class="btn-primary" style="width: auto; padding: 10px 24px; background-color: #10b981; border-color: #10b981;" onclick="executeCapNhatDatSan('HoanThanh')"><i class="fa-solid fa-check"></i> Hoàn thành</button>
                 </div>
@@ -2302,6 +2303,60 @@ function openDSConfirmModal(id) {
 }
 
 function closeDSConfirmModal() { document.getElementById('ds-confirm-modal').style.display = 'none'; }
+
+function openAdminCancelConfirmModal() {
+    closeDSConfirmModal(); // Đóng modal hiện tại
+    
+    let modal = document.getElementById('admin-cancel-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'admin-cancel-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 10000;';
+        document.body.appendChild(modal);
+    }
+    
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 400px; text-align: center; padding: 30px 20px;">
+            <div style="font-size: 3.5rem; color: #ef4444; margin-bottom: 15px;"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <h3 style="margin-bottom: 10px; font-size: 1.4rem;">Xác nhận Hủy Sân</h3>
+            <p style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5;">Hệ thống sẽ <strong>HỦY LỊCH</strong> và tự động <strong>HOÀN TRẢ 100% TIỀN CỌC</strong> vào ví khách hàng. Bạn có chắc chắn?</p>
+            <div style="display: flex; justify-content: center; gap: 12px;">
+                <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="closeAdminCancelConfirmModal()">Hủy bỏ</button>
+                <button class="btn-primary" style="width: auto; padding: 10px 24px; background-color: #ef4444; border-color: #ef4444;" onclick="executeCapNhatDatSan('DaHuy'); closeAdminCancelConfirmModal();"><i class="fa-solid fa-trash"></i> Đồng ý Hủy</button>
+            </div>
+        </div>`;
+    modal.style.display = 'flex';
+}
+
+function closeAdminCancelConfirmModal() {
+    const modal = document.getElementById('admin-cancel-modal');
+    if(modal) modal.style.display = 'none';
+}
+
+async function executeCapNhatDatSan(trangThai) {
+    if (!pendingDSId) return;
+    closeDSConfirmModal(); 
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/dat-san/${pendingDSId}/chot`, {
+            method: 'PUT',
+            credentials: 'include',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trang_thai: trangThai })
+        });
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            showDSAlert('Đã cập nhật trạng thái thành công!', true);
+            loadDanhSachDatSanAdmin();
+        } else {
+            showDSAlert(data.message || 'Lỗi xử lý.', false);
+        }
+    } catch (e) {
+        showDSAlert('Lỗi kết nối máy chủ.', false);
+    }
+}
 
 async function executeCapNhatDatSan(trangThai) {
     if (!pendingDSId) return;
