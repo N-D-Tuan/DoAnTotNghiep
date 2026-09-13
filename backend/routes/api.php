@@ -19,6 +19,11 @@ use App\Http\Controllers\YeuCauHuyGapController;
 use App\Http\Controllers\KhachHangController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ChatbotController;
+use App\Services\ChromaDBService;
+
+Route::get('/seed-chromadb', function (ChromaDBService $chroma) {
+    return $chroma->napDuLieuQuyDinh();
+});
 
 // Bọc TẤT CẢ trong middleware 'web' để đồng bộ Session Cookie
 Route::middleware('web')->group(function () {

@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use App\Services\ChromaDBService;
 use App\Models\PhienChat;
 use App\Models\TinNhan;
 use App\Models\NguoiDung;
@@ -75,6 +76,20 @@ class ChatbotController extends Controller
         $tools = [
             [
                 'functionDeclarations' => [
+                    [
+                        'name' => 'traCuuQuyDinhHeThong',
+                        'description' => 'Tìm kiếm và tra cứu các quy định, chính sách, hướng dẫn sử dụng của hệ thống DN FOOTBALL (ví dụ: luật hủy sân, hoàn tiền, rút tiền, tạo giải đấu, đặt cọc, thời tiết, tài khoản, đổi/quên mật khẩu...).',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'tu_khoa' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Từ khóa tìm kiếm quy định (VD: "cách hủy sân gấp", "hướng dẫn rút tiền"). QUAN TRỌNG: Nếu khách nói những câu tiếp nối ngắn gọn như "hướng dẫn tôi", "làm thế nào", "ở đâu", bạn PHẢI tự ghép thêm ngữ cảnh của câu trước đó để tạo thành từ khóa tra cứu đầy đủ (Ví dụ: "hướng dẫn hủy sân gấp").'
+                                ]
+                            ],
+                            'required' => ['tu_khoa']
+                        ]
+                    ],
                     [
                         'name' => 'traCuuGiaTien',
                         'description' => 'Tra cứu bảng giá thuê sân bóng theo tên cụm sân, loại sân hoặc khung giờ cụ thể.',
@@ -173,15 +188,18 @@ class ChatbotController extends Controller
                            - Không bao giờ được tiết lộ thông tin cá nhân (tên, SĐT, ID...) của người đã đặt sân. 
                            - ĐỐI VỚI LỊCH SỬ GIAO DỊCH VÀ GIẢI ĐẤU: Tuyệt đối từ chối nếu khách hàng yêu cầu kiểm tra giao dịch, số dư hoặc giải đấu của người khác. BẠN CHỈ ĐƯỢC PHÉP trả lời thông tin giao dịch/giải đấu của CHÍNH KHÁCH HÀNG đang trò chuyện (dựa vào tool đã cung cấp).
                         3. Luôn trả lời ngắn gọn, súc tích, xuống dòng rõ ràng, sử dụng emoji phù hợp để tạo sự thân thiện. Nếu người dùng hỏi về các vấn đề không liên quan thì hãy từ chối 1 cách khéo léo và nhẹ nhàng.
-                        4. Tuyệt đối KHÔNG tự bịa đặt dữ liệu sân bãi. Phải luôn dùng Tool để tra cứu MySQL. (Lưu ý: Chỉ dùng câu 'Hiện tại mình chưa có thông tin...' đối với các câu hỏi về dữ liệu sân bãi mà Tool không tìm ra. Còn các câu hỏi giao tiếp thông thường hoặc hỏi về ngày tháng thì cứ trả lời tự nhiên).
+                        4. LUẬT CẤM BỊA ĐẶT (RẤT QUAN TRỌNG): 
+                            - Tuyệt đối KHÔNG tự bịa đặt dữ liệu sân bãi.
+                            - Tuyệt đối KHÔNG tự bịa đặt các bước thao tác trên website (ví dụ: bấm nút nào, vào menu nào). Mọi hướng dẫn cách làm (rút tiền, hủy sân, tạo giải...) BẮT BUỘC phải trích xuất y hệt từng bước từ kết quả của tool traCuuQuyDinhHeThong. Nếu tool không trả về các bước thao tác, hãy báo rằng bạn chưa có thông tin.
                         5. CÁCH SỬ DỤNG TOOL CHUẨN XÁC:
-                           - Khách hỏi hệ thống có những cụm sân nào, HOẶC hỏi sân bóng ở một khu vực/phường/quận cụ thể (VD: Hải Châu có sân nào) -> Gọi `traCuuDanhSachCumSan`. (LƯU Ý: Hãy tự động quét mảng JSON trả về, đối chiếu trường 'khu_vuc' hoặc 'dia_chi' để lọc ra đúng các sân thuộc khu vực khách hỏi rồi mới trả lời).
-                           - Khách hỏi giờ mở cửa, địa chỉ, hoặc có các sân con nào ở 1 cụm -> Gọi `traCuuChiTietCumSan`.
-                           - Khách hỏi giá tiền -> Gọi `traCuuGiaTien`.
-                           - Khách hỏi lịch trống (VD: 15h sân 2 Đa Phước trống không?) -> Gọi `kiemTraLichTrong`.
-                           - Khách hỏi về lịch sử đặt sân -> Gọi `traCuuLichSuDatSan`. (BẮT BUỘC: Bạn PHẢI ĐỌC trường 'loai_hinh' trong JSON trả về để xác định là 'Đá phong trào' hay 'Đá giải'. TUYỆT ĐỐI KHÔNG tự phỏng đoán dựa trên tên sân hay thời gian. Luôn luôn kiểm tra trường này trước khi trả lời).
-                           - Khách hỏi về TIỀN (nạp tiền, số dư ví, trừ tiền, lịch sử thanh toán) -> Gọi `traCuuLichSuGiaoDich`.
-                           - Khách hỏi về THÔNG TIN GIẢI ĐẤU do họ quản lý (số lượng giải, ngày bắt đầu/kết thúc giải) -> Gọi `traCuuGiaiDauCaNhan`. (BẮT BUỘC: Nếu khách hỏi giải đấu đó có bao nhiêu trận/bao nhiêu lượt đặt sân, hãy TỪ CHỐI khéo léo, giải thích rằng số lượng đặt sân của giải quá lớn nên hệ thống không thể đếm chính xác, mong khách thông cảm. TUYỆT ĐỐI KHÔNG TỰ Ý ĐẾM).
+                            - Khách hỏi CÁCH THỨC, HƯỚNG DẪN (cách nạp tiền, rút tiền, đặt sân, tạo giải, đổi mật khẩu, quên mật khẩu) HOẶC hỏi LUẬT, CHÍNH SÁCH (hủy sân, hoàn tiền, thời tiết) -> BẮT BUỘC gọi `traCuuQuyDinhHeThong`.
+                            - Khách hỏi hệ thống có những cụm sân nào, HOẶC hỏi sân bóng ở một khu vực/phường/quận cụ thể (VD: Hải Châu có sân nào) -> Gọi `traCuuDanhSachCumSan`. (LƯU Ý: Hãy tự động quét mảng JSON trả về, đối chiếu trường 'khu_vuc' hoặc 'dia_chi' để lọc ra đúng các sân thuộc khu vực khách hỏi rồi mới trả lời).
+                            - Khách hỏi giờ mở cửa, địa chỉ, hoặc có các sân con nào ở 1 cụm -> Gọi `traCuuChiTietCumSan`.
+                            - Khách hỏi giá tiền của khung giờ của sân cụ thể nào đó -> Gọi `traCuuGiaTien`.
+                            - Khách hỏi lịch trống (VD: 15h sân 2 Đa Phước trống không?) -> Gọi `kiemTraLichTrong`.
+                            - Khách hỏi về lịch sử đặt sân -> Gọi `traCuuLichSuDatSan`. (BẮT BUỘC: Bạn PHẢI ĐỌC trường 'loai_hinh' trong JSON trả về để xác định là 'Đá phong trào' hay 'Đá giải'. TUYỆT ĐỐI KHÔNG tự phỏng đoán dựa trên tên sân hay thời gian. Luôn luôn kiểm tra trường này trước khi trả lời).
+                            - Khách yêu cầu KIỂM TRA DỮ LIỆU CÁ NHÂN VỀ TIỀN (số dư ví của tôi bao nhiêu, tôi vừa nạp tiền chưa, lịch sử giao dịch) -> Gọi `traCuuLichSuGiaoDich`.
+                            - Khách hỏi về THÔNG TIN GIẢI ĐẤU do họ quản lý (số lượng giải, ngày bắt đầu/kết thúc giải) -> Gọi `traCuuGiaiDauCaNhan`. (BẮT BUỘC: Nếu khách hỏi giải đấu đó có bao nhiêu trận/bao nhiêu lượt đặt sân, hãy TỪ CHỐI khéo léo, giải thích rằng số lượng đặt sân của giải quá lớn nên hệ thống không thể đếm chính xác, mong khách thông cảm. TUYỆT ĐỐI KHÔNG TỰ Ý ĐẾM).
                         6. Khi có kết quả từ Database, hãy tổng hợp lại thành câu văn tự nhiên, thân thiện và dễ đọc.
                         7. Các câu hỏi về ngày, tháng và thời gian thì trả lời tự nhiên. Với dữ liệu ngày hôm nay là {$homNay}."
                     ]
@@ -218,7 +236,10 @@ class ChatbotController extends Controller
                 $arguments = $functionCall['args'] ?? [];
 
                 $functionResult = null;
-                if ($functionName === 'traCuuGiaTien') {
+                if ($functionName === 'traCuuQuyDinhHeThong') {
+                    $chromaService = app(ChromaDBService::class);
+                    $functionResult = $chromaService->timKiemQuyDinh($arguments['tu_khoa'] ?? $noiDung);
+                } elseif ($functionName === 'traCuuGiaTien') {
                     $functionResult = $this->thucHienTraCuuGiaTien(
                         $arguments['ten_cum_san'] ?? null,
                         $arguments['ten_loai_san'] ?? null,
