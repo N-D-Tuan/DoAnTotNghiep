@@ -437,11 +437,21 @@ async function revalidateCartPrices() {
             // Tải danh sách Sân con (để lấy Loại Sân) và Bảng Giá của Cụm này
             const [sbRes, gtRes] = await Promise.all([
                 fetch(`${API_BASE_URL}/san-bong?cum_san_id=${cId}`),
-                fetch(`${API_BASE_URL}/gia-tien?cum_san_id=${cId}`)
+                fetch(`${API_BASE_URL}/gia-tien?cum_san_id=${cId}`),
+                fetch(`${API_BASE_URL}/cum-san/${cId}`)
             ]);
             
             const pitches = (await sbRes.json()).data || [];
             const prices = (await gtRes.json()).data || [];
+            const clusterData = await csRes.json();
+
+            if (!clusterData.success || clusterData.data.deleted_at !== null) {
+                isChanged = true;
+                continue; 
+            }
+
+            const moCua = clusterData.data.GioMoCua.substring(0, 5);
+            const dongCua = clusterData.data.GioDongCua.substring(0, 5);
 
             const slotsInCluster = selectedSlots.filter(s => s.clusterId == cId);
 
@@ -456,15 +466,16 @@ async function revalidateCartPrices() {
 
                 // 3. Đối chiếu giá mới nhất
                 const priceInfo = prices.find(p => p.ID_LoaiSan == pitch.ID_LoaiSan && p.ID_KhungGio == matchingKhungGio.ID);
+                const start = matchingKhungGio.GioBatDau.substring(0, 5);
+                const end = matchingKhungGio.GioKetThuc.substring(0, 5);
 
-                // Loại bỏ các khung giờ bị Admin ngừng kinh doanh (Xóa giá)
-                if (!priceInfo || priceInfo.SoTien <= 0) {
+                // Loại bỏ nếu không có giá, giá <= 0 HOẶC NẰM NGOÀI GIỜ MỞ/ĐÓNG CỬA
+                if (!priceInfo || priceInfo.SoTien <= 0 || start < moCua || end > dongCua) {
                     isChanged = true;
-                    continue; // Bỏ qua không gán _isValid -> Lát nữa sẽ bị filter xóa
+                    continue; 
                 }
 
-                const newRealPrice = priceInfo ? priceInfo.SoTien : 0;
-
+                const newRealPrice = priceInfo.SoTien;
                 // 4. Nếu giá thay đổi -> Lưu lại
                 if (Number(slot.price) !== Number(newRealPrice)) {
                     slot.price = newRealPrice;
@@ -488,7 +499,7 @@ async function revalidateCartPrices() {
             }
             
             if (selectedSlots.length < oldLength) {
-                showToast('Một số khung giờ trong giỏ đã bị ngừng kinh doanh và tự động gỡ!');
+                showToast('Một số khung giờ trong giỏ đã bị ngừng kinh doanh hoặc ngoài giờ hoạt động và tự động gỡ!');
             } else {
                 showToast('Giá tiền trong giỏ hàng vừa được tự động cập nhật!');
             }
@@ -689,6 +700,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             .listen('SystemDataUpdated', async (e) => {
                 console.log('⚡ Hệ thống có thay đổi Cụm sân/Sân bóng...');
 
+                // Cập nhật biến toàn cục chứa Giờ mở/đóng cửa mới nhất trước khi chạy các lệnh khác
+                if (currentClusterId !== null) {
+                    try {
+                        const csRes = await fetch(`${API_BASE_URL}/cum-san/${currentClusterId}`);
+                        const csData = await csRes.json();
+                        if (csData.success && csData.data) {
+                            currentClusterGioMo = csData.data.GioMoCua;
+                            currentClusterGioDong = csData.data.GioDongCua;
+                            currentClusterName = csData.data.TenCumSan;
+                            currentClusterAddress = csData.data.DiaChi;
+                        }
+                    } catch(err) { console.error("Lỗi lấy thông tin cụm sân:", err); }
+                }
+
                 await revalidateCartPrices();
                 
                 // Trạng thái 1: Khách đang xem trang Danh sách Cụm Sân (Dựa vào ID vùng chứa lưới sân)
@@ -707,6 +732,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Trạng thái 2: Khách đang xem trang chi tiết Sân con bên trong 1 Cụm
                 else if (currentClusterId !== null && currentPitchId === null && document.querySelector('.cluster-detail-header')) {
                     try {
+                        // Cập nhật lại chuỗi hiển thị giờ trên thẻ Header nếu Admin vừa thay đổi
+                        const headerInfo = document.querySelector('.cluster-detail-info');
+                        if (headerInfo) {
+                            headerInfo.innerHTML = `
+                                <span><i class="fa-solid fa-location-dot"></i> ${currentClusterAddress}</span>
+                                <span><i class="fa-solid fa-clock"></i> ${currentClusterGioMo.substring(0,5)} - ${currentClusterGioDong.substring(0,5)}</span>
+                            `;
+                        }
+
                         // 1. Gọi API ngầm lấy danh sách sân con mới nhất của cụm này
                         const response = await fetch(`${API_BASE_URL}/san-bong?cum_san_id=${currentClusterId}`);
                         const res = await response.json();
@@ -1311,16 +1345,16 @@ async function checkoutBooking() {
                     }
                     
                     // Xử lý giao diện nền phía sau Modal
-                    if (currentClusterId === cId) {
-                        // NẾU khách đang đứng ở ngay cụm sân vừa bị xóa -> Đá văng ra trang danh sách cụm
-                        renderClusters();
-                    } else if (currentClusterId !== null) {
-                        // Khách đang đứng xem ở một cụm khác an toàn -> Render lại cụm đó
-                        renderPitches(currentClusterId, currentClusterName, currentClusterAddress, currentClusterGioMo, currentClusterGioDong);
-                    } else {
-                        // Khách đang đứng ở trang chủ
-                        renderClusters();
-                    }
+                    // if (currentClusterId === cId) {
+                    //     // NẾU khách đang đứng ở ngay cụm sân vừa bị xóa -> Đá văng ra trang danh sách cụm
+                    //     renderClusters();
+                    // } else if (currentClusterId !== null) {
+                    //     // Khách đang đứng xem ở một cụm khác an toàn -> Render lại cụm đó
+                    //     renderPitches(currentClusterId, currentClusterName, currentClusterAddress, currentClusterGioMo, currentClusterGioDong);
+                    // } else {
+                    //     // Khách đang đứng ở trang chủ
+                    //     renderClusters();
+                    // }
                 }, 3000); 
                 return;
             }
@@ -1349,11 +1383,11 @@ async function checkoutBooking() {
                         }
                         
                         // Cập nhật lại giao diện lịch/danh sách phía sau
-                        if (currentClusterId !== null) {
-                            renderPitches(cId, clusterData.data.TenCumSan, clusterData.data.DiaChi, clusterData.data.GioMoCua, clusterData.data.GioDongCua);
-                        } else {
-                            renderClusters();
-                        }
+                        // if (currentClusterId !== null) {
+                        //     renderPitches(cId, clusterData.data.TenCumSan, clusterData.data.DiaChi, clusterData.data.GioMoCua, clusterData.data.GioDongCua);
+                        // } else {
+                        //     renderClusters();
+                        // }
                     }, 3000);
                     return;
                 }
@@ -1402,13 +1436,13 @@ async function checkoutBooking() {
                             if (selectedSlots.length > 0) openCartModal(); 
                             else closeCartModal();
                             
-                            if (currentClusterId !== null && currentPitchId !== null) {
-                                renderSchedule(currentClusterId, currentClusterName, currentPitchId, currentPitchName, currentLoaiSanId, currentPitchType);
-                            } else if (currentClusterId !== null && document.querySelector('.pitch-section')) {
-                                renderPitches(cId, clusterData.data.TenCumSan, clusterData.data.DiaChi, clusterData.data.GioMoCua, clusterData.data.GioDongCua);
-                            } else {
-                                renderClusters();
-                            }
+                            // if (currentClusterId !== null && currentPitchId !== null) {
+                            //     renderSchedule(currentClusterId, currentClusterName, currentPitchId, currentPitchName, currentLoaiSanId, currentPitchType);
+                            // } else if (currentClusterId !== null && document.querySelector('.pitch-section')) {
+                            //     renderPitches(cId, clusterData.data.TenCumSan, clusterData.data.DiaChi, clusterData.data.GioMoCua, clusterData.data.GioDongCua);
+                            // } else {
+                            //     renderClusters();
+                            // }
                         }, 3000);
                         return;
                     }
@@ -1742,16 +1776,8 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
         const bookedSlots = (await dsRes.json()).data || [];
 
         const validPrices = giaTienData.filter(gt => gt.ID_LoaiSan == loaiSanId);
-        const validKhungGioIds = validPrices.map(gt => gt.ID_KhungGio);
 
-        const moCua = currentClusterGioMo.substring(0, 5);
-        const dongCua = currentClusterGioDong.substring(0, 5);
-
-        const availableTimeSlots = allKhungGio.filter(kg => {
-            const start = kg.GioBatDau.substring(0, 5);
-            const end = kg.GioKetThuc.substring(0, 5);
-            return (start >= moCua && end <= dongCua);
-        });
+        const availableTimeSlots = allKhungGio;
 
         if (availableTimeSlots.length === 0) {
             appContent.innerHTML = `
@@ -1880,11 +1906,17 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
 
         const now = new Date();
 
+        const moCua = currentClusterGioMo.substring(0, 5);
+        const dongCua = currentClusterGioDong.substring(0, 5);
+
         availableTimeSlots.forEach((kg) => {
             const priceInfo = validPrices.find(p => p.ID_KhungGio == kg.ID);
 
+            const start = kg.GioBatDau.substring(0, 5);
+            const end = kg.GioKetThuc.substring(0, 5);
+
             // Khung giờ chỉ hợp lệ nếu CÓ BẢNG GIÁ và GIÁ > 0
-            const isValid = priceInfo && priceInfo.SoTien > 0;
+            const isValid = priceInfo && priceInfo.SoTien > 0 && (start >= moCua && end <= dongCua);
             const priceValue = priceInfo ? priceInfo.SoTien : 0;
 
             const displayStyle = isValid ? '' : 'display: none;';

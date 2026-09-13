@@ -63,6 +63,9 @@ class CumSanController extends Controller
         }
 
         $cumSan->update($validated);
+
+        broadcast(new \App\Events\SystemDataUpdated())->toOthers();
+        
         return response()->json(['success' => true, 'message' => 'Cập nhật thành công!', 'data' => $cumSan]);
     }
 
