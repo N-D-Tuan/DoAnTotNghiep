@@ -26,12 +26,14 @@ class ChatbotController extends Controller
     {
         $request->validate([
             'noi_dung' => 'required|string',
-            'id_phien_chat' => 'nullable|integer'
+            'id_phien_chat' => 'nullable|integer',
+            'gio_hang' => 'nullable|array'
         ]);
 
         $noiDung = $request->input('noi_dung');
         $idPhienChat = $request->input('id_phien_chat');
-        
+        $gioHang = $request->input('gio_hang', []);
+
         $user = NguoiDung::find(Auth::id() ?? $request->user()->ID);
 
         if (!$user) {
@@ -106,7 +108,12 @@ class ChatbotController extends Controller
                                 ],
                                 'gio_da' => [
                                     'type' => 'STRING',
-                                    'description' => 'Giờ bắt đầu đá mà khách quan tâm (VD: 15:00, 17h00)'
+                                    'description' => 'Giờ bắt đầu đá (VD: "15:00", "17:30". BẮT BUỘC đổi "h" thành ":" và thêm số phút trước khi gọi hàm).'
+                                ],
+                                'danh_sach_gio' => [
+                                    'type' => 'ARRAY',
+                                    'items' => ['type' => 'STRING'],
+                                    'description' => 'Danh sách số giờ khách muốn kiểm tra. ĐẶC BIỆT LƯU Ý: Nếu khách hỏi 1 KHOẢNG thời gian (VD: "từ 17h đến 20h"), BẮT BUỘC liệt kê TẤT CẢ các số giờ trong khoảng đó thành mảng (VD: ["17", "18", "19", "20"]). Nếu khách không nói giờ, gửi mảng rỗng [].'
                                 ]
                             ]
                         ]
@@ -131,7 +138,7 @@ class ChatbotController extends Controller
                     ],
                     [
                         'name' => 'kiemTraLichTrong',
-                        'description' => 'Kiểm tra xem một sân bóng cụ thể tại một thời gian (ngày, giờ) cụ thể đã có người đặt hay chưa.',
+                        'description' => 'Kiểm tra xem một sân bóng cụ thể tại một ngày cụ thể còn những khung giờ nào trống. Hỗ trợ kiểm tra 1 giờ, nhiều giờ cùng lúc, hoặc toàn bộ các giờ trong ngày.',
                         'parameters' => [
                             'type' => 'OBJECT',
                             'properties' => [
@@ -149,10 +156,15 @@ class ChatbotController extends Controller
                                 ],
                                 'gio_da' => [
                                     'type' => 'STRING',
-                                    'description' => 'Giờ bắt đầu đá (VD: 15:00, 17:30)'
+                                    'description' => 'Giờ bắt đầu đá (VD: "15:00", "17:30". BẮT BUỘC đổi "h" thành ":" và thêm số phút trước khi gọi hàm).'
+                                ],
+                                'danh_sach_gio' => [
+                                    'type' => 'ARRAY',
+                                    'items' => ['type' => 'STRING'],
+                                    'description' => 'Danh sách số giờ khách muốn kiểm tra. ĐẶC BIỆT LƯU Ý: Nếu khách hỏi 1 KHOẢNG thời gian (VD: "từ 17h đến 20h"), BẮT BUỘC liệt kê TẤT CẢ các số giờ trong khoảng đó thành mảng (VD: ["17", "18", "19", "20"]). Nếu khách không nói giờ, gửi mảng rỗng [].'
                                 ]
                             ],
-                            'required' => ['ten_cum_san', 'ten_san_bong', 'ngay_da', 'gio_da']
+                            'required' => ['ten_cum_san', 'ten_san_bong', 'ngay_da']
                         ]
                     ],
                     [
@@ -166,6 +178,24 @@ class ChatbotController extends Controller
                     [
                         'name' => 'traCuuGiaiDauCaNhan',
                         'description' => 'Tra cứu số lượng và thông tin chi tiết các giải đấu (tên giải, thời gian, trạng thái) do chính khách hàng tạo ra hoặc quản lý.'
+                    ],
+                    [
+                        'name' => 'themVaoGioHang',
+                        'description' => 'Thực hiện việc thêm lịch sân vào giỏ hàng ngay khi khách hàng yêu cầu đặt sân. BẮT BUỘC phải hỏi và thu thập đủ 4 thông tin (cụm sân, sân, ngày, giờ) trước khi gọi hàm này.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'ten_cum_san' => ['type' => 'STRING', 'description' => 'Tên cụm sân (VD: Đa Phước)'],
+                                'ten_san_bong' => ['type' => 'STRING', 'description' => 'Tên sân con (VD: Sân 1, Sân 2)'],
+                                'ngay_da' => ['type' => 'STRING', 'description' => 'Định dạng YYYY-MM-DD'],
+                                'danh_sach_gio' => [
+                                    'type' => 'ARRAY',
+                                    'items' => ['type' => 'STRING'],
+                                    'description' => 'Danh sách số giờ khách muốn kiểm tra. ĐẶC BIỆT LƯU Ý: Nếu khách hỏi 1 KHOẢNG thời gian (VD: "từ 17h đến 20h"), BẮT BUỘC liệt kê TẤT CẢ các số giờ trong khoảng đó thành mảng (VD: ["17", "18", "19", "20"]). Nếu khách không nói giờ, gửi mảng rỗng [].'
+                                ]
+                            ],
+                            'required' => ['ten_cum_san', 'ten_san_bong', 'ngay_da', 'danh_sach_gio']
+                        ]
                     ]
                 ]
             ]
@@ -196,12 +226,14 @@ class ChatbotController extends Controller
                             - Khách hỏi hệ thống có những cụm sân nào, HOẶC hỏi sân bóng ở một khu vực/phường/quận cụ thể (VD: Hải Châu có sân nào) -> Gọi `traCuuDanhSachCumSan`. (LƯU Ý: Hãy tự động quét mảng JSON trả về, đối chiếu trường 'khu_vuc' hoặc 'dia_chi' để lọc ra đúng các sân thuộc khu vực khách hỏi rồi mới trả lời).
                             - Khách hỏi giờ mở cửa, địa chỉ, hoặc có các sân con nào ở 1 cụm -> Gọi `traCuuChiTietCumSan`.
                             - Khách hỏi giá tiền của khung giờ của sân cụ thể nào đó -> Gọi `traCuuGiaTien`.
-                            - Khách hỏi lịch trống (VD: 15h sân 2 Đa Phước trống không?) -> Gọi `kiemTraLichTrong`.
+                            - Khách hỏi lịch trống (VD: 15h sân 2 Đa Phước trống không? Hoặc từ 17h đến 20h còn trống không?) -> Gọi `kiemTraLichTrong`. Dựa vào kết quả trả về, BẮT BUỘC phải liệt kê rõ ràng cho khách biết khung giờ nào CÒN TRỐNG, khung giờ nào ĐÃ CÓ NGƯỜI ĐẶT.
                             - Khách hỏi về lịch sử đặt sân -> Gọi `traCuuLichSuDatSan`. (BẮT BUỘC: Bạn PHẢI ĐỌC trường 'loai_hinh' trong JSON trả về để xác định là 'Đá phong trào' hay 'Đá giải'. TUYỆT ĐỐI KHÔNG tự phỏng đoán dựa trên tên sân hay thời gian. Luôn luôn kiểm tra trường này trước khi trả lời).
                             - Khách yêu cầu KIỂM TRA DỮ LIỆU CÁ NHÂN VỀ TIỀN (số dư ví của tôi bao nhiêu, tôi vừa nạp tiền chưa, lịch sử giao dịch) -> Gọi `traCuuLichSuGiaoDich`.
                             - Khách hỏi về THÔNG TIN GIẢI ĐẤU do họ quản lý (số lượng giải, ngày bắt đầu/kết thúc giải) -> Gọi `traCuuGiaiDauCaNhan`. (BẮT BUỘC: Nếu khách hỏi giải đấu đó có bao nhiêu trận/bao nhiêu lượt đặt sân, hãy TỪ CHỐI khéo léo, giải thích rằng số lượng đặt sân của giải quá lớn nên hệ thống không thể đếm chính xác, mong khách thông cảm. TUYỆT ĐỐI KHÔNG TỰ Ý ĐẾM).
+                            - Khách yêu cầu ĐẶT SÂN / CHỐT LỊCH / THÊM VÀO GIỎ HÀNG -> Gọi `themVaoGioHang` (Hãy đảm bảo hỏi đủ 4 thông tin trước khi gọi).
                         6. Khi có kết quả từ Database, hãy tổng hợp lại thành câu văn tự nhiên, thân thiện và dễ đọc.
-                        7. Các câu hỏi về ngày, tháng và thời gian thì trả lời tự nhiên. Với dữ liệu ngày hôm nay là {$homNay}."
+                        7. Các câu hỏi về ngày, tháng và thời gian thì trả lời tự nhiên. Với dữ liệu ngày hôm nay là {$homNay}.
+                        8. QUY ĐỊNH VỀ THỜI GIAN: Hệ thống CHỈ hỗ trợ các khung giờ chẵn theo từng tiếng (VD: 17:00 - 18:00, 18:00 - 19:00). TUYỆT ĐỐI KHÔNG hỗ trợ giờ lẻ (như 17:30, 18h30) và KHÔNG cho phép đặt 1 tiếng rưỡi. Nếu khách yêu cầu giờ lẻ, bạn phải từ chối khéo léo và hướng dẫn khách chọn lại giờ chẵn."
                     ]
                 ]
             ]
@@ -215,6 +247,7 @@ class ChatbotController extends Controller
             $botReply = '';
             $functionCall = null;
             $modelText = '';
+            $clientAction = null;
 
             // Quét toàn bộ mảng parts để tìm lệnh gọi hàm (tránh bị che khuất bởi câu chào)
             foreach ($parts as $key => $part) {
@@ -254,7 +287,7 @@ class ChatbotController extends Controller
                         $arguments['ten_cum_san'] ?? '',
                         $arguments['ten_san_bong'] ?? '',
                         $arguments['ngay_da'] ?? '',
-                        $arguments['gio_da'] ?? ''
+                        $arguments['danh_sach_gio'] ?? []
                     );
                 } elseif ($functionName === 'traCuuLichSuDatSan') {
                     $functionResult = $this->thucHienTraCuuLichSuDatSan($user->ID);
@@ -262,6 +295,18 @@ class ChatbotController extends Controller
                     $functionResult = $this->thucHienTraCuuLichSuGiaoDich($user->ID);
                 } elseif ($functionName === 'traCuuGiaiDauCaNhan') {
                     $functionResult = $this->thucHienTraCuuGiaiDauCaNhan($user->ID);
+                } elseif ($functionName === 'themVaoGioHang') {
+                    $datSanResult = $this->thucHienThemVaoGioHang(
+                        $arguments['ten_cum_san'] ?? '',
+                        $arguments['ten_san_bong'] ?? '',
+                        $arguments['ngay_da'] ?? '',
+                        $arguments['danh_sach_gio'] ?? [],
+                        $gioHang
+                    );
+                    $functionResult = $datSanResult['gemini_text']; // Đưa text cho Gemini đọc
+                    if (isset($datSanResult['client_action'])) {
+                        $clientAction = $datSanResult['client_action']; // Giữ lại gói lệnh để gửi về JS
+                    }
                 }
 
                 // Đưa lượt Function Call vào hội thoại (Bắt buộc phải trả lại nguyên vẹn $parts cũ cho Google)
@@ -319,7 +364,8 @@ class ChatbotController extends Controller
                 'success' => true,
                 'id_phien_chat' => $idPhienChat,
                 'reply' => $botReply,
-                'tin_nhan_id' => $tinNhanBot->ID
+                'tin_nhan_id' => $tinNhanBot->ID,
+                'client_action' => $clientAction
             ]);
 
         } catch (\Exception $e) {
@@ -471,10 +517,21 @@ class ChatbotController extends Controller
         }
 
         if (!empty($gioDa)) {
-            // Chuyển đổi định dạng "15h" thành "15:00:00" để so sánh với CSDL
-            $gioFormat = date('H:i:00', strtotime($gioDa));
-            $query->where('KhungGio.GioBatDau', '<=', $gioFormat)
-                  ->where('KhungGio.GioKetThuc', '>', $gioFormat);
+            preg_match('/(\d{1,2})(?:h|:)?(\d{2})?/i', trim($gioDa), $matches);
+            if (!empty($matches[1])) {
+                $hour = str_pad($matches[1], 2, '0', STR_PAD_LEFT);
+                $minute = !empty($matches[2]) ? str_pad($matches[2], 2, '0', STR_PAD_LEFT) : '00';
+
+                if ($minute !== '00') {
+                    return [
+                        'trang_thai' => 'loi',
+                        'thong_bao' => 'Hệ thống chỉ có các khung giờ chẵn theo từng tiếng (VD: 17:00, 18:00), không hỗ trợ giờ lẻ.'
+                    ];
+                }
+                $gioFormat = "$hour:$minute:00";
+                $query->where('KhungGio.GioBatDau', '<=', $gioFormat)
+                      ->where('KhungGio.GioKetThuc', '>', $gioFormat);
+            }
         }
 
         $danhSachGia = $query->select([
@@ -594,52 +651,93 @@ class ChatbotController extends Controller
         ];
     }
 
-    private function thucHienKiemTraLichTrong($tenCumSan, $tenSanBong, $ngayDa, $gioDa)
+    private function thucHienKiemTraLichTrong($tenCumSan, $tenSanBong, $ngayDa, $danhSachGio = [])
     {
-        if (!$tenCumSan || !$tenSanBong || !$ngayDa || !$gioDa) {
-            return ['trang_thai' => 'loi', 'thong_bao' => 'Cần cung cấp đủ tên cụm sân, tên sân, ngày và giờ để kiểm tra.'];
+        if (!$tenCumSan || !$tenSanBong || !$ngayDa) {
+            return ['trang_thai' => 'loi', 'thong_bao' => 'Cần cung cấp đủ tên cụm sân, tên sân, ngày để kiểm tra.'];
         }
 
-        // 1. Tìm thông tin ID Sân bóng
+        // 1. Tìm thông tin ID Sân bóng và Giờ hoạt động
         $sanBong = SanBong::join('CumSan', 'SanBong.ID_CumSan', '=', 'CumSan.ID')
             ->where('CumSan.TenCumSan', 'LIKE', '%' . trim($tenCumSan) . '%')
             ->where('SanBong.TenSan', 'LIKE', '%' . trim($tenSanBong) . '%')
             ->whereNull('CumSan.deleted_at')
-            ->select('SanBong.ID', 'SanBong.TenSan', 'CumSan.TenCumSan')
+            ->select('SanBong.ID', 'SanBong.TenSan', 'CumSan.TenCumSan', 'CumSan.GioMoCua', 'CumSan.GioDongCua')
             ->first();
 
         if (!$sanBong) {
             return ['trang_thai' => 'khong_tim_thay_san', 'thong_bao' => "Không tìm thấy sân '{$tenSanBong}' tại cụm '{$tenCumSan}'."];
         }
 
-        // 2. Chuyển đổi định dạng giờ (VD: 15h -> 15:00:00)
-        $gioBatDau = date('H:i:00', strtotime($gioDa));
-        $khungGio = KhungGio::where('GioBatDau', $gioBatDau)->first();
-
-        if (!$khungGio) {
-            return ['trang_thai' => 'loi_khung_gio', 'thong_bao' => "Hệ thống không có khung giờ bắt đầu lúc {$gioBatDau}."];
-        }
-
-        // 3. Chuẩn hóa ngày về Y-m-d để tra cứu CSDL
         $ngayDaFormat = date('Y-m-d', strtotime($ngayDa));
 
-        // 4. Kiểm tra trong bảng DatSan (Ngoại trừ các lịch đã hủy)
-        $daDat = DatSan::where('ID_SanBong', $sanBong->ID)
-            ->where('ID_KhungGio', $khungGio->ID)
+        // 2. Chuyển mảng giờ thành các con số nguyên (VD: "17h" -> 17)
+        $requestedHours = [];
+        if (!empty($danhSachGio) && is_array($danhSachGio)) {
+            foreach ($danhSachGio as $g) {
+                if (preg_match('/(\d{1,2})(?:h|:)?(\d{2})?/i', trim($g), $matches)) {
+                    $hour = (int)$matches[1];
+                    $minute = !empty($matches[2]) ? str_pad($matches[2], 2, '0', STR_PAD_LEFT) : '00';
+                    
+                    // CHỐT CHẶN: Từ chối nếu số phút khác 00
+                    if ($minute !== '00') {
+                        return ['trang_thai' => 'loi_khung_gio', 'thong_bao' => "Hệ thống chỉ hỗ trợ đặt sân chẵn từng tiếng (VD: 17:00, 18:00). Không hỗ trợ giờ lẻ như {$g} hoặc 1.5 tiếng. Hãy từ chối khéo léo và yêu cầu khách chọn lại giờ chẵn."];
+                    }
+                    $requestedHours[] = $hour;
+                }
+            }
+        }
+
+        // 3. Lấy toàn bộ khung giờ của hệ thống
+        $danhSachKhungGio = KhungGio::orderBy('GioBatDau', 'asc')->get();
+
+        // 4. Lấy danh sách ID các khung giờ ĐÃ BỊ ĐẶT
+        $daDatKhungGioIds = DatSan::where('ID_SanBong', $sanBong->ID)
             ->where('NgayDa', $ngayDaFormat)
             ->where('TrangThai', '!=', 'DaHuy')
-            ->first();
+            ->pluck('ID_KhungGio')
+            ->toArray();
 
-        if ($daDat) {
-            return [
-                'trang_thai' => 'da_co_nguoi_dat',
-                'thong_bao' => "Rất tiếc, sân {$sanBong->TenSan} ({$sanBong->TenCumSan}) lúc {$gioBatDau} ngày {$ngayDaFormat} ĐÃ CÓ NGƯỜI ĐẶT."
-            ];
+        // 5. Lọc kết quả linh hoạt
+        $ketQuaLich = [];
+        foreach ($danhSachKhungGio as $kg) {
+            // Bỏ qua nếu ngoài giờ hoạt động
+            if ($kg->GioBatDau < $sanBong->GioMoCua || $kg->GioKetThuc > $sanBong->GioDongCua) {
+                continue;
+            }
+
+            // Nếu khách có hỏi giờ cụ thể, kiểm tra xem "giờ" của khung này có nằm trong danh sách không
+            if (!empty($requestedHours)) {
+                $hourKg = (int)date('H', strtotime($kg->GioBatDau));
+                if (!in_array($hourKg, $requestedHours)) {
+                    continue; // Bỏ qua nếu không phải giờ khách hỏi
+                }
+            }
+
+            $gioStr = substr($kg->GioBatDau, 0, 5) . ' - ' . substr($kg->GioKetThuc, 0, 5);
+            $isBooked = in_array($kg->ID, $daDatKhungGioIds);
+            $isPast = strtotime($ngayDaFormat . ' ' . $kg->GioBatDau) <= time();
+
+            // Gắn nhãn mạnh cho AI dễ hiểu
+            if ($isPast) {
+                $trangThai = 'Đã qua giờ (KHÔNG ĐẶT ĐƯỢC)';
+            } elseif ($isBooked) {
+                $trangThai = 'Đã có người đặt (KHÔNG TRỐNG)';
+            } else {
+                $trangThai = 'CÒN TRỐNG (CÓ THỂ ĐẶT)';
+            }
+
+            $ketQuaLich[$gioStr] = $trangThai;
+        }
+
+        if (empty($ketQuaLich)) {
+            return ['trang_thai' => 'loi_khung_gio', 'thong_bao' => "Hệ thống không có các khung giờ như yêu cầu hoặc sân đóng cửa."];
         }
 
         return [
-            'trang_thai' => 'con_trong',
-            'thong_bao' => "Tuyệt vời, sân {$sanBong->TenSan} ({$sanBong->TenCumSan}) lúc {$gioBatDau} ngày {$ngayDaFormat} HIỆN ĐANG TRỐNG và có thể đặt."
+            'trang_thai' => 'thanh_cong',
+            'thong_bao' => "Dưới đây là tình trạng các khung giờ ngày " . date('d/m/Y', strtotime($ngayDaFormat)) . " tại {$sanBong->TenSan} ({$sanBong->TenCumSan}). Hãy thông báo rõ ràng tình trạng của TỪNG KHUNG GIỜ cho khách biết:",
+            'chi_tiet_lich' => $ketQuaLich
         ];
     }
 
@@ -767,6 +865,134 @@ class ChatbotController extends Controller
                     'ghi_chu' => $item->NoiDung ?? 'Không có'
                 ];
             })->toArray()
+        ];
+    }
+
+    private function thucHienThemVaoGioHang($tenCumSan, $tenSanBong, $ngayDa, $danhSachGio, $gioHang)
+    {
+        if (!$tenCumSan || !$tenSanBong || !$ngayDa || empty($danhSachGio)) {
+            return ['gemini_text' => ['trang_thai' => 'loi', 'thong_bao' => 'Cần cung cấp đủ tên cụm sân, tên sân, ngày và giờ.']];
+        }
+
+        // 1. Tìm thông tin sân
+        $sanBong = SanBong::join('CumSan', 'SanBong.ID_CumSan', '=', 'CumSan.ID')
+            ->where('CumSan.TenCumSan', 'LIKE', '%' . trim($tenCumSan) . '%')
+            ->where('SanBong.TenSan', 'LIKE', '%' . trim($tenSanBong) . '%')
+            ->whereNull('CumSan.deleted_at')
+            ->select('SanBong.*', 'CumSan.TenCumSan', 'CumSan.ID as CumSanID', 'CumSan.GioMoCua', 'CumSan.GioDongCua')
+            ->first();
+
+        if (!$sanBong || $sanBong->TrangThai === 'BaoTri') {
+            return ['gemini_text' => ['trang_thai' => 'loi', 'thong_bao' => 'Sân không tồn tại hoặc đang bảo trì.']];
+        }
+
+        $ngayDaFormat = date('Y-m-d', strtotime($ngayDa));
+        $dateStr = date('d/m/Y', strtotime($ngayDa));
+        
+        $thongBaoKetQua = [];
+        $newSlots = [];
+
+        // 2. Xử lý từng khung giờ
+        foreach ($danhSachGio as $g) {
+            preg_match('/(\d{1,2})(?:h|:)?(\d{2})?/i', trim($g), $matches);
+            if (empty($matches[1])) {
+                $thongBaoKetQua[] = "Giờ $g không hợp lệ.";
+                continue;
+            }
+            $hour = str_pad($matches[1], 2, '0', STR_PAD_LEFT);
+            $minute = !empty($matches[2]) ? str_pad($matches[2], 2, '0', STR_PAD_LEFT) : '00';
+
+            if ($minute !== '00') {
+                $thongBaoKetQua[] = "Giờ {$g} bị từ chối vì hệ thống chỉ cho thuê chẵn từng tiếng (VD: 17:00), không hỗ trợ giờ lẻ hay 1.5 tiếng.";
+                continue;
+            }
+            $gioBatDau = "$hour:$minute:00";
+
+            $khungGio = KhungGio::where('GioBatDau', $gioBatDau)->first();
+            if (!$khungGio || $khungGio->GioBatDau < $sanBong->GioMoCua || $khungGio->GioKetThuc > $sanBong->GioDongCua) {
+                $thongBaoKetQua[] = "Khung giờ $gioBatDau ngoài giờ hoạt động.";
+                continue;
+            }
+
+            $giaTien = GiaTien::where('ID_CumSan', $sanBong->CumSanID)->where('ID_LoaiSan', $sanBong->ID_LoaiSan)->where('ID_KhungGio', $khungGio->ID)->first();
+            if (!$giaTien || $giaTien->SoTien <= 0) {
+                $thongBaoKetQua[] = "Khung giờ $gioBatDau đang ngừng kinh doanh.";
+                continue;
+            }
+
+            $daDat = DatSan::where('ID_SanBong', $sanBong->ID)->where('ID_KhungGio', $khungGio->ID)->where('NgayDa', $ngayDaFormat)->where('TrangThai', '!=', 'DaHuy')->first();
+            if ($daDat) {
+                $thongBaoKetQua[] = "Khung giờ $gioBatDau đã có người đặt.";
+                continue;
+            }
+
+            if (strtotime($ngayDaFormat . ' ' . $gioBatDau) <= time()) {
+                $thongBaoKetQua[] = "Khung giờ $gioBatDau đã qua giờ thi đấu.";
+                continue;
+            }
+
+            $timeStr = substr($khungGio->GioBatDau, 0, 5) . ' - ' . substr($khungGio->GioKetThuc, 0, 5);
+            $slotId = "{$sanBong->TenCumSan}-{$sanBong->TenSan}-{$dateStr}-{$timeStr}";
+
+            // Kiểm tra xem giờ này đã có trong giỏ chưa
+            $isAlreadyInCart = false;
+            foreach ($gioHang as $item) {
+                if (isset($item['id']) && $item['id'] === $slotId) {
+                    $isAlreadyInCart = true;
+                    break;
+                }
+            }
+
+            if ($isAlreadyInCart) {
+                $thongBaoKetQua[] = "Khung giờ $timeStr đã có sẵn trong giỏ hàng.";
+            } else {
+                $newSlots[] = [
+                    'id' => $slotId,
+                    'clusterId' => $sanBong->CumSanID,
+                    'clusterName' => $sanBong->TenCumSan,
+                    'pitchId' => $sanBong->ID,
+                    'pitchName' => $sanBong->TenSan,
+                    'date' => $dateStr,
+                    'time' => $timeStr,
+                    'price' => $giaTien->SoTien
+                ];
+                $thongBaoKetQua[] = "Khung giờ $timeStr hợp lệ có thể thêm vào giỏ.";
+            }
+        }
+
+        if (empty($newSlots)) {
+            return [
+                'gemini_text' => [
+                    'trang_thai' => 'khong_co_slot_moi',
+                    'thong_bao' => implode(" ", $thongBaoKetQua) . " Hãy báo cho khách hàng biết tình trạng này."
+                ]
+            ];
+        }
+
+        // Kiểm tra xem giỏ hàng có đang chứa các sân KHÁC không
+        if (!empty($gioHang)) {
+            return [
+                'gemini_text' => [
+                    'trang_thai' => 'can_xac_nhan',
+                    'thong_bao' => implode(" ", $thongBaoKetQua) . " Tuy nhiên, giỏ hàng của khách ĐANG CÓ SẴN sân khác. Hệ thống đã hiển thị 2 nút (Thêm mới / Thêm vào) trên màn hình. Hãy nói với khách vui lòng click chọn trên màn hình để xác nhận."
+                ],
+                'client_action' => [
+                    'type' => 'PROMPT_CART_CHOICE',
+                    'payload' => $newSlots // Mảng các slot
+                ]
+            ];
+        }
+
+        // Giỏ trống -> Thêm luôn
+        return [
+            'gemini_text' => [
+                'trang_thai' => 'thanh_cong',
+                'thong_bao' => implode(" ", $thongBaoKetQua) . " Đã tự động thêm thành công vào giỏ hàng trống. Hãy báo khách kiểm tra giỏ hàng."
+            ],
+            'client_action' => [
+                'type' => 'ADD_TO_CART',
+                'payload' => $newSlots // Mảng các slot
+            ]
         ];
     }
 }
