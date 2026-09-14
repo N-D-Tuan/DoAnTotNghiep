@@ -423,6 +423,8 @@ function showToast(message) {
 async function revalidateCartPrices() {
     if (selectedSlots.length === 0) return;
 
+    selectedSlots.forEach(s => s._isValid = false);
+
     let isChanged = false;
 
     try {
@@ -435,7 +437,7 @@ async function revalidateCartPrices() {
 
         for (let cId of clusterIds) {
             // Tải danh sách Sân con (để lấy Loại Sân) và Bảng Giá của Cụm này
-            const [sbRes, gtRes] = await Promise.all([
+            const [sbRes, gtRes, csRes] = await Promise.all([
                 fetch(`${API_BASE_URL}/san-bong?cum_san_id=${cId}`),
                 fetch(`${API_BASE_URL}/gia-tien?cum_san_id=${cId}`),
                 fetch(`${API_BASE_URL}/cum-san/${cId}`)
@@ -458,11 +460,17 @@ async function revalidateCartPrices() {
             for (let slot of slotsInCluster) {
                 // 1. Tìm sân để biết là Sân 5, Sân 7 hay Sân 11
                 const pitch = pitches.find(p => p.ID == slot.pitchId);
-                if (!pitch) continue; 
+                if (!pitch || pitch.TrangThai === 'BaoTri') {
+                    isChanged = true;
+                    continue; 
+                }
 
                 // 2. Tìm ID của khung giờ tương ứng với chuỗi giờ trong giỏ
                 const matchingKhungGio = allKhungGio.find(kg => `${kg.GioBatDau.substring(0,5)} - ${kg.GioKetThuc.substring(0,5)}` === slot.time);
-                if (!matchingKhungGio) continue;
+                if (!matchingKhungGio) {
+                    isChanged = true;
+                    continue;
+                }
 
                 // 3. Đối chiếu giá mới nhất
                 const priceInfo = prices.find(p => p.ID_LoaiSan == pitch.ID_LoaiSan && p.ID_KhungGio == matchingKhungGio.ID);
@@ -705,6 +713,30 @@ document.addEventListener('DOMContentLoaded', async () => {
                     try {
                         const csRes = await fetch(`${API_BASE_URL}/cum-san/${currentClusterId}`);
                         const csData = await csRes.json();
+
+                        // Kiểm tra Cụm sân hiện tại có bị Admin Xóa mềm không
+                        if (!csData.success || csData.data.deleted_at !== null) {
+                            
+                            // 1. Dọn dẹp tất cả khung giờ của cụm sân này ra khỏi giỏ hàng
+                            selectedSlots = selectedSlots.filter(s => s.clusterId !== currentClusterId);
+                            saveToSession();
+                            
+                            // 2. Cập nhật Modal Giỏ hàng nếu đang mở
+                            if (document.getElementById('cart-modal')?.style.display === 'flex') {
+                                if (selectedSlots.length > 0) openCartModal(); 
+                                else closeCartModal();
+                            }
+
+                            // 3. Thông báo cho khách hàng biết
+                            showToast(`Cụm sân "${currentClusterName}" đã bị ngừng hoạt động hoặc bảo trì!`);
+                            
+                            // 4. Đá văng người dùng ra ngoài màn hình danh sách cụm sân
+                            renderClusters();
+                            
+                            // 5. Dừng luôn luồng cập nhật ngầm bên dưới vì cụm sân đã "bốc hơi"
+                            return; 
+                        }
+
                         if (csData.success && csData.data) {
                             currentClusterGioMo = csData.data.GioMoCua;
                             currentClusterGioDong = csData.data.GioDongCua;
@@ -712,6 +744,42 @@ document.addEventListener('DOMContentLoaded', async () => {
                             currentClusterAddress = csData.data.DiaChi;
                         }
                     } catch(err) { console.error("Lỗi lấy thông tin cụm sân:", err); }
+                }
+
+                // KIỂM TRA SÂN BÓNG BẢO TRÌ NẾU KHÁCH ĐANG XEM LỊCH CỦA SÂN ĐÓ
+                if (currentPitchId !== null && currentClusterId !== null) {
+                    try {
+                        // Tận dụng API có sẵn bằng cách truyền query cum_san_id
+                        const pitchRes = await fetch(`${API_BASE_URL}/san-bong?cum_san_id=${currentClusterId}`);
+                        const pitchData = await pitchRes.json();
+                        
+                        if (pitchData.success) {
+                            // Dùng hàm find() để lọc ra đúng sân bóng khách đang đứng xem
+                            const currentPitchInfo = pitchData.data.find(p => p.ID == currentPitchId);
+
+                            // Nếu không tìm thấy hoặc Sân bóng bị chuyển sang Bảo trì
+                            if (!currentPitchInfo || currentPitchInfo.TrangThai === 'BaoTri') {
+                                
+                                // 1. Gỡ hết các ô của sân này khỏi giỏ hàng
+                                selectedSlots = selectedSlots.filter(s => s.pitchId !== currentPitchId);
+                                saveToSession();
+                                
+                                // 2. Cập nhật lại Modal giỏ hàng
+                                if (document.getElementById('cart-modal')?.style.display === 'flex') {
+                                    if (selectedSlots.length > 0) openCartModal(); 
+                                    else closeCartModal();
+                                }
+
+                                // 3. Thông báo cho khách
+                                showToast(`Sân bóng "${currentPitchName}" vừa được đưa vào bảo trì!`);
+                                
+                                // 4. Đá khách văng ra trang Danh sách sân con của Cụm này
+                                renderPitches(currentClusterId, currentClusterName, currentClusterAddress, currentClusterGioMo, currentClusterGioDong);
+                                
+                                return;
+                            }
+                        }
+                    } catch(err) { console.error("Lỗi lấy thông tin sân bóng:", err); }
                 }
 
                 await revalidateCartPrices();
@@ -821,7 +889,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             }
                         });
 
-                        // BƯỚC 1.5 - ĐÃ SỬA LẠI HOÀN TOÀN: ẨN/HIỆN DÒNG TỰ ĐỘNG THEO GIÁ TIỀN
+                        // BƯỚC 1.5 - ẨN/HIỆN DÒNG TỰ ĐỘNG THEO GIÁ TIỀN
                         const moCua = currentClusterGioMo.substring(0, 5);
                         const dongCua = currentClusterGioDong.substring(0, 5);
                         
@@ -943,6 +1011,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                         });
 
                         await revalidateCartPrices();
+
+                        // BƯỚC 3 - ĐỒNG BỘ GIAO DIỆN "ĐÃ CHỌN" VỚI GIỎ HÀNG THỰC TẾ
+                        // Quét mọi ô đang hiển thị là "ĐÃ CHỌN" trên màn hình
+                        const allSelectedElements = document.querySelectorAll('.schedule-table .slot.selected');
+                        allSelectedElements.forEach(el => {
+                            const slotId = el.getAttribute('data-slot-id');
+                            // Kiểm tra xem ID của ô này có còn nằm trong mảng giỏ hàng nữa không
+                            const isStillInCart = selectedSlots.some(s => s.id === slotId);
+                            
+                            // Nếu đã bị hàm revalidateCartPrices xóa khỏi mảng -> Ép nhả giao diện về CÒN TRỐNG
+                            if (!isStillInCart) {
+                                el.classList.remove('selected');
+                                el.innerText = 'CÒN TRỐNG';
+                            }
+                        });
 
                     } catch(err) { console.error("Lỗi cập nhật ngầm lịch:", err); }
                 }
@@ -1344,17 +1427,15 @@ async function checkoutBooking() {
                         closeCartModal(); // Đóng nếu giỏ trống
                     }
                     
-                    // Xử lý giao diện nền phía sau Modal
-                    // if (currentClusterId === cId) {
-                    //     // NẾU khách đang đứng ở ngay cụm sân vừa bị xóa -> Đá văng ra trang danh sách cụm
-                    //     renderClusters();
-                    // } else if (currentClusterId !== null) {
-                    //     // Khách đang đứng xem ở một cụm khác an toàn -> Render lại cụm đó
-                    //     renderPitches(currentClusterId, currentClusterName, currentClusterAddress, currentClusterGioMo, currentClusterGioDong);
-                    // } else {
-                    //     // Khách đang đứng ở trang chủ
-                    //     renderClusters();
-                    // }
+                    // Đồng bộ nhả màu xanh trên giao diện lịch
+                    const allSelectedElements = document.querySelectorAll('.schedule-table .slot.selected');
+                    allSelectedElements.forEach(el => {
+                        const slotId = el.getAttribute('data-slot-id');
+                        if (!selectedSlots.some(s => s.id === slotId)) {
+                            el.classList.remove('selected');
+                            el.innerText = 'CÒN TRỐNG';
+                        }
+                    });
                 }, 3000); 
                 return;
             }
@@ -1382,12 +1463,15 @@ async function checkoutBooking() {
                             closeCartModal(); // Đóng nếu giỏ trống
                         }
                         
-                        // Cập nhật lại giao diện lịch/danh sách phía sau
-                        // if (currentClusterId !== null) {
-                        //     renderPitches(cId, clusterData.data.TenCumSan, clusterData.data.DiaChi, clusterData.data.GioMoCua, clusterData.data.GioDongCua);
-                        // } else {
-                        //     renderClusters();
-                        // }
+                        // Đồng bộ nhả màu xanh trên giao diện lịch
+                        const allSelectedElements = document.querySelectorAll('.schedule-table .slot.selected');
+                        allSelectedElements.forEach(el => {
+                            const slotId = el.getAttribute('data-slot-id');
+                            if (!selectedSlots.some(s => s.id === slotId)) {
+                                el.classList.remove('selected');
+                                el.innerText = 'CÒN TRỐNG';
+                            }
+                        });
                     }, 3000);
                     return;
                 }
@@ -1534,6 +1618,15 @@ async function checkoutBooking() {
                     // if (currentClusterId !== null && currentPitchId !== null) {
                     //     renderSchedule(currentClusterId, currentClusterName, currentPitchId, currentPitchName, currentLoaiSanId, currentPitchType);
                     // }
+                }, 3000);
+            }
+            else {
+                setTimeout(() => {
+                    const alertBox = document.getElementById('cart-alert');
+                    if (alertBox) {
+                        alertBox.style.display = 'none'; // Chỉ ẩn dòng chữ đỏ, giữ nguyên giỏ hàng
+                    }
+                    closeCartModal();
                 }, 3000);
             }
         }
