@@ -4348,7 +4348,10 @@ async function sendChatMessage() {
 
     // 2. GỌI API BACKEND
     try {
-        const payload = { noi_dung: text };
+        const payload = { 
+            noi_dung: text,
+            gio_hang: selectedSlots
+        };
         if (activeChatId) payload.id_phien_chat = activeChatId;
 
         const response = await fetch(`${API_BASE_URL}/chatbot/chat`, {
@@ -4371,6 +4374,42 @@ async function sendChatMessage() {
             
             // Vẽ tin nhắn của AI
             appendMessageToUI('Bot', data.reply);
+
+            // XỬ LÝ LỆNH TỪ BACKEND ĐẨY VỀ
+            if (data.client_action) {
+                const actionType = data.client_action.type;
+                const slotsData = data.client_action.payload; // Lúc này là mảng Array
+
+                if (actionType === 'ADD_TO_CART') {
+                    // Xử lý thêm thẳng vào giỏ
+                    slotsData.forEach(slotData => {
+                        const existingIndex = selectedSlots.findIndex(s => s.id === slotData.id);
+                        if (existingIndex === -1) {
+                            selectedSlots.push(slotData);
+                            updateSlotUI(slotData, true); // Tô màu xanh nếu đang ở màn hình lịch
+                        }
+                    });
+                    saveToSession();
+                    showToast(`Bot đã thêm ${slotsData.length} khung giờ vào Giỏ hàng giúp bạn!`);
+                } 
+                else if (actionType === 'PROMPT_CART_CHOICE') {
+                    // Xử lý hiện 2 nút
+                    const actionId = Date.now();
+                    const msgArea = document.getElementById('chat-messages-area');
+                    msgArea.innerHTML += `
+                        <div class="chat-msg bot" id="cart-confirm-${actionId}" style="align-self: flex-start; max-width: 80%;">
+                            <div style="background: #fffbeb; color: #b45309; padding: 12px 16px; border-radius: 0 12px 12px 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); border: 1px solid #fde68a; line-height: 1.6;">
+                                ⚠️ Giỏ hàng của bạn đang có sẵn các sân khác. Bạn muốn xóa giỏ cũ để thêm sân mới hay chèn thêm vào giỏ?
+                                <div style="margin-top: 10px; display: flex; gap: 8px;">
+                                    <button onclick="handleCartChoice('replace', ${actionId}, '${encodeURIComponent(JSON.stringify(slotsData))}')" style="padding: 6px 12px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; display: flex; align-items: center; gap: 6px;"><i class="fa-solid fa-trash-can"></i> Thêm mới</button>
+                                    <button onclick="handleCartChoice('append', ${actionId}, '${encodeURIComponent(JSON.stringify(slotsData))}')" style="padding: 6px 12px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; display: flex; align-items: center; gap: 6px;"><i class="fa-solid fa-plus"></i> Thêm vào</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    scrollToBottomChat();
+                }
+            }
             
             // Render lại sidebar để đẩy phiên này lên trên cùng
             loadChatSessions();
@@ -4388,6 +4427,43 @@ async function sendChatMessage() {
         scrollToBottomChat();
     }
 }
+
+// ==========================================
+// HÀM XỬ LÝ LỰA CHỌN GIỎ HÀNG TỪ CHATBOT
+// ==========================================
+window.handleCartChoice = function(choice, actionId, encodedSlots) {
+    const slotsData = JSON.parse(decodeURIComponent(encodedSlots));
+    
+    if (choice === 'replace') {
+        clearAllSlots(); // Xóa mảng cũ & nhả màu xanh
+        slotsData.forEach(slotData => {
+            selectedSlots.push(slotData);
+            updateSlotUI(slotData, true);
+        });
+        saveToSession();
+        showToast(`Đã xóa giỏ hàng cũ và thêm ${slotsData.length} sân mới vào giỏ!`);
+    } else if (choice === 'append') {
+        slotsData.forEach(slotData => {
+            const existingIndex = selectedSlots.findIndex(s => s.id === slotData.id);
+            if (existingIndex === -1) {
+                selectedSlots.push(slotData);
+                updateSlotUI(slotData, true);
+            }
+        });
+        saveToSession();
+        showToast(`Đã chèn thêm ${slotsData.length} sân vào giỏ hàng hiện tại!`);
+    }
+
+    // Đổi 2 nút thành thông báo xanh lá
+    const confirmBox = document.getElementById(`cart-confirm-${actionId}`);
+    if (confirmBox) {
+        confirmBox.innerHTML = `
+            <div style="background: #ecfdf5; color: #047857; padding: 12px 16px; border-radius: 0 12px 12px 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); border: 1px solid #a7f3d0; line-height: 1.6;">
+                Đã xử lý thành công yêu cầu thêm sân vào giỏ hàng!
+            </div>
+        `;
+    }
+};
 
 // Hàm hỗ trợ vẽ bong bóng chat (Xử lý cả xuống dòng và Markdown in đậm)
 function appendMessageToUI(role, text) {
