@@ -455,6 +455,8 @@ class ChatbotController extends Controller
             return response()->json(['success' => false, 'message' => 'Không tìm thấy phiên chat!'], 404);
         }
 
+        $phienChat->timestamps = false;
+
         $phienChat->TieuDe = $request->tieu_de;
         $phienChat->save();
 
@@ -994,5 +996,166 @@ class ChatbotController extends Controller
                 'payload' => $newSlots // Mảng các slot
             ]
         ];
+    }
+
+    // =====================================================================
+    // MODULE: CHATBOT DÀNH CHO ADMIN (READ-ONLY)
+    // =====================================================================
+    public function nhanTinNhanAdmin(Request $request)
+    {
+        $request->validate([
+            'noi_dung' => 'required|string',
+            'id_phien_chat' => 'nullable|integer'
+        ]);
+
+        $noiDung = $request->input('noi_dung');
+        $idPhienChat = $request->input('id_phien_chat');
+        
+        $user = NguoiDung::find(Auth::id() ?? $request->user()->ID);
+
+        // BẢO MẬT: Bắt buộc phải là Admin mới được phép gọi API này
+        if (!$user || $user->VaiTro !== 'Admin') {
+            return response()->json([
+                'success' => false, 
+                'message' => 'Lỗi phân quyền: Chỉ Ban quản trị mới được phép sử dụng Trợ lý này!'
+            ], 403);
+        }
+
+        // 1. Lấy hoặc tạo Phiên Chat
+        if (!$idPhienChat) {
+            $phienChat = PhienChat::create([
+                'ID_NguoiDung' => $user->ID,
+                'TieuDe' => mb_substr($noiDung, 0, 40) . '...',
+            ]);
+            $idPhienChat = $phienChat->ID;
+        } else {
+            $phienChat = PhienChat::findOrFail($idPhienChat);
+        }
+
+        // 2. Lưu tin nhắn của Admin
+        TinNhan::create([
+            'ID_PhienChat' => $idPhienChat,
+            'NguoiGui' => 'User',
+            'NoiDung' => $noiDung,
+        ]);
+
+        // 3. Chuẩn bị lịch sử Chat
+        $lichSuChat = TinNhan::where('ID_PhienChat', $idPhienChat)->orderBy('NgayTao', 'asc')->get();
+        $contents = [];
+        foreach ($lichSuChat as $tinNhan) {
+            $contents[] = [
+                'role' => $tinNhan->NguoiGui === 'User' ? 'user' : 'model',
+                'parts' => [['text' => $tinNhan->NoiDung]]
+            ];
+        }
+
+        // 4. Khai báo danh sách Tools DÀNH RIÊNG CHO ADMIN
+        $tools = [
+            [
+                'functionDeclarations' => [
+                    [
+                        'name' => 'thongKeTongQuan',
+                        'description' => 'Lấy số liệu thống kê tổng quan trong ngày hôm nay (số lượng đơn đặt sân, doanh thu cọc, số lượng khách hàng mới).'
+                    ],
+                    [
+                        'name' => 'kiemTraYeuCauChoDuyet',
+                        'description' => 'Kiểm tra xem hệ thống đang có bao nhiêu yêu cầu đang ở trạng thái "Chờ duyệt" (bao gồm: Giải đấu, Hủy sân gấp, Rút tiền).'
+                    ]
+                    // (Tương lai chúng ta sẽ thêm các tool tra cứu user, tra cứu doanh thu theo tháng vào đây)
+                ]
+            ]
+        ];
+
+        $homNay = date('d/m/Y');
+
+        // 5. System Prompt cho Admin
+        $payload = [
+            'contents' => $contents,
+            'tools' => $tools,
+            'systemInstruction' => [
+                'parts' => [
+                    [
+                        'text' => "Bạn là AI Trợ lý cấp cao dành riêng cho Ban quản trị (Admin) của hệ thống DN FOOTBALL. (HÔM NAY LÀ: {$homNay}).
+                        
+                        Quy tắc làm việc:
+                        1. Xưng hô là 'tôi' hoặc 'trợ lý', gọi người dùng là 'Admin' hoặc 'Sếp'. Tác phong chuyên nghiệp, báo cáo số liệu rõ ràng, mạch lạc, sử dụng gạch đầu dòng khi cần thiết.
+                        2. BẢO MẬT: Bạn đang phục vụ Admin, nên bạn ĐƯỢC PHÉP xem và báo cáo mọi thông tin nội bộ nếu Admin hỏi (doanh thu, tiền bạc, thông tin user). 
+                        3. GIỚI HẠN QUYỀN HẠN: Bạn là trợ lý 'Chỉ Đọc' (Read-only). Bạn chỉ có nhiệm vụ BÁO CÁO số liệu. TUYỆT ĐỐI KHÔNG nhận lệnh xóa, sửa, phê duyệt hay thay đổi bất kỳ dữ liệu nào trong hệ thống. Nếu Admin yêu cầu duyệt đơn hay xóa user, hãy hướng dẫn Admin tự thao tác trên giao diện web.
+                        4. CÁCH SỬ DỤNG TOOL:
+                           - Admin hỏi tình hình hôm nay, doanh thu hôm nay -> Gọi `thongKeTongQuan`.
+                           - Admin hỏi có đơn nào cần duyệt không, có ai rút tiền không -> Gọi `kiemTraYeuCauChoDuyet`.
+                        5. Báo cáo số liệu tài chính luôn phải có định dạng VNĐ (VD: 1.500.000đ)."
+                    ]
+                ]
+            ]
+        ];
+
+        try {
+            $geminiResponse = $this->callGeminiWithKeyRotation($payload);
+            $parts = $geminiResponse['candidates'][0]['content']['parts'] ?? [];
+
+            $botReply = '';
+            $functionCall = null;
+            $modelText = '';
+
+            foreach ($parts as $key => $part) {
+                if (isset($part['functionCall'])) {
+                    $functionCall = $part['functionCall'];
+                    if (empty($parts[$key]['functionCall']['args'])) {
+                        $parts[$key]['functionCall']['args'] = new \stdClass();
+                    }
+                } elseif (isset($part['text'])) {
+                    $modelText .= $part['text'];
+                }
+            }
+
+            if ($functionCall) {
+                $functionName = $functionCall['name'];
+                $arguments = $functionCall['args'] ?? [];
+                $functionResult = null;
+
+                // Xử lý các hàm của Admin
+                if ($functionName === 'thongKeTongQuan') {
+                    $functionResult = ['thong_bao' => 'Hàm thống kê tổng quan đang được xây dựng...']; // Placeholder
+                } elseif ($functionName === 'kiemTraYeuCauChoDuyet') {
+                    $functionResult = ['thong_bao' => 'Hàm kiểm tra chờ duyệt đang được xây dựng...']; // Placeholder
+                }
+
+                $contents[] = ['role' => 'model', 'parts' => $parts];
+                $contents[] = [
+                    'role' => 'user',
+                    'parts' => [['functionResponse' => ['name' => $functionName, 'response' => ['name' => $functionName, 'content' => $functionResult]]]]
+                ];
+
+                $payload['contents'] = $contents;
+                $secondResponse = $this->callGeminiWithKeyRotation($payload);
+                
+                $secondParts = $secondResponse['candidates'][0]['content']['parts'] ?? [];
+                foreach ($secondParts as $p) {
+                    if (isset($p['text'])) $botReply .= $p['text'];
+                }
+                if (empty($botReply)) $botReply = 'Lỗi tổng hợp dữ liệu báo cáo.';
+            } else {
+                $botReply = $modelText ?: 'Xin lỗi Admin, tôi chưa hiểu ý.';
+            }
+
+            TinNhan::create([
+                'ID_PhienChat' => $idPhienChat,
+                'NguoiGui' => 'Bot',
+                'NoiDung' => $botReply,
+            ]);
+            $phienChat->touch();
+
+            return response()->json([
+                'success' => true,
+                'id_phien_chat' => $idPhienChat,
+                'reply' => $botReply
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Lỗi Gemini API Admin: ' . $e->getMessage());
+            TinNhan::where('ID_PhienChat', $idPhienChat)->where('NguoiGui', 'User')->orderBy('ID', 'desc')->first()?->delete();
+            return response()->json(['success' => false, 'message' => 'Lỗi kết nối AI.'], 500);
+        }
     }
 }
