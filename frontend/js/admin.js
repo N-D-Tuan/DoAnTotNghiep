@@ -3345,3 +3345,384 @@ async function renderTongQuan() {
         contentArea.innerHTML = `<div style="text-align:center; color:red; padding: 50px;">Lỗi kết nối máy chủ! Không thể tải dữ liệu thống kê.</div>`;
     }
 }
+
+// ======================================================
+// MODULE: TRỢ LÝ ẢO AI CHATBOT CHO ADMIN (READ-ONLY)
+// ======================================================
+let isAdminChatOpen = false;
+
+// 1. Mở / Đóng cửa sổ Chat Admin
+function toggleAdminChatWindow() {
+    const container = document.getElementById('admin-chatbot-container');
+    isAdminChatOpen = !isAdminChatOpen;
+    
+    if (isAdminChatOpen) {
+        container.style.display = 'flex';
+        loadAdminChatSessions(); 
+        
+        if (!document.getElementById('current-admin-chat-id').value) {
+            createNewAdminChatSession();
+        }
+    } else {
+        container.style.display = 'none';
+    }
+}
+
+// Lắng nghe sự kiện Enter để gửi tin nhắn
+document.addEventListener('DOMContentLoaded', () => {
+    const chatInput = document.getElementById('admin-chat-input-text');
+    if (chatInput) {
+        chatInput.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                sendAdminChatMessage();
+            }
+        });
+    }
+});
+
+// 2. Tải danh sách các Phiên Chat
+async function loadAdminChatSessions() {
+    const sidebarList = document.getElementById('admin-chat-sidebar-list');
+    try {
+        // Tái sử dụng API lấy danh sách phiên chat (tự nhận diện ID Admin qua session)
+        const response = await fetch(`${API_BASE_URL}/chatbot/phien-chat`, { credentials: 'include' });
+        const res = await response.json();
+
+        if (res.success && res.data.length > 0) {
+            let html = '';
+            res.data.forEach(phien => {
+                const activeId = document.getElementById('current-admin-chat-id').value;
+                const isActive = (String(phien.ID) === String(activeId)) ? 'background: #e2e8f0; border-left: 4px solid #1e293b;' : 'background: transparent; border-left: 4px solid transparent;';
+                
+                let tieuDe = phien.TieuDe ? phien.TieuDe : 'Báo cáo mới';
+                if (tieuDe.length > 25) tieuDe = tieuDe.substring(0, 25) + '...';
+
+                html += `
+                    <div style="padding: 12px; margin-bottom: 8px; border-radius: 8px; cursor: pointer; transition: 0.2s; position: relative; ${isActive}" onclick="loadAdminChatDetails(${phien.ID})">
+                        <div style="font-weight: 600; font-size: 0.9rem; color: #334155; padding-right: 20px;">${tieuDe}</div>
+                        
+                        <div class="chat-action-menu" style="position: absolute; right: 10px; top: 10px;" onclick="event.stopPropagation()">
+                            <i class="fa-solid fa-ellipsis-vertical" style="color: #94a3b8; padding: 4px 8px; cursor: pointer;" onclick="toggleAdminChatDropdown(${phien.ID})"></i>
+                            <div id="admin-chat-dropdown-${phien.ID}" style="display: none; position: absolute; right: 0; top: 25px; background: white; border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.1); border-radius: 8px; width: 120px; z-index: 10;">
+                                <div style="padding: 8px 12px; font-size: 0.85rem; cursor: pointer; border-bottom: 1px solid #f1f5f9; color: var(--text-dark);" onclick="openAdminRenameChatModal(${phien.ID}, '${tieuDe.replace(/'/g, "\\'")}')"><i class="fa-solid fa-pen" style="margin-right: 6px;"></i> Đổi tên</div>
+                                <div style="padding: 8px 12px; font-size: 0.85rem; cursor: pointer; color: #ef4444;" onclick="openAdminDeleteChatModal(${phien.ID})"><i class="fa-solid fa-trash-can" style="margin-right: 6px;"></i> Xóa</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            sidebarList.innerHTML = html;
+        } else {
+            sidebarList.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 0.9rem; margin-top: 20px;">Chưa có lịch sử báo cáo</div>`;
+        }
+    } catch (e) {
+        console.error('Lỗi load danh sách chat Admin', e);
+    }
+}
+
+// 3. Tạo màn hình chat mới tinh
+function createNewAdminChatSession() {
+    document.getElementById('current-admin-chat-id').value = '';
+    document.getElementById('admin-chat-header-title').innerText = 'Trợ lý Báo Cáo AI';
+    
+    const msgArea = document.getElementById('admin-chat-messages-area');
+    msgArea.innerHTML = `
+        <div class="chat-msg bot" style="align-self: flex-start; max-width: 85%;">
+            <div style="background: white; padding: 12px 16px; border-radius: 0 12px 12px 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); color: #334155; line-height: 1.6; border: 1px solid #e2e8f0;">
+                Xin chào Admin! Tôi là Trợ lý phân tích dữ liệu của DN FOOTBALL. Sếp cần tôi báo cáo số liệu gì hôm nay?
+            </div>
+        </div>
+    `;
+    loadAdminChatSessions(); 
+}
+
+// 4. Tải chi tiết nội dung 1 Phiên Chat
+async function loadAdminChatDetails(id) {
+    document.getElementById('current-admin-chat-id').value = id;
+    const msgArea = document.getElementById('admin-chat-messages-area');
+    msgArea.innerHTML = `<div style="text-align:center; padding:20px; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Đang trích xuất dữ liệu...</div>`;
+    
+    loadAdminChatSessions();
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/chatbot/phien-chat/${id}`, { credentials: 'include' });
+        const res = await response.json();
+
+        if (res.success) {
+            document.getElementById('admin-chat-header-title').innerText = res.phien_chat.TieuDe || 'Báo cáo hệ thống';
+            msgArea.innerHTML = ''; 
+            
+            res.data.forEach(msg => {
+                appendAdminMessageToUI(msg.NguoiGui, msg.NoiDung);
+            });
+            scrollToBottomAdminChat();
+        }
+    } catch (e) {
+        msgArea.innerHTML = `<div style="text-align:center; color: red;">Lỗi kết nối máy chủ!</div>`;
+    }
+}
+
+// 5. Gửi tin nhắn lên AI DÀNH RIÊNG CHO ADMIN
+async function sendAdminChatMessage() {
+    const inputEl = document.getElementById('admin-chat-input-text');
+    const text = inputEl.value.trim();
+    if (!text) return;
+
+    const activeChatId = document.getElementById('current-admin-chat-id').value;
+    const btnSend = document.getElementById('btn-send-admin-chat');
+
+    inputEl.value = '';
+    inputEl.disabled = true;
+    btnSend.disabled = true;
+    
+    appendAdminMessageToUI('User', text);
+    scrollToBottomAdminChat();
+
+    // Hiệu ứng "Đang phân tích..."
+    const loadingId = 'admin-typing-' + Date.now();
+    const msgArea = document.getElementById('admin-chat-messages-area');
+    msgArea.innerHTML += `
+        <div id="${loadingId}" class="chat-msg bot" style="align-self: flex-start; max-width: 85%;">
+            <div style="background: white; padding: 12px 16px; border-radius: 0 12px 12px 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; color: #1e293b; font-size: 0.9rem; font-style: italic;">
+                <i class="fa-solid fa-magnifying-glass-chart fa-beat-fade" style="margin-right: 8px;"></i> Đang truy xuất dữ liệu hệ thống...
+            </div>
+        </div>
+    `;
+    scrollToBottomAdminChat();
+
+    try {
+        const payload = { noi_dung: text };
+        if (activeChatId) payload.id_phien_chat = activeChatId;
+
+        // BẮN VÀO ROUTE MỚI CỦA ADMIN
+        const response = await fetch(`${API_BASE_URL}/chatbot/admin-chat`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+        
+        document.getElementById(loadingId).remove();
+
+        if (response.ok && data.success) {
+            if (!activeChatId && data.id_phien_chat) {
+                document.getElementById('current-admin-chat-id').value = data.id_phien_chat;
+            }
+            
+            appendAdminMessageToUI('Bot', data.reply);
+            loadAdminChatSessions();
+        } else {
+            appendAdminMessageToUI('Bot', `<span style="color:red"><i class="fa-solid fa-triangle-exclamation"></i> Lỗi: ${data.message || 'Hệ thống bận'}</span>`);
+        }
+
+    } catch (e) {
+        document.getElementById(loadingId)?.remove();
+        appendAdminMessageToUI('Bot', '<span style="color:red"><i class="fa-solid fa-wifi"></i> Mất kết nối đến máy chủ quản trị!</span>');
+    } finally {
+        inputEl.disabled = false;
+        btnSend.disabled = false;
+        inputEl.focus();
+        scrollToBottomAdminChat();
+    }
+}
+
+// Hàm hỗ trợ vẽ bong bóng chat Admin
+function appendAdminMessageToUI(role, text) {
+    const msgArea = document.getElementById('admin-chat-messages-area');
+    
+    // Convert in đậm và xuống dòng
+    let formattedText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    formattedText = formattedText.replace(/\n/g, '<br>');
+
+    if (role === 'User') {
+        msgArea.innerHTML += `
+            <div class="chat-msg user" style="align-self: flex-end; max-width: 80%;">
+                <div style="background: #1e293b; color: white; padding: 12px 16px; border-radius: 12px 12px 0 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); line-height: 1.5;">
+                    ${formattedText}
+                </div>
+            </div>
+        `;
+    } else {
+        msgArea.innerHTML += `
+            <div class="chat-msg bot" style="align-self: flex-start; max-width: 85%;">
+                <div style="background: white; color: #334155; padding: 12px 16px; border-radius: 0 12px 12px 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; line-height: 1.6;">
+                    ${formattedText}
+                </div>
+            </div>
+        `;
+    }
+}
+
+function scrollToBottomAdminChat() {
+    const msgArea = document.getElementById('admin-chat-messages-area');
+    msgArea.scrollTop = msgArea.scrollHeight;
+}
+
+// Bắt sự kiện click ra ngoài để đóng chat
+document.addEventListener('pointerdown', function (event) {
+    const chatbotContainer = document.getElementById('admin-chatbot-container');
+    const openChatbotButton = document.getElementById('btn-open-admin-chatbot');
+
+    const renameModal = document.getElementById('admin-rename-chat-modal');
+    const deleteModal = document.getElementById('admin-delete-chat-modal');
+
+    if (!isAdminChatOpen || !chatbotContainer) return;
+    
+    // ==================================================
+    // 1. ĐANG CLICK TRONG MODAL ĐỔI TÊN -> BỎ QUA
+    // ==================================================
+    if (renameModal && renameModal.style.display !== 'none' && renameModal.contains(event.target)) {
+        return;
+    }
+
+    // ==================================================
+    // 2. ĐANG CLICK TRONG MODAL XÓA -> BỎ QUA
+    // ==================================================
+    if (deleteModal && deleteModal.style.display !== 'none' && deleteModal.contains(event.target)) {
+        return;
+    }
+
+    // ==================================================
+    // 3. CLICK BÊN TRONG CHATBOT HOẶC NÚT MỞ CHATBOT -> BỎ QUA
+    // ==================================================
+    if (chatbotContainer.contains(event.target) || (openChatbotButton && openChatbotButton.contains(event.target))) {
+        return;
+    }
+
+    chatbotContainer.style.display = 'none';
+    isAdminChatOpen = false;
+}, true);
+
+// Tắt/bật menu 3 chấm
+function toggleAdminChatDropdown(id) {
+    const allDropdowns = document.querySelectorAll('[id^="admin-chat-dropdown-"]');
+    allDropdowns.forEach(d => {
+        if (d.id !== `admin-chat-dropdown-${id}`) d.style.display = 'none';
+    });
+    const dropdown = document.getElementById(`admin-chat-dropdown-${id}`);
+    if(dropdown) {
+        dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+    }
+}
+
+// Click ra ngoài tự đóng menu 3 chấm
+window.addEventListener('click', () => {
+    document.querySelectorAll('[id^="admin-chat-dropdown-"]').forEach(d => d.style.display = 'none');
+});
+
+// ==========================================
+// CÁC MODAL QUẢN LÝ PHIÊN CHAT ADMIN (ĐỔI TÊN/XÓA)
+// ==========================================
+function openAdminRenameChatModal(id, currentName) {
+    document.getElementById('admin-rename-chat-id').value = id;
+    document.getElementById('admin-rename-chat-original').value = currentName;
+    document.getElementById('admin-rename-chat-input').value = currentName;
+    
+    const btnRename = document.getElementById('btn-admin-confirm-rename');
+    btnRename.disabled = true;
+    btnRename.style.opacity = '0.5';
+    btnRename.style.cursor = 'not-allowed';
+
+    document.getElementById('admin-rename-chat-modal').style.display = 'flex';
+}
+
+function openAdminDeleteChatModal(id) {
+    document.getElementById('admin-delete-chat-id').value = id;
+    document.getElementById('admin-delete-chat-modal').style.display = 'flex';
+}
+
+function closeAdminChatModal(type) {
+    if (type === 'rename') {
+        document.getElementById('admin-rename-chat-modal').style.display = 'none';
+    } else if (type === 'delete') {
+        document.getElementById('admin-delete-chat-modal').style.display = 'none';
+    }
+}
+
+function checkAdminRenameChange() {
+    const inputVal = document.getElementById('admin-rename-chat-input').value.trim();
+    const originalVal = document.getElementById('admin-rename-chat-original').value;
+    const btnRename = document.getElementById('btn-admin-confirm-rename');
+
+    if (inputVal !== '' && inputVal !== originalVal) {
+        btnRename.disabled = false;
+        btnRename.style.opacity = '1';
+        btnRename.style.cursor = 'pointer';
+    } else {
+        btnRename.disabled = true;
+        btnRename.style.opacity = '0.5';
+        btnRename.style.cursor = 'not-allowed';
+    }
+}
+
+async function executeAdminRenameChat() {
+    const id = document.getElementById('admin-rename-chat-id').value;
+    const newName = document.getElementById('admin-rename-chat-input').value.trim();
+    const btn = document.getElementById('btn-admin-confirm-rename');
+
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang lưu...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/chatbot/phien-chat/${id}/doi-ten`, {
+            method: 'PUT',
+            credentials: 'include',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tieu_de: newName })
+        });
+
+        const data = await response.json();
+        if (response.ok && data.success) {
+            closeAdminChatModal('rename');
+            loadAdminChatSessions(); // Update UI
+            
+            // Cập nhật tiêu đề bên phải nếu đang mở đúng phiên này
+            if(document.getElementById('current-admin-chat-id').value === id) {
+                document.getElementById('admin-chat-header-title').innerText = newName;
+            }
+        } else {
+            alert(data.message || 'Lỗi khi đổi tên!');
+        }
+    } catch (e) {
+        alert('Lỗi kết nối máy chủ!');
+    } finally {
+        btn.innerHTML = 'Đổi tên';
+    }
+}
+
+async function executeAdminDeleteChat() {
+    const id = document.getElementById('admin-delete-chat-id').value;
+    const btn = document.getElementById('btn-admin-confirm-delete');
+
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xóa...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/chatbot/phien-chat/${id}`, {
+            method: 'DELETE',
+            credentials: 'include',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        });
+
+        const data = await response.json();
+        if (response.ok && data.success) {
+            closeAdminChatModal('delete');
+            loadAdminChatSessions();
+            
+            // Nếu phiên vừa xóa là phiên đang mở -> clear màn hình
+            if (document.getElementById('current-admin-chat-id').value === id) {
+                createNewAdminChatSession();
+            }
+        } else {
+            alert(data.message || 'Lỗi khi xóa!');
+        }
+    } catch (e) {
+        alert('Lỗi kết nối máy chủ!');
+    } finally {
+        btn.innerHTML = 'Xóa';
+        btn.disabled = false;
+    }
+}

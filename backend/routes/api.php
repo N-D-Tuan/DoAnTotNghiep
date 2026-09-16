@@ -54,6 +54,9 @@ Route::middleware('web')->group(function () {
     Route::delete('/chatbot/phien-chat/{id}', [ChatbotController::class, 'xoaPhienChat']);
     Route::get('/chatbot/phien-chat/{id}', [ChatbotController::class, 'layChiTietPhienChat']);
 
+    // Chatbot API Admin
+    Route::post('/chatbot/admin-chat', [App\Http\Controllers\ChatbotController::class, 'nhanTinNhanAdmin']);
+
     //Admin Dashboard
     Route::get('/admin/thong-ke', [DashboardController::class, 'layThongKe']);
 
