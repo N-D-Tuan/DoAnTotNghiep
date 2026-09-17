@@ -19,6 +19,8 @@ use App\Models\KhungGio;
 use App\Models\DatSan;
 use App\Models\GiaiDau;
 use App\Models\GiaoDich;
+use App\Models\YeuCauHuyGap;
+use App\Models\YeuCauRutTien;
 
 class ChatbotController extends Controller
 {
@@ -1055,7 +1057,15 @@ class ChatbotController extends Controller
                 'functionDeclarations' => [
                     [
                         'name' => 'thongKeTongQuan',
-                        'description' => 'Lấy số liệu thống kê tổng quan trong ngày hôm nay (số lượng đơn đặt sân, doanh thu cọc, số lượng khách hàng mới).'
+                        'description' => 'Lấy số liệu thống kê hệ thống (số lượng trận đấu, doanh thu cọc) theo một khoảng thời gian. NẾU LÀ 1 NGÀY CỤ THỂ, tu_ngay và den_ngay phải GIỐNG NHAU.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'tu_ngay' => ['type' => 'STRING', 'description' => 'Ngày bắt đầu thống kê (định dạng YYYY-MM-DD).'],
+                                'den_ngay' => ['type' => 'STRING', 'description' => 'Ngày kết thúc thống kê (định dạng YYYY-MM-DD). VD: nếu hỏi "hôm qua và hôm nay", tu_ngay là hôm qua, den_ngay là hôm nay.']
+                            ],
+                            'required' => ['tu_ngay', 'den_ngay']
+                        ]
                     ],
                     [
                         'name' => 'kiemTraYeuCauChoDuyet',
@@ -1082,7 +1092,8 @@ class ChatbotController extends Controller
                         2. BẢO MẬT: Bạn đang phục vụ Admin, nên bạn ĐƯỢC PHÉP xem và báo cáo mọi thông tin nội bộ nếu Admin hỏi (doanh thu, tiền bạc, thông tin user). 
                         3. GIỚI HẠN QUYỀN HẠN: Bạn là trợ lý 'Chỉ Đọc' (Read-only). Bạn chỉ có nhiệm vụ BÁO CÁO số liệu. TUYỆT ĐỐI KHÔNG nhận lệnh xóa, sửa, phê duyệt hay thay đổi bất kỳ dữ liệu nào trong hệ thống. Nếu Admin yêu cầu duyệt đơn hay xóa user, hãy hướng dẫn Admin tự thao tác trên giao diện web.
                         4. CÁCH SỬ DỤNG TOOL:
-                           - Admin hỏi tình hình hôm nay, doanh thu hôm nay -> Gọi `thongKeTongQuan`.
+                           - Admin hỏi tình hình, doanh thu, số trận đấu của ngày/tuần/tháng/năm bất kỳ -> Gọi `thongKeTongQuan`. BẮT BUỘC phải tự suy luận ra tham số `tu_ngay` và `den_ngay`.
+                           - QUAN TRỌNG: Nếu Admin hỏi 1 ngày cụ thể (VD: hôm qua), BẮT BUỘC gán `tu_ngay` và `den_ngay` bằng nhau. Nếu hỏi nhiều ngày liên tiếp (VD: hôm qua và hôm nay), BẮT BUỘC gom thành 1 khoảng thời gian (tu_ngay = hôm qua, den_ngay = hôm nay) để CHỈ GỌI HÀM 1 LẦN DUY NHẤT.
                            - Admin hỏi có đơn nào cần duyệt không, có ai rút tiền không -> Gọi `kiemTraYeuCauChoDuyet`.
                         5. Báo cáo số liệu tài chính luôn phải có định dạng VNĐ (VD: 1.500.000đ)."
                     ]
@@ -1116,9 +1127,12 @@ class ChatbotController extends Controller
 
                 // Xử lý các hàm của Admin
                 if ($functionName === 'thongKeTongQuan') {
-                    $functionResult = ['thong_bao' => 'Hàm thống kê tổng quan đang được xây dựng...']; // Placeholder
+                    $functionResult = $this->thucHienThongKeTongQuan(
+                        $arguments['tu_ngay'] ?? date('Y-m-d'),
+                        $arguments['den_ngay'] ?? date('Y-m-d')
+                    );
                 } elseif ($functionName === 'kiemTraYeuCauChoDuyet') {
-                    $functionResult = ['thong_bao' => 'Hàm kiểm tra chờ duyệt đang được xây dựng...']; // Placeholder
+                    $functionResult = $this->thucHienKiemTraYeuCauChoDuyet();
                 }
 
                 $contents[] = ['role' => 'model', 'parts' => $parts];
@@ -1156,6 +1170,73 @@ class ChatbotController extends Controller
             Log::error('Lỗi Gemini API Admin: ' . $e->getMessage());
             TinNhan::where('ID_PhienChat', $idPhienChat)->where('NguoiGui', 'User')->orderBy('ID', 'desc')->first()?->delete();
             return response()->json(['success' => false, 'message' => 'Lỗi kết nối AI.'], 500);
+        }
+    }
+
+    private function thucHienThongKeTongQuan($tuNgay, $denNgay)
+    {
+        try {
+            // 1. Số lượng trận đấu diễn ra trong khoảng thời gian này (Tính theo NgayDa)
+            $soTranDau = DatSan::whereDate('NgayDa', '>=', $tuNgay)
+                ->whereDate('NgayDa', '<=', $denNgay)
+                ->whereIn('TrangThai', ['DaCoc', 'HoanThanh', 'KhongDen'])
+                ->count();
+
+            // 2. Doanh thu cọc (Tính theo tổng TienCoc của các trận đấu diễn ra trong khoảng thời gian trên)
+            $doanhThuCoc = DatSan::whereDate('NgayDa', '>=', $tuNgay)
+                ->whereDate('NgayDa', '<=', $denNgay)
+                ->whereIn('TrangThai', ['DaCoc', 'HoanThanh', 'KhongDen'])
+                ->sum('TienCoc');
+
+            // Format lại chuỗi thời gian để AI đọc cho tự nhiên
+            $khoangThoiGian = ($tuNgay === $denNgay) 
+                ? date('d/m/Y', strtotime($tuNgay)) 
+                : date('d/m/Y', strtotime($tuNgay)) . ' đến ' . date('d/m/Y', strtotime($denNgay));
+
+            return [
+                'trang_thai' => 'thanh_cong',
+                'du_lieu' => [
+                    'thoi_gian_thong_ke' => $khoangThoiGian,
+                    'tong_so_tran_dau' => $soTranDau . ' trận',
+                    'doanh_thu_coc' => number_format($doanhThuCoc, 0, ',', '.') . ' VNĐ'
+                ],
+                'loi_nhan_cho_AI' => 'Đây là dữ liệu thống kê chính xác từ hệ thống. Hãy báo cáo chi tiết các số liệu trên một cách chuyên nghiệp cho Admin. Nếu kết quả đều là 0, hãy báo là thời gian này chưa có phát sinh dữ liệu.'
+            ];
+        } catch (\Exception $e) {
+            \Log::error('Lỗi thống kê Admin: ' . $e->getMessage());
+            return ['trang_thai' => 'loi', 'thong_bao' => 'Lỗi truy xuất cơ sở dữ liệu.'];
+        }
+    }
+
+    private function thucHienKiemTraYeuCauChoDuyet()
+    {
+        try {
+            // Đếm số lượng giải đấu chờ duyệt
+            $giaiDauChoDuyet = GiaiDau::where('TrangThai', 'ChoDuyet')->count();
+            
+            // Đếm số lượng Hủy sân gấp chờ duyệt
+            $huySanChoDuyet = YeuCauHuyGap::where('TrangThai', 'ChoDuyet')->count();
+            
+            // Đếm số lượng Rút tiền chờ duyệt
+            $rutTienChoDuyet = YeuCauRutTien::where('TrangThai', 'ChoDuyet')->count();
+
+            $tongChoDuyet = $giaiDauChoDuyet + $huySanChoDuyet + $rutTienChoDuyet;
+
+            return [
+                'trang_thai' => 'thanh_cong',
+                'du_lieu' => [
+                    'tong_yeu_cau_cho_duyet' => $tongChoDuyet . ' đơn',
+                    'chi_tiet' => [
+                        'giai_dau_cho_duyet' => $giaiDauChoDuyet . ' đơn',
+                        'huy_san_gap_cho_duyet' => $huySanChoDuyet . ' đơn',
+                        'rut_tien_cho_duyet' => $rutTienChoDuyet . ' đơn'
+                    ]
+                ],
+                'loi_nhan_cho_AI' => 'Hãy liệt kê chi tiết các yêu cầu đang chờ duyệt. Nếu tổng số đơn = 0, hãy báo rằng hệ thống hiện tại đã xử lý xong mọi yêu cầu, sếp có thể thảnh thơi.'
+            ];
+        } catch (\Exception $e) {
+            \Log::error('Lỗi kiểm tra yêu cầu Admin: ' . $e->getMessage());
+            return ['trang_thai' => 'loi', 'thong_bao' => 'Lỗi truy xuất cơ sở dữ liệu.'];
         }
     }
 }
