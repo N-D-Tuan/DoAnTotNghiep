@@ -1379,12 +1379,17 @@ function renderGDTable(data) {
     };
 
     tbody.innerHTML = data.map(item => {
-        let badgeClass = 'badge-secondary';
-        if(item.TrangThai === 'DaDuyet') badgeClass = 'badge-success';
-        else if(item.TrangThai === 'ChoDuyet') badgeClass = 'badge-warning';
-        else if(item.TrangThai === 'TuChoi' || item.TrangThai === 'DaHuy') badgeClass = 'badge-danger';
+        let badgeColor = '#6b7280', badgeBg = '#f3f4f6'; // Mặc định (Trắng xám)
+        if(item.TrangThai === 'ChoDuyet') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; } // Vàng cam
+        else if(item.TrangThai === 'DaDuyet') { badgeColor = '#047857'; badgeBg = '#d1fae5'; } // Xanh lá
+        else if(item.TrangThai === 'TuChoi') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; } // Đỏ nhạt
+        else if(item.TrangThai === 'DaHuy') { badgeColor = '#7f1d1d'; badgeBg = '#fca5a5'; } // Đỏ đậm
+        else if(item.TrangThai === 'HoanThanh') { badgeColor = '#1d4ed8'; badgeBg = '#dbeafe'; } // Xanh dương
+        else if(item.TrangThai === 'HetHan') { badgeColor = '#475569'; badgeBg = '#e2e8f0'; } // Xám đậm
 
         const viStatus = statusTextMap[item.TrangThai] || item.TrangThai;
+        
+        const badgeHtml = `<span style="padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor}; display: inline-block; text-align: center; min-width: 90px; white-space: nowrap;">${viStatus}</span>`;
 
         // Hành động Mở Modal thay vì gọi thẳng hàm
         let actionHtml = '';
@@ -1414,7 +1419,7 @@ function renderGDTable(data) {
                     <span style="font-size: 0.9rem; color: var(--text-muted);">đến ${item.NgayKetThuc}</span>
                 </td>
                 <td>${item.NgayTao ? item.NgayTao.substring(0,10) : 'N/A'}</td>
-                <td><span class="badge ${badgeClass}">${viStatus}</span></td>
+                <td>${badgeHtml}</td>
                 <td>${actionHtml}</td>
             </tr>
         `;
