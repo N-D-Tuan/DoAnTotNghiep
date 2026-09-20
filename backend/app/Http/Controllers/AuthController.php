@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\NguoiDung;
 use App\Models\GiaiDau;
+use App\Models\ThongBao;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -33,6 +34,8 @@ class AuthController extends Controller
             'VaiTro' => 'KhachHang',
             'SoDuVi' => 0
         ]);
+
+        broadcast(new \App\Events\AdminDataUpdated())->toOthers();
 
         return response()->json([
             'message' => 'Đăng ký thành công',
@@ -186,10 +189,43 @@ class AuthController extends Controller
         $today = now()->toDateString();
         $ngayHetHan = now()->subDays(3)->toDateString();
 
-        // Cập nhật Giải đấu
-        GiaiDau::where('TrangThai', 'DaDuyet')
+        $cacGiaiDauHetHan = GiaiDau::where('TrangThai', 'DaDuyet')
             ->whereDate('NgayDuyet', '<=', $ngayHetHan)
-            ->update(['TrangThai' => 'HetHan']);
+            ->get();
+
+        if ($cacGiaiDauHetHan->count() > 0) {
+            
+            $thongBaoMoi = [];
+            $userIdsToUpdate = [];
+
+            // 2. Tạo mảng thông báo cho từng giải đấu
+            foreach ($cacGiaiDauHetHan as $giaiDau) {
+                $thongBaoMoi[] = [
+                    'ID_NguoiDung' => $giaiDau->ID_NguoiDung,
+                    'LoaiThongBao' => 'GiaiDau',
+                    'TieuDe'       => 'Giải đấu hết hạn đặt sân',
+                    'NoiDung'      => "Hạn đặt sân 3 ngày cho giải đấu '{$giaiDau->TenGiaiDau}' của bạn đã hết hạn. Hệ thống đã tự động khóa lịch giải đấu này."
+                ];
+                
+                // Gom ID user để bắn WebSocket chính xác
+                if (!in_array($giaiDau->ID_NguoiDung, $userIdsToUpdate)) {
+                    $userIdsToUpdate[] = $giaiDau->ID_NguoiDung;
+                }
+            }
+
+            // 3. Chèn thông báo vào DB
+            ThongBao::insert($thongBaoMoi);
+
+            // 4. Cập nhật trạng thái Giải Đấu thành HetHan
+            GiaiDau::where('TrangThai', 'DaDuyet')
+                ->whereDate('NgayDuyet', '<=', $ngayHetHan)
+                ->update(['TrangThai' => 'HetHan']);
+
+            // 5. Bắn tín hiệu WebSocket đến các khách hàng bị ảnh hưởng để cập nhật chuông
+            foreach ($userIdsToUpdate as $userId) {
+                broadcast(new \App\Events\UserDataUpdated($userId));
+            }
+        }
 
     }
 }

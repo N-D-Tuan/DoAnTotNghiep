@@ -143,6 +143,11 @@ document.addEventListener(
 
                 loadNotifications();
 
+                // Nếu Admin đang mở tab TỔNG QUAN (Dashboard) -> TỰ ĐỘNG REFRESH BIỂU ĐỒ & SỐ LƯỢNG
+                if (document.getElementById('revenueChart')) {
+                    syncTongQuanData();
+                }
+
                 // NẾU ADMIN ĐANG MỞ TAB DANH SÁCH KHÁCH HÀNG -> TỰ REFRESH BẢNG
                 if (document.getElementById('khachhang-table-body')) {
                     loadDanhSachKhachHangAdmin();
@@ -1379,12 +1384,17 @@ function renderGDTable(data) {
     };
 
     tbody.innerHTML = data.map(item => {
-        let badgeClass = 'badge-secondary';
-        if(item.TrangThai === 'DaDuyet') badgeClass = 'badge-success';
-        else if(item.TrangThai === 'ChoDuyet') badgeClass = 'badge-warning';
-        else if(item.TrangThai === 'TuChoi' || item.TrangThai === 'DaHuy') badgeClass = 'badge-danger';
+        let badgeColor = '#6b7280', badgeBg = '#f3f4f6'; // Mặc định (Trắng xám)
+        if(item.TrangThai === 'ChoDuyet') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; } // Vàng cam
+        else if(item.TrangThai === 'DaDuyet') { badgeColor = '#047857'; badgeBg = '#d1fae5'; } // Xanh lá
+        else if(item.TrangThai === 'TuChoi') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; } // Đỏ nhạt
+        else if(item.TrangThai === 'DaHuy') { badgeColor = '#7f1d1d'; badgeBg = '#fca5a5'; } // Đỏ đậm
+        else if(item.TrangThai === 'HoanThanh') { badgeColor = '#1d4ed8'; badgeBg = '#dbeafe'; } // Xanh dương
+        else if(item.TrangThai === 'HetHan') { badgeColor = '#475569'; badgeBg = '#e2e8f0'; } // Xám đậm
 
         const viStatus = statusTextMap[item.TrangThai] || item.TrangThai;
+        
+        const badgeHtml = `<span style="padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor}; display: inline-block; text-align: center; min-width: 90px; white-space: nowrap;">${viStatus}</span>`;
 
         // Hành động Mở Modal thay vì gọi thẳng hàm
         let actionHtml = '';
@@ -1414,7 +1424,7 @@ function renderGDTable(data) {
                     <span style="font-size: 0.9rem; color: var(--text-muted);">đến ${item.NgayKetThuc}</span>
                 </td>
                 <td>${item.NgayTao ? item.NgayTao.substring(0,10) : 'N/A'}</td>
-                <td><span class="badge ${badgeClass}">${viStatus}</span></td>
+                <td>${badgeHtml}</td>
                 <td>${actionHtml}</td>
             </tr>
         `;
@@ -2971,7 +2981,7 @@ async function renderChiTietKhachHang(id) {
 
 // Hàm hỗ trợ Render dòng trong Bảng Đặt Sân của chi tiết KH
 function renderKhachHangDatSanTable(dsDatSan) {
-    if (dsDatSan.length === 0) return `<tr><td colspan="4" class="text-center">Khách hàng chưa đặt sân nào.</td></tr>`;
+    if (dsDatSan.length === 0) return `<tr><td colspan="4" class="text-center" style="text-align: center;">Khách hàng chưa đặt sân nào.</td></tr>`;
     
     return dsDatSan.map(item => {
         let badgeColor = '#6b7280', badgeBg = '#f3f4f6', viStatus = item.TrangThai;
@@ -3017,7 +3027,7 @@ function filterKHDatsan(status) {
 
 // Hàm hỗ trợ Render dòng trong Bảng Giao Dịch của chi tiết KH
 function renderKhachHangGiaoDichTable(dsGiaoDich) {
-    if (dsGiaoDich.length === 0) return `<tr><td colspan="4" class="text-center">Khách hàng chưa có giao dịch nào.</td></tr>`;
+    if (dsGiaoDich.length === 0) return `<tr><td colspan="4" class="text-center" style="text-align: center;">Khách hàng chưa có giao dịch nào.</td></tr>`;
     
     return dsGiaoDich.map(item => {
         const isCong = item.DongTien === 'Cong';
@@ -3262,20 +3272,20 @@ async function renderTongQuan() {
             <div class="stat-grid" style="margin-bottom: 24px;">
                 <div class="stat-card">
                     <div class="stat-title">Doanh thu hôm nay</div>
-                    <div class="stat-value" style="color: #047857;">${Number(data.doanh_thu_hom_nay).toLocaleString('vi-VN')}đ</div>
+                    <div id="stat-doanh-thu" class="stat-value" style="color: #047857;">${Number(data.doanh_thu_hom_nay).toLocaleString('vi-VN')}đ</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-title">Tổng số trận hôm nay</div>
-                    <div class="stat-value" style="color: #2563eb;">${data.booking_hoan_thanh_hom_nay}/${data.booking_hom_nay} trận</div>
+                    <div id="stat-so-tran" class="stat-value" style="color: #2563eb;">${data.booking_hoan_thanh_hom_nay}/${data.booking_hom_nay} trận</div>
                     <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">(Hoàn thành / Đã chốt)</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-title">Tổng Khách Hàng</div>
-                    <div class="stat-value" style="color: #8b5cf6;">${data.tong_khach_hang} người</div>
+                    <div id="stat-khach-hang" class="stat-value" style="color: #8b5cf6;">${data.tong_khach_hang} người</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-title">Yêu cầu chờ xử lý</div>
-                    <div class="stat-value" style="color: #ea580c;">${data.cho_duyet} đơn</div>
+                    <div id="stat-cho-duyet" class="stat-value" style="color: #ea580c;">${data.cho_duyet} đơn</div>
                 </div>
             </div>
 
@@ -3343,6 +3353,65 @@ async function renderTongQuan() {
 
     } catch (e) {
         contentArea.innerHTML = `<div style="text-align:center; color:red; padding: 50px;">Lỗi kết nối máy chủ! Không thể tải dữ liệu thống kê.</div>`;
+    }
+}
+
+async function syncTongQuanData() {
+    // Chỉ chạy ngầm nếu sếp đang thực sự đứng ở trang Tổng quan
+    if (!document.getElementById('revenueChart')) return;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/thong-ke`, { credentials: 'include' });
+        const res = await response.json();
+        
+        if (res.success) {
+            const data = res.data;
+            
+            // 1. Cập nhật ngầm 4 con số thống kê
+            const elDoanhThu = document.getElementById('stat-doanh-thu');
+            const elSoTran = document.getElementById('stat-so-tran');
+            const elKhachHang = document.getElementById('stat-khach-hang');
+            const elChoDuyet = document.getElementById('stat-cho-duyet');
+
+            if (elDoanhThu) elDoanhThu.innerText = `${Number(data.doanh_thu_hom_nay).toLocaleString('vi-VN')}đ`;
+            if (elSoTran) elSoTran.innerText = `${data.booking_hoan_thanh_hom_nay}/${data.booking_hom_nay} trận`;
+            if (elKhachHang) elKhachHang.innerText = `${data.tong_khach_hang} người`;
+            if (elChoDuyet) elChoDuyet.innerText = `${data.cho_duyet} đơn`;
+
+            // 2. Cập nhật ngầm bảng "Booking mới nhất" (Chỉ sửa phần ruột tbody)
+            const recentTbody = document.querySelector('.admin-table tbody');
+            if (recentTbody && !document.getElementById('khachhang-table-body')) { // Tránh nhầm với bảng khác
+                
+                if (data.recent_bookings.length === 0) {
+                    recentTbody.innerHTML = `<tr><td colspan="6" class="text-center" style="padding: 20px; color: var(--text-muted);">Chưa có dữ liệu.</td></tr>`;
+                } else {
+                    recentTbody.innerHTML = data.recent_bookings.map(bk => {
+                        let badgeColor = '#6b7280', badgeBg = '#f3f4f6', viStatus = bk.TrangThai;
+                        if(bk.TrangThai === 'DaCoc') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; viStatus = 'Đã cọc'; }
+                        else if(bk.TrangThai === 'DaHuy') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; viStatus = 'Đã hủy'; }
+                        else if(bk.TrangThai === 'HoanThanh') { badgeColor = '#047857'; badgeBg = '#d1fae5'; viStatus = 'Hoàn thành'; }
+                        else if(bk.TrangThai === 'KhongDen') { badgeColor = '#6b7280'; badgeBg = '#f3f4f6'; viStatus = 'Không đến'; }
+                        const badgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${viStatus}</span>`;
+
+                        const d = new Date(bk.NgayDa);
+                        const dateStr = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
+                        const timeStr = bk.khung_gio ? `${bk.khung_gio.GioBatDau.substring(0,5)} - ${bk.khung_gio.GioKetThuc.substring(0,5)}` : '';
+                        
+                        return `
+                            <tr>
+                                <td><strong style="font-family: monospace;">#${bk.ID_GiaiDau ? 'GD-'+bk.ID_GiaiDau : 'PT-'+bk.ID}</strong></td>
+                                <td>${bk.nguoi_dung ? bk.nguoi_dung.HoTen : 'N/A'}</td>
+                                <td><strong style="color: var(--primary);">${bk.san_bong ? bk.san_bong.TenSan : 'N/A'}</strong><br><span style="font-size:0.8rem;color:var(--text-muted);"><i class="fa-solid fa-location-dot"></i> ${bk.san_bong && bk.san_bong.cum_san ? bk.san_bong.cum_san.TenCumSan : ''}</span></td>
+                                <td>${dateStr}<br><strong style="font-size:0.85rem;color:var(--text-dark);">${timeStr}</strong></td>
+                                <td>${badgeHtml}</td>
+                            </tr>
+                        `;
+                    }).join('');
+                }
+            }
+        }
+    } catch (error) {
+        console.error("Lỗi đồng bộ ngầm Dashboard:", error);
     }
 }
 

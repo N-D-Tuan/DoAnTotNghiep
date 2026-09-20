@@ -97,6 +97,10 @@ class ChromaDBService
             'id' => 'huong_dan_dat_san', 
             'noi_dung' => 'Hướng dẫn đặt sân: Khách hàng truy cập trang chủ, chọn cụm sân, sân bóng, khung giờ ở ngày muốn đá. Sau khi hệ thống hiển thị sân trống, bạn nhấn "Tiến hành đặt sân" và tiến hành thanh toán cọc (30% cho đá phong trào, 50% cho giải đấu) bằng tiền trong thẻ ví của bạn để giữ chỗ thành công.' 
         ],
+        [ 
+            'id' => 'huong_dan_dat_giai_dau', 
+            'noi_dung' => 'Hướng dẫn đặt sân cho giải đấu: Khách hàng truy cập trang chủ, chọn vào cụm sân mình được phép đá giải. Sau khi vào trong, bạn nhấn "Tiến hành đặt sân", thay đổi mục đích đặt sân của mình sang giải đấu mình muốn, chọn các khung giờ và tiến hành thanh toán cọc (30% cho đá phong trào, 50% cho giải đấu) bằng tiền trong thẻ ví của bạn để giữ chỗ thành công.' 
+        ],
         [
             'id' => 'quy_dinh_dat_san',
             'noi_dung' => 'Quy định đặt sân và cọc tiền: Để giữ lịch thành công, khách hàng bắt buộc phải thanh toán cọc trước 30% tổng giá trị ca đặt (50% đối với giải đấu).'
