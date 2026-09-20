@@ -151,6 +151,8 @@ class VNPayController extends Controller
                                 'NoiDung'      => 'Bạn đã nạp thành công ' . number_format($soTienNap) . 'đ vào ví điện tử từ VNPay.',
                                 'LoaiThongBao' => 'ViTien'
                             ]);
+
+                            broadcast(new \App\Events\AdminDataUpdated())->toOthers();
                         }
                     }
                     DB::commit();
