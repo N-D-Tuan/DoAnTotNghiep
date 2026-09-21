@@ -2408,6 +2408,38 @@ function applyBookingFiltersAndRender() {
                 ? `Thời gian diễn ra: <strong>${formatDate(gd.ngayBatDau)} - ${formatDate(gd.ngayKetThuc)}</strong>`
                 : 'Thời gian: Đang cập nhật';
 
+            const firstMatch = gd.matches[0];
+            const trangThaiGiaiDauGoc = firstMatch && firstMatch.giai_dau ? firstMatch.giai_dau.TrangThai : '';
+            
+            let statusBadgeHtml = '';
+
+            if (trangThaiGiaiDauGoc === 'HetHan') {
+                if (gd.ngayBatDau && gd.ngayKetThuc) {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0); // Đưa về mốc 0h để so sánh ngày
+                    
+                    const startDate = new Date(gd.ngayBatDau);
+                    startDate.setHours(0, 0, 0, 0);
+                    
+                    const endDate = new Date(gd.ngayKetThuc);
+                    endDate.setHours(23, 59, 59, 999); // Đưa về cuối ngày
+
+                    if (today >= startDate && today <= endDate) {
+                        statusBadgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: #d1fae5; color: #047857; margin-left: 10px;">Đang diễn ra</span>`;
+                    } else if (today < startDate) {
+                        statusBadgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: #fef3c7; color: #b45309; margin-left: 10px;">Sắp diễn ra</span>`;
+                    } else {
+                        statusBadgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: #e2e8f0; color: #475569; margin-left: 10px;">Đã kết thúc</span>`;
+                    }
+                }
+            } else if (trangThaiGiaiDauGoc === 'HoanThanh') {
+                statusBadgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: #dbeafe; color: #1d4ed8; margin-left: 10px;">Đã hoàn thành</span>`;
+            } else if (trangThaiGiaiDauGoc === 'DaHuy' || trangThaiGiaiDauGoc === 'TuChoi') {
+                statusBadgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: #fee2e2; color: #b91c1c; margin-left: 10px;">Đã hủy</span>`;
+            } else {
+                 statusBadgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: #f3f4f6; color: #6b7280; margin-left: 10px;">Đang chờ</span>`;
+            }
+
             gd.matches.sort((a, b) => {
                 const timeA = new Date(a.NgayDa + 'T' + (a.khung_gio ? a.khung_gio.GioBatDau : '00:00:00')).getTime();
                 const timeB = new Date(b.NgayDa + 'T' + (b.khung_gio ? b.khung_gio.GioBatDau : '00:00:00')).getTime();
@@ -2448,7 +2480,7 @@ function applyBookingFiltersAndRender() {
                 <div ${cardClick} style="cursor: ${cursorStyle}; background: white; border: 1px solid var(--border); border-left: 4px solid #4338ca; border-radius: 12px; padding: 20px; margin-bottom: 24px; box-shadow: var(--shadow-sm);">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; border-bottom: 1px dashed var(--border); padding-bottom: 16px;">
                         <div>
-                            <h3 style="margin: 0 0 6px 0; font-size: 1.25rem; color: #4338ca;"><i class="fa-solid fa-trophy"></i> Giải đấu: ${gd.tenGiaiDau}</h3>
+                            <h3 style="margin: 0 0 6px 0; font-size: 1.25rem; color: #4338ca; display: flex; align-items: center;"><i class="fa-solid fa-trophy" style="margin-right: 8px;"></i> Giải đấu: ${gd.tenGiaiDau} ${statusBadgeHtml}</h3>
                             <div style="font-size: 0.95rem; color: var(--text-dark); margin-bottom: 4px; font-weight: 500;"><i class="fa-solid fa-location-dot" style="color: var(--primary);"></i> ${gd.cumSan}</div>
                             <div style="font-size: 0.95rem; color: var(--text-muted); margin-bottom: 4px;">${thoiGianGiaiDau}</div>
                             <div style="font-size: 0.95rem; color: var(--text-muted);">Tổng số trận: <strong>${gd.matches.length}</strong> | Tổng cọc: <strong style="color: #ea580c;">${gd.totalCoc.toLocaleString('vi-VN')}đ</strong></div>
