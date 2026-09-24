@@ -1,6 +1,23 @@
 const API_BASE_URL = 'http://127.0.0.1:8000/api';
 const appContent = document.getElementById('app-content');
 
+// ======================================================
+// FETCH INTERCEPTOR (TỰ ĐỘNG BƠM TOKEN VÀO MỌI API)
+// ======================================================
+const originalFetch = window.fetch;
+window.fetch = async function(resource, config = {}) {
+    if (!config.headers) config.headers = {};
+    const token = sessionStorage.getItem('dn_football_token');
+    if (token) {
+        if (config.headers instanceof Headers) {
+            config.headers.append('Authorization', `Bearer ${token}`);
+        } else {
+            config.headers['Authorization'] = `Bearer ${token}`;
+        }
+    }
+    return originalFetch(resource, config);
+};
+
 let toastTimeout;
 let currentClusterId = null;
 let currentClusterName = null;
@@ -90,7 +107,7 @@ function loadCustomerInfo() {
 // ======================================================
 async function syncUserWallet() {
     try {
-        const res = await fetch(`${API_BASE_URL}/thong-tin-ca-nhan`, { credentials: 'include' });
+        const res = await fetch(`${API_BASE_URL}/thong-tin-ca-nhan`);
         if (res.ok) {
             const data = await res.json();
 
@@ -126,7 +143,7 @@ async function syncUserBookings() {
     if (!document.getElementById('my-bookings-container')) return;
 
     try {
-        const response = await fetch(`${API_BASE_URL}/dat-san/cua-toi`, { credentials: 'include' });
+        const response = await fetch(`${API_BASE_URL}/dat-san/cua-toi`);
         if (!response.ok) return;
         
         const res = await response.json();
@@ -161,7 +178,7 @@ async function syncUserTournaments() {
     if (!isGiaiDauTab) return;
 
     try {
-        const response = await fetch(`${API_BASE_URL}/giai-dau/cua-toi`, { credentials: 'include' });
+        const response = await fetch(`${API_BASE_URL}/giai-dau/cua-toi`);
         if (!response.ok) return;
         
         const res = await response.json();
@@ -262,7 +279,7 @@ async function syncUserUrgentCancels() {
     if (!isHuySanTab) return;
 
     try {
-        const response = await fetch(`${API_BASE_URL}/yeu-cau-huy-gap/cua-toi`, { credentials: 'include' });
+        const response = await fetch(`${API_BASE_URL}/yeu-cau-huy-gap/cua-toi`);
         if (!response.ok) return;
         
         const res = await response.json();
@@ -344,7 +361,7 @@ async function syncUserWithdrawals() {
     if (!isRutTienTab) return;
 
     try {
-        const response = await fetch(`${API_BASE_URL}/yeu-cau-rut-tien/cua-toi`, { credentials: 'include' });
+        const response = await fetch(`${API_BASE_URL}/yeu-cau-rut-tien/cua-toi`);
         if (!response.ok) return;
         
         const res = await response.json();
@@ -528,7 +545,6 @@ async function logoutCustomer() {
                 `${API_BASE_URL}/dang-xuat`,
                 {
                     method: 'POST',
-                    credentials: 'include',
                     headers: {
                         'Accept':
                             'application/json',
@@ -658,7 +674,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             wsPort: 8080,
             forceTLS: false,
             disableStats: true,
-            // Custom Authorizer: Dùng fetch với credentials: 'include' để tự động gửi Session Cookie khi xác thực Private Channel
             authorizer: (channel, options) => {
                 return {
                     authorize: (socketId, callback) => {
@@ -668,7 +683,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 'Content-Type': 'application/json',
                                 'Accept': 'application/json'
                             },
-                            credentials: 'include', // Mang theo cookie đăng nhập
                             body: JSON.stringify({
                                 socket_id: socketId,
                                 channel_name: channel.name
@@ -1113,7 +1127,7 @@ function updateFloatingCart() {
 // Hàm gọi API lấy danh sách giải đấu Đã Duyệt của khách hàng
 async function loadUserTournaments() {
     try {
-        const res = await fetch(`${API_BASE_URL}/giai-dau/cua-toi`, { credentials: 'include' });
+        const res = await fetch(`${API_BASE_URL}/giai-dau/cua-toi`);
         if (res.ok) {
             const data = await res.json();
             // Lọc và chỉ lưu lại các giải đấu đã được duyệt vào biến toàn cục
@@ -1541,7 +1555,6 @@ async function checkoutBooking() {
 
         const response = await fetch(`${API_BASE_URL}/dat-san`, {
             method: 'POST',
-            credentials: 'include',
             headers: { 
                 'Accept': 'application/json', 
                 'Content-Type': 'application/json',
@@ -2155,7 +2168,7 @@ function markSlotAsBooked(slot) {
 // ======================================================
 async function loadMyBookingsData() {
     try {
-        const response = await fetch(`${API_BASE_URL}/dat-san/cua-toi`, { credentials: 'include' });
+        const response = await fetch(`${API_BASE_URL}/dat-san/cua-toi`);
         const res = await response.json();
         
         allMyBookingsData = res.data || [];
@@ -2559,7 +2572,6 @@ async function executeCancelTournament() {
         // Gọi API Hủy hàng loạt theo ID Giải Đấu
         const response = await fetch(`${API_BASE_URL}/giai-dau/${pendingCancelTourId}/huy-lich`, {
             method: 'PUT',
-            credentials: 'include',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-Socket-ID': window.Echo.socketId() }
         });
 
@@ -2623,7 +2635,6 @@ async function executeCancelBooking() {
     try {
         const response = await fetch(`${API_BASE_URL}/dat-san/${pendingCancelId}/huy`, {
             method: 'PUT',
-            credentials: 'include',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-Socket-ID': window.Echo.socketId() }
         });
 
@@ -2727,7 +2738,6 @@ async function saveProfile() {
     try {
         const response = await fetch(`${API_BASE_URL}/cap-nhat-profile`, {
             method: 'PUT',
-            credentials: 'include',
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
@@ -2827,7 +2837,6 @@ async function sendPasswordOTP() {
     try {
         const response = await fetch(`${API_BASE_URL}/gui-otp`, {
             method: 'POST',
-            credentials: 'include',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: user.Email })
         });
@@ -2871,7 +2880,6 @@ async function verifyAndChangePassword() {
     try {
         const response = await fetch(`${API_BASE_URL}/dat-lai-mat-khau`, {
             method: 'POST',
-            credentials: 'include',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 email: user.Email,
@@ -2941,7 +2949,7 @@ async function renderRequests(activeTab = 'giai_dau') {
     if (activeTab === 'giai_dau') {
         try {
             // Cần tạo API Backend cho route này sau
-            const response = await fetch(`${API_BASE_URL}/giai-dau/cua-toi`, { credentials: 'include' });
+            const response = await fetch(`${API_BASE_URL}/giai-dau/cua-toi`);
             if (!response.ok) throw new Error('API chưa sẵn sàng');
             
             const res = await response.json();
@@ -3040,7 +3048,7 @@ async function renderRequests(activeTab = 'giai_dau') {
         }
     } else if (activeTab === 'huy_san') {
         try {
-            const response = await fetch(`${API_BASE_URL}/yeu-cau-huy-gap/cua-toi`, { credentials: 'include' });
+            const response = await fetch(`${API_BASE_URL}/yeu-cau-huy-gap/cua-toi`);
             const res = await response.json();
             const list = res.data || [];
 
@@ -3100,7 +3108,7 @@ async function renderRequests(activeTab = 'giai_dau') {
         } catch (e) { container.innerHTML = `<div style="padding: 40px; color: var(--danger);">Lỗi tải dữ liệu.</div>`; }
     } else if (activeTab === 'rut_tien') {
         try {
-            const response = await fetch(`${API_BASE_URL}/yeu-cau-rut-tien/cua-toi`, { credentials: 'include' });
+            const response = await fetch(`${API_BASE_URL}/yeu-cau-rut-tien/cua-toi`);
             const res = await response.json();
             const list = res.data || [];
 
@@ -3225,7 +3233,6 @@ async function submitTournamentRequest() {
     try {
         const response = await fetch(`${API_BASE_URL}/giai-dau/tao-yeu-cau`, {
             method: 'POST',
-            credentials: 'include', // Bắt buộc để gửi kèm Session/Cookie định danh user
             headers: { 
                 'Accept': 'application/json', 
                 'Content-Type': 'application/json' 
@@ -3390,7 +3397,7 @@ async function loadTransactionHistory(filterDate = '') {
     const listContainer = document.getElementById('transaction-list');
     try {
         // GỌI API THẬT TỪ BACKEND
-        const response = await fetch(`${API_BASE_URL}/giao-dich/cua-toi`, { credentials: 'include' });
+        const response = await fetch(`${API_BASE_URL}/giao-dich/cua-toi`);
         const data = await response.json();
         
         // Kiểm tra nếu API trả về không thành công
@@ -3514,7 +3521,6 @@ async function processDeposit() {
     try {
         const response = await fetch(`${API_BASE_URL}/vnpay/nap-tien`, {
             method: 'POST',
-            credentials: 'include',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify({ so_tien: amount })
         });
@@ -3571,7 +3577,6 @@ async function submitWithdrawRequest() {
     try {
         const response = await fetch(`${API_BASE_URL}/yeu-cau-rut-tien`, {
             method: 'POST',
-            credentials: 'include',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
             body: JSON.stringify({ SoTien: amount, NoiDung: note })
         });
@@ -3605,7 +3610,7 @@ async function submitWithdrawRequest() {
 // 1. Tải danh sách thông báo từ API
 async function loadNotifications() {
     try {
-        const res = await fetch(`${API_BASE_URL}/thong-bao`, { credentials: 'include' });
+        const res = await fetch(`${API_BASE_URL}/thong-bao`);
         if (!res.ok) return;
         
         const data = await res.json();
@@ -3677,8 +3682,7 @@ async function loadNotifications() {
 async function markAllAsRead() {
     try {
         await fetch(`${API_BASE_URL}/thong-bao/doc-tat-ca`, { 
-            method: 'PUT', 
-            credentials: 'include' 
+            method: 'PUT'
         });
         
         // Ẩn huy hiệu chuông ngay lập tức trên UI để tạo cảm giác mượt mà
@@ -3725,8 +3729,7 @@ function toggleNotificationDropdown(e) {
 async function markAsRead(id, element) {
     try {
         const res = await fetch(`${API_BASE_URL}/thong-bao/${id}/doc`, {
-            method: 'PUT',
-            credentials: 'include'
+            method: 'PUT'
         });
         
         if (res.ok) {
@@ -3767,8 +3770,8 @@ async function openUrgentCancelModal() {
     try {
         // ĐÃ SỬA: Gọi song song 2 API để lấy Lịch Đặt Sân và Yêu Cầu Hủy Gấp
         const [dsRes, ygRes] = await Promise.all([
-            fetch(`${API_BASE_URL}/dat-san/cua-toi`, { credentials: 'include' }),
-            fetch(`${API_BASE_URL}/yeu-cau-huy-gap/cua-toi`, { credentials: 'include' })
+            fetch(`${API_BASE_URL}/dat-san/cua-toi`),
+            fetch(`${API_BASE_URL}/yeu-cau-huy-gap/cua-toi`)
         ]);
         
         const dsData = await dsRes.json();
@@ -3897,7 +3900,6 @@ async function submitUrgentCancelRequest() {
     try {
         const response = await fetch(`${API_BASE_URL}/yeu-cau-huy-gap`, {
             method: 'POST',
-            credentials: 'include',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 id_dat_san: datSanId,
@@ -4250,7 +4252,7 @@ document.addEventListener('pointerdown', function (event) {
 async function loadChatSessions() {
     const sidebarList = document.getElementById('chat-sidebar-list');
     try {
-        const response = await fetch(`${API_BASE_URL}/chatbot/phien-chat`, { credentials: 'include' });
+        const response = await fetch(`${API_BASE_URL}/chatbot/phien-chat`);
         const res = await response.json();
 
         if (res.success && res.data.length > 0) {
@@ -4329,7 +4331,7 @@ async function loadChatDetails(id) {
     loadChatSessions();
 
     try {
-        const response = await fetch(`${API_BASE_URL}/chatbot/phien-chat/${id}`, { credentials: 'include' });
+        const response = await fetch(`${API_BASE_URL}/chatbot/phien-chat/${id}`);
         const res = await response.json();
 
         if (res.success) {
@@ -4388,7 +4390,6 @@ async function sendChatMessage() {
 
         const response = await fetch(`${API_BASE_URL}/chatbot/chat`, {
             method: 'POST',
-            credentials: 'include',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
@@ -4585,7 +4586,6 @@ async function executeRenameChat() {
     try {
         const response = await fetch(`${API_BASE_URL}/chatbot/phien-chat/${id}/doi-ten`, {
             method: 'PUT',
-            credentials: 'include',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
             body: JSON.stringify({ tieu_de: newName })
         });
@@ -4619,7 +4619,6 @@ async function executeDeleteChat() {
     try {
         const response = await fetch(`${API_BASE_URL}/chatbot/phien-chat/${id}`, {
             method: 'DELETE',
-            credentials: 'include',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
         });
 

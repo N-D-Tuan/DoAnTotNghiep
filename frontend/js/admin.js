@@ -3,6 +3,23 @@
 // ======================================================
 const API_BASE_URL = 'http://127.0.0.1:8000/api';
 
+// ======================================================
+// FETCH INTERCEPTOR (TỰ ĐỘNG BƠM TOKEN VÀO MỌI API)
+// ======================================================
+const originalFetch = window.fetch;
+window.fetch = async function(resource, config = {}) {
+    if (!config.headers) config.headers = {};
+    const token = sessionStorage.getItem('dn_football_token');
+    if (token) {
+        if (config.headers instanceof Headers) {
+            config.headers.append('Authorization', `Bearer ${token}`);
+        } else {
+            config.headers['Authorization'] = `Bearer ${token}`;
+        }
+    }
+    return originalFetch(resource, config);
+};
+
 let currentGDDate = '';
 // ======================================================
 // DOM READY
@@ -125,7 +142,6 @@ document.addEventListener(
                         fetch(`${API_BASE_URL.replace('/api', '')}/broadcasting/auth`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                            credentials: 'include',
                             body: JSON.stringify({ socket_id: socketId, channel_name: channel.name })
                         })
                         .then(response => response.json())
@@ -190,7 +206,6 @@ async function logoutAdmin() {
                 `${API_BASE_URL}/dang-xuat`,
                 {
                     method: 'POST',
-                    credentials: 'include',
                     headers: {
                         'Accept':
                             'application/json',
@@ -337,7 +352,6 @@ async function saveAdminProfile() {
     try {
         const response = await fetch(`${API_BASE_URL}/cap-nhat-profile`, {
             method: 'PUT',
-            credentials: 'include', // Bắt buộc để gửi kèm Cookie/Session
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
@@ -439,7 +453,6 @@ async function sendPasswordOTP() {
     try {
         const response = await fetch(`${API_BASE_URL}/gui-otp`, {
             method: 'POST',
-            credentials: 'include',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: user.Email })
         });
@@ -483,7 +496,6 @@ async function verifyAndChangePassword() {
     try {
         const response = await fetch(`${API_BASE_URL}/dat-lai-mat-khau`, {
             method: 'POST',
-            credentials: 'include',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 email: user.Email,
@@ -562,7 +574,7 @@ function renderQuanLySan() {
 // 2. Fetch API và vẽ Thẻ Cụm Sân
 async function loadCumSanCards() {
     try {
-        const response = await fetch(`${API_BASE_URL}/cum-san`, { credentials: 'include' });
+        const response = await fetch(`${API_BASE_URL}/cum-san`);
         const res = await response.json();
         
         const grid = document.getElementById('cumsan-grid');
@@ -611,7 +623,7 @@ async function renderCumSanDetail(cumSanId) {
 
     try {
         // Fetch dữ liệu Cụm Sân chi tiết từ API
-        const response = await fetch(`${API_BASE_URL}/cum-san/${cumSanId}`, { credentials: 'include' });
+        const response = await fetch(`${API_BASE_URL}/cum-san/${cumSanId}`);
         const res = await response.json();
 
         if (!res.success) {
@@ -695,7 +707,7 @@ async function renderCumSanDetail(cumSanId) {
 
 async function loadSanBongTheoCum(cumSanId) {
     try {
-        const response = await fetch(`${API_BASE_URL}/san-bong?cum_san_id=${cumSanId}`, { credentials: 'include' });
+        const response = await fetch(`${API_BASE_URL}/san-bong?cum_san_id=${cumSanId}`);
         const res = await response.json();
         
         const tbody = document.getElementById('sanbong-table-body');
@@ -768,7 +780,6 @@ async function saveSanBong() {
     try {
         const response = await fetch(url, {
             method: method,
-            credentials: 'include',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
@@ -892,7 +903,6 @@ async function saveGiaTien(csID, lsID, tenLoaiSan) {
     try {
         const response = await fetch(`${API_BASE_URL}/gia-tien/save`, {
             method: 'POST',
-            credentials: 'include',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 ID_CumSan: csID,
@@ -933,7 +943,7 @@ function showCumSanAlert(message, isSuccess) {
 // Hàm tải danh sách Phường vào Select
 async function loadPhuongDropdown() {
     try {
-        const response = await fetch(`${API_BASE_URL}/phuong`, { credentials: 'include' });
+        const response = await fetch(`${API_BASE_URL}/phuong`);
         const res = await response.json();
         if (res.success) {
             const select = document.getElementById('cs-phuong');
@@ -1043,10 +1053,8 @@ async function saveCumSan() {
     try {
         const response = await fetch(url, {
             method: 'POST',
-            credentials: 'include',
             headers: {
                 'Accept': 'application/json'
-                // Xóa 'Content-Type' để browser tự set dạng multipart/form-data
             },
             body: formData
         });
@@ -1153,7 +1161,6 @@ async function executeCSAction() {
     try {
         const response = await fetch(url, {
             method: method,
-            credentials: 'include',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
         });
 
@@ -1305,7 +1312,7 @@ function showGDAlert(message, isSuccess) {
 // ----------------------------------------------------
 async function loadDanhSachGiaiDauAdmin() {
     try {
-        const response = await fetch(`${API_BASE_URL}/admin/giai-dau`, { credentials: 'include' });
+        const response = await fetch(`${API_BASE_URL}/admin/giai-dau`);
         const res = await response.json();
         
         if (res.success) {
@@ -1516,7 +1523,6 @@ async function executeCapNhatTrangThai() {
     try {
         const response = await fetch(`${API_BASE_URL}/admin/giai-dau/${pendingActionId}/xu-ly`, {
             method: 'PUT',
-            credentials: 'include',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
             body: JSON.stringify({ trang_thai: pendingActionStatus, ly_do_huy: lyDoHuy })
         });
@@ -1588,7 +1594,7 @@ async function openMaTranLichModal(giaiDauId) {
 
     try {
         // 2. Fetch Data
-        const response = await fetch(`${API_BASE_URL}/admin/giai-dau/${giaiDauId}/ma-tran`, { credentials: 'include' });
+        const response = await fetch(`${API_BASE_URL}/admin/giai-dau/${giaiDauId}/ma-tran`);
         const res = await response.json();
 
         if (!res.success) {
@@ -1794,7 +1800,7 @@ function handleRTFilter(val) { currentRTFilter = val; currentRTPage = 1; applyRT
 
 async function loadDanhSachRutTienAdmin() {
     try {
-        const response = await fetch(`${API_BASE_URL}/admin/yeu-cau-rut-tien`, { credentials: 'include' });
+        const response = await fetch(`${API_BASE_URL}/admin/yeu-cau-rut-tien`);
         const res = await response.json();
         if (res.success) { allRutTienData = res.data || []; applyRTFiltersAndRender(); }
     } catch (error) { showRTAlert('Lỗi kết nối.', false); }
@@ -1906,7 +1912,7 @@ async function executeCapNhatTrangThaiRT() {
 
     try {
         const response = await fetch(`${API_BASE_URL}/admin/yeu-cau-rut-tien/${pendingRTId}/xu-ly`, {
-            method: 'PUT', credentials: 'include', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            method: 'PUT', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
             body: JSON.stringify({ trang_thai: pendingRTStatus, ly_do_huy: lyDoHuy })
         });
         const data = await response.json();
@@ -1931,7 +1937,7 @@ document.addEventListener('click', () => {
 // 1. Tải danh sách thông báo từ API
 async function loadNotifications() {
     try {
-        const res = await fetch(`${API_BASE_URL}/thong-bao`, { credentials: 'include' });
+        const res = await fetch(`${API_BASE_URL}/thong-bao`);
         if (!res.ok) return;
         
         const data = await res.json();
@@ -2003,8 +2009,7 @@ async function loadNotifications() {
 async function markAllAsRead() {
     try {
         await fetch(`${API_BASE_URL}/thong-bao/doc-tat-ca`, { 
-            method: 'PUT', 
-            credentials: 'include' 
+            method: 'PUT'
         });
         
         // Ẩn huy hiệu chuông ngay lập tức trên UI để tạo cảm giác mượt mà
@@ -2048,8 +2053,7 @@ function toggleNotificationDropdown(e) {
 async function markAsRead(id, element) {
     try {
         const res = await fetch(`${API_BASE_URL}/thong-bao/${id}/doc`, {
-            method: 'PUT',
-            credentials: 'include'
+            method: 'PUT'
         });
         
         if (res.ok) {
@@ -2156,7 +2160,7 @@ function handleDSFilter(val) { currentDSFilter = val; currentDSPage = 1; applyDS
 
 async function loadDanhSachDatSanAdmin() {
     try {
-        const response = await fetch(`${API_BASE_URL}/admin/dat-san`, { credentials: 'include' });
+        const response = await fetch(`${API_BASE_URL}/admin/dat-san`);
         const res = await response.json();
         if (res.success) { allDatSanData = res.data || []; applyDSFiltersAndRender(); }
     } catch (error) { showDSAlert('Lỗi kết nối máy chủ.', false); }
@@ -2351,7 +2355,6 @@ async function executeCapNhatDatSan(trangThai) {
     try {
         const response = await fetch(`${API_BASE_URL}/admin/dat-san/${pendingDSId}/chot`, {
             method: 'PUT',
-            credentials: 'include',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
             body: JSON.stringify({ trang_thai: trangThai })
         });
@@ -2375,7 +2378,6 @@ async function executeCapNhatDatSan(trangThai) {
     try {
         const response = await fetch(`${API_BASE_URL}/admin/dat-san/${pendingDSId}/chot`, {
             method: 'PUT',
-            credentials: 'include',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
             body: JSON.stringify({ trang_thai: trangThai })
         });
@@ -2475,7 +2477,7 @@ function handleUCFilter(val) { currentUCFilter = val; currentUCPage = 1; applyUC
 
 async function loadDanhSachHuySanAdmin() {
     try {
-        const response = await fetch(`${API_BASE_URL}/admin/yeu-cau-huy-gap`, { credentials: 'include' });
+        const response = await fetch(`${API_BASE_URL}/admin/yeu-cau-huy-gap`);
         const res = await response.json();
         if (res.success) { 
             allHuySanData = res.data || []; 
@@ -2679,7 +2681,7 @@ async function executeCapNhatTrangThaiUC() {
 
     try {
         const response = await fetch(`${API_BASE_URL}/admin/yeu-cau-huy-gap/${pendingUCId}/xu-ly`, {
-            method: 'PUT', credentials: 'include', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            method: 'PUT', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
             body: JSON.stringify({ trang_thai: pendingUCStatus, ly_do_huy: lyDoHuy })
         });
         const data = await response.json();
@@ -2759,7 +2761,7 @@ function renderQuanLyKhachHang() {
 
 async function loadDanhSachKhachHangAdmin() {
     try {
-        const response = await fetch(`${API_BASE_URL}/admin/khach-hang`, { credentials: 'include' });
+        const response = await fetch(`${API_BASE_URL}/admin/khach-hang`);
         const res = await response.json();
         if (res.success) {
             allKhachHangData = res.data;
@@ -2843,7 +2845,7 @@ async function renderChiTietKhachHang(id) {
     contentArea.innerHTML = `<div style="text-align:center; padding: 50px;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải thông tin...</div>`;
 
     try {
-        const response = await fetch(`${API_BASE_URL}/admin/khach-hang/${id}`, { credentials: 'include' });
+        const response = await fetch(`${API_BASE_URL}/admin/khach-hang/${id}`);
         const res = await response.json();
         
         if (!res.success) {
@@ -3147,7 +3149,6 @@ async function executeToggleKhoaKhachHang() {
     try {
         const response = await fetch(`${API_BASE_URL}/admin/khach-hang/${pendingKhoaUserId}/khoa`, {
             method: 'PUT',
-            credentials: 'include',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
         });
         
@@ -3205,7 +3206,7 @@ async function renderTongQuan() {
     contentArea.innerHTML = `<div style="text-align:center; padding: 50px;"><i class="fa-solid fa-spinner fa-spin text-primary" style="font-size: 2rem;"></i><br><br>Đang tải dữ liệu tổng quan...</div>`;
 
     try {
-        const response = await fetch(`${API_BASE_URL}/admin/thong-ke`, { credentials: 'include' });
+        const response = await fetch(`${API_BASE_URL}/admin/thong-ke`);
         const res = await response.json();
 
         if (!res.success) throw new Error('Không thể tải dữ liệu');
@@ -3223,8 +3224,8 @@ async function renderTongQuan() {
             alertHtml = `
                 <div style="background: #fef2f2; border: 1px solid #f87171; border-left: 4px solid #ef4444; color: #b91c1c; padding: 16px 20px; border-radius: 8px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px rgba(239, 68, 68, 0.1);">
                     <div>
-                        <h4 style="margin: 0 0 4px 0; font-size: 1.05rem;"><i class="fa-solid fa-triangle-exclamation"></i> CẢNH BÁO: CHƯA CHỐT SÂN NGÀY HÔM QUA</h4>
-                        <p style="margin: 0; font-size: 0.9rem;">Hệ thống phát hiện có <strong>${data.so_san_quen_chot}</strong> lịch đặt sân của ngày hôm qua vẫn đang ở trạng thái "Đã cọc". Vui lòng kiểm tra và chốt sân để không ảnh hưởng dữ liệu thống kê!</p>
+                        <h4 style="margin: 0 0 4px 0; font-size: 1.05rem;"><i class="fa-solid fa-triangle-exclamation"></i> CẢNH BÁO: CHƯA CHỐT SÂN NGÀY HÔM TRƯỚC</h4>
+                        <p style="margin: 0; font-size: 0.9rem;">Hệ thống phát hiện có <strong>${data.so_san_quen_chot}</strong> lịch đặt sân của ngày hôm trước vẫn đang ở trạng thái "Đã cọc". Vui lòng kiểm tra và chốt sân để không ảnh hưởng dữ liệu thống kê!</p>
                     </div>
                     <button onclick="renderQuanLyDatSan('DaCoc', '${yesterday}')" style="background: #ef4444; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; white-space: nowrap;">Xử lý ngay</button>
                 </div>
@@ -3361,7 +3362,7 @@ async function syncTongQuanData() {
     if (!document.getElementById('revenueChart')) return;
 
     try {
-        const response = await fetch(`${API_BASE_URL}/admin/thong-ke`, { credentials: 'include' });
+        const response = await fetch(`${API_BASE_URL}/admin/thong-ke`);
         const res = await response.json();
         
         if (res.success) {
@@ -3455,7 +3456,7 @@ async function loadAdminChatSessions() {
     const sidebarList = document.getElementById('admin-chat-sidebar-list');
     try {
         // Tái sử dụng API lấy danh sách phiên chat (tự nhận diện ID Admin qua session)
-        const response = await fetch(`${API_BASE_URL}/chatbot/phien-chat`, { credentials: 'include' });
+        const response = await fetch(`${API_BASE_URL}/chatbot/phien-chat`);
         const res = await response.json();
 
         if (res.success && res.data.length > 0) {
@@ -3515,7 +3516,7 @@ async function loadAdminChatDetails(id) {
     loadAdminChatSessions();
 
     try {
-        const response = await fetch(`${API_BASE_URL}/chatbot/phien-chat/${id}`, { credentials: 'include' });
+        const response = await fetch(`${API_BASE_URL}/chatbot/phien-chat/${id}`);
         const res = await response.json();
 
         if (res.success) {
@@ -3567,7 +3568,6 @@ async function sendAdminChatMessage() {
         // BẮN VÀO ROUTE MỚI CỦA ADMIN
         const response = await fetch(`${API_BASE_URL}/chatbot/admin-chat`, {
             method: 'POST',
-            credentials: 'include',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
@@ -3738,7 +3738,6 @@ async function executeAdminRenameChat() {
     try {
         const response = await fetch(`${API_BASE_URL}/chatbot/phien-chat/${id}/doi-ten`, {
             method: 'PUT',
-            credentials: 'include',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
             body: JSON.stringify({ tieu_de: newName })
         });
@@ -3772,7 +3771,6 @@ async function executeAdminDeleteChat() {
     try {
         const response = await fetch(`${API_BASE_URL}/chatbot/phien-chat/${id}`, {
             method: 'DELETE',
-            credentials: 'include',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
         });
 

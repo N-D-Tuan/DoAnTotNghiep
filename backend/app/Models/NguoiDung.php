@@ -4,17 +4,19 @@ namespace App\Models;
 
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 
 class NguoiDung extends Authenticatable
 {
     use Notifiable;
+    use HasApiTokens;
 
     protected $table = 'NguoiDung';
     protected $primaryKey = 'ID';
     public $timestamps = false;
 
     protected $fillable = [
-        'HoTen', 'SoDienThoai', 'Email', 'MatKhau', 'VaiTro', 'SoDuVi', 'MaOTP', 'ThoiGianHetHanOTP', 'TrangThaiKhoa'
+        'HoTen', 'SoDienThoai', 'Email', 'MatKhau', 'VaiTro', 'SoDuVi', 'MaOTP', 'ThoiGianHetHanOTP', 'TrangThaiKhoa', 'Token'
     ];
 
     protected $casts = [
@@ -22,7 +24,7 @@ class NguoiDung extends Authenticatable
     ];
 
     protected $hidden = [
-        'MatKhau', 'MaOTP', 'ThoiGianHetHanOTP'
+        'MatKhau', 'MaOTP', 'ThoiGianHetHanOTP', 'Token'
     ];
 
     // Ghi đè phương thức lấy mật khẩu mặc định của Laravel

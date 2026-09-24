@@ -239,7 +239,6 @@ async function handleLogin(form) {
         `${API_BASE_URL}/dang-nhap`,
         {
             method: 'POST',
-            credentials: 'include',
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
@@ -298,6 +297,8 @@ async function handleLogin(form) {
         JSON.stringify(data.user)
     );
 
+    sessionStorage.setItem('dn_football_token', data.token);
+
     console.log(
         'Đăng nhập thành công:',
         data.user
@@ -344,7 +345,6 @@ async function handleRegister(form) {
         `${API_BASE_URL}/dang-ky`,
         {
             method: 'POST',
-            credentials: 'include',
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
@@ -733,7 +733,6 @@ async function handleSendOTP(form) {
 
     const response = await fetch(`${API_BASE_URL}/gui-otp`, {
         method: 'POST',
-        credentials: 'include',
         headers: {
             'Accept': 'application/json',
             'Content-Type': 'application/json'
@@ -776,7 +775,6 @@ async function handleResetPassword(form) {
 
     const response = await fetch(`${API_BASE_URL}/dat-lai-mat-khau`, {
         method: 'POST',
-        credentials: 'include',
         headers: {
             'Accept': 'application/json',
             'Content-Type': 'application/json'
