@@ -1112,7 +1112,8 @@ class ChatbotController extends Controller
                            - Admin hỏi SẮP TỚI CÓ GIẢI ĐẤU NÀO KHÔNG -> Gọi `traCuuGiaiDauSapToi`.
                            - Admin hỏi DANH SÁCH TRẬN ĐẤU, CÓ TRẬN NÀO ĐÁ KHÔNG (VD: 'ngày mai có trận nào không') -> Gọi `traCuuDanhSachTranDau`. BẮT BUỘC liệt kê rõ ràng cho admin thấy đó là trận Phong trào hay Giải đấu.
                            - ĐẶC BIỆT LƯU Ý VỀ NGÀY THÁNG: Khi Admin hỏi từ 2 ngày trở lên (VD: 'ngày mai và ngày mốt'), BẮT BUỘC gộp thành khoảng thời gian (tu_ngay = ngày mai, den_ngay = ngày mốt) để chỉ gọi hàm 1 lần. Khi trả lời, BẮT BUỘC phải tách riêng và báo cáo rõ ràng từng ngày một, không được gộp chung số liệu trừ khi Admin yêu cầu tính tổng.
-                        5. Báo cáo số liệu tài chính luôn phải có định dạng VNĐ (VD: 1.500.000đ)."
+                        5. Báo cáo số liệu tài chính luôn phải có định dạng VNĐ (VD: 1.500.000đ).
+                        6. QUY ĐỊNH VỀ THỜI GIAN: Hệ thống CHỈ hỗ trợ các khung giờ chẵn theo từng tiếng (VD: 17:00 - 18:00, 18:00 - 19:00). TUYỆT ĐỐI KHÔNG hỗ trợ giờ lẻ (như 17:30, 18h30) và KHÔNG cho phép đặt 1 tiếng rưỡi."
                     ]
                 ]
             ]

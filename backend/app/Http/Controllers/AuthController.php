@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Mail;
 use Carbon\Carbon;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
@@ -61,13 +62,20 @@ class AuthController extends Controller
         // 4. Thực hiện kiểm tra
         if (Auth::attempt($credentials)) {
             $user = Auth::user();
+
+            $user->tokens()->delete();
+
+            $token = $user->createToken('auth_token')->plainTextToken;
+
+            $user->Token = $token;
+            $user->save();
             
             $this->tuDongCapNhatHeThong();
 
             return response()->json([
                 'message' => 'Đăng nhập thành công',
                 'user' => $user,
-                // 'token' => $token 
+                'token' => $token 
             ]);
         }
 
@@ -79,8 +87,14 @@ class AuthController extends Controller
     // Chức năng Đăng xuất
     public function dangXuat(Request $request)
     {
-        Auth::logout();
-        // Nếu dùng token: $request->user()->currentAccessToken()->delete();
+        $user = $request->user();
+        
+        if ($user) {
+            $user->currentAccessToken()->delete();
+            
+            $user->Token = null;
+            $user->save();
+        }
         
         return response()->json(['message' => 'Đã đăng xuất']);
     }
@@ -226,6 +240,5 @@ class AuthController extends Controller
                 broadcast(new \App\Events\UserDataUpdated($userId));
             }
         }
-
     }
 }
