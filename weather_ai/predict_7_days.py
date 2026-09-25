@@ -14,7 +14,6 @@ CLUSTERS = [
 ]
 
 FORECAST_DAYS = 7
-RAIN_PROBABILITY_THRESHOLD = 0.5
 
 def tao_khung_gio_du_bao():
     now = datetime.now()
@@ -26,9 +25,15 @@ def tao_khung_gio_du_bao():
             times.append(current_day.replace(hour=hour))
     return times
 
-def phan_loai_thoi_tiet(co_mua, luong_mua, cloud_cover):
+def phan_loai_thoi_tiet(co_mua, luong_mua, cloud_cover, humidity, pressure, wind_speed):
     if luong_mua > 10: return "Mưa lớn"
     if co_mua and luong_mua > 0.1: return "Mưa"
+
+    if cloud_cover > 90 and humidity > 88:
+        if pressure < 1005 and wind_speed > 15:
+            return "Mưa lớn"
+        return "Mưa"
+
     if cloud_cover >= 80: return "Âm u"
     if cloud_cover >= 30: return "Có mây"
     return "Nắng"
@@ -70,7 +75,6 @@ def du_doan_7_ngay_toi():
             current_anchor = {}
             for col in bundle["base_columns"]:
                 current_anchor[f"{col}_mean_7d"] = history[col].tail(168).mean()
-            
             row = {
                 "gio": forecast_time.hour,
                 "thang": forecast_time.month,
@@ -82,7 +86,7 @@ def du_doan_7_ngay_toi():
             X = pd.DataFrame([row])[bundle["feature_columns"]]
 
             # AI Phân loại trạng thái Mưa / Không mưa
-            RAIN_PROBABILITY_THRESHOLD = 0.66 
+            RAIN_PROBABILITY_THRESHOLD = 0.64 
             rain_prob = float(models["co_mua"].predict_proba(X)[0][1])
             rain_flag = int(rain_prob >= RAIN_PROBABILITY_THRESHOLD)
 
@@ -112,7 +116,14 @@ def du_doan_7_ngay_toi():
                 "xac_suat_mua_mo_hinh": round(rain_prob * 100, 2),
                 "co_mua": "Có" if rain_flag else "Không",
                 "luong_mua_mm": round(rain_mm, 2) if rain_flag else 0.0,
-                "kieu_thoi_tiet": phan_loai_thoi_tiet(rain_flag, rain_mm, predicted["do_che_phu_may"]),
+                "kieu_thoi_tiet": phan_loai_thoi_tiet(
+                    rain_flag, 
+                    rain_mm, 
+                    predicted["do_che_phu_may"],
+                    predicted["do_am"],
+                    predicted["ap_suat"],
+                    predicted["toc_do_gio"]
+                ),
                 "nhiet_do": round(predicted["nhiet_do"], 2),
                 "do_am": round(np.clip(predicted["do_am"], 0, 100), 2),
                 "do_che_phu_may": round(np.clip(predicted["do_che_phu_may"], 0, 100), 2),

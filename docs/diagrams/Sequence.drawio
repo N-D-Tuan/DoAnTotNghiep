@@ -189,7 +189,7 @@
     </mxGraphModel>
   </diagram>
   <diagram name="Đăng nhập" id="8zBbc4lXUgINC1VbgIoC">
-    <mxGraphModel dx="1980" dy="914" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="1683" dy="777" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -311,9 +311,6 @@
             </mxGeometry>
           </mxCell>
         </UserObject>
-        <mxCell id="USrZE1rQUQZKpwDemRAs-17" parent="USrZE1rQUQZKpwDemRAs-1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Architects Daughter;fontSize=16;fontColor=light-dark(#333333,#cccccc);fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" value="Khởi tạo Session / Cấp Token" vertex="1">
-          <mxGeometry height="18" width="200" x="669" y="469" as="geometry" />
-        </mxCell>
         <UserObject label="Điều hướng (Redirect)" mermaidId="e:C-&gt;UI#1" mermaidBaseStyle="dashed=1;fixDash=1;dashPattern=3 3;endArrow=block;endSize=9;verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontSize=16;labelBackgroundColor=none;strokeWidth=1.5;strokeColor=light-dark(#333333,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;" mermaidBaseValue="Điều hướng (Redirect)" id="USrZE1rQUQZKpwDemRAs-18">
           <mxCell edge="1" parent="USrZE1rQUQZKpwDemRAs-1" source="USrZE1rQUQZKpwDemRAs-4" style="dashed=1;fixDash=1;dashPattern=3 3;endArrow=block;endSize=9;verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontSize=16;labelBackgroundColor=none;strokeWidth=1.5;strokeColor=light-dark(#333333,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;sourcePerimeterSpacing=8;targetPerimeterSpacing=8;" target="USrZE1rQUQZKpwDemRAs-3">
             <mxGeometry relative="1" as="geometry">
@@ -336,6 +333,9 @@
             </mxGeometry>
           </mxCell>
         </UserObject>
+        <mxCell id="iylHZnxt0jkqUuxQMgAE-1" parent="USrZE1rQUQZKpwDemRAs-1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontSize=20;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" value="&lt;span style=&quot;color: rgb(51, 51, 51); font-family: &amp;quot;Trebuchet MS&amp;quot;, Verdana, Arial, sans-serif; font-size: 16px;&quot;&gt;Cấp phát chuỗi Bearer Token (Sanctum)&lt;/span&gt;" vertex="1">
+          <mxGeometry height="30" width="343" x="576" y="454" as="geometry" />
+        </mxCell>
       </root>
     </mxGraphModel>
   </diagram>
