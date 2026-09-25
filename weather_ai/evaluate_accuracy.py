@@ -55,7 +55,7 @@ def run_backtest():
         
         # Dự đoán Mưa
         rain_prob = models["co_mua"].predict_proba(X)[0][1]
-        rain_flag = int(rain_prob >= 0.66)
+        rain_flag = int(rain_prob >= 0.64)
 
         predicted = {}
         for name in bundle["base_columns"]:

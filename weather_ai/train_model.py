@@ -61,7 +61,7 @@ def train_weather_ai():
     print("2. Huấn luyện mô hình Phân loại Mưa...")
     rain_classifier = RandomForestClassifier(
         n_estimators=350, max_depth=16, min_samples_leaf=2,
-        class_weight={0: 1.0, 1: 1.3}, random_state=42, n_jobs=-1
+        class_weight={0: 1.0, 1: 1.0}, random_state=42, n_jobs=-1
     )
     rain_classifier.fit(X_train, y_train_clf)
     models["co_mua"] = rain_classifier
