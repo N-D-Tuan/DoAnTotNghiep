@@ -6,7 +6,6 @@ from sklearn.metrics import f1_score, accuracy_score
 def find_optimal_threshold():
     print("🔍 BẮT ĐẦU QUÉT TOÁN HỌC TÌM NGƯỠNG TỐI ƯU (GRID SEARCH)...")
     
-    # 1. Nạp dữ liệu
     df = pd.read_csv("danang_weather_history.csv")
     df["thoi_gian"] = pd.to_datetime(df["thoi_gian"])
     
@@ -21,11 +20,7 @@ def find_optimal_threshold():
     history_base = df_c1.iloc[-336:-168].copy()
     
     y_true_rain = (test_actual["luong_mua"] > 0.1).astype(int).tolist()
-    
-    # Dải ngưỡng cần quét (Từ 0.40 đến 0.75, mỗi bước nhảy là 0.02)
-    thresholds_to_test = np.arange(0.40, 0.76, 0.02)
-    
-    results = []
+    thresholds_to_test = np.arange(0.20, 0.62, 0.02)
 
     print(f"{'Ngưỡng (Threshold)':<20} | {'Độ chính xác (Acc)':<20} | {'Điểm F1-Macro':<20}")
     print("-" * 65)
@@ -39,9 +34,16 @@ def find_optimal_threshold():
         
         for _, row in test_actual.iterrows():
             current_time = row["thoi_gian"]
+            
+            # --- Tính mỏ neo Mean và Std từ lịch sử ---
             current_anchor = {}
             for col in bundle["base_columns"]:
                 current_anchor[f"{col}_mean_7d"] = history[col].tail(168).mean()
+            
+            for col in ["do_am", "do_che_phu_may"]:
+                std_val = history[col].tail(168).std()
+                current_anchor[f"{col}_std_7d"] = 0.0 if pd.isna(std_val) else std_val
+            # ------------------------------------------
                 
             X_dict = {
                 "gio": current_time.hour,
@@ -56,18 +58,13 @@ def find_optimal_threshold():
             rain_flag = int(rain_prob >= threshold)
             y_pred_rain.append(rain_flag)
             
-            # Cập nhật lịch sử để cuốn chiếu
             new_row = {"thoi_gian": current_time}
             for c in bundle["base_columns"]:
-                if c == "luong_mua": new_row[c] = float(models[c].predict(X)[0]) if rain_flag else 0.0
-                else: new_row[c] = float(models[c].predict(X)[0])
+                new_row[c] = float(models[c].predict(X)[0])
             history = pd.concat([history, pd.DataFrame([new_row])], ignore_index=True)
         
-        # Chấm điểm tại ngưỡng hiện tại
         acc = accuracy_score(y_true_rain, y_pred_rain)
-        # F1-Macro cân bằng giữa cả việc đoán trúng Mưa và trúng Nắng
         f1_macro = f1_score(y_true_rain, y_pred_rain, average='macro')
-        
         print(f"{threshold:<20.2f} | {acc*100:<18.2f}% | {f1_macro:<20.4f}")
         
         if f1_macro > max_f1:
@@ -77,7 +74,10 @@ def find_optimal_threshold():
     print("-" * 65)
     print(f"🏆 NGƯỠNG TOÁN HỌC TỐI ƯU NHẤT LÀ: {best_threshold:.2f}")
     print(f"Đạt điểm F1-Macro cao nhất: {max_f1:.4f}")
-    print("=> HÃY ĐIỀN CON SỐ NÀY VÀO FILE PREDICT CỦA BẠN!")
+
+    pd.DataFrame([{"threshold": best_threshold}]).to_csv("optimal_threshold.csv", index=False)
+    print("=> TỰ ĐỘNG HÓA: Đã lưu ngưỡng tối ưu vào file 'optimal_threshold.csv'")
+    print("=> File Evaluate và Predict sẽ tự động lấy con số này!")
 
 if __name__ == "__main__":
     find_optimal_threshold()

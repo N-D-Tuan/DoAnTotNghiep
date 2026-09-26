@@ -1,39 +1,34 @@
+import os
 import requests
 import pandas as pd
 import time
 from datetime import datetime, timedelta
+from sqlalchemy import create_engine
+from dotenv import load_dotenv
 
-# ============================================================
-# CẤU HÌNH CÁC CỤM SÂN
-# Thay tọa độ mẫu bằng tọa độ thực tế của các cụm sân của bạn.
-# Có thể thêm nhiều cụm sân vào danh sách này.
-# ============================================================
-CLUSTERS = [
-    {
-        "cum_san_id": 1,
-        "ten_cum_san": "Sân Đa Phước",
-        "latitude": 16.0763069,
-        "longitude": 108.2045825
-    },
-    {
-        "cum_san_id": 4,
-        "ten_cum_san": "Sân An Phúc",
-        "latitude": 16.0873684,
-        "longitude": 108.2168627
-    },
-    {
-        "cum_san_id": 5,
-        "ten_cum_san": "Sân Chuyên Việt",
-        "latitude": 16.0447858,
-        "longitude": 108.2146174
-    },
-    {
-        "cum_san_id": 6,
-        "ten_cum_san": "Sân Win Win",
-        "latitude": 16.0610116,
-        "longitude": 108.2399103
-    }
-]
+load_dotenv()
+DB_URI = os.getenv("DB_URI")
+
+def get_clusters_from_db():
+    try:
+        engine = create_engine(DB_URI)
+        # Chỉ lấy những sân có tọa độ
+        query = """
+            SELECT 
+                ID as cum_san_id, 
+                TenCumSan as ten_cum_san, 
+                ViDo as latitude, 
+                KinhDo as longitude 
+            FROM CumSan 
+            WHERE ViDo IS NOT NULL AND KinhDo IS NOT NULL
+        """
+        df_clusters = pd.read_sql(query, engine)
+        return df_clusters.to_dict('records')
+    except Exception as e:
+        print(f" Lỗi kết nối Database: {e}")
+        return []
+
+CLUSTERS = get_clusters_from_db()
 
 OUTPUT_FILE = "danang_weather_history.csv"
 YEARS_TO_FETCH = 3
