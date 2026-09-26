@@ -12,7 +12,7 @@ class CumSan extends Model
     protected $table = 'CumSan';
     protected $primaryKey = 'ID';
     public $timestamps = false;
-    protected $fillable = ['ID_Phuong', 'TenCumSan', 'DiaChi', 'GioMoCua', 'GioDongCua', 'HinhAnh'];
+    protected $fillable = ['ID_Phuong', 'TenCumSan', 'DiaChi', 'ViDo', 'KinhDo', 'GioMoCua', 'GioDongCua', 'HinhAnh'];
 
     public function phuong()
     {

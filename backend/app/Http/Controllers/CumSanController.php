@@ -22,6 +22,8 @@ class CumSanController extends Controller
             'ID_Phuong'  => 'required|exists:Phuong,ID',
             'TenCumSan'  => 'required|string|max:255',
             'DiaChi'     => 'required|string|max:255',
+            'ViDo'       => 'required|numeric',
+            'KinhDo'     => 'required|numeric',
             'GioMoCua'   => 'required|date_format:H:i',
             'GioDongCua' => 'required|date_format:H:i',
             'HinhAnh'    => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048'
@@ -41,7 +43,7 @@ class CumSanController extends Controller
     // 3. Cập nhật Cụm Sân
     public function update(Request $request, $id)
     {
-        $cumSan = CumSan::find($id);
+        $cumSan = CumSan::withTrashed()->find($id);;
         if (!$cumSan) {
             return response()->json(['success' => false, 'message' => 'Không tìm thấy cụm sân!'], 404);
         }
@@ -50,6 +52,8 @@ class CumSanController extends Controller
             'ID_Phuong'  => 'required|exists:Phuong,ID',
             'TenCumSan'  => 'required|string|max:255',
             'DiaChi'     => 'required|string|max:255',
+            'ViDo'       => 'required|numeric',
+            'KinhDo'     => 'required|numeric',
             'GioMoCua'   => 'required|date_format:H:i',
             'GioDongCua' => 'required|date_format:H:i',
             'HinhAnh'    => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048'

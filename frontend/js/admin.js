@@ -687,7 +687,7 @@ async function renderCumSanDetail(cumSanId) {
                             </tr>
                         </thead>
                         <tbody id="sanbong-table-body">
-                            <tr><td colspan="4" class="text-center">Đang tải...</td></tr>
+                            <tr><td colspan="4" class="text-center" style="text-align: center;">Đang tải...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -973,12 +973,20 @@ async function openEditCumSanModal(cs) {
     document.getElementById('cumsan-modal-title').textContent = 'Chỉnh sửa Cụm Sân';
     editCumSanId = cs.ID; // Đánh dấu là đang sửa
 
+    const btnSave = document.querySelector('#cumsan-modal .btn-primary');
+    if (btnSave) {
+        btnSave.textContent = 'Lưu Cụm Sân';
+        btnSave.disabled = false;
+    }
+
     await loadPhuongDropdown();
     generateTimeOptions('cs-giomo', cs.GioMoCua.substring(0, 5));
     generateTimeOptions('cs-giodong', cs.GioDongCua.substring(0, 5));
 
     document.getElementById('cs-ten').value = cs.TenCumSan;
     document.getElementById('cs-diachi').value = cs.DiaChi;
+    document.getElementById('cs-vido').value = cs.ViDo || '';
+    document.getElementById('cs-kinhdo').value = cs.KinhDo || '';
     document.getElementById('cs-phuong').value = cs.ID_Phuong;
     document.getElementById('cs-hinhanh').value = ''; // Reset input file
 
@@ -991,10 +999,18 @@ async function openCumSanModal() {
     document.getElementById('cumsan-modal-title').textContent = 'Thêm Cụm Sân Mới';
 
     editCumSanId = null;
+
+    const btnSave = document.querySelector('#cumsan-modal .btn-primary');
+    if (btnSave) {
+        btnSave.textContent = 'Lưu Cụm Sân';
+        btnSave.disabled = false;
+    }
     
     // Clear dữ liệu cũ
     document.getElementById('cs-ten').value = '';
     document.getElementById('cs-diachi').value = '';
+    document.getElementById('cs-vido').value = '';
+    document.getElementById('cs-kinhdo').value = '';
     document.getElementById('cs-hinhanh').value = '';
     
     // Sinh dropdown giờ chuẩn 24h và set mặc định
@@ -1019,6 +1035,8 @@ async function saveCumSan() {
     const tenCumSan = document.getElementById('cs-ten').value.trim();
     const idPhuong = document.getElementById('cs-phuong').value;
     const diaChi = document.getElementById('cs-diachi').value.trim();
+    const viDo = document.getElementById('cs-vido').value.trim();
+    const kinhDo = document.getElementById('cs-kinhdo').value.trim();
     const gioMo = document.getElementById('cs-giomo').value;
     const gioDong = document.getElementById('cs-giodong').value;
     
@@ -1038,6 +1056,8 @@ async function saveCumSan() {
     formData.append('TenCumSan', tenCumSan);
     formData.append('ID_Phuong', idPhuong);
     formData.append('DiaChi', diaChi);
+    formData.append('ViDo', viDo);
+    formData.append('KinhDo', kinhDo);
     formData.append('GioMoCua', gioMo);
     formData.append('GioDongCua', gioDong);
     
