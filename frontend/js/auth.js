@@ -309,26 +309,19 @@ async function handleLogin(form) {
     // ==============================================
 
     if (data.user.VaiTro === 'KhachHang') {
-        window.location.href =
-            'customer.html';
-
+        window.location.href = 'customer.html';
         return;
     }
 
-    if (data.user.VaiTro === 'Admin') {
-        window.location.href =
-            'admin.html';
-
+    // Cho phép cả Admin và QuanLySan vào trang Dashboard
+    if (data.user.VaiTro === 'Admin' || data.user.VaiTro === 'QuanLySan') {
+        window.location.href = 'admin.html';
         return;
     }
 
     // Vai trò không hợp lệ
     sessionStorage.clear();
-    showFormMessage(
-        form,
-        'Vai trò tài khoản không hợp lệ.',
-        'error'
-    );
+    showFormMessage(form, 'Vai trò tài khoản không hợp lệ.', 'error');
 }
 
 // ======================================================

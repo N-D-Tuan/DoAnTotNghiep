@@ -16,7 +16,7 @@ class NguoiDung extends Authenticatable
     public $timestamps = false;
 
     protected $fillable = [
-        'HoTen', 'SoDienThoai', 'Email', 'MatKhau', 'VaiTro', 'SoDuVi', 'MaOTP', 'ThoiGianHetHanOTP', 'TrangThaiKhoa', 'Token'
+        'HoTen', 'SoDienThoai', 'Email', 'MatKhau', 'VaiTro', 'SoDuVi', 'MaOTP', 'ThoiGianHetHanOTP', 'TrangThaiKhoa', 'Token', 'ID_CumSan'
     ];
 
     protected $casts = [
@@ -61,5 +61,10 @@ class NguoiDung extends Authenticatable
     public function thongBaos()
     {
         return $this->hasMany(ThongBao::class, 'ID_NguoiDung', 'ID');
+    }
+
+    public function cumSan()
+    {
+        return $this->belongsTo(CumSan::class, 'ID_CumSan', 'ID');
     }
 }

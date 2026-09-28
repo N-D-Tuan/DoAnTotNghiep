@@ -1,4 +1,4 @@
-<mxfile host="app.diagrams.net" pages="14">
+<mxfile host="app.diagrams.net" pages="15">
   <diagram name="Đăng ký" id="BzztISM2V6nG0YmpkWcu">
     <mxGraphModel dx="2244" dy="1036" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
@@ -2169,7 +2169,7 @@
             <mxGeometry height="54" width="259" x="35" y="560" as="geometry" />
           </mxCell>
         </UserObject>
-        <UserObject label="Truy cập DN FOOTBALL" mermaidId="n:Start" mermaidBaseStyle="html=1;rounded=1;whiteSpace=wrap;arcSize=50;strokeWidth=2;fillColor=#1e293b;strokeColor=#0f172a;fontColor=#fff;fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontStyle=1;" mermaidBaseValue="Truy cập DN FOOTBALL" id="YT2M3igp2EM4a7R2Kv6R-40">
+        <UserObject label="Truy cập hệ thống" mermaidId="n:Start" mermaidBaseStyle="html=1;rounded=1;whiteSpace=wrap;arcSize=50;strokeWidth=2;fillColor=#1e293b;strokeColor=#0f172a;fontColor=#fff;fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontStyle=1;" mermaidBaseValue="Truy cập DN FOOTBALL" id="YT2M3igp2EM4a7R2Kv6R-40">
           <mxCell parent="YT2M3igp2EM4a7R2Kv6R-1" style="html=1;rounded=1;whiteSpace=wrap;arcSize=50;strokeWidth=2;fillColor=#1e293b;strokeColor=#0f172a;fontColor=#fff;fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontStyle=1;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" vertex="1">
             <mxGeometry height="39" width="189" x="1588" y="30" as="geometry" />
           </mxCell>
@@ -2387,6 +2387,161 @@
                 <mxPoint x="1554" y="1123" />
                 <mxPoint x="1554" y="1167" />
                 <mxPoint x="1554" y="1201" />
+              </Array>
+            </mxGeometry>
+          </mxCell>
+        </UserObject>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="3HZPCa6IxUJcTXoN_FMN" name="Flowchart thực tế">
+    <mxGraphModel dx="3060" dy="213" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <UserObject label="" mermaidData="{&#xa;  &quot;data&quot;: &quot;flowchart TD\n    subgraph KH [Làn 1: KHÁCH HÀNG]\n        direction TB\n        Start([Bắt đầu])\n        K1(1. Yêu cầu đặt sân &amp; Cọc)\n        K2(3. Đến sân nhận ca)\n        K3(4. Sử dụng sân &amp; Dịch vụ)\n        K4(5. Thanh toán tiền còn lại)\n    end\n\n    subgraph HT [Làn 2: HỆ THỐNG PHẦN MỀM]\n        direction TB\n        H1(Ghi nhận &amp; Khóa lịch)\n        H2(Lưu doanh thu &amp; In hóa đơn)\n    end\n\n    subgraph LT [Làn 3: LỄ TÂN / BẢO VỆ]\n        direction TB\n        L1(2. Xác nhận mã &amp; Bàn giao sân)\n        L2(6. Kiểm tra sân &amp; Chốt ca)\n        End([Kết thúc])\n    end\n\n    %% Luồng đi\n    Start --&gt; K1\n    K1 --&gt;|Thông tin lịch| H1\n    H1 --&gt;|Báo có khách| L1\n    L1 --&gt;|Giao sân| K2\n    K2 ---&gt; K3\n    K3 ---&gt; K4\n    K4 --&gt;|Tiền &amp; Thông tin| H2\n    H2 --&gt;|Biên lai| L2\n    L2 --&gt; End\n\n    %% ==========================================\n    %% ÉP MÀU TRỰC TIẾP (BẢO ĐẢM 100% KHÔNG BỊ LỖI)\n    %% ==========================================\n\n    %% Màu xám cho khối Bắt đầu / Kết thúc\n    style Start fill:#f1f5f9,stroke:#475569,stroke-width:2px,color:#0f172a,font-weight:bold\n    style End fill:#f1f5f9,stroke:#475569,stroke-width:2px,color:#0f172a,font-weight:bold\n\n    %% Màu XANH DƯƠNG cho làn Khách Hàng\n    style K1 fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a,font-weight:bold\n    style K2 fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a,font-weight:bold\n    style K3 fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a,font-weight:bold\n    style K4 fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a,font-weight:bold\n\n    %% Màu VÀNG cho làn Hệ Thống\n    style H1 fill:#fef08a,stroke:#ca8a04,stroke-width:2px,color:#713f12,font-weight:bold\n    style H2 fill:#fef08a,stroke:#ca8a04,stroke-width:2px,color:#713f12,font-weight:bold\n\n    %% Màu XANH LÁ cho làn Lễ Tân\n    style L1 fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d,font-weight:bold\n    style L2 fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d,font-weight:bold&quot;,&#xa;  &quot;config&quot;: null&#xa;}" id="-s3eYNz_PmICnCP0iIh9-145">
+          <mxCell connectable="0" parent="1" style="group;transparentBounds=1;editIcon=1;lockedGroup=0;groupPadding=10;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" vertex="1">
+            <mxGeometry as="geometry" />
+          </mxCell>
+        </UserObject>
+        <UserObject label="Làn 1: KHÁCH HÀNG" mermaidId="n:KH" mermaidBaseStyle="html=1;whiteSpace=wrap;strokeWidth=1;verticalAlign=top;fillColor=light-dark(#ffffde,#1f2020);strokeColor=light-dark(#aaaa33,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" mermaidBaseValue="Làn 1: KHÁCH HÀNG" id="-s3eYNz_PmICnCP0iIh9-146">
+          <mxCell parent="-s3eYNz_PmICnCP0iIh9-145" style="html=1;whiteSpace=wrap;strokeWidth=1;verticalAlign=top;fillColor=light-dark(#ffffde,#1f2020);strokeColor=light-dark(#aaaa33,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" vertex="1">
+            <mxGeometry height="940" width="287" x="692" y="1395" as="geometry" />
+          </mxCell>
+        </UserObject>
+        <UserObject label="Bắt đầu" mermaidId="n:Start" mermaidBaseStyle="html=1;rounded=1;whiteSpace=wrap;arcSize=50;strokeWidth=2;fillColor=#f1f5f9;strokeColor=#475569;fontColor=#0f172a;fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontStyle=1;" mermaidBaseValue="Bắt đầu" id="-s3eYNz_PmICnCP0iIh9-147">
+          <mxCell parent="-s3eYNz_PmICnCP0iIh9-146" style="html=1;rounded=1;whiteSpace=wrap;arcSize=50;strokeWidth=2;fillColor=#f1f5f9;strokeColor=#475569;fontColor=#0f172a;fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontStyle=1;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" vertex="1">
+            <mxGeometry height="39" width="81" x="103" y="45" as="geometry" />
+          </mxCell>
+        </UserObject>
+        <UserObject label="1. Yêu cầu đặt sân &amp; Cọc" mermaidId="n:K1" mermaidBaseStyle="rounded=1;absoluteArcSize=1;arcSize=10;html=1;whiteSpace=wrap;strokeWidth=2;fillColor=#dbeafe;strokeColor=#2563eb;fontColor=#1e3a8a;fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontStyle=1;" mermaidBaseValue="1. Yêu cầu đặt sân &amp; Cọc" id="-s3eYNz_PmICnCP0iIh9-148">
+          <mxCell parent="-s3eYNz_PmICnCP0iIh9-146" style="rounded=1;absoluteArcSize=1;arcSize=10;html=1;whiteSpace=wrap;strokeWidth=2;fillColor=#dbeafe;strokeColor=#2563eb;fontColor=#1e3a8a;fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontStyle=1;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" vertex="1">
+            <mxGeometry height="54" width="213" x="37" y="134" as="geometry" />
+          </mxCell>
+        </UserObject>
+        <UserObject label="3. Đến sân nhận ca" mermaidId="n:K2" mermaidBaseStyle="rounded=1;absoluteArcSize=1;arcSize=10;html=1;whiteSpace=wrap;strokeWidth=2;fillColor=#dbeafe;strokeColor=#2563eb;fontColor=#1e3a8a;fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontStyle=1;" mermaidBaseValue="3. Đến sân nhận ca" id="-s3eYNz_PmICnCP0iIh9-149">
+          <mxCell parent="-s3eYNz_PmICnCP0iIh9-146" style="rounded=1;absoluteArcSize=1;arcSize=10;html=1;whiteSpace=wrap;strokeWidth=2;fillColor=#dbeafe;strokeColor=#2563eb;fontColor=#1e3a8a;fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontStyle=1;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" vertex="1">
+            <mxGeometry height="54" width="167" x="60" y="553" as="geometry" />
+          </mxCell>
+        </UserObject>
+        <UserObject label="4. Sử dụng sân &amp; Dịch vụ" mermaidId="n:K3" mermaidBaseStyle="rounded=1;absoluteArcSize=1;arcSize=10;html=1;whiteSpace=wrap;strokeWidth=2;fillColor=#dbeafe;strokeColor=#2563eb;fontColor=#1e3a8a;fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontStyle=1;" mermaidBaseValue="4. Sử dụng sân &amp; Dịch vụ" id="-s3eYNz_PmICnCP0iIh9-150">
+          <mxCell parent="-s3eYNz_PmICnCP0iIh9-146" style="rounded=1;absoluteArcSize=1;arcSize=10;html=1;whiteSpace=wrap;strokeWidth=2;fillColor=#dbeafe;strokeColor=#2563eb;fontColor=#1e3a8a;fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontStyle=1;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" vertex="1">
+            <mxGeometry height="54" width="211" x="38" y="707" as="geometry" />
+          </mxCell>
+        </UserObject>
+        <UserObject label="5. Thanh toán tiền còn lại" mermaidId="n:K4" mermaidBaseStyle="rounded=1;absoluteArcSize=1;arcSize=10;html=1;whiteSpace=wrap;strokeWidth=2;fillColor=#dbeafe;strokeColor=#2563eb;fontColor=#1e3a8a;fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontStyle=1;" mermaidBaseValue="5. Thanh toán tiền còn lại" id="-s3eYNz_PmICnCP0iIh9-151">
+          <mxCell parent="-s3eYNz_PmICnCP0iIh9-146" style="rounded=1;absoluteArcSize=1;arcSize=10;html=1;whiteSpace=wrap;strokeWidth=2;fillColor=#dbeafe;strokeColor=#2563eb;fontColor=#1e3a8a;fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontStyle=1;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" vertex="1">
+            <mxGeometry height="54" width="217" x="35" y="861" as="geometry" />
+          </mxCell>
+        </UserObject>
+        <UserObject label="" mermaidId="e:Start-&gt;K1#0" mermaidBaseStyle="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);exitX=0.51;exitY=1;entryX=0.5;entryY=0;" mermaidBaseValue="" id="-s3eYNz_PmICnCP0iIh9-152">
+          <mxCell edge="1" parent="-s3eYNz_PmICnCP0iIh9-146" source="-s3eYNz_PmICnCP0iIh9-147" style="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);exitX=0.51;exitY=1;entryX=0.5;entryY=0;rounded=0;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=16;sourcePerimeterSpacing=8;targetPerimeterSpacing=8;" target="-s3eYNz_PmICnCP0iIh9-148">
+            <mxGeometry relative="1" as="geometry">
+              <Array as="points" />
+            </mxGeometry>
+          </mxCell>
+        </UserObject>
+        <UserObject label="" mermaidId="e:K2-&gt;K3#0" mermaidBaseStyle="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);exitX=0.5;exitY=1;entryX=0.5;entryY=0;" mermaidBaseValue="" id="-s3eYNz_PmICnCP0iIh9-153">
+          <mxCell edge="1" parent="-s3eYNz_PmICnCP0iIh9-146" source="-s3eYNz_PmICnCP0iIh9-149" style="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);exitX=0.5;exitY=1;entryX=0.5;entryY=0;rounded=0;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=16;sourcePerimeterSpacing=8;targetPerimeterSpacing=8;" target="-s3eYNz_PmICnCP0iIh9-150">
+            <mxGeometry relative="1" as="geometry">
+              <Array as="points" />
+            </mxGeometry>
+          </mxCell>
+        </UserObject>
+        <UserObject label="" mermaidId="e:K3-&gt;K4#0" mermaidBaseStyle="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);exitX=0.5;exitY=1;entryX=0.5;entryY=0;" mermaidBaseValue="" id="-s3eYNz_PmICnCP0iIh9-154">
+          <mxCell edge="1" parent="-s3eYNz_PmICnCP0iIh9-146" source="-s3eYNz_PmICnCP0iIh9-150" style="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);exitX=0.5;exitY=1;entryX=0.5;entryY=0;rounded=0;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=16;sourcePerimeterSpacing=8;targetPerimeterSpacing=8;" target="-s3eYNz_PmICnCP0iIh9-151">
+            <mxGeometry relative="1" as="geometry">
+              <Array as="points" />
+            </mxGeometry>
+          </mxCell>
+        </UserObject>
+        <UserObject label="Làn 2: HỆ THỐNG PHẦN MỀM" mermaidId="n:HT" mermaidBaseStyle="html=1;whiteSpace=wrap;strokeWidth=1;verticalAlign=top;fillColor=light-dark(#ffffde,#1f2020);strokeColor=light-dark(#aaaa33,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" mermaidBaseValue="Làn 2: HỆ THỐNG PHẦN MỀM" id="-s3eYNz_PmICnCP0iIh9-155">
+          <mxCell parent="-s3eYNz_PmICnCP0iIh9-145" style="html=1;whiteSpace=wrap;strokeWidth=1;verticalAlign=top;fillColor=light-dark(#ffffde,#1f2020);strokeColor=light-dark(#aaaa33,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" vertex="1">
+            <mxGeometry height="851" width="301" x="371" y="1632" as="geometry" />
+          </mxCell>
+        </UserObject>
+        <UserObject label="Ghi nhận &amp; Khóa lịch" mermaidId="n:H1" mermaidBaseStyle="rounded=1;absoluteArcSize=1;arcSize=10;html=1;whiteSpace=wrap;strokeWidth=2;fillColor=#fef08a;strokeColor=#ca8a04;fontColor=#713f12;fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontStyle=1;" mermaidBaseValue="Ghi nhận &amp; Khóa lịch" id="-s3eYNz_PmICnCP0iIh9-156">
+          <mxCell parent="-s3eYNz_PmICnCP0iIh9-155" style="rounded=1;absoluteArcSize=1;arcSize=10;html=1;whiteSpace=wrap;strokeWidth=2;fillColor=#fef08a;strokeColor=#ca8a04;fontColor=#713f12;fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontStyle=1;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" vertex="1">
+            <mxGeometry height="54" width="181" x="60" y="45" as="geometry" />
+          </mxCell>
+        </UserObject>
+        <UserObject label="Lưu doanh thu &amp; In hóa đơn" mermaidId="n:H2" mermaidBaseStyle="rounded=1;absoluteArcSize=1;arcSize=10;html=1;whiteSpace=wrap;strokeWidth=2;fillColor=#fef08a;strokeColor=#ca8a04;fontColor=#713f12;fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontStyle=1;" mermaidBaseValue="Lưu doanh thu &amp; In hóa đơn" id="-s3eYNz_PmICnCP0iIh9-157">
+          <mxCell parent="-s3eYNz_PmICnCP0iIh9-155" style="rounded=1;absoluteArcSize=1;arcSize=10;html=1;whiteSpace=wrap;strokeWidth=2;fillColor=#fef08a;strokeColor=#ca8a04;fontColor=#713f12;fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontStyle=1;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" vertex="1">
+            <mxGeometry height="54" width="231" x="35" y="772" as="geometry" />
+          </mxCell>
+        </UserObject>
+        <UserObject label="Làn 3: LỄ TÂN" mermaidId="n:LT" mermaidBaseStyle="html=1;whiteSpace=wrap;strokeWidth=1;verticalAlign=top;fillColor=light-dark(#ffffde,#1f2020);strokeColor=light-dark(#aaaa33,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" mermaidBaseValue="Làn 3: LỄ TÂN / BẢO VỆ" id="-s3eYNz_PmICnCP0iIh9-158">
+          <mxCell parent="-s3eYNz_PmICnCP0iIh9-145" style="html=1;whiteSpace=wrap;strokeWidth=1;verticalAlign=top;fillColor=light-dark(#ffffde,#1f2020);strokeColor=light-dark(#aaaa33,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" vertex="1">
+            <mxGeometry height="940" width="321" x="12" y="1780" as="geometry" />
+          </mxCell>
+        </UserObject>
+        <UserObject label="2. Xác nhận mã &amp; Bàn giao sân" mermaidId="n:L1" mermaidBaseStyle="rounded=1;absoluteArcSize=1;arcSize=10;html=1;whiteSpace=wrap;strokeWidth=2;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#14532d;fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontStyle=1;" mermaidBaseValue="2. Xác nhận mã &amp; Bàn giao sân" id="-s3eYNz_PmICnCP0iIh9-159">
+          <mxCell parent="-s3eYNz_PmICnCP0iIh9-158" style="rounded=1;absoluteArcSize=1;arcSize=10;html=1;whiteSpace=wrap;strokeWidth=2;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#14532d;fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontStyle=1;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" vertex="1">
+            <mxGeometry height="54" width="251" x="35" y="45" as="geometry" />
+          </mxCell>
+        </UserObject>
+        <UserObject label="6. Kiểm tra sân &amp; Chốt ca" mermaidId="n:L2" mermaidBaseStyle="rounded=1;absoluteArcSize=1;arcSize=10;html=1;whiteSpace=wrap;strokeWidth=2;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#14532d;fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontStyle=1;" mermaidBaseValue="6. Kiểm tra sân &amp; Chốt ca" id="-s3eYNz_PmICnCP0iIh9-160">
+          <mxCell parent="-s3eYNz_PmICnCP0iIh9-158" style="rounded=1;absoluteArcSize=1;arcSize=10;html=1;whiteSpace=wrap;strokeWidth=2;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#14532d;fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontStyle=1;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" vertex="1">
+            <mxGeometry height="54" width="216" x="53" y="772" as="geometry" />
+          </mxCell>
+        </UserObject>
+        <UserObject label="Kết thúc" mermaidId="n:End" mermaidBaseStyle="html=1;rounded=1;whiteSpace=wrap;arcSize=50;strokeWidth=2;fillColor=#f1f5f9;strokeColor=#475569;fontColor=#0f172a;fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontStyle=1;" mermaidBaseValue="Kết thúc" id="-s3eYNz_PmICnCP0iIh9-161">
+          <mxCell parent="-s3eYNz_PmICnCP0iIh9-158" style="html=1;rounded=1;whiteSpace=wrap;arcSize=50;strokeWidth=2;fillColor=#f1f5f9;strokeColor=#475569;fontColor=#0f172a;fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;fontStyle=1;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" vertex="1">
+            <mxGeometry height="39" width="86" x="118" y="876" as="geometry" />
+          </mxCell>
+        </UserObject>
+        <UserObject label="" mermaidId="e:L2-&gt;End#0" mermaidBaseStyle="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);exitX=0.5;exitY=1;entryX=0.5;entryY=0;" mermaidBaseValue="" id="-s3eYNz_PmICnCP0iIh9-162">
+          <mxCell edge="1" parent="-s3eYNz_PmICnCP0iIh9-158" source="-s3eYNz_PmICnCP0iIh9-160" style="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);exitX=0.5;exitY=1;entryX=0.5;entryY=0;rounded=0;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=16;sourcePerimeterSpacing=8;targetPerimeterSpacing=8;" target="-s3eYNz_PmICnCP0iIh9-161">
+            <mxGeometry relative="1" as="geometry">
+              <Array as="points" />
+            </mxGeometry>
+          </mxCell>
+        </UserObject>
+        <UserObject label="Thông tin lịch" mermaidId="e:K1-&gt;H1#0" mermaidBaseStyle="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);html=1;fontSize=16;labelBackgroundColor=light-dark(#E8E8E88D,#2a2a2a8D);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontColor=light-dark(#333333,#cccccc);exitX=0.5;exitY=1;entryX=1;entryY=0.22;" mermaidBaseValue="Thông tin lịch" id="-s3eYNz_PmICnCP0iIh9-163">
+          <mxCell edge="1" parent="-s3eYNz_PmICnCP0iIh9-145" source="-s3eYNz_PmICnCP0iIh9-148" style="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);html=1;fontSize=16;labelBackgroundColor=light-dark(#E8E8E88D,#2a2a2a8D);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontColor=light-dark(#333333,#cccccc);exitX=0.5;exitY=1;entryX=1;entryY=0.22;rounded=0;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;sourcePerimeterSpacing=8;targetPerimeterSpacing=8;" target="-s3eYNz_PmICnCP0iIh9-156">
+            <mxGeometry relative="1" as="geometry">
+              <Array as="points">
+                <mxPoint x="836" y="1618" />
+                <mxPoint x="836" y="1652" />
+              </Array>
+            </mxGeometry>
+          </mxCell>
+        </UserObject>
+        <UserObject label="Báo có khách" mermaidId="e:H1-&gt;L1#0" mermaidBaseStyle="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);html=1;fontSize=16;labelBackgroundColor=light-dark(#E8E8E88D,#2a2a2a8D);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontColor=light-dark(#333333,#cccccc);exitX=0.5;exitY=1;entryX=1;entryY=0.13;" mermaidBaseValue="Báo có khách" id="-s3eYNz_PmICnCP0iIh9-164">
+          <mxCell edge="1" parent="-s3eYNz_PmICnCP0iIh9-145" source="-s3eYNz_PmICnCP0iIh9-156" style="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);html=1;fontSize=16;labelBackgroundColor=light-dark(#E8E8E88D,#2a2a2a8D);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontColor=light-dark(#333333,#cccccc);exitX=0.5;exitY=1;entryX=1;entryY=0.13;rounded=0;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;sourcePerimeterSpacing=8;targetPerimeterSpacing=8;" target="-s3eYNz_PmICnCP0iIh9-159">
+            <mxGeometry relative="1" as="geometry">
+              <Array as="points">
+                <mxPoint x="522" y="1766" />
+                <mxPoint x="522" y="1800" />
+              </Array>
+            </mxGeometry>
+          </mxCell>
+        </UserObject>
+        <UserObject label="Giao sân" mermaidId="e:L1-&gt;K2#0" mermaidBaseStyle="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);html=1;fontSize=16;labelBackgroundColor=light-dark(#E8E8E88D,#2a2a2a8D);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontColor=light-dark(#333333,#cccccc);exitX=0.5;exitY=1;entryX=0;entryY=0.35;" mermaidBaseValue="Giao sân" id="-s3eYNz_PmICnCP0iIh9-165">
+          <mxCell edge="1" parent="-s3eYNz_PmICnCP0iIh9-145" source="-s3eYNz_PmICnCP0iIh9-159" style="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);html=1;fontSize=16;labelBackgroundColor=light-dark(#E8E8E88D,#2a2a2a8D);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontColor=light-dark(#333333,#cccccc);exitX=0.5;exitY=1;entryX=0;entryY=0.35;rounded=0;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;sourcePerimeterSpacing=8;targetPerimeterSpacing=8;" target="-s3eYNz_PmICnCP0iIh9-149">
+            <mxGeometry relative="1" as="geometry">
+              <Array as="points">
+                <mxPoint x="191" y="1914" />
+              </Array>
+            </mxGeometry>
+          </mxCell>
+        </UserObject>
+        <UserObject label="Tiền &amp; Thông tin" mermaidId="e:K4-&gt;H2#0" mermaidBaseStyle="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);html=1;fontSize=16;labelBackgroundColor=light-dark(#E8E8E88D,#2a2a2a8D);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontColor=light-dark(#333333,#cccccc);exitX=0.5;exitY=1;entryX=0.5;entryY=0;" mermaidBaseValue="Tiền &amp; Thông tin" id="-s3eYNz_PmICnCP0iIh9-166">
+          <mxCell edge="1" parent="-s3eYNz_PmICnCP0iIh9-145" source="-s3eYNz_PmICnCP0iIh9-151" style="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);html=1;fontSize=16;labelBackgroundColor=light-dark(#E8E8E88D,#2a2a2a8D);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontColor=light-dark(#333333,#cccccc);exitX=0.5;exitY=1;entryX=0.5;entryY=0;rounded=0;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;sourcePerimeterSpacing=8;targetPerimeterSpacing=8;" target="-s3eYNz_PmICnCP0iIh9-157">
+            <mxGeometry relative="1" as="geometry">
+              <Array as="points">
+                <mxPoint x="836" y="2335" />
+                <mxPoint x="522" y="2370" />
+              </Array>
+            </mxGeometry>
+          </mxCell>
+        </UserObject>
+        <UserObject label="Biên lai" mermaidId="e:H2-&gt;L2#0" mermaidBaseStyle="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);html=1;fontSize=16;labelBackgroundColor=light-dark(#E8E8E88D,#2a2a2a8D);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontColor=light-dark(#333333,#cccccc);exitX=0.5;exitY=1;entryX=0.5;entryY=0;" mermaidBaseValue="Biên lai" id="-s3eYNz_PmICnCP0iIh9-167">
+          <mxCell edge="1" parent="-s3eYNz_PmICnCP0iIh9-145" source="-s3eYNz_PmICnCP0iIh9-157" style="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);html=1;fontSize=16;labelBackgroundColor=light-dark(#E8E8E88D,#2a2a2a8D);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontColor=light-dark(#333333,#cccccc);exitX=0.5;exitY=1;entryX=0.5;entryY=0;rounded=0;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;sourcePerimeterSpacing=8;targetPerimeterSpacing=8;" target="-s3eYNz_PmICnCP0iIh9-160">
+            <mxGeometry relative="1" as="geometry">
+              <Array as="points">
+                <mxPoint x="522" y="2483" />
+                <mxPoint x="191" y="2518" />
               </Array>
             </mxGeometry>
           </mxCell>

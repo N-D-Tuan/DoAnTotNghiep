@@ -26,4 +26,9 @@ class UserDataUpdated implements ShouldBroadcastNow
         // Sử dụng PrivateChannel để chỉ user này mới nghe được thông báo của họ
         return new PrivateChannel('user.' . $this->userId);
     }
+
+    public function broadcastAs()
+    {
+        return 'UserDataUpdated';
+    }
 }

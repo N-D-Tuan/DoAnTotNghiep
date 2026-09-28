@@ -681,7 +681,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
-                                'Accept': 'application/json'
+                                'Accept': 'application/json',
+                                'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}`
                             },
                             body: JSON.stringify({
                                 socket_id: socketId,
@@ -701,7 +702,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // BẮT ĐẦU LẮNG NGHE TÍN HIỆU RIÊNG TƯ CỦA USER NÀY
         window.Echo.private('user.' + currentUser.ID)
-            .listen('UserDataUpdated', (e) => {
+            .listen('.UserDataUpdated', (e) => {
                 console.log('⚡ Đã nhận tín hiệu từ Backend, đang tự động đồng bộ...');
                 
                 // Kích hoạt ngay 3 hàm cập nhật giao diện mà không cần chờ 1 phút

@@ -44,6 +44,46 @@ class AuthController extends Controller
         ], 201);
     }
 
+    public function capTaiKhoan(Request $request)
+    {
+        $nguoiThucHien = $request->user();
+        if (!$nguoiThucHien || $nguoiThucHien->VaiTro !== 'Admin') {
+            return response()->json(['message' => 'Lỗi phân quyền: Chỉ Admin mới được phép cấp tài khoản.'], 403);
+        }
+
+        $request->validate([
+            'ho_ten' => 'required|string|max:255',
+            'so_dien_thoai' => 'required|string|max:20|unique:NguoiDung,SoDienThoai',
+            'email' => 'required|string|email|max:255|unique:NguoiDung,Email',
+            'mat_khau' => 'required|string|min:6',
+            'vai_tro' => ['required', Rule::in(['KhachHang', 'Admin', 'QuanLySan'])],
+            
+            // Logic cực hay của Laravel: Ràng buộc bắt buộc nhập ID cụm sân nếu vai trò là QuanLySan
+            'id_cum_san' => 'required_if:vai_tro,QuanLySan|nullable|exists:CumSan,ID'
+        ], [
+            'id_cum_san.required_if' => 'Vui lòng chọn Cụm sân cho tài khoản Quản lý.',
+            'id_cum_san.exists' => 'Cụm sân đã chọn không tồn tại trên hệ thống.'
+        ]);
+
+        // 3. Tạo tài khoản
+        $user = NguoiDung::create([
+            'HoTen' => $request->ho_ten,
+            'SoDienThoai' => $request->so_dien_thoai,
+            'Email' => $request->email,
+            'MatKhau' => Hash::make($request->mat_khau),
+            'VaiTro' => $request->vai_tro,
+            'ID_CumSan' => ($request->vai_tro === 'QuanLySan') ? $request->id_cum_san : null,
+            'SoDuVi' => 0
+        ]);
+
+        broadcast(new \App\Events\AdminDataUpdated())->toOthers();
+
+        return response()->json([
+            'message' => 'Cấp tài khoản ' . $request->vai_tro . ' thành công',
+            'user' => $user
+        ], 201);
+    }
+
     // Chức năng Đăng nhập
     public function dangNhap(Request $request)
     {
@@ -62,6 +102,13 @@ class AuthController extends Controller
         // 4. Thực hiện kiểm tra
         if (Auth::attempt($credentials)) {
             $user = Auth::user();
+
+            if (in_array($user->VaiTro, ['Admin', 'QuanLySan']) && $user->TrangThaiKhoa) {
+                Auth::logout(); // Hủy session vừa tạo
+                return response()->json([
+                    'message' => 'Tài khoản của bạn đã bị khóa quyền truy cập. Vui lòng liên hệ Admin hệ thống!'
+                ], 403);
+            }
 
             $user->tokens()->delete();
 
