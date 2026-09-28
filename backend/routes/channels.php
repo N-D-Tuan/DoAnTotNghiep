@@ -8,5 +8,5 @@ Broadcast::channel('user.{id}', function ($user, $id) {
     return (int) $user->ID === (int) $id; 
 });
 Broadcast::channel('admin-notifications', function ($user) {
-    return $user->VaiTro === 'Admin';
+    return in_array($user->VaiTro, ['Admin', 'QuanLySan']);
 });

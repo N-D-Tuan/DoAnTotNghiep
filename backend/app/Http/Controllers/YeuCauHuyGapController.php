@@ -25,7 +25,7 @@ class YeuCauHuyGapController extends Controller
             'noi_dung'   => 'required|string|max:500'
         ]);
 
-        $datSan = DatSan::find($request->id_dat_san);
+        $datSan = DatSan::with('sanBong')->find($request->id_dat_san);
 
         if ($datSan->ID_NguoiDung !== $user->ID) {
             return response()->json(['success' => false, 'message' => 'Bạn không có quyền thao tác trên lịch đặt này!']);
@@ -70,20 +70,33 @@ class YeuCauHuyGapController extends Controller
                 'TrangThai'    => 'ChoDuyet'
             ]);
 
-            // Tạo thông báo cho toàn bộ Admin
-            $admins = NguoiDung::where('VaiTro', 'Admin')->get();
-            foreach ($admins as $admin) {
+            // 1. Tìm TẤT CẢ Super Admin trên hệ thống
+            $superAdmins = NguoiDung::where('VaiTro', 'Admin')->get();
+
+            // 2. Tìm TẤT CẢ Quản lý sân đang quản lý trực tiếp Cụm sân chứa Sân bóng đang xin hủy
+            $idCumSanTuongUng = $datSan->sanBong->ID_CumSan;
+            $quanLySans = NguoiDung::where('VaiTro', 'QuanLySan')
+                                   ->where('ID_CumSan', $idCumSanTuongUng)
+                                   ->get();
+
+            // 3. Gộp danh sách
+            $nguoiNhanThongBao = $superAdmins->merge($quanLySans);
+
+            foreach ($nguoiNhanThongBao as $nhanSu) {
                 ThongBao::create([
-                    'ID_NguoiDung' => $admin->ID,
+                    'ID_NguoiDung' => $nhanSu->ID,
                     'TieuDe'       => 'Yêu cầu hủy sân gấp mới',
                     'NoiDung'      => "Khách hàng {$user->HoTen} vừa gửi 1 yêu cầu hủy sân gấp.",
                     'LoaiThongBao' => 'DatSan'
                 ]);
+
+                // Bắn trực tiếp vào kênh cá nhân
+                broadcast(new \App\Events\UserDataUpdated($nhanSu->ID))->toOthers();
             }
 
             DB::commit();
 
-            // Phát tín hiệu cho Admin ngay lập tức
+            // Phát tín hiệu làm mới bảng dữ liệu
             broadcast(new \App\Events\AdminDataUpdated())->toOthers();
 
             return response()->json(['success' => true, 'message' => 'Đã gửi yêu cầu hủy gấp thành công! Vui lòng chờ Admin phê duyệt.']);
@@ -194,6 +207,7 @@ class YeuCauHuyGapController extends Controller
             // Phát tín hiệu cho Customer cập nhật UI ngầm
             broadcast(new \App\Events\UserDataUpdated($user->ID))->toOthers();
             broadcast(new \App\Events\SystemDataUpdated())->toOthers();
+            broadcast(new \App\Events\AdminDataUpdated())->toOthers();
 
             return response()->json(['success' => true, 'message' => 'Đã xử lý yêu cầu hủy sân!']);
         } catch (\Exception $e) {
@@ -226,14 +240,19 @@ class YeuCauHuyGapController extends Controller
     // =========================================================
     public function layDanhSachAdmin(Request $request)
     {
-        // Admin cần biết thêm thông tin người gửi yêu cầu (nguoiDung)
-        $danhSach = YeuCauHuyGap::with(['nguoiDung', 'datSan.sanBong.cumSan', 'datSan.khungGio', 'datSan.giaiDau'])
-            ->orderBy('NgayTao', 'desc')
-            ->get();
+        $userDangNhap = auth()->user();
 
-        return response()->json([
-            'success' => true,
-            'data' => $danhSach
-        ]);
+        $query = YeuCauHuyGap::with(['nguoiDung', 'datSan.sanBong.cumSan', 'datSan.khungGio', 'datSan.giaiDau']);
+
+        // CHÈN LOGIC CÁCH LY
+        if ($userDangNhap->VaiTro === 'QuanLySan') {
+            $query->whereHas('datSan.sanBong', function ($q) use ($userDangNhap) {
+                $q->where('ID_CumSan', $userDangNhap->ID_CumSan);
+            });
+        }
+
+        $danhSach = $query->orderBy('NgayTao', 'desc')->get();
+
+        return response()->json(['success' => true, 'data' => $danhSach]);
     }
 }

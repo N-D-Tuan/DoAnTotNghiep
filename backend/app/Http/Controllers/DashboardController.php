@@ -17,16 +17,25 @@ class DashboardController extends Controller
     public function layThongKe()
     {
         $today = Carbon::today();
+        $userDangNhap = auth()->user();
+        $isQuanLy = $userDangNhap->VaiTro === 'QuanLySan';
+        $idCumSan = $userDangNhap->ID_CumSan;
 
-        // 1. Doanh thu hôm nay (Tổng tiền các Giao dịch "Cộng" vào ví trong hôm nay)
-        $datSansHomNay = DatSan::whereDate('NgayDa', $today)
-                            ->whereIn('TrangThai', ['HoanThanh', 'KhongDen'])
-                            ->get();
+        // =========================================================
+        // 1. DOANH THU HÔM NAY
+        // =========================================================
+        $queryDatSansHomNay = DatSan::whereDate('NgayDa', $today)
+                            ->whereIn('TrangThai', ['HoanThanh', 'KhongDen']);
+        
+        if ($isQuanLy) {
+            $queryDatSansHomNay->whereHas('sanBong', function($q) use ($idCumSan) {
+                $q->where('ID_CumSan', $idCumSan);
+            });
+        }
+        $datSansHomNay = $queryDatSansHomNay->get();
         
         $doanhThuHomNay = 0;
         foreach ($datSansHomNay as $ds) {
-            // Nếu là Hoàn thành HOẶC thuộc Giải đấu -> Thu đủ (TongTien)
-            // Nếu Phong trào mà Không đến -> Chỉ thu Cọc (TienCoc)
             if ($ds->TrangThai === 'HoanThanh' || !is_null($ds->ID_GiaiDau)) {
                 $doanhThuHomNay += $ds->TongTien;
             } else {
@@ -34,37 +43,77 @@ class DashboardController extends Controller
             }
         }
 
-        // 2. Tổng booking đá trong hôm nay
-        $bookingHoanThanhHomNay = DatSan::where('TrangThai', 'HoanThanh')
-                                    ->whereDate('NgayDa', $today)
-                                    ->count();
+        // =========================================================
+        // 2. TỔNG BOOKING ĐÁ TRONG HÔM NAY
+        // =========================================================
+        $queryBookingHoanThanh = DatSan::where('TrangThai', 'HoanThanh')->whereDate('NgayDa', $today);
+        $queryBookingTong = DatSan::whereIn('TrangThai', ['HoanThanh', 'KhongDen'])->whereDate('NgayDa', $today);
 
-        $bookingHomNay = DatSan::whereIn('TrangThai', ['HoanThanh', 'KhongDen'])
-                            ->whereDate('NgayDa', $today)
-                            ->count();
+        if ($isQuanLy) {
+            $queryBookingHoanThanh->whereHas('sanBong', function($q) use ($idCumSan) { $q->where('ID_CumSan', $idCumSan); });
+            $queryBookingTong->whereHas('sanBong', function($q) use ($idCumSan) { $q->where('ID_CumSan', $idCumSan); });
+        }
 
-        // 3. Tổng khách hàng
-        $tongKhachHang = NguoiDung::where('VaiTro', 'KhachHang')->count();
+        $bookingHoanThanhHomNay = $queryBookingHoanThanh->count();
+        $bookingHomNay = $queryBookingTong->count();
 
-        // 4. Số yêu cầu đang chờ duyệt (Gộp Giải đấu, Hủy gấp, Rút tiền)
-        $choDuyetGD = GiaiDau::where('TrangThai', 'ChoDuyet')->count();
-        $choDuyetHuy = YeuCauHuyGap::where('TrangThai', 'ChoDuyet')->count();
-        $choDuyetRut = YeuCauRutTien::where('TrangThai', 'ChoDuyet')->count();
-        $tongChoDuyet = $choDuyetGD + $choDuyetHuy + $choDuyetRut;
+        // =========================================================
+        // 3. TỔNG KHÁCH HÀNG
+        // =========================================================
+        if ($isQuanLy) {
+            // Quản lý sân: Chỉ đếm số lượng khách hàng ĐÃ TỪNG đặt sân tại cụm sân này (Loại bỏ trùng lặp bằng distinct)
+            $tongKhachHang = DatSan::whereHas('sanBong', function($q) use ($idCumSan) {
+                                        $q->where('ID_CumSan', $idCumSan);
+                                    })
+                                    ->distinct('ID_NguoiDung')
+                                    ->count('ID_NguoiDung');
+        } else {
+            // Admin: Đếm tổng toàn bộ khách hàng trên hệ thống
+            $tongKhachHang = NguoiDung::where('VaiTro', 'KhachHang')->count();
+        }
 
-        // 5. Số sân QUÊN CHỐT (Trạng thái Đã cọc nhưng Ngày đá nhỏ hơn hôm nay)
-        $soSanQuenChot = DatSan::where('TrangThai', 'DaCoc')
-                            ->whereDate('NgayDa', '<', $today)
-                            ->count();
+        // =========================================================
+        // 4. SỐ YÊU CẦU ĐANG CHỜ DUYỆT
+        // =========================================================
+        $queryGiaiDau = GiaiDau::where('TrangThai', 'ChoDuyet');
+        $queryHuyGap = YeuCauHuyGap::where('TrangThai', 'ChoDuyet');
+        $choDuyetRut = 0;
 
-        // 6. Biểu đồ doanh thu 7 ngày gần nhất
+        if ($isQuanLy) {
+            // Quản lý sân: Cách ly giải đấu và yêu cầu hủy theo cụm sân
+            $queryGiaiDau->where('ID_CumSan', $idCumSan);
+            $queryHuyGap->whereHas('datSan.sanBong', function($q) use ($idCumSan) {
+                $q->where('ID_CumSan', $idCumSan);
+            });
+            // Quản lý sân KHÔNG CÓ QUYỀN duyệt rút tiền, nên $choDuyetRut giữ nguyên bằng 0
+        } else {
+            // Admin: Thấy toàn bộ, cộng thêm số lượng yêu cầu rút tiền
+            $choDuyetRut = YeuCauRutTien::where('TrangThai', 'ChoDuyet')->count();
+        }
+
+        $tongChoDuyet = $queryGiaiDau->count() + $queryHuyGap->count() + $choDuyetRut;
+
+        // =========================================================
+        // 5. SỐ SÂN QUÊN CHỐT (Đã cọc nhưng quá hạn)
+        // =========================================================
+        $queryQuenChot = DatSan::where('TrangThai', 'DaCoc')->whereDate('NgayDa', '<', $today);
+        if ($isQuanLy) {
+            $queryQuenChot->whereHas('sanBong', function($q) use ($idCumSan) { $q->where('ID_CumSan', $idCumSan); });
+        }
+        $soSanQuenChot = $queryQuenChot->count();
+
+        // =========================================================
+        // 6. BIỂU ĐỒ DOANH THU 7 NGÀY GẦN NHẤT
+        // =========================================================
         $doanhThu7Ngay = [];
         for ($i = 6; $i >= 0; $i--) {
             $date = Carbon::today()->subDays($i);
             
-            $datSansNgay = DatSan::whereDate('NgayDa', $date)
-                            ->whereIn('TrangThai', ['HoanThanh', 'KhongDen'])
-                            ->get();
+            $queryChart = DatSan::whereDate('NgayDa', $date)->whereIn('TrangThai', ['HoanThanh', 'KhongDen']);
+            if ($isQuanLy) {
+                $queryChart->whereHas('sanBong', function($q) use ($idCumSan) { $q->where('ID_CumSan', $idCumSan); });
+            }
+            $datSansNgay = $queryChart->get();
             
             $dt = 0;
             foreach ($datSansNgay as $ds) {
@@ -81,11 +130,15 @@ class DashboardController extends Controller
             ];
         }
 
-        // 7. Lấy 5 Booking mới nhất
-        $bookingMoiNhat = DatSan::with(['nguoiDung', 'sanBong.cumSan', 'khungGio'])
-                                ->orderBy('ID', 'desc')
-                                ->take(5)
-                                ->get();
+        // =========================================================
+        // 7. LẤY 5 BOOKING MỚI NHẤT
+        // =========================================================
+        $queryRecent = DatSan::with(['nguoiDung', 'sanBong.cumSan', 'khungGio']);
+        if ($isQuanLy) {
+            $queryRecent->whereHas('sanBong', function($q) use ($idCumSan) { $q->where('ID_CumSan', $idCumSan); });
+        }
+        
+        $bookingMoiNhat = $queryRecent->orderBy('ID', 'desc')->take(5)->get();
 
         return response()->json([
             'success' => true,

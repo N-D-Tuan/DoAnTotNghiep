@@ -33,4 +33,9 @@ class CumSan extends Model
     {
         return $this->hasMany(GiaiDau::class, 'ID_CumSan', 'ID');
     }
+
+    public function quanLySans()
+    {
+        return $this->hasMany(NguoiDung::class, 'ID_CumSan', 'ID');
+    }
 }

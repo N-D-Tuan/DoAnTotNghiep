@@ -301,10 +301,20 @@ class DatSanController extends Controller
 
     public function layDanhSachAdmin(Request $request)
     {
-        $danhSach = DatSan::with(['nguoiDung', 'sanBong.cumSan', 'khungGio', 'giaiDau'])
-            ->orderBy('NgayDa', 'desc')
-            ->orderBy('ID_KhungGio', 'asc')
-            ->get();
+        $userDangNhap = auth()->user();
+
+        $query = DatSan::with(['nguoiDung', 'sanBong.cumSan', 'khungGio', 'giaiDau']);
+
+        // CHÈN LOGIC CÁCH LY
+        if ($userDangNhap->VaiTro === 'QuanLySan') {
+            $query->whereHas('sanBong', function ($q) use ($userDangNhap) {
+                $q->where('ID_CumSan', $userDangNhap->ID_CumSan);
+            });
+        }
+
+        $danhSach = $query->orderBy('NgayDa', 'desc')
+                          ->orderBy('ID_KhungGio', 'asc')
+                          ->get();
             
         return response()->json(['success' => true, 'data' => $danhSach]);
     }
@@ -393,7 +403,8 @@ class DatSanController extends Controller
 
             // Phát tín hiệu Realtime cho khách hàng
             broadcast(new \App\Events\UserDataUpdated($datSan->ID_NguoiDung))->toOthers();
-
+            broadcast(new \App\Events\AdminDataUpdated())->toOthers();
+            
             return response()->json(['success' => true, 'message' => 'Đã chốt trạng thái sân thành công!']);
         } catch (\Exception $e) {
             DB::rollBack();

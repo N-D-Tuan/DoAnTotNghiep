@@ -67,13 +67,27 @@ class GiaiDauController extends Controller
         $admins = NguoiDung::where('VaiTro', 'Admin')->get();
         $nguoiTao = NguoiDung::find(Auth::id()); // Lấy tên người dùng vừa tạo
         
-        foreach ($admins as $admin) {
+        // 1. Tìm TẤT CẢ Super Admin trên hệ thống
+        $superAdmins = NguoiDung::where('VaiTro', 'Admin')->get();
+
+        // 2. Tìm TẤT CẢ Quản lý sân đang quản lý trực tiếp Cụm sân này
+        $quanLySans = NguoiDung::where('VaiTro', 'QuanLySan')
+                               ->where('ID_CumSan', $request->id_cum_san)
+                               ->get();
+
+        // 3. Gộp 2 danh sách lại thành 1 mảng duy nhất để gửi thông báo
+        $nguoiNhanThongBao = $superAdmins->merge($quanLySans);
+
+        foreach ($nguoiNhanThongBao as $nhanSu) {
             ThongBao::create([
-                'ID_NguoiDung' => $admin->ID,
+                'ID_NguoiDung' => $nhanSu->ID,
                 'TieuDe'       => 'Yêu cầu Giải đấu mới',
                 'NoiDung'      => 'Khách hàng ' . ($nguoiTao ? $nguoiTao->HoTen : '') . ' vừa gửi yêu cầu tổ chức giải đấu "' . $giaiDau->TenGiaiDau . '".',
                 'LoaiThongBao' => 'GiaiDau'
             ]);
+
+            // Kích hoạt chuông đỏ cá nhân cho từng người quản lý
+            broadcast(new \App\Events\UserDataUpdated($nhanSu->ID))->toOthers();
         }
 
         broadcast(new \App\Events\AdminDataUpdated())->toOthers();
@@ -88,15 +102,18 @@ class GiaiDauController extends Controller
     // 3. API Lấy toàn bộ danh sách giải đấu (Dành cho Admin)
     public function layDanhSachAdmin()
     {
-        // Nối 2 bảng CumSan và NguoiDung để lấy Tên sân và Tên người đặt
-        $danhSach = GiaiDau::with(['cumSan', 'nguoiDung'])
-            ->orderBy('NgayTao', 'desc')
-            ->get();
+        $userDangNhap = auth()->user();
 
-        return response()->json([
-            'success' => true,
-            'data' => $danhSach
-        ], 200);
+        $query = GiaiDau::with(['cumSan', 'nguoiDung']);
+
+        // CHÈN LOGIC CÁCH LY
+        if ($userDangNhap->VaiTro === 'QuanLySan') {
+            $query->where('ID_CumSan', $userDangNhap->ID_CumSan);
+        }
+
+        $danhSach = $query->orderBy('NgayTao', 'desc')->get();
+
+        return response()->json(['success' => true, 'data' => $danhSach]);
     }
 
     // 4. API Cập nhật trạng thái duyệt/từ chối
@@ -145,6 +162,7 @@ class GiaiDauController extends Controller
         // -----------------------------------------
 
         broadcast(new \App\Events\UserDataUpdated($giaiDau->ID_NguoiDung))->toOthers();
+        broadcast(new \App\Events\AdminDataUpdated())->toOthers();
 
         return response()->json([
             'success' => true,

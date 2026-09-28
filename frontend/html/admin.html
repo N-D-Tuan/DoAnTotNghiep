@@ -16,13 +16,23 @@
                 <span>DN FOOTBALL</span> 
             </div>
             <nav class="sidebar-nav">
-                <a href="#" onclick="renderTongQuan(); return false;"><i class="fa-solid fa-chart-pie"></i> TỔNG QUAN</a>
-                <a href="#" onclick="renderQuanLySan(); return false;"><i class="fa-solid fa-layer-group"></i> QUẢN LÝ SÂN</a>
-                <a href="#" onclick="renderQuanLyKhachHang(); return false;" style="white-space: nowrap;"><i class="fa-solid fa-users"></i> QUẢN LÝ KHÁCH HÀNG</a>
-                <a href="#" onclick="renderQuanLyDatSan(); return false;"><i class="fa-solid fa-calendar-check"></i> QUẢN LÝ ĐẶT SÂN</a>
-                <a href="#" onclick="renderQuanLyGiaiDau(); return false;"><i class="fa-solid fa-flag-checkered"></i> YÊU CẦU GIẢI ĐẤU</a>
-                <a href="#" onclick="renderQuanLyHuySan(); return false;"><i class="fa-solid fa-calendar-xmark"></i> YÊU CẦU HỦY SÂN</a>
-                <a href="#" onclick="renderQuanLyRutTien(); return false;"><i class="fa-solid fa-wallet"></i> YÊU CẦU RÚT TIỀN</a>
+                <a href="#" id="menu-tongquan" onclick="renderTongQuan(); return false;"><i class="fa-solid fa-chart-pie"></i> TỔNG QUAN</a>
+                
+                <!-- Dành riêng cho Admin -->
+                <a href="#" id="menu-cumsan" onclick="renderQuanLySan(); return false;"><i class="fa-solid fa-layer-group"></i> QUẢN LÝ CỤM SÂN</a>
+                
+                <!-- Dành riêng cho Quản lý sân -->
+                <a href="#" id="menu-sancuatoi" onclick="renderCumSanDetail(JSON.parse(sessionStorage.getItem('dn_football_user')).ID_CumSan); return false;"><i class="fa-solid fa-house-flag"></i> SÂN CỦA TÔI</a>
+                
+                <a href="#" id="menu-khachhang" onclick="renderQuanLyKhachHang(); return false;" style="white-space: nowrap;"><i class="fa-solid fa-users"></i> QUẢN LÝ KHÁCH HÀNG</a>
+                <a href="#" id="menu-datsan" onclick="renderQuanLyDatSan(); return false;"><i class="fa-solid fa-calendar-check"></i> QUẢN LÝ ĐẶT SÂN</a>
+                <a href="#" id="menu-giaidau" onclick="renderQuanLyGiaiDau(); return false;"><i class="fa-solid fa-flag-checkered"></i> YÊU CẦU GIẢI ĐẤU</a>
+                <a href="#" id="menu-huysan" onclick="renderQuanLyHuySan(); return false;"><i class="fa-solid fa-calendar-xmark"></i> YÊU CẦU HỦY SÂN</a>
+                
+                <!-- Dành riêng cho Admin -->
+                <a href="#" id="menu-ruttien" onclick="renderQuanLyRutTien(); return false;"><i class="fa-solid fa-wallet"></i> YÊU CẦU RÚT TIỀN</a>
+                <a href="#" id="menu-captaikhoan" onclick="renderCapTaiKhoan(); return false;"><i class="fa-solid fa-user-plus"></i> CẤP TÀI KHOẢN</a>
+                
                 <hr>
                 <a href="#" onclick="renderAdminProfile(); return false;"><i class="fa-solid fa-user"></i> TRANG CÁ NHÂN</a>
                 <a href="#" onclick="openChangePasswordModal(); return false;"><i class="fa-solid fa-key"></i> ĐỔI MẬT KHẨU</a>

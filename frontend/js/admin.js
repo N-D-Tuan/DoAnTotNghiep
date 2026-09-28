@@ -75,17 +75,36 @@ document.addEventListener(
         // ==============================================
         // KIỂM TRA VAI TRÒ
         // ==============================================
-        if (currentUser.VaiTro !== 'Admin') {
-            if (
-                currentUser.VaiTro === 'KhachHang'
-            ) {
-                window.location.href =
-                    'customer.html';
-            } else {
-                sessionStorage.clear();
-                window.location.href = 'login.html';
-            }
+        if (currentUser.VaiTro !== 'Admin' && currentUser.VaiTro !== 'QuanLySan') {
+            sessionStorage.clear();
+            window.location.href = 'login.html';
             return;
+        }
+
+        // CÔ LẬP GIAO DIỆN: Ẩn các menu không thuộc thẩm quyền
+        const menuKhachHang = document.getElementById('menu-khachhang');
+
+        if (currentUser.VaiTro === 'QuanLySan') {
+            // Quản lý sân: TUYỆT ĐỐI ẨN menu của Admin
+            if(document.getElementById('menu-cumsan')) document.getElementById('menu-cumsan').style.display = 'none';
+            if(document.getElementById('menu-ruttien')) document.getElementById('menu-ruttien').style.display = 'none';
+            if(document.getElementById('menu-captaikhoan')) document.getElementById('menu-captaikhoan').style.display = 'none';
+            
+            // HIỆN menu đặc quyền của Quản lý sân
+            if(document.getElementById('menu-sancuatoi')) document.getElementById('menu-sancuatoi').style.display = 'flex';
+
+            if(menuKhachHang) menuKhachHang.innerHTML = '<i class="fa-solid fa-users"></i> QUẢN LÝ KHÁCH HÀNG';
+        } 
+        else if (currentUser.VaiTro === 'Admin') {
+            // Admin nền tảng: TUYỆT ĐỐI ẨN menu đặc quyền của Quản lý sân
+            if(document.getElementById('menu-sancuatoi')) document.getElementById('menu-sancuatoi').style.display = 'none';
+            
+            // Đảm bảo hiển thị đầy đủ menu của Admin
+            if(document.getElementById('menu-cumsan')) document.getElementById('menu-cumsan').style.display = 'flex';
+            if(document.getElementById('menu-ruttien')) document.getElementById('menu-ruttien').style.display = 'flex';
+            if(document.getElementById('menu-captaikhoan')) document.getElementById('menu-captaikhoan').style.display = 'flex';
+
+            if(menuKhachHang) menuKhachHang.innerHTML = '<i class="fa-solid fa-users-gear"></i> QUẢN LÝ TÀI KHOẢN';
         }
 
         // ==============================================
@@ -141,7 +160,7 @@ document.addEventListener(
                     authorize: (socketId, callback) => {
                         fetch(`${API_BASE_URL.replace('/api', '')}/broadcasting/auth`, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` },
                             body: JSON.stringify({ socket_id: socketId, channel_name: channel.name })
                         })
                         .then(response => response.json())
@@ -165,8 +184,8 @@ document.addEventListener(
                 }
 
                 // NẾU ADMIN ĐANG MỞ TAB DANH SÁCH KHÁCH HÀNG -> TỰ REFRESH BẢNG
-                if (document.getElementById('khachhang-table-body')) {
-                    loadDanhSachKhachHangAdmin();
+                if (document.getElementById('user-table-body')) {
+                    loadDanhSachUsersAPI();
                 }
 
                 // NẾU ADMIN ĐANG MỞ TAB CHI TIẾT KHÁCH HÀNG -> TỰ REFRESH CHÍNH KHÁCH HÀNG ĐÓ                
@@ -192,6 +211,46 @@ document.addEventListener(
                     loadDanhSachRutTienAdmin();
                 }
             });
+
+        if (currentUser && currentUser.ID) {
+            window.Echo.private(`user.${currentUser.ID}`)
+                .listen('.UserDataUpdated', async (e) => {
+                    console.log('⚡ Nhận thông báo cá nhân nội bộ!');
+                    
+                    // 1. Luôn luôn cập nhật dữ liệu chuông đỏ trên Header khi có bất kỳ thông báo nào
+                    await loadNotifications(); 
+                    
+                    // 2. Kiểm tra thông báo mới nhất để xem có phải nghiệp vụ KHÓA TÀI KHOẢN hay không
+                    try {
+                        const res = await fetch(`${API_BASE_URL}/thong-bao`);
+                        if (res.ok) {
+                            const data = await res.json();
+                            const list = data.data || [];
+                            if (list.length > 0) {
+                                const latestNotif = list[0]; // Lấy thông báo mới nhất
+                                
+                                // CHỈ TẬP TRUNG KIỂM TRA NẾU TIÊU ĐỀ HOẶC NỘI DUNG CHỨA TỪ KHÓA BỊ KHÓA
+                                const isLocked = latestNotif.TieuDe.toLowerCase().includes('bị khóa') || 
+                                                 latestNotif.NoiDung.toLowerCase().includes('bị khóa');
+                                
+                                // Nếu KHÔNG PHẢI thông báo khóa tài khoản -> Dừng lại, không hiện Modal popup chướng mắt
+                                if (!isLocked) return;
+                                
+                                // Nếu ĐÚNG LÀ thông báo bị khóa -> Mới bật Modal cảnh báo màu đỏ và chuẩn bị đăng xuất
+                                showSystemModal(latestNotif.TieuDe, latestNotif.NoiDung, 'error');
+                                
+                                // Đếm ngược 4 giây rồi tự động đá văng ra màn hình đăng nhập
+                                setTimeout(() => {
+                                    sessionStorage.clear();
+                                    window.location.href = 'login.html';
+                                }, 4000);
+                            }
+                        }
+                    } catch (err) {
+                        console.error('Lỗi khi kiểm tra thông báo cá nhân', err);
+                    }
+                });
+        }
     }
 );
 
@@ -249,6 +308,16 @@ function renderAdminProfile() {
         profileLink.classList.add('active');
     }
 
+    // XỬ LÝ ĐỘNG TÊN VAI TRÒ HIỂN THỊ
+    let roleDisplay = '';
+    if (user.VaiTro === 'Admin') {
+        roleDisplay = '<i class="fa-solid fa-chess-king" style="color: #4338ca; margin-right: 5px;"></i> Admin';
+    } else if (user.VaiTro === 'QuanLySan') {
+        roleDisplay = '<i class="fa-solid fa-building-flag" style="color: #b45309; margin-right: 5px;"></i> Quản lý Cụm Sân';
+    } else {
+        roleDisplay = 'Người dùng';
+    }
+
     // 3. Render giao diện
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
@@ -260,8 +329,8 @@ function renderAdminProfile() {
         <div class="profile-card">
             <div class="profile-avatar-large"><i class="fa-solid fa-user"></i></div>
             <div>
-                <h3>${user.HoTen || 'Chưa cập nhật'}</h3>
-                <p>Quản trị viên</p>
+                <h3 style="margin-bottom: 5px;">${user.HoTen || 'Chưa cập nhật'}</h3>
+                <p style="font-weight: 500; font-size: 0.95rem;">${roleDisplay}</p>
             </div>
         </div>
 
@@ -536,7 +605,7 @@ async function verifyAndChangePassword() {
 // 1. Render giao diện danh sách thẻ Cụm Sân
 function renderQuanLySan() {
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
-    const menuLink = Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('QUẢN LÝ SÂN'));
+    const menuLink = document.getElementById('menu-cumsan');
     if (menuLink) menuLink.classList.add('active');
 
     const contentArea = document.querySelector('.admin-content');
@@ -578,6 +647,9 @@ async function loadCumSanCards() {
         const res = await response.json();
         
         const grid = document.getElementById('cumsan-grid');
+
+        if (!grid) return;
+
         if (!res.success || res.data.length === 0) {
             grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 40px;">Chưa có cụm sân nào.</div>`;
             return;
@@ -618,6 +690,17 @@ async function renderCumSanDetail(cumSanId) {
     currentCumSanId = cumSanId;
     const contentArea = document.querySelector('.admin-content');
     
+    // 1. FIX UX: Tự động set trạng thái Active màu xanh cho Menu Sidebar
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+    document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+    if (currentUser && currentUser.VaiTro === 'QuanLySan') {
+        const menuLink = document.getElementById('menu-sancuatoi');
+        if (menuLink) menuLink.classList.add('active');
+    } else {
+        const menuLink = document.getElementById('menu-cumsan');
+        if (menuLink) menuLink.classList.add('active');
+    }
+
     // Khung loading
     contentArea.innerHTML = `<div style="text-align:center; margin-top:50px;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải dữ liệu...</div>`;
 
@@ -627,7 +710,9 @@ async function renderCumSanDetail(cumSanId) {
         const res = await response.json();
 
         if (!res.success) {
-            contentArea.innerHTML = `<button class="btn-back" onclick="renderQuanLySan()"><i class="fa-solid fa-arrow-left"></i> Quay lại</button>
+            // Khắc phục nút quay lại khi lỗi
+            const backAction = currentUser.VaiTro === 'Admin' ? 'renderQuanLySan()' : 'renderTongQuan()';
+            contentArea.innerHTML = `<button class="btn-back" onclick="${backAction}"><i class="fa-solid fa-arrow-left"></i> Quay lại</button>
                                      <div class="modal-alert error" style="display:block;">Không tìm thấy cụm sân.</div>`;
             return;
         }
@@ -635,10 +720,10 @@ async function renderCumSanDetail(cumSanId) {
         const cs = res.data;
         const isDeleted = cs.deleted_at !== null;
 
-        // 1. Nút Sửa luôn hiển thị
+        // Nút Sửa luôn hiển thị
         const btnEdit = `<button class="btn-outline-sm" onclick='openEditCumSanModal(${JSON.stringify(cs).replace(/'/g, "\\'")})'><i class="fa-solid fa-pen"></i> Sửa Cụm Sân</button>`;
         
-        // 2. Nút Xóa hoặc Khôi phục đổi theo trạng thái
+        // Nút Xóa hoặc Khôi phục đổi theo trạng thái
         const btnDeleteOrRestore = isDeleted 
             ? `<button class="btn-outline-sm" style="color: #16A34A; border-color: #bbf7d0;" onclick="restoreCumSan(${cs.ID})"><i class="fa-solid fa-rotate-left"></i> Khôi phục</button>`
             : `<button class="btn-outline-sm" style="color: #ef4444; border-color: #fecaca;" onclick="deleteCumSan(${cs.ID})"><i class="fa-solid fa-trash"></i> Xóa</button>`;
@@ -646,9 +731,16 @@ async function renderCumSanDetail(cumSanId) {
         // Nhãn trạng thái hiển thị kế bên Tên cụm sân
         const statusBadge = isDeleted ? `<span class="badge badge-warning" style="margin-left: 10px; font-size: 0.9rem;">Đã tạm ngưng</span>` : '';
 
+        // =======================================================
+        // 2. FIX BẢO MẬT: Ẩn nút "Quay lại" đối với Quản lý sân
+        // =======================================================
+        const backBtnHtml = currentUser.VaiTro === 'QuanLySan' 
+            ? '' // Trống (Không cho phép quay lại danh sách tổng)
+            : `<button class="btn-back" onclick="renderQuanLySan()"><i class="fa-solid fa-arrow-left"></i> Quay lại Danh sách Cụm Sân</button>`;
+
         // Render HTML
         contentArea.innerHTML = `
-            <button class="btn-back" onclick="renderQuanLySan()"><i class="fa-solid fa-arrow-left"></i> Quay lại Danh sách Cụm Sân</button>
+            ${backBtnHtml} <!-- Chèn biến html đã xử lý ở trên vào đây -->
             
             <div class="page-header" style="margin-bottom: 24px; padding: 20px 24px; display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; border-radius: 14px; background: linear-gradient(135deg, #0b5d3b 0%, #087f4f 100%); box-shadow: 0 6px 18px rgba(0, 93, 59, 0.18); border-left: 5px solid #f5c542;"> 
                 <div> 
@@ -674,10 +766,10 @@ async function renderCumSanDetail(cumSanId) {
             <div id="tab-sanbong" class="tab-pane active panel">
                 <div class="panel-header">Danh sách Sân con <button class="btn-primary" onclick="openSanBongModal()" ${isDeleted?'disabled':''}>+ Thêm Sân Con</button></div>
                 
-                <!-- 1. Thêm max-height và overflow-y vào thẻ bọc ngoài -->
+                <!-- Thêm max-height và overflow-y vào thẻ bọc ngoài -->
                 <div class="table-responsive" style="max-height: 320px; overflow-y: auto;">
                     <table class="admin-table" style="position: relative;">
-                        <!-- 2. Thêm position: sticky để ghim tiêu đề cột khi cuộn chuột -->
+                        <!-- Thêm position: sticky để ghim tiêu đề cột khi cuộn chuột -->
                         <thead style="position: sticky; top: 0; background: #F8FAFC; z-index: 1; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
                             <tr>
                                 <th>Tên Sân</th>
@@ -2726,49 +2818,62 @@ async function executeCapNhatTrangThaiUC() {
 // ======================================================
 // MODULE: ADMIN - QUẢN LÝ KHÁCH HÀNG
 // ======================================================
+let allUsersData = [];
 let allKhachHangData = [];
 let currentViewedKhachHangId = null;
 let currentKhachHangDatSan = [];
+let currentRoleTab = 'KhachHang';
+let userSearchTerm = '';
 
-// 1. Render màn hình Danh sách Khách hàng
+// 1. Render màn hình Danh sách
 function renderQuanLyKhachHang() {
     currentViewedKhachHangId = null;
+    currentRoleTab = 'KhachHang';
+    userSearchTerm = '';
+
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+    const isAdmin = currentUser.VaiTro === 'Admin';
 
     // Active menu
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
-    const menuLink = Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('QUẢN LÝ KHÁCH HÀNG'));
+    const menuLink = document.getElementById('menu-khachhang');
     if (menuLink) menuLink.classList.add('active');
+
+    // UI TABS: Nếu là Admin thì hiện Tab, nếu là Quản lý thì không cần Tab
+    let tabsHtml = '';
+    if (isAdmin) {
+        tabsHtml = `
+            <div style="display: flex; gap: 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px; padding: 0 20px;">
+                <button class="nav-tab active" onclick="switchUserTab('KhachHang', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; border-bottom: 2px solid var(--primary); color: var(--primary);">Khách hàng</button>
+                <button class="nav-tab" onclick="switchUserTab('QuanLySan', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Quản lý sân</button>
+                <button class="nav-tab" onclick="switchUserTab('Admin', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Admin</button>
+            </div>
+        `;
+    }
 
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
         <div class="page-header" style="margin-bottom: 24px;">
-            <h1 class="page-title">Quản lý Khách Hàng</h1>
-            <p class="text-muted">Theo dõi thông tin, lịch sử đặt sân và uy tín của khách hàng</p>
+            <h1 class="page-title">Quản lý Tài khoản</h1>
+            <p class="text-muted">Danh sách tài khoản và phân quyền trên hệ thống</p>
         </div>
 
-        <!-- Khung tìm kiếm -->
-        <div class="panel" style="margin-bottom: 20px; max-width: 400px;">
-            <div style="position: relative; max-width: 400px;">
-                <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
-                <input type="text" id="kh-search-input" class="form-control" style="padding-left: 35px;" placeholder="Tìm theo Tên, SĐT, Email..." oninput="handleKHSearch(this.value)">
-            </div>
-        </div>
-
-        <!-- Bảng danh sách -->
         <div class="panel">
+            ${tabsHtml}
+
+            <!-- Khung tìm kiếm (Dùng chung) -->
+            <div style="position: relative; max-width: 400px; margin: ${isAdmin ? '0 20px 20px 20px' : '20px'};">
+                <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
+                <input type="text" id="user-search-input" class="form-control" style="padding-left: 35px;" placeholder="Tìm theo Tên, SĐT, Email..." oninput="handleUserSearch(this.value)">
+            </div>
+
+            <!-- Bảng danh sách -->
             <div class="table-responsive" style="max-height: 60vh; overflow-y: auto;">
                 <table class="admin-table" style="position: relative;">
-                    <thead style="position: sticky; top: 0; z-index: 10; background: #F8FAFC;">
-                        <tr>
-                            <th>Khách hàng</th>
-                            <th>Liên hệ</th>
-                            <th style="text-align: center;">Số dư ví</th>
-                            <th style="text-align: center;">Tỷ lệ Bùng sân</th>
-                            <th style="text-align: center;">Trạng thái</th>
-                            <th style="text-align: center;">Hành động</th>
-                        </tr>
+                    <thead id="user-table-head" style="position: sticky; top: 0; z-index: 10; background: #F8FAFC;">
+                        <!-- Render Header bằng JS -->
                     </thead>
-                    <tbody id="khachhang-table-body">
+                    <tbody id="user-table-body">
                         <tr><td colspan="6" class="text-center" style="text-align: center;">Đang tải dữ liệu...</td></tr>
                     </tbody>
                 </table>
@@ -2776,89 +2881,183 @@ function renderQuanLyKhachHang() {
         </div>
     `;
 
-    loadDanhSachKhachHangAdmin();
+    loadDanhSachUsersAPI();
 }
 
-async function loadDanhSachKhachHangAdmin() {
+// Chuyển Tab (Và giải quyết UX Clear Search)
+function switchUserTab(role, btnElement) {
+    const tabs = btnElement.parentElement.children;
+    for (let i = 0; i < tabs.length; i++) {
+        tabs[i].classList.remove('active');
+        tabs[i].style.borderBottom = 'none';
+        tabs[i].style.color = 'var(--text-muted)';
+    }
+    btnElement.classList.add('active');
+    btnElement.style.borderBottom = '2px solid var(--primary)';
+    btnElement.style.color = 'var(--primary)';
+
+    currentRoleTab = role;
+    
+    // CLEAR Ô TÌM KIẾM ĐỂ TRÁNH TRỐNG DỮ LIỆU GÂY HOANG MANG
+    userSearchTerm = '';
+    document.getElementById('user-search-input').value = '';
+
+    filterAndRenderUsers();
+}
+
+async function loadDanhSachUsersAPI() {
     try {
         const response = await fetch(`${API_BASE_URL}/admin/khach-hang`);
         const res = await response.json();
         if (res.success) {
-            allKhachHangData = res.data;
-            renderKHTable(allKhachHangData);
+            allUsersData = res.data;
+            filterAndRenderUsers();
         }
     } catch (error) {
-        document.getElementById('khachhang-table-body').innerHTML = `<tr><td colspan="6" class="text-center text-danger" style="text-align: center;">Lỗi kết nối máy chủ!</td></tr>`;
+        document.getElementById('user-table-body').innerHTML = `<tr><td colspan="6" class="text-center text-danger" style="text-align: center;">Lỗi kết nối máy chủ!</td></tr>`;
     }
 }
 
-function handleKHSearch(value) {
-    const searchTerm = value.toLowerCase().trim();
-    const filtered = allKhachHangData.filter(kh => 
-        kh.HoTen.toLowerCase().includes(searchTerm) || 
-        kh.SoDienThoai.includes(searchTerm) || 
-        (kh.Email && kh.Email.toLowerCase().includes(searchTerm))
-    );
-    renderKHTable(filtered);
+function handleUserSearch(value) {
+    userSearchTerm = value.toLowerCase().trim();
+    filterAndRenderUsers();
 }
 
-function renderKHTable(data) {
-    const tbody = document.getElementById('khachhang-table-body');
-    if (data.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="padding: 40px; text-align: center;">Không tìm thấy khách hàng nào.</td></tr>`;
+function filterAndRenderUsers() {
+    // 1. Lọc theo Tab và Search
+    const filtered = allUsersData.filter(user => {
+        const matchTab = user.VaiTro === currentRoleTab;
+        const matchSearch = 
+            user.HoTen.toLowerCase().includes(userSearchTerm) || 
+            user.SoDienThoai.includes(userSearchTerm) || 
+            (user.Email && user.Email.toLowerCase().includes(userSearchTerm));
+        
+        return matchTab && matchSearch;
+    });
+
+    // 2. Render Header (Tùy theo Tab)
+    const thead = document.getElementById('user-table-head');
+    if (currentRoleTab === 'KhachHang') {
+        thead.innerHTML = `
+            <tr>
+                <th>Khách hàng</th>
+                <th>Liên hệ</th>
+                <th style="text-align: center;">Số dư ví</th>
+                <th style="text-align: center;">Tỷ lệ Bùng sân</th>
+                <th style="text-align: center;">Trạng thái</th>
+                <th style="text-align: center;">Hành động</th>
+            </tr>
+        `;
+    } else {
+        // Giao diện cột chuẩn xác cho nhân sự hệ thống
+        thead.innerHTML = `
+            <tr>
+                <th>Tài khoản Nội bộ</th>
+                <th>Thông tin liên hệ</th>
+                <th>Cơ sở trực thuộc</th>
+                <th style="text-align: center;">Trạng thái</th>
+                <th style="text-align: center;">Hành động</th>
+            </tr>
+        `;
+    }
+
+    // 3. Render Body
+    const tbody = document.getElementById('user-table-body');
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="padding: 40px; text-align: center;">Không tìm thấy người dùng nào.</td></tr>`;
         return;
     }
 
-    tbody.innerHTML = data.map(kh => {
-        // Trạng thái Khóa
-        const statusBadge = kh.TrangThaiKhoa 
+    tbody.innerHTML = filtered.map(u => {
+        const statusBadge = u.TrangThaiKhoa 
             ? `<span class="badge badge-danger"><i class="fa-solid fa-lock"></i> Bị khóa</span>` 
             : `<span class="badge badge-success"><i class="fa-solid fa-check-circle"></i> Hoạt động</span>`;
         
-        // Tỷ lệ bùng sân
-        let tyLeBungHtml = `<span style="color: #64748b; font-size: 0.85rem;">Chưa có dữ liệu</span>`;
-        if (kh.tong_tran_da_chot > 0) {
-            // Rủi ro cao nếu tỷ lệ >= 30% HOẶC đã bùng >= 3 trận
-            const isNguyHiem = kh.ty_le_bung >= 30 || kh.tong_bung_san >= 3; 
-            const color = isNguyHiem ? '#ef4444' : (kh.ty_le_bung > 0 ? '#f59e0b' : '#16a34a'); // Đỏ, Vàng, Xanh lá
+        // ==========================================
+        // UI CHO KHÁCH HÀNG
+        // ==========================================
+        if (currentRoleTab === 'KhachHang') {
+            let tyLeBungHtml = `<span style="color: #64748b; font-size: 0.85rem;">Chưa có dữ liệu</span>`;
+            if (u.tong_tran_da_chot > 0) {
+                const isNguyHiem = u.ty_le_bung >= 30 || u.tong_bung_san >= 3; 
+                const color = isNguyHiem ? '#ef4444' : (u.ty_le_bung > 0 ? '#f59e0b' : '#16a34a');
+                tyLeBungHtml = `
+                    <div style="font-size: 1.1rem; font-weight: bold; color: ${color};">${u.ty_le_bung}%</div>
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">${u.tong_bung_san} bùng / ${u.tong_tran_da_chot} chốt</div>
+                    ${isNguyHiem ? `<div style="font-size:0.75rem; color:#ef4444; margin-top:2px;"><i class="fa-solid fa-triangle-exclamation"></i> Rủi ro cao</div>` : ''}
+                `;
+            }
+
+            return `
+                <tr>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 40px; height: 40px; border-radius: 50%; background: #e2e8f0; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #64748b;">${u.HoTen.charAt(0).toUpperCase()}</div>
+                            <div>
+                                <strong style="color: var(--text-dark);">${u.HoTen}</strong><br>
+                                <span style="font-size: 0.8rem; color: var(--text-muted);">ID: KH-${u.ID}</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <div><i class="fa-solid fa-phone" style="width: 16px; color: #94a3b8;"></i> ${u.SoDienThoai}</div>
+                        <div style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-solid fa-envelope" style="width: 16px; color: #94a3b8;"></i> ${u.Email || 'Chưa cập nhật'}</div>
+                    </td>
+                    <td style="text-align: center;"><strong style="color: #047857; font-size: 1.05rem;">${Number(u.SoDuVi).toLocaleString('vi-VN')}đ</strong></td>
+                    <td style="text-align: center;">${tyLeBungHtml}</td>
+                    <td style="text-align: center;">${statusBadge}</td>
+                    <td style="text-align: center;"><button class="btn-outline-sm" onclick="renderChiTietKhachHang(${u.ID})"><i class="fa-solid fa-eye"></i> Chi tiết</button></td>
+                </tr>
+            `;
+        } 
+        // ==========================================
+        // UI CHO ADMIN / QUẢN LÝ SÂN
+        // ==========================================
+        else {
+            const roleBadge = u.VaiTro === 'Admin' 
+                ? `<span style="font-size: 0.75rem; background: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: 4px;"><i class="fa-solid fa-chess-king"></i> Admin</span>`
+                : `<span style="font-size: 0.75rem; background: #fef3c7; color: #b45309; padding: 2px 6px; border-radius: 4px;"><i class="fa-solid fa-user-tie"></i> Quản lý sân</span>`;
             
-            tyLeBungHtml = `
-                <div style="font-size: 1.1rem; font-weight: bold; color: ${color};">${kh.ty_le_bung}%</div>
-                <div style="font-size: 0.8rem; color: var(--text-muted);">${kh.tong_bung_san} bùng / ${kh.tong_tran_da_chot} chốt</div>
-                ${isNguyHiem ? `<div style="font-size:0.75rem; color:#ef4444; margin-top:2px;"><i class="fa-solid fa-triangle-exclamation"></i> Rủi ro cao</div>` : ''}
+            const coSoStr = u.cum_san 
+                ? `<div style="color: var(--primary); font-weight: 600;"><i class="fa-solid fa-building-flag"></i> ${u.cum_san.TenCumSan}</div><div style="font-size: 0.8rem; color: var(--text-muted);">${u.cum_san.DiaChi}</div>` 
+                : `<div style="color: var(--text-muted); font-weight: 600;"><i class="fa-solid fa-globe"></i> Toàn hệ thống</div>`;
+
+            let actionBtn = '';
+            if (Number(u.ID) === 1) {
+                actionBtn = `<button class="btn-outline-sm" style="color: #94a3b8; border-color: #e2e8f0; background: #f8fafc; width: 130px; cursor: not-allowed; opacity: 0.8;" title="Tài khoản tối cao không thể bị khóa" disabled><i class="fa-solid fa-shield"></i> Bảo vệ</button>`;
+            } else {
+                actionBtn = u.TrangThaiKhoa
+                    ? `<button class="btn-outline-sm" style="color: #16a34a; border-color: #bbf7d0; background: #f0fdf4; width: 130px;" onclick="openKhoaKhachHangModal(${u.ID}, true)"><i class="fa-solid fa-unlock"></i> Mở quyền</button>`
+                    : `<button class="btn-outline-sm" style="color: #ef4444; border-color: #fecaca; background: #fef2f2; width: 130px; white-space: nowrap;" onclick="openKhoaKhachHangModal(${u.ID}, false)"><i class="fa-solid fa-lock"></i> Khóa tài khoản</button>`;
+            }
+            return `
+                <tr>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 40px; height: 40px; border-radius: 50%; background: #eff6ff; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #3b82f6; font-size: 1.2rem;"><i class="fa-solid fa-user-shield"></i></div>
+                            <div>
+                                <strong style="color: var(--text-dark);">${u.HoTen}</strong><br>
+                                ${roleBadge}
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <div><i class="fa-solid fa-phone" style="width: 16px; color: #94a3b8;"></i> ${u.SoDienThoai}</div>
+                        <div style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-solid fa-envelope" style="width: 16px; color: #94a3b8;"></i> ${u.Email || 'Chưa cập nhật'}</div>
+                    </td>
+                    <td>${coSoStr}</td>
+                    <td style="text-align: center;">${statusBadge}</td>
+                    <td style="text-align: center;">${actionBtn}</td>
+                </tr>
             `;
         }
-
-        return `
-            <tr>
-                <td>
-                    <div style="display: flex; align-items: center; gap: 12px;">
-                        <div style="width: 40px; height: 40px; border-radius: 50%; background: #e2e8f0; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #64748b;">
-                            ${kh.HoTen.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                            <strong style="color: var(--text-dark);">${kh.HoTen}</strong><br>
-                            <span style="font-size: 0.8rem; color: var(--text-muted);">ID: KH-${kh.ID}</span>
-                        </div>
-                    </div>
-                </td>
-                <td>
-                    <div><i class="fa-solid fa-phone" style="width: 16px; color: #94a3b8;"></i> ${kh.SoDienThoai}</div>
-                    <div style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-solid fa-envelope" style="width: 16px; color: #94a3b8;"></i> ${kh.Email || 'Chưa cập nhật'}</div>
-                </td>
-                <td style="text-align: center;"><strong style="color: #047857; font-size: 1.05rem;">${Number(kh.SoDuVi).toLocaleString('vi-VN')}đ</strong></td>
-                <td style="text-align: center;">${tyLeBungHtml}</td>
-                <td style="text-align: center;">${statusBadge}</td>
-                <td style="text-align: center;">
-                    <button class="btn-outline-sm" onclick="renderChiTietKhachHang(${kh.ID})"><i class="fa-solid fa-eye"></i> Chi tiết</button>
-                </td>
-            </tr>
-        `;
     }).join('');
 }
 
 // 2. Render Màn hình Chi tiết Khách hàng
 async function renderChiTietKhachHang(id) {
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+
     currentViewedKhachHangId = id;
 
     const contentArea = document.querySelector('.admin-content');
@@ -2879,63 +3078,69 @@ async function renderChiTietKhachHang(id) {
 
         currentKhachHangDatSan = dsDatSan;
 
-        // Thống kê
-        const tongTienNap = dsGiaoDich.filter(gd => gd.LoaiGiaoDich === 'NapTien' && gd.DongTien === 'Cong').reduce((sum, gd) => sum + Number(gd.SoTien), 0);
-        
-        // Tổng số trận đặt (chỉ tính đặt thành công, không hủy)
-        const totalBooking = dsDatSan.filter(ds => ds.TrangThai === 'HoanThanh' || ds.TrangThai === 'KhongDen' || ds.TrangThai === 'DaCoc').length;
+        const tk = res.thong_ke || {
+            so_du_vi: kh.SoDuVi || 0,
+            tong_tien_da_nap: 0,
+            tong_so_tran: dsDatSan.length,
+            tong_bung_san: dsDatSan.filter(d => d.TrangThai === 'KhongDen').length,
+            tong_da_chot: dsDatSan.filter(d => d.TrangThai === 'HoanThanh' || d.TrangThai === 'KhongDen').length,
+            ty_le_bung: 0
+        };
 
-        // Cập nhật lại cách đếm dựa vào dữ liệu mới
-        const soLanHoanThanh = dsDatSan.filter(ds => ds.TrangThai === 'HoanThanh').length;
-        const soLanBung = dsDatSan.filter(ds => ds.TrangThai === 'KhongDen').length;
-        const tongDaChot = soLanHoanThanh + soLanBung;
-        const tyLeBung = tongDaChot > 0 ? Math.round((soLanBung / tongDaChot) * 100) : 0;
+        if (tk.ty_le_bung === 0 && tk.tong_da_chot > 0) {
+            tk.ty_le_bung = Math.round((tk.tong_bung_san / tk.tong_da_chot) * 100);
+        }
+
+        // Xử lý bảo mật thẻ Tổng tiền nạp (Nếu null -> Ẩn đi bằng icon Ổ khóa)
+        const tongTienNapHtml = tk.tong_tien_da_nap === null 
+            ? `<div class="stat-value" style="color: #ef4444; font-size: 1.2rem; margin-top: 5px;"><i class="fa-solid fa-lock"></i> Bảo mật</div>` 
+            : `<div class="stat-value" style="color: #4338ca;">${Number(tk.tong_tien_da_nap).toLocaleString('vi-VN')}đ</div>`;
 
         // Nút Khóa/Mở Khóa
         const lockBtnHtml = kh.TrangThaiKhoa 
             ? `<button class="btn-primary" style="background: #16a34a; border-color: #16a34a;" onclick="openKhoaKhachHangModal(${kh.ID}, true)"><i class="fa-solid fa-unlock"></i> Mở khóa tài khoản</button>`
             : `<button class="btn-primary" style="background: #ef4444; border-color: #ef4444;" onclick="openKhoaKhachHangModal(${kh.ID}, false)"><i class="fa-solid fa-lock"></i> Khóa tài khoản</button>`;
 
+        const isQuanLySan = currentUser.VaiTro === 'QuanLySan';
+
         // Render HTML
         contentArea.innerHTML = `
             <button class="btn-back" onclick="renderQuanLyKhachHang()"><i class="fa-solid fa-arrow-left"></i> Quay lại danh sách</button>
-            
+            <!-- ... (Phần Header giữ nguyên như cũ) ... -->
             <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding: 24px; background: white; border-radius: 12px; box-shadow: var(--shadow-sm); border: 1px solid var(--border);">
                 <div style="display: flex; align-items: center; gap: 20px;">
                     <div style="width: 70px; height: 70px; border-radius: 50%; background: var(--primary-light); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: bold;">
                         ${kh.HoTen.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                        <h1 class="page-title" style="margin-bottom: 4px;">${kh.HoTen} ${kh.TrangThaiKhoa ? '<span class="badge badge-danger" style="vertical-align: middle; font-size: 0.8rem; margin-left: 8px;">Bị khóa</span>' : ''}</h1>
+                        <h1 class="page-title" style="margin-bottom: 4px;">${kh.HoTen}${kh.TrangThaiKhoa ? '<span class="badge badge-danger" style="vertical-align: middle; font-size: 0.8rem; margin-left: 8px;">Bị khóa</span>' : ''}</h1>
                         <div style="color: var(--text-muted); font-size: 0.95rem; display: flex; gap: 15px;">
                             <span><i class="fa-solid fa-phone"></i> ${kh.SoDienThoai}</span>
                             <span><i class="fa-solid fa-envelope"></i> ${kh.Email || 'N/A'}</span>
                         </div>
                     </div>
                 </div>
-                <div>
-                    ${lockBtnHtml}
-                </div>
+                <div>${lockBtnHtml}</div>
             </div>
 
-            <!-- Thống kê nhanh -->
+            <!-- Thống kê nhanh dùng dữ liệu Backend (Đã cách ly) -->
             <div class="stat-grid" style="margin-bottom: 24px;">
                 <div class="stat-card">
                     <div class="stat-title">Số dư ví hiện tại</div>
-                    <div class="stat-value" style="color: #047857;">${Number(kh.SoDuVi).toLocaleString('vi-VN')}đ</div>
+                    <div class="stat-value" style="color: #047857;">${Number(tk.so_du_vi).toLocaleString('vi-VN')}đ</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-title">Tổng tiền đã nạp</div>
-                    <div class="stat-value" style="color: #4338ca;">${tongTienNap.toLocaleString('vi-VN')}đ</div>
+                    ${tongTienNapHtml}
                 </div>
                 <div class="stat-card">
                     <div class="stat-title">Tổng số trận đặt</div>
-                    <div class="stat-value">${totalBooking} trận</div>
+                    <div class="stat-value">${tk.tong_so_tran} trận</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-title">Tỷ lệ bùng sân</div>
-                    <div class="stat-value" style="color: ${tyLeBung >= 30 ? '#ef4444' : '#047857'};">${tyLeBung}%</div>
-                    <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">(${soLanBung} bùng / ${tongDaChot} chốt)</div>
+                    <div class="stat-value" style="color: ${tk.ty_le_bung >= 30 ? '#ef4444' : '#047857'};">${tk.ty_le_bung}%</div>
+                    <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">(${tk.tong_bung_san} bùng / ${tk.tong_da_chot} chốt)</div>
                 </div>
             </div>
 
@@ -2943,7 +3148,7 @@ async function renderChiTietKhachHang(id) {
             <div class="panel">
                 <div style="display: flex; gap: 20px; border-bottom: 1px solid var(--border);">
                     <button class="nav-tab active" onclick="switchKhachHangTab('tab-ls-datsan', this)" style="margin-left: 20px; padding: 12px 0; border: none; background: transparent; font-weight: 600; cursor: pointer; border-bottom: 2px solid var(--primary); color: var(--primary);">Lịch sử Đặt sân</button>
-                    <button class="nav-tab" onclick="switchKhachHangTab('tab-ls-giaodich', this)" style="padding: 12px 0; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Lịch sử Giao dịch Ví</button>
+                    ${isQuanLySan ? '' : `<button class="nav-tab" onclick="switchKhachHangTab('tab-ls-giaodich', this)" style="padding: 12px 0; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Lịch sử Giao dịch Ví</button>`}
 
                     <div id="kh-filter-container" style="display: flex; justify-content: flex-end; align-items: center; margin-left: auto; margin-right: 20px;">
                         <select class="form-control" style="width: 200px;" onchange="filterKHDatsan(this.value)">
@@ -2976,6 +3181,7 @@ async function renderChiTietKhachHang(id) {
                 </div>
 
                 <!-- Tab 2: Giao Dịch -->
+                ${isQuanLySan ? '' : `
                 <div id="tab-ls-giaodich" class="tab-pane" style="display: none;">
                     <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
                         <table class="admin-table">
@@ -2992,7 +3198,7 @@ async function renderChiTietKhachHang(id) {
                             </tbody>
                         </table>
                     </div>
-                </div>
+                </div>`}
             </div>
         `;
     } catch (e) {
@@ -3084,10 +3290,14 @@ function switchKhachHangTab(tabId, btnElement) {
     btnElement.style.borderBottom = '2px solid var(--primary)';
     btnElement.style.color = 'var(--primary)';
 
-    document.getElementById('tab-ls-datsan').style.display = 'none';
-    document.getElementById('tab-ls-giaodich').style.display = 'none';
+    const tabDatSan = document.getElementById('tab-ls-datsan');
+    const tabGiaoDich = document.getElementById('tab-ls-giaodich');
+
+    if (tabDatSan) tabDatSan.style.display = 'none';
+    if (tabGiaoDich) tabGiaoDich.style.display = 'none';
     
-    document.getElementById(tabId).style.display = 'block';
+    const targetTab = document.getElementById(tabId);
+    if (targetTab) targetTab.style.display = 'block';
 
     const filterContainer = document.getElementById('kh-filter-container');
     if (filterContainer) {
@@ -3180,17 +3390,26 @@ async function executeToggleKhoaKhachHang() {
             alertBox.style.display = 'block';
             alertBox.style.textAlign = 'center';
 
-            // 1. Phục hồi ngay lập tức trạng thái nút bấm để lần sau không bị kẹt
+            // 1. Phục hồi ngay lập tức trạng thái nút bấm
             btn.innerHTML = 'Đồng ý';
             btn.disabled = false;
 
-            // 2. Lưu lại ID khách hàng ra 1 biến tạm (tránh bị reset mất)
+            // 2. Lưu lại ID khách hàng
             const idToRender = pendingKhoaUserId;
 
-            // 3. Đợi 1.5 giây cho Admin đọc thông báo rồi đóng Modal & Tải lại Profile
+            // 3. Đợi 1.5 giây cho Admin đọc thông báo rồi điều hướng
             setTimeout(() => {
-                closeKhoaKhachHangModal(); // Đóng Modal và gán pendingKhoaUserId = null
-                renderChiTietKhachHang(idToRender); // Dùng biến tạm để gọi API
+                closeKhoaKhachHangModal();
+                
+                // NẾU LÀ KHÁCH HÀNG -> Nhảy vào xem chi tiết
+                if (currentRoleTab === 'KhachHang') {
+                    renderChiTietKhachHang(idToRender);
+                } 
+                // NẾU LÀ TÀI KHOẢN NỘI BỘ -> Chỉ tải lại danh sách (tránh nhảy màn hình trắng)
+                else {
+                    loadDanhSachUsersAPI();
+                }
+                
             }, 1500);
 
         } else {
@@ -3198,7 +3417,6 @@ async function executeToggleKhoaKhachHang() {
             alertBox.className = 'modal-alert error';
             alertBox.style.display = 'block';
             
-            // Lỗi thì phục hồi nút bấm
             btn.innerHTML = 'Đồng ý';
             btn.disabled = false;
         }
@@ -3207,7 +3425,6 @@ async function executeToggleKhoaKhachHang() {
         alertBox.className = 'modal-alert error';
         alertBox.style.display = 'block';
         
-        // Lỗi thì phục hồi nút bấm
         btn.innerHTML = 'Đồng ý';
         btn.disabled = false;
     }
@@ -3217,6 +3434,9 @@ async function executeToggleKhoaKhachHang() {
 // MODULE: ADMIN - TỔNG QUAN (DASHBOARD)
 // ======================================================
 async function renderTongQuan() {
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+    if (!currentUser) return;
+
     // 1. Cập nhật trạng thái Menu
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
     const menuLink = Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('TỔNG QUAN'));
@@ -3232,10 +3452,9 @@ async function renderTongQuan() {
         if (!res.success) throw new Error('Không thể tải dữ liệu');
         const data = res.data;
 
-        // 2. Logic Cảnh Báo Quên Chốt Sân
+        // 2. Logic Cảnh Báo Quên Chốt Sân cho Quản lý sân
         let alertHtml = '';
         if (data.so_san_quen_chot > 0) {
-
             const d = new Date();
             d.setDate(d.getDate() - 1);
             const pad = n => n < 10 ? '0' + n : n;
@@ -3245,9 +3464,9 @@ async function renderTongQuan() {
                 <div style="background: #fef2f2; border: 1px solid #f87171; border-left: 4px solid #ef4444; color: #b91c1c; padding: 16px 20px; border-radius: 8px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px rgba(239, 68, 68, 0.1);">
                     <div>
                         <h4 style="margin: 0 0 4px 0; font-size: 1.05rem;"><i class="fa-solid fa-triangle-exclamation"></i> CẢNH BÁO: CHƯA CHỐT SÂN NGÀY HÔM TRƯỚC</h4>
-                        <p style="margin: 0; font-size: 0.9rem;">Hệ thống phát hiện có <strong>${data.so_san_quen_chot}</strong> lịch đặt sân của ngày hôm trước vẫn đang ở trạng thái "Đã cọc". Vui lòng kiểm tra và chốt sân để không ảnh hưởng dữ liệu thống kê!</p>
+                        <p style="margin: 0; font-size: 0.9rem;">Hệ thống phát hiện có <strong>${data.so_san_quen_chot}</strong> lịch đặt sân của ngày hôm trước vẫn đang ở trạng thái "Đã cọc". Vui lòng kiểm tra và chốt sân ngay!</p>
                     </div>
-                    <button onclick="renderQuanLyDatSan('DaCoc', '${yesterday}')" style="background: #ef4444; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; white-space: nowrap;">Xử lý ngay</button>
+                    <button onclick="renderQuanLyDatSan('DaCoc', '${yesterday}')" style="background: #ef4444; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s;">Xử lý ngay</button>
                 </div>
             `;
         }
@@ -3812,4 +4031,189 @@ async function executeAdminDeleteChat() {
         btn.innerHTML = 'Xóa';
         btn.disabled = false;
     }
+}
+
+// ======================================================
+// MODULE: ADMIN - CẤP TÀI KHOẢN (ADMIN)
+// ======================================================
+function renderCapTaiKhoan() {
+    document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+    const menuLink = Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('CẤP TÀI KHOẢN'));
+    if (menuLink) menuLink.classList.add('active');
+
+    const contentArea = document.querySelector('.admin-content');
+    contentArea.innerHTML = `
+        <div class="page-header" style="margin-bottom: 24px;">
+            <h1 class="page-title">Cấp tài khoản Nội bộ</h1>
+            <p class="text-muted">Tạo tài khoản quản trị phân quyền cho Ban quản lý hoặc Admin</p>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 350px; gap: 24px; align-items: start;">
+            <!-- Form Card -->
+            <div class="panel" style="padding: 30px;">
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 25px; border-bottom: 1px solid var(--border); padding-bottom: 15px;">
+                    <div style="width: 45px; height: 45px; border-radius: 10px; background: #eff6ff; color: #3b82f6; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;"><i class="fa-solid fa-user-shield"></i></div>
+                    <div>
+                        <h3 style="margin: 0; font-size: 1.1rem; color: var(--text-dark);">Thông tin định danh</h3>
+                        <span style="font-size: 0.85rem; color: var(--text-muted);">Điền thông tin bắt buộc để khởi tạo tài khoản</span>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div class="form-group">
+                        <label style="font-weight: 600;">Họ và tên <span style="color: red;">*</span></label>
+                        <input type="text" id="tk-hoten" class="form-control" placeholder="VD: Nguyễn Văn A">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 600;">Số điện thoại <span style="color: red;">*</span></label>
+                        <input type="text" id="tk-sdt" class="form-control" placeholder="Dùng để đăng nhập">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 600;">Email <span style="color: red;">*</span></label>
+                        <input type="email" id="tk-email" class="form-control" placeholder="Dùng để nhận thông báo">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 600;">Mật khẩu khởi tạo <span style="color: red;">*</span></label>
+                        <input type="text" id="tk-matkhau" class="form-control" value="123456" placeholder="Ít nhất 6 ký tự">
+                    </div>
+                </div>
+
+                <div style="margin-top: 15px; border-top: 1px dashed var(--border); padding-top: 20px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div class="form-group">
+                            <label style="font-weight: 600;">Vai trò phân quyền <span style="color: red;">*</span></label>
+                            <select id="tk-vaitro" class="form-control" style="border-color: #3b82f6; background: #f8fafc;" onchange="toggleCumSanSelect(this.value)">
+                                <option value="QuanLySan" selected>Quản lý Cụm Sân</option>
+                                <option value="Admin">Admin (Toàn quyền)</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="tk-group-cumsan">
+                            <label style="font-weight: 600;">Cơ sở quản lý <span style="color: red;">*</span></label>
+                            <select id="tk-cumsan" class="form-control">
+                                <option value="">-- Đang tải dữ liệu sân --</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 30px; display: flex; justify-content: flex-end;">
+                    <button id="btn-create-tk" class="btn-primary" style="padding: 12px 30px; font-size: 1rem; border-radius: 8px;" onclick="executeTaoTaiKhoan()">
+                        <i class="fa-solid fa-user-plus" style="margin-right: 8px;"></i> Khởi tạo tài khoản
+                    </button>
+                </div>
+            </div>
+
+            <!-- Hướng dẫn Card -->
+            <div class="panel" style="padding: 25px; background: linear-gradient(to bottom, #f8fafc, #ffffff);">
+                <h4 style="margin: 0 0 15px 0; color: var(--primary);"><i class="fa-solid fa-circle-info"></i> Hướng dẫn phân quyền</h4>
+                <ul style="padding-left: 20px; color: var(--text-muted); font-size: 0.9rem; line-height: 1.7;">
+                    <li style="margin-bottom: 10px;"><strong style="color: var(--text-dark);">Admin:</strong> Có toàn quyền xem báo cáo doanh thu tổng, duyệt yêu cầu rút tiền và quản lý hệ thống. Không thuộc cụm sân nào.</li>
+                    <li><strong style="color: var(--text-dark);">Quản lý sân:</strong> Chỉ được phép quản lý lịch đặt, khách hàng và cấu hình giá của Cụm sân được chỉ định. Dữ liệu tài chính bị cách ly hoàn toàn.</li>
+                </ul>
+            </div>
+        </div>
+    `;
+    loadCumSanForDropdown(); 
+}
+
+function toggleCumSanSelect(vaiTro) {
+    const group = document.getElementById('tk-group-cumsan');
+    if (vaiTro === 'QuanLySan') {
+        group.style.display = 'block';
+    } else {
+        group.style.display = 'none';
+        document.getElementById('tk-cumsan').value = '';
+    }
+}
+
+async function loadCumSanForDropdown() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/cum-san`);
+        const res = await response.json();
+        if (res.success) {
+            const select = document.getElementById('tk-cumsan');
+            select.innerHTML = '<option value="">-- Bấm để chọn Cụm Sân --</option>' + res.data.map(cs => `<option value="${cs.ID}">${cs.TenCumSan}</option>`).join('');
+        }
+    } catch (e) {
+        console.log("Lỗi tải dropdown cụm sân", e);
+    }
+}
+
+async function executeTaoTaiKhoan() {
+    const btn = document.getElementById('btn-create-tk');
+    
+    const ho_ten = document.getElementById('tk-hoten').value.trim();
+    const so_dien_thoai = document.getElementById('tk-sdt').value.trim();
+    const email = document.getElementById('tk-email').value.trim();
+    const mat_khau = document.getElementById('tk-matkhau').value;
+    const vai_tro = document.getElementById('tk-vaitro').value;
+    const id_cum_san = document.getElementById('tk-cumsan').value;
+
+    if (!ho_ten || !so_dien_thoai || !email || !mat_khau) {
+        return showSystemModal('Thiếu thông tin', 'Vui lòng điền đầy đủ các trường bắt buộc có dấu (*).', 'error');
+    }
+
+    if (vai_tro === 'QuanLySan' && !id_cum_san) {
+        return showSystemModal('Chưa chọn cơ sở', 'Vui lòng chọn Cụm Sân mà người này sẽ quản lý.', 'error');
+    }
+
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right: 8px;"></i> Đang tạo...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/cap-tai-khoan`, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ho_ten, so_dien_thoai, email, mat_khau, vai_tro, id_cum_san })
+        });
+        const data = await response.json();
+        
+        if (response.ok && data.user) {
+            showSystemModal('Thành công!', 'Tài khoản nội bộ đã được khởi tạo thành công.', 'success');
+            
+            // Xóa rỗng form nhưng giữ lại mật khẩu mặc định
+            document.getElementById('tk-hoten').value = '';
+            document.getElementById('tk-sdt').value = '';
+            document.getElementById('tk-email').value = '';
+            document.getElementById('tk-matkhau').value = '123456';
+        } else {
+            const errorMsg = data.errors ? data.errors[Object.keys(data.errors)[0]][0] : data.message;
+            showSystemModal('Không thể tạo tài khoản', errorMsg, 'error');
+        }
+    } catch (e) {
+        showSystemModal('Lỗi kết nối', 'Mất kết nối đến máy chủ. Vui lòng thử lại sau.', 'error');
+    } finally {
+        btn.innerHTML = '<i class="fa-solid fa-user-plus" style="margin-right: 8px;"></i> Khởi tạo tài khoản'; 
+        btn.disabled = false;
+    }
+}
+
+// ======================================================
+// HÀM TIỆN ÍCH: CUSTOM MODAL ALERT
+// ======================================================
+function showSystemModal(title, message, type = 'success') {
+    let modal = document.getElementById('system-alert-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'system-alert-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 100000; align-items: center; justify-content: center;';
+        document.body.appendChild(modal);
+    }
+
+    const iconHtml = type === 'success' 
+        ? '<i class="fa-solid fa-circle-check" style="color: #10b981; font-size: 3.5rem;"></i>' 
+        : '<i class="fa-solid fa-circle-xmark" style="color: #ef4444; font-size: 3.5rem;"></i>';
+    const btnColor = type === 'success' ? '#10b981' : '#ef4444';
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 350px; text-align: center; padding: 30px 20px; border-radius: 16px; transform: scale(0.9); animation: modalPop 0.3s ease forwards;">
+            <div style="margin-bottom: 15px;">${iconHtml}</div>
+            <h3 style="margin-bottom: 10px; font-size: 1.3rem; color: var(--text-dark);">${title}</h3>
+            <p style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5; font-size: 0.95rem;">${message}</p>
+            <button onclick="document.getElementById('system-alert-modal').style.display='none'" style="background: ${btnColor}; color: white; border: none; padding: 10px 30px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; width: 100%;">Đóng</button>
+        </div>
+        <style>@keyframes modalPop { to { transform: scale(1); } }</style>
+    `;
+    modal.style.display = 'flex';
 }
