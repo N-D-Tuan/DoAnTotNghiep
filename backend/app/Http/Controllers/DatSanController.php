@@ -404,8 +404,113 @@ class DatSanController extends Controller
             // Phát tín hiệu Realtime cho khách hàng
             broadcast(new \App\Events\UserDataUpdated($datSan->ID_NguoiDung))->toOthers();
             broadcast(new \App\Events\AdminDataUpdated())->toOthers();
+            broadcast(new \App\Events\SystemDataUpdated())->toOthers();
             
             return response()->json(['success' => true, 'message' => 'Đã chốt trạng thái sân thành công!']);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => 'Lỗi hệ thống: ' . $e->getMessage()]);
+        }
+    }
+
+    public function datSanOffline(Request $request)
+    {
+        $userDangNhap = auth()->user();
+        if (!in_array($userDangNhap->VaiTro, ['Admin', 'QuanLySan'])) {
+            return response()->json(['success' => false, 'message' => 'Không có quyền thực hiện!'], 403);
+        }
+
+        $request->validate([
+            'sdt_khach' => 'required|string|max:20',
+            'ho_ten'    => 'nullable|string|max:255',
+            'tien_coc'  => 'required|numeric|min:0',
+            'slots'     => 'required|array|min:1'
+        ]);
+
+        DB::beginTransaction();
+        try {
+            // 1. TÌM HOẶC TẠO NHANH TÀI KHOẢN KHÁCH HÀNG
+            $khachHang = NguoiDung::where('SoDienThoai', $request->sdt_khach)->first();
+            
+            if (!$khachHang) {
+                $tenKhach = $request->ho_ten ? $request->ho_ten : 'Khách Offline';
+                $emailAo = $request->sdt_khach . '@dnfootball.offline';
+                $khachHang = NguoiDung::create([
+                    'HoTen' => $tenKhach,
+                    'SoDienThoai' => $request->sdt_khach,
+                    'Email' => $emailAo,
+                    'MatKhau' => \Illuminate\Support\Facades\Hash::make('123456'), // Mật khẩu mặc định
+                    'VaiTro' => 'KhachHang',
+                    'SoDuVi' => 0
+                ]);
+            }
+
+            $failed_slots = [];
+            $failed_messages = [];
+
+            // 2. LẶP QUA CÁC SLOT ĐỂ CHỐNG TRÙNG LỊCH (Pessimistic Locking)
+            foreach ($request->slots as $slot) {
+                $daDat = DatSan::where('ID_SanBong', $slot['pitchId'])
+                               ->where('NgayDa', $slot['dateDb'])
+                               ->where('ID_KhungGio', $slot['kgId'])
+                               ->where('TrangThai', '!=', 'DaHuy')
+                               ->lockForUpdate()
+                               ->first();
+
+                if ($daDat) {
+                    $failed_slots[] = $slot['id'];
+                    $failed_messages[] = "[{$slot['timeStr']} ngày {$slot['dateDisplay']}]";
+                } else if (empty($failed_slots)) {
+                    // 3. TẠO LỊCH ĐẶT SÂN
+                    DatSan::create([
+                        'ID_NguoiDung' => $khachHang->ID,
+                        'ID_SanBong'   => $slot['pitchId'],
+                        'ID_KhungGio'  => $slot['kgId'],
+                        'ID_GiaiDau'   => null,
+                        'NgayDa'       => $slot['dateDb'],
+                        'TongTien'     => $slot['price'],
+                        'TienCoc'      => 0, // Cọc sẽ gom 1 cục ở dưới, ở đây để 0 để tránh lặp
+                        'TrangThai'    => 'DaCoc' 
+                    ]);
+                }
+            }
+
+            // Nếu có bất kỳ slot nào bị trùng, Rollback và báo lỗi hàng loạt
+            if (!empty($failed_slots)) {
+                DB::rollBack();
+                $msg_gop = implode(', ', $failed_messages);
+                return response()->json([
+                    'success' => false,
+                    'message' => "Lỗi! Các khung giờ sau vừa bị khách hàng khác đặt mất: {$msg_gop}. Đã tự động gỡ khỏi giỏ!",
+                    'failed_slot_ids' => $failed_slots
+                ]);
+            }
+
+            // Lưu tổng tiền cọc mà Quản lý đã thu tay vào 1 giao dịch ảo (để quản lý theo dõi)
+            if ($request->tien_coc > 0) {
+                GiaoDich::create([
+                    'ID_NguoiDung' => $khachHang->ID,
+                    'LoaiGiaoDich' => 'DatSan',
+                    'DongTien'     => 'Tru',
+                    'SoTien'       => $request->tien_coc,
+                    'SoDuTruoc'    => $khachHang->SoDuVi,
+                    'SoDuSau'      => $khachHang->SoDuVi, // Không trừ ví vì khách nạp tiền mặt
+                    'NoiDung'      => "Thu tiền cọc trực tiếp tại sân (" . count($request->slots) . " khung giờ)"
+                ]);
+                
+                // Trét tiền cọc vào slot đầu tiên để DB có dữ liệu đối soát
+                $firstSlot = DatSan::where('ID_NguoiDung', $khachHang->ID)->orderBy('ID', 'desc')->first();
+                if ($firstSlot) $firstSlot->update(['TienCoc' => $request->tien_coc]);
+            }
+
+            DB::commit();
+
+            // Phát tín hiệu làm mới giao diện cho TẤT CẢ mọi người
+            broadcast(new \App\Events\SystemDataUpdated())->toOthers();
+            broadcast(new \App\Events\AdminDataUpdated())->toOthers();
+
+            return response()->json(['success' => true, 'message' => 'Giữ sân thành công!']);
+
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['success' => false, 'message' => 'Lỗi hệ thống: ' . $e->getMessage()]);

@@ -89,6 +89,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // 5. Admin: Dashboard & Quản lý khách hàng
     Route::get('/admin/thong-ke', [DashboardController::class, 'layThongKe']);
     Route::post('/admin/cap-tai-khoan', [AuthController::class, 'capTaiKhoan']);
+    Route::post('/admin/dat-san-ho', [DatSanController::class, 'datSanOffline']);
     Route::prefix('admin/khach-hang')->group(function () {
         Route::get('/', [KhachHangController::class, 'layDanhSach']);
         Route::get('/{id}', [KhachHangController::class, 'layChiTiet']);

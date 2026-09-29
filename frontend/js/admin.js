@@ -21,6 +21,7 @@ window.fetch = async function(resource, config = {}) {
 };
 
 let currentGDDate = '';
+let selectedOfflineSlots = [];
 // ======================================================
 // DOM READY
 // ======================================================
@@ -209,6 +210,60 @@ document.addEventListener(
                 // Nếu Admin đang mở tab Yêu cầu Rút tiền -> tự refresh bảng
                 else if (document.getElementById('rt-pending-count')) {
                     loadDanhSachRutTienAdmin();
+                }
+            });
+        
+        // BẮT ĐẦU LẮNG NGHE TÍN HIỆU TOÀN HỆ THỐNG (Để cập nhật lịch sân Realtime)
+        window.Echo.channel('system-updates')
+            .listen('SystemDataUpdated', async (e) => {
+                console.log('⚡ Hệ thống có người vừa đặt sân...');
+                
+                // CHỈ cập nhật nếu Admin đang đứng ở trang xem Ma trận lịch
+                if (currentPitchId !== null && document.querySelector('.schedule-table')) {
+                    try {
+                        const dsRes = await fetch(`${API_BASE_URL}/dat-san/da-dat?id_san_bong=${currentPitchId}&_t=${new Date().getTime()}`);
+                        const bookedSlots = (await dsRes.json()).data || [];
+
+                        // 1. Nhả tất cả các ô đang xám (Đã đặt) thành màu xanh
+                        document.querySelectorAll('.schedule-table .slot.booked').forEach(el => {
+                            if (el.innerText === 'Đã đặt') {
+                                el.classList.remove('booked');
+                                el.classList.add('available');
+                                el.innerText = 'CÒN TRỐNG';
+                                
+                                // Khôi phục sự kiện click
+                                const slotIdData = el.getAttribute('data-slot-data');
+                                if (slotIdData) el.setAttribute('onclick', `toggleOfflineSlot(this, ${slotIdData})`);
+                            }
+                        });
+
+                        // 2. Quét mảng bookedSlots từ CSDL để tô xám những ô thực sự đã bị đặt
+                        bookedSlots.forEach(booked => {
+                            // Tạo ID chuẩn: pitchId-NgayDa-kgId
+                            const targetSlotId = `${currentPitchId}-${booked.NgayDa}-${booked.ID_KhungGio}`;
+                            const slotEl = document.querySelector(`.schedule-table .slot[data-slot-id="${targetSlotId}"]`);
+                            
+                            if (slotEl && !slotEl.classList.contains('booked')) {
+                                slotEl.classList.remove('available', 'selected');
+                                slotEl.classList.add('booked');
+                                slotEl.innerText = 'Đã đặt';
+                                slotEl.removeAttribute('onclick');
+
+                                // 3. Nếu xui xẻo Admin đang chọn đúng ô mà khách vừa đặt -> Rút ô đó khỏi giỏ hàng
+                                const existingIndex = selectedOfflineSlots.findIndex(s => s.id === targetSlotId);
+                                if (existingIndex > -1) {
+                                    selectedOfflineSlots.splice(existingIndex, 1);
+                                    updateOfflineCartUI(); // Cập nhật lại thanh nổi
+                                    
+                                    // Nếu đang mở Modal đặt hộ thì vẽ lại danh sách
+                                    if (document.getElementById('offline-booking-modal').style.display === 'flex') {
+                                        if(selectedOfflineSlots.length > 0) openOfflineCartModal();
+                                        else closeOfflineModal();
+                                    }
+                                }
+                            }
+                        });
+                    } catch(err) { console.error("Lỗi cập nhật ngầm lịch Admin:", err); }
                 }
             });
 
@@ -718,6 +773,7 @@ async function renderCumSanDetail(cumSanId) {
         }
 
         const cs = res.data;
+        window.currentClusterNameAdmin = cs.TenCumSan;
         const isDeleted = cs.deleted_at !== null;
 
         // Nút Sửa luôn hiển thị
@@ -775,7 +831,7 @@ async function renderCumSanDetail(cumSanId) {
                                 <th>Tên Sân</th>
                                 <th>Loại Sân</th>
                                 <th>Trạng Thái</th>
-                                <th>Hành động</th>
+                                <th style="text-align:center;">Hành động</th>
                             </tr>
                         </thead>
                         <tbody id="sanbong-table-body">
@@ -813,7 +869,16 @@ async function loadSanBongTheoCum(cumSanId) {
                 <td><strong>${sb.TenSan}</strong></td>
                 <td>${sb.loaiSan?.TenLoaiSan || sb.loai_san?.TenLoaiSan || '<span style="color:red">Lỗi dữ liệu</span>'}</td>
                 <td><span class="badge ${sb.TrangThai === 'HoatDong' ? 'badge-success' : 'badge-warning'}">${sb.TrangThai === 'HoatDong' ? 'Hoạt động' : 'Bảo trì'}</span></td>
-                <td><button class="action-btn" onclick='openSanBongModal(${JSON.stringify(sb).replace(/'/g, "\\'")})'><i class="fa-solid fa-pen-to-square"></i>Chỉnh sửa</button></td>
+                <td>
+                    <div style="display: flex; gap: 8px; justify-content: center;">
+                        <button class="action-btn" style="background:#f0fdf4; color:#16a34a; border-color:#bbf7d0;" onclick="renderAdminSchedule(${cumSanId}, '${sb.TenSan}', ${sb.ID}, ${sb.ID_LoaiSan})">
+                            <i class="fa-regular fa-calendar"></i> Xem lịch
+                        </button>
+                        <button class="action-btn" onclick='openSanBongModal(${JSON.stringify(sb).replace(/'/g, "\\'")})'>
+                            <i class="fa-solid fa-pen-to-square"></i> Sửa
+                        </button>
+                    </div>
+                </td>
             </tr>
         `).join('');
     } catch (e) { console.error(e); }
@@ -4216,4 +4281,341 @@ function showSystemModal(title, message, type = 'success') {
         <style>@keyframes modalPop { to { transform: scale(1); } }</style>
     `;
     modal.style.display = 'flex';
+}
+
+// ======================================================
+// MODULE: ADMIN XEM LỊCH SÂN VÀ ĐẶT HỘ (OFFLINE)
+// ======================================================
+
+async function renderAdminSchedule(clusterId, pitchName, pitchId, loaiSanId) {
+    currentPitchId = pitchId;
+    currentCumSanId = clusterId;
+    currentLoaiSanId = loaiSanId;
+    window.currentPitchNameAdmin = pitchName;
+    
+    const contentArea = document.querySelector('.admin-content');
+    contentArea.innerHTML = `<div style="text-align:center; padding: 50px;"><i class="fa-solid fa-spinner fa-spin text-primary" style="font-size: 2rem;"></i><br><br>Đang tải ma trận lịch...</div>`;
+
+    try {
+        const [gtRes, kgRes, dsRes] = await Promise.all([
+            fetch(`${API_BASE_URL}/gia-tien?cum_san_id=${clusterId}`),
+            fetch(`${API_BASE_URL}/khung-gio`),
+            fetch(`${API_BASE_URL}/dat-san/da-dat?id_san_bong=${pitchId}`)
+        ]);
+
+        const giaTienData = (await gtRes.json()).data || [];
+        const allKhungGio = (await kgRes.json()).data || [];
+        const bookedSlots = (await dsRes.json()).data || [];
+
+        const validPrices = giaTienData.filter(gt => gt.ID_LoaiSan == loaiSanId);
+
+        if (allKhungGio.length === 0 || validPrices.length === 0) {
+            contentArea.innerHTML = `
+                <button class="btn-back" onclick="renderCumSanDetail(${clusterId})"><i class="fa-solid fa-arrow-left"></i> Quay lại cấu hình sân</button>
+                <div style="text-align:center; padding: 50px; color: red;">Chưa cấu hình Bảng giá cho loại sân này!</div>
+            `;
+            return;
+        }
+
+        let dateArray = [];
+        const today = new Date();
+        for(let i = 0; i < 7; i++) {
+            let d = new Date(today); 
+            d.setDate(today.getDate() + i);
+            const pad = n => n < 10 ? '0' + n : n;
+            dateArray.push({
+                short: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`,
+                dbFormat: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+                displayFormat: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`
+            });
+        }
+
+        let html = `
+            <button class="btn-back" onclick="renderCumSanDetail(${clusterId})"><i class="fa-solid fa-arrow-left"></i> Quay lại cấu hình sân</button>
+            <div class="page-header" style="margin-top: 10px; margin-bottom: 20px;">
+                <h1 class="page-title">Lịch trống: ${pitchName}</h1>
+                <p class="text-muted">Bấm vào ô CÒN TRỐNG để chọn nhiều khung giờ giữ sân.</p>
+            </div>
+            
+            <div class="schedule-container" style="margin-bottom: 40px;">
+                <div style="width: 100%; max-height: calc(100vh - 250px); overflow-y: auto; overflow-x: auto;"> 
+                    <table class="schedule-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 140px; min-width: 140px; position: sticky; top: 0; left: 0; z-index: 60;">Khung giờ</th>
+                                <th style="width: 110px; min-width: 110px; position: sticky; top: 0; left: 140px; z-index: 59;">Giá tiền</th>
+                                ${dateArray.map(d => `<th style="min-width: 110px; position: sticky; top: 0; z-index: 50;">${d.short}</th>`).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+
+        const now = new Date();
+
+        allKhungGio.forEach((kg) => {
+            const priceInfo = validPrices.find(p => p.ID_KhungGio == kg.ID);
+            const isValid = priceInfo && priceInfo.SoTien > 0;
+            const displayStyle = isValid ? '' : 'display: none;';
+            const priceValue = priceInfo ? priceInfo.SoTien : 0;
+            const displayPrice = isValid ? `${Number(priceValue).toLocaleString('vi-VN')}đ` : '-';
+            const timeStr = `${kg.GioBatDau.substring(0,5)} - ${kg.GioKetThuc.substring(0,5)}`;
+
+            html += `
+                <tr style="${displayStyle}">
+                    <td style="position: sticky; left: 0; z-index: 20; background: #fff; font-weight: bold;">${timeStr}</td>
+                    <td style="position: sticky; left: 140px; z-index: 19; background: #fff; color: var(--primary); font-weight: 600;">${displayPrice}</td>
+            `;
+                        
+            dateArray.forEach((date) => {
+                const isBooked = bookedSlots.some(b => b.NgayDa === date.dbFormat && b.ID_KhungGio === kg.ID);
+                const [startHour, startMinute] = kg.GioBatDau.split(':');
+                const [y, m, d] = date.dbFormat.split('-');
+                const slotDateTime = new Date(y, m - 1, d, startHour, startMinute);
+                const isPast = slotDateTime <= now; 
+                
+                // Định danh Slot = PitchID + NgayDa + KhungGioID
+                const slotId = `${pitchId}-${date.dbFormat}-${kg.ID}`;
+                const isSelected = selectedOfflineSlots.some(s => s.id === slotId);
+                
+                let statusClass = 'available', statusText = 'CÒN TRỐNG';
+                
+                // Nén data vào chuỗi để đẩy vào hàm onclick
+                const slotDataStr = `${pitchId}, ${kg.ID}, '${date.dbFormat}', '${date.displayFormat}', '${timeStr}', ${priceValue}`;
+                let onClickAttr = `data-slot-data="${slotDataStr}" onclick="toggleOfflineSlot(this, ${slotDataStr})"`;
+                
+                if (isPast) {
+                    statusClass = 'booked'; statusText = 'Quá giờ'; onClickAttr = '';
+                } else if (!isValid) {
+                    statusClass = 'booked'; statusText = 'Đóng'; onClickAttr = '';
+                } else if (isBooked) { 
+                    statusClass = 'booked'; statusText = 'Đã đặt'; onClickAttr = '';
+                } else if (isSelected) {
+                    statusClass = 'available selected'; statusText = 'ĐÃ CHỌN ✓';
+                }
+                
+                html += `<td><div class="slot ${statusClass}" data-slot-id="${slotId}" ${onClickAttr}>${statusText}</div></td>`;
+            });
+            html += `</tr>`;
+        });
+        html += `</tbody></table></div></div>`;
+        contentArea.innerHTML = html;
+
+        // Cập nhật giỏ hàng ngay khi vừa vẽ lại (để tránh mất UI giỏ hàng khi Admin F5)
+        updateOfflineCartUI();
+
+    } catch (e) { 
+        contentArea.innerHTML = `<div style="text-align:center; color:red; padding: 50px;">Lỗi tải dữ liệu lịch!</div>`;
+    }
+}
+
+// Hàm Chọn/Bỏ chọn ô
+window.toggleOfflineSlot = function(element, pitchId, kgId, dateDb, dateDisplay, timeStr, price) {
+    if (element.classList.contains('booked')) return;
+    
+    const slotId = `${pitchId}-${dateDb}-${kgId}`;
+    const existingIndex = selectedOfflineSlots.findIndex(s => s.id === slotId);
+    
+    if (existingIndex > -1) {
+        selectedOfflineSlots.splice(existingIndex, 1);
+        element.classList.remove('selected'); 
+        element.innerText = 'CÒN TRỐNG';
+    } else {
+        selectedOfflineSlots.push({ 
+            id: slotId, 
+            pitchId, 
+            kgId, 
+            dateDb, 
+            dateDisplay, 
+            timeStr, 
+            price,
+            pitchName: window.currentPitchNameAdmin,
+            clusterName: window.currentClusterNameAdmin
+        });
+        element.classList.add('selected'); 
+        element.innerText = 'ĐÃ CHỌN ✓';
+    }
+    
+    updateOfflineCartUI();
+};
+
+function clearOfflineCart() {
+    const slotsToRemove = [...selectedOfflineSlots];
+    selectedOfflineSlots = [];
+    
+    // Nhả màu trực tiếp
+    slotsToRemove.forEach(slot => {
+        const el = document.querySelector(`.schedule-table .slot[data-slot-id="${slot.id}"]`);
+        if (el) {
+            el.classList.remove('selected');
+            el.innerText = 'CÒN TRỐNG';
+        }
+    });
+    
+    updateOfflineCartUI();
+}
+
+function updateOfflineCartUI() {
+    const cartBar = document.getElementById('admin-floating-cart');
+    if (!cartBar) return;
+
+    if (selectedOfflineSlots.length > 0) {
+        cartBar.style.display = 'block';
+        document.getElementById('admin-cart-count').innerText = selectedOfflineSlots.length;
+        const total = selectedOfflineSlots.reduce((sum, s) => sum + Number(s.price), 0);
+        document.getElementById('admin-cart-total').innerText = total.toLocaleString('vi-VN') + 'đ';
+    } else {
+        cartBar.style.display = 'none';
+        closeOfflineModal(); // Đóng Modal nếu đang mở mà xóa hết
+    }
+}
+
+function openOfflineCartModal() {
+    document.getElementById('offline-booking-alert').style.display = 'none';
+    const listContainer = document.getElementById('offline-cart-list');
+    
+    let html = '';
+    let totalAmount = 0;
+    
+    selectedOfflineSlots.forEach((s, index) => {
+        totalAmount += Number(s.price);
+        html += `
+            <div class="cart-item-card">
+                <div class="cart-item-info">
+                    <h4 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 4px; color: var(--primary);">${s.clusterName || 'Cụm sân'} - ${s.pitchName || 'Sân'}</h4>
+                    <p style="margin-bottom: 2px; color: var(--text-muted); font-size: 0.85rem;">Ngày: <strong style="color: var(--text-dark);">${s.dateDisplay}</strong> | Giờ: <strong style="color: var(--text-dark);">${s.timeStr}</strong></p>
+                    <p style="color: #ea580c; font-weight: 600; font-size: 0.95rem; margin-top: 2px;">${Number(s.price).toLocaleString('vi-VN')}đ</p>
+                </div>
+                <i class="fa-solid fa-trash-can cart-item-remove" onclick="removeSlotFromCartModal(${index})" style="font-size: 1.15rem;"></i>
+            </div>
+        `;
+    });
+    
+    listContainer.innerHTML = html;
+    
+    // Mặc định gợi ý cọc 30% làm chẵn
+    document.getElementById('off-deposit').value = Math.round(totalAmount * 0.3);
+    document.getElementById('offline-booking-modal').style.display = 'flex';
+}
+
+// Xóa 1 phần tử ngay trong Modal Giỏ hàng
+window.removeSlotFromCartModal = function(index) {
+    const removedSlot = selectedOfflineSlots[index];
+    if (!removedSlot) return;
+    
+    selectedOfflineSlots.splice(index, 1);
+    
+    // Nhả màu trên lưới
+    const el = document.querySelector(`.schedule-table .slot[data-slot-id="${removedSlot.id}"]`);
+    if (el) {
+        el.classList.remove('selected');
+        el.innerText = 'CÒN TRỐNG';
+    }
+    
+    updateOfflineCartUI();
+    if (selectedOfflineSlots.length > 0) {
+        openOfflineCartModal(); // Render lại danh sách trong Modal
+    }
+};
+
+function closeOfflineModal() {
+    document.getElementById('offline-booking-modal').style.display = 'none';
+}
+
+// Hàm Thực thi gọi API Đặt hộ
+async function submitOfflineBooking() {
+    const sdt = document.getElementById('off-phone').value.trim();
+    const ten = document.getElementById('off-name').value.trim();
+    const tienCoc = document.getElementById('off-deposit').value;
+    
+    const alertBox = document.getElementById('offline-booking-alert');
+    alertBox.style.display = 'none';
+
+    if (!sdt) {
+        alertBox.textContent = "Số điện thoại là bắt buộc để lưu lịch sử cho khách!";
+        alertBox.className = "modal-alert error";
+        alertBox.style.display = "block";
+        return;
+    }
+
+    const btn = document.getElementById('btn-submit-offline');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+    btn.disabled = true;
+
+    try {
+        const payload = {
+            sdt_khach: sdt,
+            ho_ten: ten,
+            tien_coc: tienCoc,
+            slots: selectedOfflineSlots // Truyền toàn bộ mảng lên Backend
+        };
+
+        const response = await fetch(`${API_BASE_URL}/admin/dat-san-ho`, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            alertBox.textContent = "Giữ sân thành công!";
+            alertBox.className = "modal-alert success";
+            alertBox.style.display = "block";
+            
+            // Lấy danh sách ID đã đặt để chuyển sang trạng thái xám ngay lập tức
+            const bookedSlotIds = selectedOfflineSlots.map(s => s.id);
+            selectedOfflineSlots = []; // Reset mảng
+            updateOfflineCartUI();     // Ẩn thanh nổi
+            
+            bookedSlotIds.forEach(id => {
+                const el = document.querySelector(`.schedule-table .slot[data-slot-id="${id}"]`);
+                if (el) {
+                    el.classList.remove('selected', 'available');
+                    el.classList.add('booked');
+                    el.innerText = 'Đã đặt';
+                    el.removeAttribute('onclick');
+                }
+            });
+
+            setTimeout(() => {
+                closeOfflineModal();
+                btn.disabled = false;
+                btn.innerHTML = 'Chốt giữ sân';
+            }, 1500);
+            
+        } else {
+            alertBox.textContent = data.message || "Lỗi xử lý!";
+            alertBox.className = "modal-alert error";
+            alertBox.style.display = "block";
+            btn.disabled = false;
+            btn.innerHTML = 'Chốt giữ sân';
+            
+            // Xử lý báo trùng lịch và xóa khỏi mảng
+            if (data.failed_slot_ids) {
+                selectedOfflineSlots = selectedOfflineSlots.filter(s => !data.failed_slot_ids.includes(s.id));
+                updateOfflineCartUI();
+                
+                data.failed_slot_ids.forEach(id => {
+                    const el = document.querySelector(`.schedule-table .slot[data-slot-id="${id}"]`);
+                    if (el) {
+                        el.classList.remove('selected', 'available');
+                        el.classList.add('booked');
+                        el.innerText = 'Đã đặt';
+                        el.removeAttribute('onclick');
+                    }
+                });
+                
+                setTimeout(() => {
+                    if (selectedOfflineSlots.length > 0) openOfflineCartModal();
+                    else closeOfflineModal();
+                }, 3000);
+            }
+        }
+    } catch (e) {
+        alertBox.textContent = "Mất kết nối tới máy chủ!";
+        alertBox.className = "modal-alert error";
+        alertBox.style.display = "block";
+        btn.disabled = false;
+        btn.innerHTML = 'Chốt giữ sân';
+    }
 }
