@@ -3800,11 +3800,16 @@ function createNewAdminChatSession() {
     document.getElementById('current-admin-chat-id').value = '';
     document.getElementById('admin-chat-header-title').innerText = 'Trợ lý Báo Cáo AI';
     
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+    const greeting = currentUser.VaiTro === 'Admin' 
+        ? 'Xin chào Sếp! Tôi là Trợ lý phân tích dữ liệu toàn hệ thống DN FOOTBALL. Sếp cần tôi báo cáo số liệu gì hôm nay?'
+        : 'Xin chào Quản lý! Tôi là Trợ lý phân tích dữ liệu của cụm sân. Bạn cần báo cáo số liệu gì hôm nay?';
+
     const msgArea = document.getElementById('admin-chat-messages-area');
     msgArea.innerHTML = `
         <div class="chat-msg bot" style="align-self: flex-start; max-width: 85%;">
             <div style="background: white; padding: 12px 16px; border-radius: 0 12px 12px 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); color: #334155; line-height: 1.6; border: 1px solid #e2e8f0;">
-                Xin chào Admin! Tôi là Trợ lý phân tích dữ liệu của DN FOOTBALL. Sếp cần tôi báo cáo số liệu gì hôm nay?
+                ${greeting}
             </div>
         </div>
     `;
