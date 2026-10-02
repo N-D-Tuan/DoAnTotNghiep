@@ -1001,7 +1001,7 @@ class ChatbotController extends Controller
     }
 
     // =====================================================================
-    // MODULE: CHATBOT DÀNH CHO ADMIN (READ-ONLY)
+    // MODULE: CHATBOT DÀNH CHO ADMIN & QUẢN LÝ SÂN
     // =====================================================================
     public function nhanTinNhanAdmin(Request $request)
     {
@@ -1010,31 +1010,33 @@ class ChatbotController extends Controller
             'id_phien_chat' => 'nullable|integer'
         ]);
 
-        $noiDung = $request->input('noi_dung');
-        $idPhienChat = $request->input('id_phien_chat');
+        $noiDung =$request->input('noi_dung');
+        $idPhienChat =$request->input('id_phien_chat');
         
         $user = NguoiDung::find(Auth::id() ?? $request->user()->ID);
 
-        // BẢO MẬT: Bắt buộc phải là Admin mới được phép gọi API này
-        if (!$user || $user->VaiTro !== 'Admin') {
+        // BẢO MẬT: Bắt buộc phải là Admin hoặc Quản lý sân
+        if (!$user || !in_array($user->VaiTro, ['Admin', 'QuanLySan'])) {
             return response()->json([
                 'success' => false, 
                 'message' => 'Lỗi phân quyền: Chỉ Ban quản trị mới được phép sử dụng Trợ lý này!'
             ], 403);
         }
 
+        // Biến then chốt để cách ly dữ liệu
+        $idCumSan = ($user->VaiTro === 'QuanLySan') ?$user->ID_CumSan : null;
+
         // 1. Lấy hoặc tạo Phiên Chat
-        if (!$idPhienChat) {
-            $phienChat = PhienChat::create([
+        if (!$idPhienChat) {$phienChat = PhienChat::create([
                 'ID_NguoiDung' => $user->ID,
                 'TieuDe' => mb_substr($noiDung, 0, 40) . '...',
             ]);
-            $idPhienChat = $phienChat->ID;
+            $idPhienChat =$phienChat->ID;
         } else {
             $phienChat = PhienChat::findOrFail($idPhienChat);
         }
 
-        // 2. Lưu tin nhắn của Admin
+        // 2. Lưu tin nhắn của Admin/Quản lý
         TinNhan::create([
             'ID_PhienChat' => $idPhienChat,
             'NguoiGui' => 'User',
@@ -1042,16 +1044,17 @@ class ChatbotController extends Controller
         ]);
 
         // 3. Chuẩn bị lịch sử Chat
-        $lichSuChat = TinNhan::where('ID_PhienChat', $idPhienChat)->orderBy('NgayTao', 'asc')->get();
-        $contents = [];
-        foreach ($lichSuChat as $tinNhan) {
-            $contents[] = [
+        $lichSuChat = TinNhan::where('ID_PhienChat', $idPhienChat)->orderBy('NgayTao', 'asc')->get();$contents = [];
+        foreach ($lichSuChat as $tinNhan) {$contents[] = [
                 'role' => $tinNhan->NguoiGui === 'User' ? 'user' : 'model',
                 'parts' => [['text' => $tinNhan->NoiDung]]
             ];
         }
 
-        // 4. Khai báo danh sách Tools DÀNH RIÊNG CHO ADMIN
+        // Xử lý mô tả động cho Tool (Quản lý sân không được kiểm tra yêu cầu rút tiền)
+        $mieuTaKiemTraYeuCau = 'Kiểm tra xem hệ thống đang có bao nhiêu yêu cầu đang ở trạng thái "Chờ duyệt" (bao gồm: Giải đấu, Hủy sân gấp' . ($user->VaiTro === 'Admin' ? ', Rút tiền).' : ').');
+
+        // 4. Khai báo danh sách Tools
         $tools = [
             [
                 'functionDeclarations' => [
@@ -1069,7 +1072,7 @@ class ChatbotController extends Controller
                     ],
                     [
                         'name' => 'kiemTraYeuCauChoDuyet',
-                        'description' => 'Kiểm tra xem hệ thống đang có bao nhiêu yêu cầu đang ở trạng thái "Chờ duyệt" (bao gồm: Giải đấu, Hủy sân gấp, Rút tiền).'
+                        'description' => $mieuTaKiemTraYeuCau
                     ],
                     [
                         'name' => 'traCuuGiaiDauSapToi',
@@ -1086,6 +1089,20 @@ class ChatbotController extends Controller
                             ],
                             'required' => ['tu_ngay', 'den_ngay']
                         ]
+                    ],
+                    [
+                        'name' => 'kiemTraLichTrong',
+                        'description' => 'Kiểm tra xem một sân bóng cụ thể tại một ngày cụ thể còn những khung giờ nào trống. Hỗ trợ kiểm tra 1 giờ, nhiều giờ cùng lúc, hoặc toàn bộ các giờ trong ngày.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'ten_cum_san' => ['type' => 'STRING', 'description' => 'Tên cụm sân (VD: Đa Phước, Tuyên Sơn)'],
+                                'ten_san_bong' => ['type' => 'STRING', 'description' => 'Tên sân con cụ thể (VD: Sân 1, Sân 2)'],
+                                'ngay_da' => ['type' => 'STRING', 'description' => 'Định dạng YYYY-MM-DD. Tự suy luận năm.'],
+                                'danh_sach_gio' => ['type' => 'ARRAY', 'items' => ['type' => 'STRING'], 'description' => 'Danh sách số giờ.']
+                            ],
+                            'required' => ['ten_cum_san', 'ten_san_bong', 'ngay_da']
+                        ]
                     ]
                 ]
             ]
@@ -1093,27 +1110,38 @@ class ChatbotController extends Controller
 
         $homNay = date('d/m/Y');
 
-        // 5. System Prompt cho Admin
+        // CẤU HÌNH NHẬP VAI BẢO MẬT DỮ LIỆU
+        if ($user->VaiTro === 'Admin') {
+            $danhXung = "Admin hoặc Sếp";
+            $cauLệnhBaoMat = "Bạn đang phục vụ Admin, nên bạn ĐƯỢC PHÉP xem và báo cáo mọi thông tin nội bộ trên toàn hệ thống.";
+        } else {
+            $cumSan = CumSan::find($idCumSan);
+            $tenCumSan = $cumSan ? $cumSan->TenCumSan : 'cơ sở của bạn';
+            $danhXung = "Quản lý";
+            $cauLệnhBaoMat = "BẢO MẬT NGHIÊM NGẶT: Bạn là AI Trợ lý dành riêng cho Quản lý của cụm sân {$tenCumSan}. Bạn CHỈ ĐƯỢC PHÉP báo cáo số liệu thuộc cụm sân này. TUYỆT ĐỐI TỪ CHỐI KHÉO LÉO nếu bị hỏi về cụm sân khác. ĐẶC BIỆT LƯU Ý VỀ RÚT TIỀN: Chức năng phê duyệt Rút tiền là do Admin Tổng quản lý, Quản lý sân không có quyền xử lý. Nếu Quản lý sân hỏi về rút tiền, BẮT BUỘC phải từ chối và giải thích rõ quy định này (không được trả lời là 0 đơn).";
+        }
+
+        // 5. System Prompt
         $payload = [
             'contents' => $contents,
             'tools' => $tools,
             'systemInstruction' => [
                 'parts' => [
                     [
-                        'text' => "Bạn là AI Trợ lý cấp cao dành riêng cho Ban quản trị (Admin) của hệ thống DN FOOTBALL. (HÔM NAY LÀ: {$homNay}).
+                        'text' => "Bạn là AI Trợ lý cấp cao của hệ thống DN FOOTBALL. (HÔM NAY LÀ: {$homNay}).
                         
                         Quy tắc làm việc:
-                        1. Xưng hô là 'tôi' hoặc 'trợ lý', gọi người dùng là 'Admin' hoặc 'Sếp'. Tác phong chuyên nghiệp, báo cáo số liệu rõ ràng, mạch lạc, sử dụng gạch đầu dòng khi cần thiết.
-                        2. BẢO MẬT: Bạn đang phục vụ Admin, nên bạn ĐƯỢC PHÉP xem và báo cáo mọi thông tin nội bộ nếu Admin hỏi (doanh thu, tiền bạc, thông tin user). 
-                        3. GIỚI HẠN QUYỀN HẠN: Bạn là trợ lý 'Chỉ Đọc' (Read-only). Bạn chỉ có nhiệm vụ BÁO CÁO số liệu. TUYỆT ĐỐI KHÔNG nhận lệnh xóa, sửa, phê duyệt hay thay đổi bất kỳ dữ liệu nào trong hệ thống. Nếu Admin yêu cầu duyệt đơn hay xóa user, hãy hướng dẫn Admin tự thao tác trên giao diện web.
+                        1. Xưng hô là 'tôi' hoặc 'trợ lý', gọi người dùng là '{$danhXung}'. Tác phong chuyên nghiệp, báo cáo số liệu rõ ràng, mạch lạc, sử dụng gạch đầu dòng khi cần thiết.
+                        2. {$cauLệnhBaoMat}
+                        3. GIỚI HẠN QUYỀN HẠN: Bạn là trợ lý 'Chỉ Đọc' (Read-only). Bạn chỉ có nhiệm vụ BÁO CÁO số liệu. TUYỆT ĐỐI KHÔNG nhận lệnh xóa, sửa, phê duyệt hay thay đổi bất kỳ dữ liệu nào trong hệ thống.
                         4. CÁCH SỬ DỤNG TOOL:
-                           - Admin hỏi TỔNG QUAN, TÌNH HÌNH, DOANH THU (bao nhiêu tiền, tổng bao nhiêu trận) -> Gọi `thongKeTongQuan`. 
-                           - Admin hỏi CÓ ĐƠN NÀO, CÓ AI RÚT TIỀN, HỦY SÂN KHÔNG -> Gọi `kiemTraYeuCauChoDuyet`.
-                           - Admin hỏi SẮP TỚI CÓ GIẢI ĐẤU NÀO KHÔNG -> Gọi `traCuuGiaiDauSapToi`.
-                           - Admin hỏi DANH SÁCH TRẬN ĐẤU, CÓ TRẬN NÀO ĐÁ KHÔNG (VD: 'ngày mai có trận nào không') -> Gọi `traCuuDanhSachTranDau`. BẮT BUỘC liệt kê rõ ràng cho admin thấy đó là trận Phong trào hay Giải đấu.
-                           - ĐẶC BIỆT LƯU Ý VỀ NGÀY THÁNG: Khi Admin hỏi từ 2 ngày trở lên (VD: 'ngày mai và ngày mốt'), BẮT BUỘC gộp thành khoảng thời gian (tu_ngay = ngày mai, den_ngay = ngày mốt) để chỉ gọi hàm 1 lần. Khi trả lời, BẮT BUỘC phải tách riêng và báo cáo rõ ràng từng ngày một, không được gộp chung số liệu trừ khi Admin yêu cầu tính tổng.
-                        5. Báo cáo số liệu tài chính luôn phải có định dạng VNĐ (VD: 1.500.000đ).
-                        6. QUY ĐỊNH VỀ THỜI GIAN: Hệ thống CHỈ hỗ trợ các khung giờ chẵn theo từng tiếng (VD: 17:00 - 18:00, 18:00 - 19:00). TUYỆT ĐỐI KHÔNG hỗ trợ giờ lẻ (như 17:30, 18h30) và KHÔNG cho phép đặt 1 tiếng rưỡi."
+                           - Hỏi TỔNG QUAN, TÌNH HÌNH, DOANH THU -> Gọi `thongKeTongQuan`. 
+                           - Hỏi CÓ ĐƠN NÀO, CÓ AI YÊU CẦU DUYỆT KHÔNG -> Gọi `kiemTraYeuCauChoDuyet`.
+                           - Hỏi SẮP TỚI CÓ GIẢI ĐẤU NÀO KHÔNG -> Gọi `traCuuGiaiDauSapToi`.
+                           - Hỏi DANH SÁCH TRẬN ĐẤU, CÓ TRẬN NÀO ĐÁ KHÔNG -> Gọi `traCuuDanhSachTranDau`.
+                           - Hỏi KIỂM TRA LỊCH TRỐNG -> Gọi `kiemTraLichTrong`.
+                           - ĐẶC BIỆT LƯU Ý VỀ NGÀY THÁNG: Khi hỏi từ 2 ngày trở lên (VD: 'ngày mai và ngày mốt'), BẮT BUỘC gộp thành khoảng thời gian (tu_ngay = ngày mai, den_ngay = ngày mốt) để chỉ gọi hàm 1 lần. Khi trả lời, phải tách riêng và báo cáo rõ ràng từng ngày một.
+                        5. Báo cáo số liệu tài chính luôn phải có định dạng VNĐ (VD: 1.500.000đ)."
                     ]
                 ]
             ]
@@ -1121,61 +1149,57 @@ class ChatbotController extends Controller
 
         try {
             $geminiResponse = $this->callGeminiWithKeyRotation($payload);
-            $parts = $geminiResponse['candidates'][0]['content']['parts'] ?? [];
+            $parts =$geminiResponse['candidates'][0]['content']['parts'] ?? [];
 
-            $botReply = '';
-            $functionCall = null;
+            $botReply = '';$functionCall = null;
             $modelText = '';
 
-            foreach ($parts as $key => $part) {
+            foreach ($parts as $key =>$part) {
                 if (isset($part['functionCall'])) {
-                    $functionCall = $part['functionCall'];
-                    if (empty($parts[$key]['functionCall']['args'])) {
-                        $parts[$key]['functionCall']['args'] = new \stdClass();
-                    }
-                } elseif (isset($part['text'])) {
-                    $modelText .= $part['text'];
+                    $functionCall =$part['functionCall'];
+                    if (empty($parts[$key]['functionCall']['args'])) {$parts[$key]['functionCall']['args'] = new \stdClass();                     }                 } elseif (isset($part['text'])) {
+                    $modelText .=$part['text'];
                 }
             }
 
-            if ($functionCall) {
-                $functionName = $functionCall['name'];
-                $arguments = $functionCall['args'] ?? [];
-                $functionResult = null;
+            if ($functionCall) {$functionName = $functionCall['name'];$arguments = $functionCall['args'] ?? [];$functionResult = null;
 
-                // Xử lý các hàm của Admin
-                if ($functionName === 'thongKeTongQuan') {
-                    $functionResult = $this->thucHienThongKeTongQuan(
-                        $arguments['tu_ngay'] ?? date('Y-m-d'),
-                        $arguments['den_ngay'] ?? date('Y-m-d')
+                // Xử lý các hàm, BƠM BIẾN $idCumSan VÀO MỌI TOOL
+                if ($functionName === 'thongKeTongQuan') {$functionResult = $this->thucHienThongKeTongQuan($arguments['tu_ngay'] ?? date('Y-m-d'),
+                        $arguments['den_ngay'] ?? date('Y-m-d'),
+                        $idCumSan
                     );
-                } elseif ($functionName === 'kiemTraYeuCauChoDuyet') {
-                    $functionResult = $this->thucHienKiemTraYeuCauChoDuyet();
-                } elseif ($functionName === 'traCuuGiaiDauSapToi') {
-                    $functionResult = $this->thucHienTraCuuGiaiDauSapToi();
-                } elseif ($functionName === 'traCuuDanhSachTranDau') {
-                    $functionResult = $this->thucHienTraCuuDanhSachTranDau(
-                        $arguments['tu_ngay'] ?? date('Y-m-d'),
-                        $arguments['den_ngay'] ?? date('Y-m-d')
+                } elseif ($functionName === 'kiemTraYeuCauChoDuyet') {$functionResult = $this->thucHienKiemTraYeuCauChoDuyet($idCumSan);
+                } elseif ($functionName === 'traCuuGiaiDauSapToi') {$functionResult = $this->thucHienTraCuuGiaiDauSapToi($idCumSan);
+                } elseif ($functionName === 'traCuuDanhSachTranDau') {$functionResult = $this->thucHienTraCuuDanhSachTranDau($arguments['tu_ngay'] ?? date('Y-m-d'),
+                        $arguments['den_ngay'] ?? date('Y-m-d'),
+                        $idCumSan
+                    );
+                }
+                elseif ($functionName === 'kiemTraLichTrong') {
+                    $functionResult = $this->thucHienKiemTraLichTrong(
+                        $arguments['ten_cum_san'] ?? '',
+                        $arguments['ten_san_bong'] ?? '',
+                        $arguments['ngay_da'] ?? '',
+                        $arguments['danh_sach_gio'] ?? []
                     );
                 }
 
-                $contents[] = ['role' => 'model', 'parts' => $parts];
-                $contents[] = [
+                $contents[] = ['role' => 'model', 'parts' => $parts];$contents[] = [
                     'role' => 'user',
-                    'parts' => [['functionResponse' => ['name' => $functionName, 'response' => ['name' => $functionName, 'content' => $functionResult]]]]
+                    'parts' => [['functionResponse' => ['name' => $functionName, 'response' => ['name' => $functionName, 'content' =>$functionResult]]]]
                 ];
 
-                $payload['contents'] = $contents;
+                $payload['contents'] =$contents;
                 $secondResponse = $this->callGeminiWithKeyRotation($payload);
                 
-                $secondParts = $secondResponse['candidates'][0]['content']['parts'] ?? [];
-                foreach ($secondParts as $p) {
-                    if (isset($p['text'])) $botReply .= $p['text'];
+                $secondParts =$secondResponse['candidates'][0]['content']['parts'] ?? [];
+                foreach ($secondParts as$p) {
+                    if (isset($p['text'])) $botReply .=$p['text'];
                 }
-                if (empty($botReply)) $botReply = 'Lỗi tổng hợp dữ liệu báo cáo.';
+                if (empty($botReply))$botReply = 'Lỗi tổng hợp dữ liệu báo cáo.';
             } else {
-                $botReply = $modelText ?: 'Xin lỗi Admin, tôi chưa hiểu ý.';
+                $botReply =$modelText ?: 'Xin lỗi, tôi chưa hiểu ý.';
             }
 
             TinNhan::create([
@@ -1198,23 +1222,23 @@ class ChatbotController extends Controller
         }
     }
 
-    private function thucHienThongKeTongQuan($tuNgay, $denNgay)
+    private function thucHienThongKeTongQuan($tuNgay, $denNgay,$idCumSan = null)
     {
         try {
-            // 1. Số lượng trận đấu diễn ra trong khoảng thời gian này (Tính theo NgayDa)
-            $soTranDau = DatSan::whereDate('NgayDa', '>=', $tuNgay)
+            $query = DatSan::whereDate('NgayDa', '>=',$tuNgay)
                 ->whereDate('NgayDa', '<=', $denNgay)
-                ->whereIn('TrangThai', ['DaCoc', 'HoanThanh', 'KhongDen'])
-                ->count();
+                ->whereIn('TrangThai', ['DaCoc', 'HoanThanh', 'KhongDen']);
 
-            // 2. Doanh thu cọc (Tính theo tổng TienCoc của các trận đấu diễn ra trong khoảng thời gian trên)
-            $doanhThuCoc = DatSan::whereDate('NgayDa', '>=', $tuNgay)
-                ->whereDate('NgayDa', '<=', $denNgay)
-                ->whereIn('TrangThai', ['DaCoc', 'HoanThanh', 'KhongDen'])
-                ->sum('TienCoc');
+            // ÁP DỤNG CÁCH LY DỮ LIỆU NẾU LÀ QUẢN LÝ SÂN
+            if ($idCumSan) {$query->whereHas('sanBong', function($q) use ($idCumSan) {
+                    $q->where('ID_CumSan',$idCumSan);
+                });
+            }
 
-            // Format lại chuỗi thời gian để AI đọc cho tự nhiên
-            $khoangThoiGian = ($tuNgay === $denNgay) 
+            $soTranDau = (clone$query)->count();
+            $doanhThuCoc = (clone$query)->sum('TienCoc');
+
+            $khoangThoiGian = ($tuNgay ===$denNgay) 
                 ? date('d/m/Y', strtotime($tuNgay)) 
                 : date('d/m/Y', strtotime($tuNgay)) . ' đến ' . date('d/m/Y', strtotime($denNgay));
 
@@ -1224,28 +1248,31 @@ class ChatbotController extends Controller
                     'thoi_gian_thong_ke' => $khoangThoiGian,
                     'tong_so_tran_dau' => $soTranDau . ' trận',
                     'doanh_thu_coc' => number_format($doanhThuCoc, 0, ',', '.') . ' VNĐ'
-                ],
-                'loi_nhan_cho_AI' => 'Đây là dữ liệu thống kê chính xác từ hệ thống. Hãy báo cáo chi tiết các số liệu trên một cách chuyên nghiệp cho Admin. Nếu kết quả đều là 0, hãy báo là thời gian này chưa có phát sinh dữ liệu.'
+                ]
             ];
         } catch (\Exception $e) {
-            \Log::error('Lỗi thống kê Admin: ' . $e->getMessage());
             return ['trang_thai' => 'loi', 'thong_bao' => 'Lỗi truy xuất cơ sở dữ liệu.'];
         }
     }
 
-    private function thucHienKiemTraYeuCauChoDuyet()
+    private function thucHienKiemTraYeuCauChoDuyet($idCumSan = null)
     {
         try {
-            // Đếm số lượng giải đấu chờ duyệt
-            $giaiDauChoDuyet = GiaiDau::where('TrangThai', 'ChoDuyet')->count();
+            $qGiaiDau = GiaiDau::where('TrangThai', 'ChoDuyet');
+            if ($idCumSan) $qGiaiDau->where('ID_CumSan',$idCumSan);
+            $giaiDauChoDuyet =$qGiaiDau->count();
             
-            // Đếm số lượng Hủy sân gấp chờ duyệt
-            $huySanChoDuyet = YeuCauHuyGap::where('TrangThai', 'ChoDuyet')->count();
+            // Dùng Join để đảm bảo an toàn cho mọi mối quan hệ Eloquent
+            $qHuySan = YeuCauHuyGap::join('DatSan', 'YeuCauHuyGap.ID_DatSan', '=', 'DatSan.ID')
+                ->join('SanBong', 'DatSan.ID_SanBong', '=', 'SanBong.ID')
+                ->where('YeuCauHuyGap.TrangThai', 'ChoDuyet');
+            if ($idCumSan) $qHuySan->where('SanBong.ID_CumSan',$idCumSan);
+            $huySanChoDuyet =$qHuySan->count();
             
-            // Đếm số lượng Rút tiền chờ duyệt
-            $rutTienChoDuyet = YeuCauRutTien::where('TrangThai', 'ChoDuyet')->count();
+            // Rút tiền chỉ hiển thị cho Admin, Quản lý sân = 0
+            $rutTienChoDuyet = ($idCumSan === null) ? YeuCauRutTien::where('TrangThai', 'ChoDuyet')->count() : 0;
 
-            $tongChoDuyet = $giaiDauChoDuyet + $huySanChoDuyet + $rutTienChoDuyet;
+            $tongChoDuyet =$giaiDauChoDuyet + $huySanChoDuyet +$rutTienChoDuyet;
 
             return [
                 'trang_thai' => 'thanh_cong',
@@ -1256,35 +1283,31 @@ class ChatbotController extends Controller
                         'huy_san_gap_cho_duyet' => $huySanChoDuyet . ' đơn',
                         'rut_tien_cho_duyet' => $rutTienChoDuyet . ' đơn'
                     ]
-                ],
-                'loi_nhan_cho_AI' => 'Hãy liệt kê chi tiết các yêu cầu đang chờ duyệt. Nếu tổng số đơn = 0, hãy báo rằng hệ thống hiện tại đã xử lý xong mọi yêu cầu, sếp có thể thảnh thơi.'
+                ]
             ];
         } catch (\Exception $e) {
-            \Log::error('Lỗi kiểm tra yêu cầu Admin: ' . $e->getMessage());
             return ['trang_thai' => 'loi', 'thong_bao' => 'Lỗi truy xuất cơ sở dữ liệu.'];
         }
     }
 
-    private function thucHienTraCuuGiaiDauSapToi()
+    private function thucHienTraCuuGiaiDauSapToi($idCumSan = null)
     {
         $homNay = date('Y-m-d');
         try {
-            $giaiDau = GiaiDau::where('NgayKetThuc', '>=', $homNay)
+            $query = GiaiDau::where('NgayKetThuc', '>=',$homNay)
                 ->where('TrangThai', 'HetHan')
-                ->whereIn('ID', function($query) {
-                    $query->select('ID_GiaiDau')
+                ->whereIn('ID', function($query) {$query->select('ID_GiaiDau')
                           ->from('DatSan')
                           ->whereNotNull('ID_GiaiDau')
                           ->where('TrangThai', 'DaCoc');
-                })
-                ->orderBy('NgayBatDau', 'asc')
-                ->get(['TenGiaiDau', 'NgayBatDau', 'NgayKetThuc', 'TrangThai']);
+                });
+                
+            if ($idCumSan) $query->where('ID_CumSan',$idCumSan);
+
+            $giaiDau =$query->orderBy('NgayBatDau', 'asc')->get(['TenGiaiDau', 'NgayBatDau', 'NgayKetThuc', 'TrangThai']);
 
             if ($giaiDau->isEmpty()) {
-                return [
-                    'trang_thai' => 'trong',
-                    'thong_bao' => 'Hiện tại và sắp tới hệ thống không có giải đấu nào đang được tổ chức.'
-                ];
+                return ['trang_thai' => 'trong', 'thong_bao' => 'Không có giải đấu nào đang được tổ chức.'];
             }
 
             return [
@@ -1294,29 +1317,31 @@ class ChatbotController extends Controller
                     return [
                         'ten_giai' => $item->TenGiaiDau,
                         'thoi_gian' => date('d/m/Y', strtotime($item->NgayBatDau)) . ' đến ' . date('d/m/Y', strtotime($item->NgayKetThuc)),
-                        'trang_thai' => $item->TrangThai === 'HetHan' ? 'Đã chốt danh sách' : 'Sắp diễn ra'
                     ];
-                })->toArray(),
-                'loi_nhan_cho_AI' => 'Hãy liệt kê danh sách các giải đấu sắp diễn ra cho Admin. Báo cáo tên giải và thời gian.'
+                })->toArray()
             ];
         } catch (\Exception $e) {
-            \Log::error('Lỗi lấy giải đấu Admin: ' . $e->getMessage());
             return ['trang_thai' => 'loi', 'thong_bao' => 'Lỗi truy xuất cơ sở dữ liệu.'];
         }
     }
 
-    private function thucHienTraCuuDanhSachTranDau($tuNgay, $denNgay)
+    private function thucHienTraCuuDanhSachTranDau($tuNgay, $denNgay,$idCumSan = null)
     {
         try {
-            $danhSach = DatSan::whereDate('DatSan.NgayDa', '>=', $tuNgay)
+            $query = DatSan::whereDate('DatSan.NgayDa', '>=',$tuNgay)
                 ->whereDate('DatSan.NgayDa', '<=', $denNgay)
                 ->whereIn('DatSan.TrangThai', ['DaCoc', 'HoanThanh', 'KhongDen'])
                 ->join('NguoiDung', 'DatSan.ID_NguoiDung', '=', 'NguoiDung.ID')
                 ->join('SanBong', 'DatSan.ID_SanBong', '=', 'SanBong.ID')
                 ->join('CumSan', 'SanBong.ID_CumSan', '=', 'CumSan.ID')
                 ->join('KhungGio', 'DatSan.ID_KhungGio', '=', 'KhungGio.ID')
-                ->leftJoin('GiaiDau', 'DatSan.ID_GiaiDau', '=', 'GiaiDau.ID')
-                ->select([
+                ->leftJoin('GiaiDau', 'DatSan.ID_GiaiDau', '=', 'GiaiDau.ID');
+
+            if ($idCumSan) {
+                $query->where('CumSan.ID',$idCumSan);
+            }
+
+            $danhSach =$query->select([
                     'DatSan.NgayDa',
                     'KhungGio.GioBatDau',
                     'KhungGio.GioKetThuc',
@@ -1328,18 +1353,15 @@ class ChatbotController extends Controller
                 ])
                 ->orderBy('DatSan.NgayDa', 'asc')
                 ->orderBy('KhungGio.GioBatDau', 'asc')
-                ->limit(30) // Giới hạn 30 trận để AI không bị quá tải bộ nhớ đọc
+                ->limit(30)
                 ->get();
 
-            $khoangThoiGian = ($tuNgay === $denNgay) 
+            $khoangThoiGian = ($tuNgay ===$denNgay) 
                 ? date('d/m/Y', strtotime($tuNgay)) 
                 : date('d/m/Y', strtotime($tuNgay)) . ' đến ' . date('d/m/Y', strtotime($denNgay));
 
             if ($danhSach->isEmpty()) {
-                return [
-                    'trang_thai' => 'trong',
-                    'thong_bao' => "Không có lịch đặt sân nào trong thời gian $khoangThoiGian."
-                ];
+                return ['trang_thai' => 'trong', 'thong_bao' => "Không có lịch đặt sân nào trong thời gian $khoangThoiGian."];
             }
 
             return [
@@ -1347,22 +1369,16 @@ class ChatbotController extends Controller
                 'thoi_gian' => $khoangThoiGian,
                 'tong_so_tran' => $danhSach->count(),
                 'danh_sach' => $danhSach->map(function ($item) {
-                    $loaiHinhDa = is_null($item->ID_GiaiDau) 
-                        ? 'Đá phong trào' 
-                        : 'Đá giải (Tên giải: ' . $item->TenGiaiDau . ')';
-                    
+                    $loaiHinhDa = is_null($item->ID_GiaiDau) ? 'Đá phong trào' : 'Đá giải (' . $item->TenGiaiDau . ')';
                     return [
                         'ngay_da' => date('d/m/Y', strtotime($item->NgayDa)),
-                        'gio_da' => substr($item->GioBatDau, 0, 5) . '-' . substr($item->GioKetThuc, 0, 5),
-                        'khach_hang' => $item->TenKhach,
-                        'san_bong' => $item->TenSan . ' (' . $item->TenCumSan . ')',
+                        'gio_da' => substr($item->GioBatDau, 0, 5) . '-' . substr($item->GioKetThuc, 0, 5),                         'khach_hang' =>$item->TenKhach,
+                        'san_bong' => $item->TenSan . ' (' .$item->TenCumSan . ')',
                         'loai_hinh' => $loaiHinhDa
                     ];
-                })->toArray(),
-                'loi_nhan_cho_AI' => 'Dưới đây là danh sách chi tiết các trận đấu. BẮT BUỘC liệt kê theo từng ngày riêng biệt. Trong mỗi ngày, hãy gạch đầu dòng rõ ràng: Giờ, Khách, Sân, và BẮT BUỘC có (Đá phong trào / Giải đấu X) ở cuối.'
+                })->toArray()
             ];
         } catch (\Exception $e) {
-            \Log::error('Lỗi lấy danh sách trận đấu Admin: ' . $e->getMessage());
             return ['trang_thai' => 'loi', 'thong_bao' => 'Lỗi truy xuất cơ sở dữ liệu.'];
         }
     }
