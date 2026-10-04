@@ -63,8 +63,43 @@ class NguoiDung extends Authenticatable
         return $this->hasMany(ThongBao::class, 'ID_NguoiDung', 'ID');
     }
 
+    public function phienChats()
+    {
+        return $this->hasMany(PhienChat::class, 'ID_NguoiDung', 'ID');
+    }
+
     public function cumSan()
     {
         return $this->belongsTo(CumSan::class, 'ID_CumSan', 'ID');
+    }
+
+    public function lichLamViecs()
+    {
+        return $this->hasMany(LichLamViec::class, 'ID_NhanVien', 'ID');
+    }
+
+    public function bangLuongs()
+    {
+        return $this->hasMany(BangLuong::class, 'ID_NhanVien', 'ID');
+    }
+
+    public function banGiaoCasNhan()
+    {
+        return $this->hasMany(BanGiaoCa::class, 'ID_NhanVienNhan', 'ID');
+    }
+
+    public function banGiaoCasGiao()
+    {
+        return $this->hasMany(BanGiaoCa::class, 'ID_NhanVienGiao', 'ID');
+    }
+
+    public function datSansXuLy()
+    {
+        return $this->hasMany(DatSan::class, 'ID_NhanVienXuLy', 'ID');
+    }
+
+    public function giaoDichsXuLy()
+    {
+        return $this->hasMany(GiaoDich::class, 'ID_NhanVienXuLy', 'ID');
     }
 }

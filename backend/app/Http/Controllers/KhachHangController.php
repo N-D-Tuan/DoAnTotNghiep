@@ -21,11 +21,20 @@ class KhachHangController extends Controller
             // Admin: Lấy tất cả user trên hệ thống, TRỪ chính bản thân Admin đang đăng nhập
             $query = NguoiDung::with('cumSan')->where('ID', '!=', $userDangNhap->ID);
         } else {
-            // Quản lý sân: CHỈ lấy khách hàng từng đặt sân tại cơ sở của mình
-            $query = NguoiDung::where('VaiTro', 'KhachHang')
-                ->whereHas('datSans.sanBong', function ($q) use ($userDangNhap) {
-                    $q->where('ID_CumSan', $userDangNhap->ID_CumSan);
+            // Quản lý sân: Lấy Khách Hàng (từng đặt sân của mình) HOẶC Nhân Viên (của cụm sân mình)
+            $query = NguoiDung::with('cumSan')->where(function ($q) use ($userDangNhap) {
+                // Điều kiện 1: Khách hàng từng đặt sân
+                $q->where('VaiTro', 'KhachHang')
+                  ->whereHas('datSans.sanBong', function ($subQ) use ($userDangNhap) {
+                      $subQ->where('ID_CumSan', $userDangNhap->ID_CumSan);
+                  });
+                  
+                // Điều kiện 2: Hoặc là Nhân viên của cơ sở này
+                $q->orWhere(function ($subQ) use ($userDangNhap) {
+                    $subQ->where('VaiTro', 'NhanVien')
+                         ->where('ID_CumSan', $userDangNhap->ID_CumSan);
                 });
+            });
         }
 
         $danhSach = $query->orderBy('VaiTro')->orderBy('ID', 'desc')->get();
@@ -184,9 +193,14 @@ class KhachHangController extends Controller
             return response()->json(['success' => false, 'message' => 'Lỗi bảo mật: Không thể khóa Super Admin tối cao!'], 403);
         }
 
-        // CHỐT CHẶN BẢO MẬT: Quản lý sân không được phép khóa người khác
-        if ($userDangNhap->VaiTro === 'QuanLySan' && $khachHang->VaiTro !== 'KhachHang') {
-             return response()->json(['success' => false, 'message' => 'Lỗi phân quyền: Bạn chỉ được phép khóa khách hàng!'], 403);
+        // CHỐT CHẶN BẢO MẬT: Quản lý sân chỉ được khóa Khách hàng hoặc Nhân viên CỦA SÂN MÌNH
+        if ($userDangNhap->VaiTro === 'QuanLySan') {
+            if ($khachHang->VaiTro === 'Admin' || $khachHang->VaiTro === 'QuanLySan') {
+                return response()->json(['success' => false, 'message' => 'Lỗi phân quyền: Quản lý sân không được khóa Admin hoặc Quản lý khác!'], 403);
+            }
+            if ($khachHang->VaiTro === 'NhanVien' && $khachHang->ID_CumSan !== $userDangNhap->ID_CumSan) {
+                return response()->json(['success' => false, 'message' => 'Lỗi phân quyền: Bạn không thể khóa nhân viên của cơ sở khác!'], 403);
+            }
         }
 
         // Đảo ngược trạng thái hiện tại
