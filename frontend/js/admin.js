@@ -89,12 +89,11 @@ document.addEventListener(
             // Quản lý sân: TUYỆT ĐỐI ẨN menu của Admin
             if(document.getElementById('menu-cumsan')) document.getElementById('menu-cumsan').style.display = 'none';
             if(document.getElementById('menu-ruttien')) document.getElementById('menu-ruttien').style.display = 'none';
-            if(document.getElementById('menu-captaikhoan')) document.getElementById('menu-captaikhoan').style.display = 'none';
             
             // HIỆN menu đặc quyền của Quản lý sân
             if(document.getElementById('menu-sancuatoi')) document.getElementById('menu-sancuatoi').style.display = 'flex';
 
-            if(menuKhachHang) menuKhachHang.innerHTML = '<i class="fa-solid fa-users"></i> QUẢN LÝ KHÁCH HÀNG';
+            if(menuKhachHang) menuKhachHang.innerHTML = '<i class="fa-solid fa-users"></i> QUẢN LÝ TÀI KHOẢN';
         } 
         else if (currentUser.VaiTro === 'Admin') {
             // Admin nền tảng: TUYỆT ĐỐI ẨN menu đặc quyền của Quản lý sân
@@ -2889,6 +2888,9 @@ let currentViewedKhachHangId = null;
 let currentKhachHangDatSan = [];
 let currentRoleTab = 'KhachHang';
 let userSearchTerm = '';
+let currentUserPage = 1;
+const itemsPerUserPage = 5;
+let currentUserCumSanFilter = 'All';
 
 // 1. Render màn hình Danh sách
 function renderQuanLyKhachHang() {
@@ -2904,32 +2906,57 @@ function renderQuanLyKhachHang() {
     const menuLink = document.getElementById('menu-khachhang');
     if (menuLink) menuLink.classList.add('active');
 
-    // UI TABS: Nếu là Admin thì hiện Tab, nếu là Quản lý thì không cần Tab
+    // UI TABS: Phân quyền hiển thị Tab
     let tabsHtml = '';
     if (isAdmin) {
         tabsHtml = `
             <div style="display: flex; gap: 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px; padding: 0 20px;">
                 <button class="nav-tab active" onclick="switchUserTab('KhachHang', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; border-bottom: 2px solid var(--primary); color: var(--primary);">Khách hàng</button>
+                <button class="nav-tab" onclick="switchUserTab('NhanVien', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Nhân viên</button>
                 <button class="nav-tab" onclick="switchUserTab('QuanLySan', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Quản lý sân</button>
                 <button class="nav-tab" onclick="switchUserTab('Admin', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Admin</button>
             </div>
+        `;
+    } else {
+        // Quản lý sân có 2 tab
+        tabsHtml = `
+            <div style="display: flex; gap: 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px; padding: 0 20px;">
+                <button class="nav-tab active" onclick="switchUserTab('KhachHang', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; border-bottom: 2px solid var(--primary); color: var(--primary);">Khách hàng</button>
+                <button class="nav-tab" onclick="switchUserTab('NhanVien', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Nhân viên (Cơ sở của tôi)</button>
+            </div>
+        `;
+    }
+
+    const pageTitle = isAdmin ? 'Quản lý Tài khoản' : 'Quản lý Khách hàng & Nhân sự';
+    const pageDesc = isAdmin ? 'Danh sách tài khoản và phân quyền trên hệ thống' : 'Danh sách khách hàng và nhân viên thuộc cụm sân của bạn';
+
+    let filterCumSanHtml = '';
+    if (isAdmin) {
+        filterCumSanHtml = `
+            <select id="user-cumsan-filter" class="form-control" style="width: 250px; display: none;" onchange="handleUserCumSanFilter(this.value)">
+                <option value="All">Tất cả Cơ sở</option>
+                <!-- Dữ liệu sẽ đổ từ API loadCumSanForFilter() -->
+            </select>
         `;
     }
 
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
         <div class="page-header" style="margin-bottom: 24px;">
-            <h1 class="page-title">Quản lý Tài khoản</h1>
-            <p class="text-muted">Danh sách tài khoản và phân quyền trên hệ thống</p>
+            <h1 class="page-title">${pageTitle}</h1>
+            <p class="text-muted">${pageDesc}</p>
         </div>
 
         <div class="panel">
             ${tabsHtml}
 
-            <!-- Khung tìm kiếm (Dùng chung) -->
-            <div style="position: relative; max-width: 400px; margin: ${isAdmin ? '0 20px 20px 20px' : '20px'};">
-                <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
-                <input type="text" id="user-search-input" class="form-control" style="padding-left: 35px;" placeholder="Tìm theo Tên, SĐT, Email..." oninput="handleUserSearch(this.value)">
+            <!-- Khung tìm kiếm và Lọc -->
+            <div style="display: flex; gap: 15px; margin: 0 20px 20px 20px; flex-wrap: wrap;">
+                <div style="position: relative; flex: 1; min-width: 250px;">
+                    <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
+                    <input type="text" id="user-search-input" class="form-control" style="padding-left: 35px;" placeholder="Tìm theo Tên, SĐT, Email..." oninput="handleUserSearch(this.value)">
+                </div>
+                ${filterCumSanHtml}
             </div>
 
             <!-- Bảng danh sách -->
@@ -2943,10 +2970,31 @@ function renderQuanLyKhachHang() {
                     </tbody>
                 </table>
             </div>
+
+            <!-- Vùng hiển thị nút Phân trang -->
+            <div id="user-pagination" style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 15px; margin-bottom: 15px; padding-top: 15px; border-top: 1px solid var(--border);"></div>
         </div>
     `;
 
+    if (isAdmin) {
+        loadCumSanForUserFilter();
+    }
+
     loadDanhSachUsersAPI();
+}
+
+async function loadCumSanForUserFilter() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/cum-san`);
+        const res = await response.json();
+        if (res.success) {
+            const select = document.getElementById('user-cumsan-filter');
+            if(select) {
+                const options = res.data.map(cs => `<option value="${cs.ID}">${cs.TenCumSan}</option>`).join('');
+                select.innerHTML = '<option value="All">Tất cả Cơ sở</option>' + options;
+            }
+        }
+    } catch (e) { console.log(e); }
 }
 
 // Chuyển Tab (Và giải quyết UX Clear Search)
@@ -2962,10 +3010,22 @@ function switchUserTab(role, btnElement) {
     btnElement.style.color = 'var(--primary)';
 
     currentRoleTab = role;
+    currentUserPage = 1;
     
-    // CLEAR Ô TÌM KIẾM ĐỂ TRÁNH TRỐNG DỮ LIỆU GÂY HOANG MANG
+    // CLEAR Ô TÌM KIẾM
     userSearchTerm = '';
     document.getElementById('user-search-input').value = '';
+
+    currentUserCumSanFilter = 'All';
+    const filterSelect = document.getElementById('user-cumsan-filter');
+    if (filterSelect) {
+        filterSelect.value = 'All';
+        if (role === 'QuanLySan' || role === 'NhanVien') {
+            filterSelect.style.display = 'block';
+        } else {
+            filterSelect.style.display = 'none';
+        }
+    }
 
     filterAndRenderUsers();
 }
@@ -2988,16 +3048,28 @@ function handleUserSearch(value) {
     filterAndRenderUsers();
 }
 
+function handleUserCumSanFilter(value) {
+    currentUserCumSanFilter = value;
+    currentUserPage = 1;
+    filterAndRenderUsers();
+}
+
 function filterAndRenderUsers() {
     // 1. Lọc theo Tab và Search
     const filtered = allUsersData.filter(user => {
         const matchTab = user.VaiTro === currentRoleTab;
+
+        let matchCumSan = true;
+        if (currentUserCumSanFilter !== 'All') {
+            matchCumSan = String(user.ID_CumSan) === String(currentUserCumSanFilter);
+        }
+
         const matchSearch = 
             user.HoTen.toLowerCase().includes(userSearchTerm) || 
             user.SoDienThoai.includes(userSearchTerm) || 
             (user.Email && user.Email.toLowerCase().includes(userSearchTerm));
         
-        return matchTab && matchSearch;
+        return matchTab && matchCumSan && matchSearch;
     });
 
     // 2. Render Header (Tùy theo Tab)
@@ -3026,14 +3098,23 @@ function filterAndRenderUsers() {
         `;
     }
 
-    // 3. Render Body
+    // 3. XỬ LÝ PHÂN TRANG (PAGINATION)
+    const totalItems = filtered.length;
+    const totalPages = Math.ceil(totalItems / itemsPerUserPage) || 1;
+    if (currentUserPage > totalPages) currentUserPage = totalPages;
+
+    const startIdx = (currentUserPage - 1) * itemsPerUserPage;
+    const pageData = filtered.slice(startIdx, startIdx + itemsPerUserPage);
+
+    // 4. Render Body
     const tbody = document.getElementById('user-table-body');
-    if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="padding: 40px; text-align: center;">Không tìm thấy người dùng nào.</td></tr>`;
+    if (pageData.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="padding: 40px; text-align: center;">Không tìm thấy dữ liệu.</td></tr>`;
+        document.getElementById('user-pagination').innerHTML = '';
         return;
     }
 
-    tbody.innerHTML = filtered.map(u => {
+    tbody.innerHTML = pageData.map(u => {
         const statusBadge = u.TrangThaiKhoa 
             ? `<span class="badge badge-danger"><i class="fa-solid fa-lock"></i> Bị khóa</span>` 
             : `<span class="badge badge-success"><i class="fa-solid fa-check-circle"></i> Hoạt động</span>`;
@@ -3076,12 +3157,13 @@ function filterAndRenderUsers() {
             `;
         } 
         // ==========================================
-        // UI CHO ADMIN / QUẢN LÝ SÂN
+        // UI CHO ADMIN / QUẢN LÝ SÂN / NHÂN VIÊN
         // ==========================================
         else {
-            const roleBadge = u.VaiTro === 'Admin' 
-                ? `<span style="font-size: 0.75rem; background: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: 4px;"><i class="fa-solid fa-chess-king"></i> Admin</span>`
-                : `<span style="font-size: 0.75rem; background: #fef3c7; color: #b45309; padding: 2px 6px; border-radius: 4px;"><i class="fa-solid fa-user-tie"></i> Quản lý sân</span>`;
+            let roleBadge = '';
+            if (u.VaiTro === 'Admin') roleBadge = `<span style="font-size: 0.75rem; background: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: 4px;"><i class="fa-solid fa-chess-king"></i> Admin</span>`;
+            else if (u.VaiTro === 'QuanLySan') roleBadge = `<span style="font-size: 0.75rem; background: #fef3c7; color: #b45309; padding: 2px 6px; border-radius: 4px;"><i class="fa-solid fa-user-tie"></i> Quản lý sân</span>`;
+            else if (u.VaiTro === 'NhanVien') roleBadge = `<span style="font-size: 0.75rem; background: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 4px;"><i class="fa-solid fa-user-gear"></i> Nhân viên</span>`;
             
             const coSoStr = u.cum_san 
                 ? `<div style="color: var(--primary); font-weight: 600;"><i class="fa-solid fa-building-flag"></i> ${u.cum_san.TenCumSan}</div><div style="font-size: 0.8rem; color: var(--text-muted);">${u.cum_san.DiaChi}</div>` 
@@ -3117,6 +3199,34 @@ function filterAndRenderUsers() {
             `;
         }
     }).join('');
+
+    // 5. Render Nút Phân Trang
+    renderUserPagination(totalPages);
+}
+
+function renderUserPagination(totalPages) {
+    const div = document.getElementById('user-pagination');
+    if (totalPages <= 1) return div.innerHTML = '';
+    
+    let html = `<button class="btn-outline-sm" ${currentUserPage === 1 ? 'disabled style="opacity:0.5;"' : ''} onclick="currentUserPage--; filterAndRenderUsers()"><i class="fa-solid fa-chevron-left"></i></button>`;
+    
+    const getPages = (current, total) => {
+        if (total <= 6) return Array.from({length: total}, (_, i) => i + 1);
+        if (current <= 3) return [1, 2, 3, 4, '...', total];
+        if (current >= total - 2) return [1, '...', total - 3, total - 2, total - 1, total];
+        return [1, '...', current - 1, current, current + 1, '...', total];
+    };
+
+    getPages(currentUserPage, totalPages).forEach(i => {
+        if (i === '...') {
+            html += `<span style="padding: 6px 10px; color: var(--text-muted); font-weight: bold;">...</span>`;
+        } else {
+            html += `<button class="${i === currentUserPage ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="currentUserPage=${i}; filterAndRenderUsers()">${i}</button>`;
+        }
+    });
+
+    html += `<button class="btn-outline-sm" ${currentUserPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="currentUserPage++; filterAndRenderUsers()"><i class="fa-solid fa-chevron-right"></i></button>`;
+    div.innerHTML = html;
 }
 
 // 2. Render Màn hình Chi tiết Khách hàng
@@ -4107,10 +4217,45 @@ async function executeAdminDeleteChat() {
 // MODULE: ADMIN - CẤP TÀI KHOẢN (ADMIN)
 // ======================================================
 function renderCapTaiKhoan() {
+    // 1. Lấy thông tin người dùng đang đăng nhập
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+    const isAdmin = currentUser.VaiTro === 'Admin';
+
+    // 2. Active thẻ Menu tương ứng
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
     const menuLink = Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('CẤP TÀI KHOẢN'));
     if (menuLink) menuLink.classList.add('active');
 
+    // 3. Xử lý ô Dropdown Vai Trò dựa trên quyền
+    let vaiTroOptions = '';
+    if (isAdmin) {
+        vaiTroOptions = `
+            <option value="QuanLySan" selected>Quản lý Cụm Sân</option>
+            <option value="NhanVien">Nhân viên Thu ngân/Phục vụ</option>
+            <option value="Admin">Admin (Toàn quyền)</option>
+        `;
+    } else {
+        // Quản lý sân chỉ được cấp quyền Nhân viên
+        vaiTroOptions = `<option value="NhanVien" selected>Nhân viên Thu ngân/Phục vụ</option>`;
+    }
+
+    // 4. Xử lý ô Dropdown Cơ sở Quản lý
+    let cumSanHtml = '';
+    if (isAdmin) {
+        cumSanHtml = `
+            <div class="form-group" id="tk-group-cumsan">
+                <label style="font-weight: 600;">Cơ sở quản lý <span style="color: red;">*</span></label>
+                <select id="tk-cumsan" class="form-control">
+                    <option value="">-- Đang tải dữ liệu sân --</option>
+                </select>
+            </div>
+        `;
+    } else {
+        // Quản lý sân không được chọn cơ sở, hệ thống sẽ tự ẩn
+        cumSanHtml = `<input type="hidden" id="tk-cumsan" value="">`;
+    }
+
+    // 5. Render toàn bộ Giao diện
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
         <div class="page-header" style="margin-bottom: 24px;">
@@ -4150,19 +4295,16 @@ function renderCapTaiKhoan() {
 
                 <div style="margin-top: 15px; border-top: 1px dashed var(--border); padding-top: 20px;">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <!-- Dropdown Vai Trò (Đã được điều chỉnh động) -->
                         <div class="form-group">
                             <label style="font-weight: 600;">Vai trò phân quyền <span style="color: red;">*</span></label>
                             <select id="tk-vaitro" class="form-control" style="border-color: #3b82f6; background: #f8fafc;" onchange="toggleCumSanSelect(this.value)">
-                                <option value="QuanLySan" selected>Quản lý Cụm Sân</option>
-                                <option value="Admin">Admin (Toàn quyền)</option>
+                                ${vaiTroOptions}
                             </select>
                         </div>
-                        <div class="form-group" id="tk-group-cumsan">
-                            <label style="font-weight: 600;">Cơ sở quản lý <span style="color: red;">*</span></label>
-                            <select id="tk-cumsan" class="form-control">
-                                <option value="">-- Đang tải dữ liệu sân --</option>
-                            </select>
-                        </div>
+                        
+                        <!-- Dropdown Cơ Sở (Đã được điều chỉnh động) -->
+                        ${cumSanHtml}
                     </div>
                 </div>
 
@@ -4179,20 +4321,27 @@ function renderCapTaiKhoan() {
                 <ul style="padding-left: 20px; color: var(--text-muted); font-size: 0.9rem; line-height: 1.7;">
                     <li style="margin-bottom: 10px;"><strong style="color: var(--text-dark);">Admin:</strong> Có toàn quyền xem báo cáo doanh thu tổng, duyệt yêu cầu rút tiền và quản lý hệ thống. Không thuộc cụm sân nào.</li>
                     <li><strong style="color: var(--text-dark);">Quản lý sân:</strong> Chỉ được phép quản lý lịch đặt, khách hàng và cấu hình giá của Cụm sân được chỉ định. Dữ liệu tài chính bị cách ly hoàn toàn.</li>
+                     <!-- Thêm hướng dẫn cho Nhân viên -->
+                    <li><strong style="color: var(--text-dark);">Nhân viên:</strong> Chịu trách nhiệm thực hiện các nghiệp vụ như bàn giao ca, xử lý đặt sân, thu tiền tại cụm sân được chỉ định.</li>
                 </ul>
             </div>
         </div>
     `;
-    loadCumSanForDropdown(); 
+
+    // 6. Tải danh sách cụm sân (chỉ chạy nếu là Admin)
+    if (isAdmin) {
+        loadCumSanForDropdown();
+    }
 }
 
 function toggleCumSanSelect(vaiTro) {
     const group = document.getElementById('tk-group-cumsan');
-    if (vaiTro === 'QuanLySan') {
+    // Bổ sung thêm điều kiện: Nếu là Quản lý sân HOẶC Nhân viên thì đều phải chọn cơ sở
+    if (vaiTro === 'QuanLySan' || vaiTro === 'NhanVien') {
         group.style.display = 'block';
     } else {
         group.style.display = 'none';
-        document.getElementById('tk-cumsan').value = '';
+        document.getElementById('tk-cumsan').value = ''; // Xóa giá trị khi chọn Admin
     }
 }
 
@@ -4223,8 +4372,9 @@ async function executeTaoTaiKhoan() {
         return showSystemModal('Thiếu thông tin', 'Vui lòng điền đầy đủ các trường bắt buộc có dấu (*).', 'error');
     }
 
-    if (vai_tro === 'QuanLySan' && !id_cum_san) {
-        return showSystemModal('Chưa chọn cơ sở', 'Vui lòng chọn Cụm Sân mà người này sẽ quản lý.', 'error');
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+    if (currentUser.VaiTro === 'Admin' && (vai_tro === 'QuanLySan' || vai_tro === 'NhanVien') && !id_cum_san) {
+        return showSystemModal('Chưa chọn cơ sở', 'Vui lòng chọn Cụm Sân.', 'error');
     }
 
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right: 8px;"></i> Đang tạo...';
@@ -4286,6 +4436,16 @@ function showSystemModal(title, message, type = 'success') {
         <style>@keyframes modalPop { to { transform: scale(1); } }</style>
     `;
     modal.style.display = 'flex';
+
+    if (type === 'success') {
+        if (modal.hideTimeout) clearTimeout(modal.hideTimeout);
+        
+        modal.hideTimeout = setTimeout(() => {
+            if (modal.style.display === 'flex') {
+                modal.style.display = 'none';
+            }
+        }, 2000);
+    }
 }
 
 // ======================================================

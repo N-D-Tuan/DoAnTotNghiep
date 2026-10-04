@@ -47,23 +47,51 @@ class AuthController extends Controller
     public function capTaiKhoan(Request $request)
     {
         $nguoiThucHien = $request->user();
-        if (!$nguoiThucHien || $nguoiThucHien->VaiTro !== 'Admin') {
-            return response()->json(['message' => 'Lỗi phân quyền: Chỉ Admin mới được phép cấp tài khoản.'], 403);
+        if (!$nguoiThucHien || !in_array($nguoiThucHien->VaiTro, ['Admin', 'QuanLySan'])) {
+            return response()->json(['message' => 'Lỗi phân quyền: Bạn không có quyền cấp tài khoản.'], 403);
         }
 
-        $request->validate([
+        // Logic check quyền gắt gao hơn: Quản lý sân CHỈ ĐƯỢC cấp tài khoản Nhân viên
+        if ($nguoiThucHien->VaiTro === 'QuanLySan' && $request->vai_tro !== 'NhanVien') {
+            return response()->json(['message' => 'Lỗi phân quyền: Quản lý sân chỉ được cấp tài khoản Nhân viên!'], 403);
+        }
+
+        $rules = [
             'ho_ten' => 'required|string|max:255',
             'so_dien_thoai' => 'required|string|max:20|unique:NguoiDung,SoDienThoai',
             'email' => 'required|string|email|max:255|unique:NguoiDung,Email',
             'mat_khau' => 'required|string|min:6',
-            'vai_tro' => ['required', Rule::in(['KhachHang', 'Admin', 'QuanLySan'])],
-            
-            // Logic cực hay của Laravel: Ràng buộc bắt buộc nhập ID cụm sân nếu vai trò là QuanLySan
-            'id_cum_san' => 'required_if:vai_tro,QuanLySan|nullable|exists:CumSan,ID'
-        ], [
+            'vai_tro' => ['required', Rule::in(['NhanVien', 'Admin', 'QuanLySan'])],
+        ];
+
+        // Chỉ Admin mới cần truyền id_cum_san từ form lên
+        if ($nguoiThucHien->VaiTro === 'Admin') {
+            $rules['id_cum_san'] = 'required_if:vai_tro,QuanLySan,NhanVien|nullable|exists:CumSan,ID';
+        }
+
+        $request->validate($rules, [
+            'ho_ten.required' => 'Vui lòng nhập họ và tên.',
+            'so_dien_thoai.required' => 'Vui lòng nhập số điện thoại.',
+            'so_dien_thoai.unique' => 'Số điện thoại này đã tồn tại trên hệ thống.',
+            'email.required' => 'Vui lòng nhập địa chỉ email.',
+            'email.email' => 'Địa chỉ email không đúng định dạng.',
+            'email.unique' => 'Email này đã tồn tại trên hệ thống.',
+            'mat_khau.required' => 'Vui lòng nhập mật khẩu.',
+            'mat_khau.min' => 'Mật khẩu phải có ít nhất 6 ký tự.',
+            'vai_tro.required' => 'Vui lòng chọn vai trò phân quyền.',
             'id_cum_san.required_if' => 'Vui lòng chọn Cụm sân cho tài khoản Quản lý.',
             'id_cum_san.exists' => 'Cụm sân đã chọn không tồn tại trên hệ thống.'
         ]);
+
+        // Logic gán ID Cụm Sân thông minh:
+        // - Nếu là Admin thao tác: Lấy ID sân từ ô Select ($request->id_cum_san).
+        // - Nếu là Quản lý sân thao tác: Ẩn/Bỏ qua ô Select, ÉP BUỘC lấy ID sân của chính người Quản lý đó.
+        $idCumSanGanVao = null;
+        if ($request->vai_tro !== 'Admin') {
+            $idCumSanGanVao = ($nguoiThucHien->VaiTro === 'QuanLySan') 
+                              ? $nguoiThucHien->ID_CumSan 
+                              : $request->id_cum_san;
+        }
 
         // 3. Tạo tài khoản
         $user = NguoiDung::create([
@@ -72,7 +100,7 @@ class AuthController extends Controller
             'Email' => $request->email,
             'MatKhau' => Hash::make($request->mat_khau),
             'VaiTro' => $request->vai_tro,
-            'ID_CumSan' => ($request->vai_tro === 'QuanLySan') ? $request->id_cum_san : null,
+            'ID_CumSan' => $idCumSanGanVao,
             'SoDuVi' => 0
         ]);
 
