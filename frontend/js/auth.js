@@ -313,6 +313,11 @@ async function handleLogin(form) {
         return;
     }
 
+    if (data.user.VaiTro === 'NhanVien') {
+        window.location.href = 'staff.html';
+        return;
+    }
+
     // Cho phép cả Admin và QuanLySan vào trang Dashboard
     if (data.user.VaiTro === 'Admin' || data.user.VaiTro === 'QuanLySan') {
         window.location.href = 'admin.html';

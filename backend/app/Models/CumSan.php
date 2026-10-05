@@ -48,4 +48,19 @@ class CumSan extends Model
     {
         return $this->hasMany(BanGiaoCa::class, 'ID_CumSan', 'ID');
     }
+
+    public function sanPhams()
+    {
+        return $this->hasMany(SanPham::class, 'ID_CumSan', 'ID');
+    }
+
+    public function hoaDonBanHangs()
+    {
+        return $this->hasMany(HoaDonBanHang::class, 'ID_CumSan', 'ID');
+    }
+
+    public function phieuNhapHangs()
+    {
+        return $this->hasMany(PhieuNhapHang::class, 'ID_CumSan', 'ID');
+    }
 }

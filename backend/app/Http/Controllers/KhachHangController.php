@@ -214,10 +214,21 @@ class KhachHangController extends Controller
                 ? 'Tài khoản của bạn đã bị KHÓA chức năng đặt sân do vi phạm quy định (Bùng sân, hủy gấp nhiều lần...). Vui lòng liên hệ Admin để được giải quyết.'
                 : 'Tài khoản của bạn đã được MỞ KHÓA chức năng đặt sân. Chúc bạn có những trải nghiệm tuyệt vời cùng DN FOOTBALL.';
         } else {
-            $tieuDe = $khachHang->TrangThaiKhoa ? 'Tài khoản quản trị bị khóa' : 'Tài khoản quản trị được mở khóa';
+            $tieuDe = $khachHang->TrangThaiKhoa ? 'Tài khoản nội bộ bị khóa' : 'Tài khoản nội bộ được mở khóa';
+            
+            // Xác định cấp trên cần liên hệ dựa vào Vai trò
+            $nguoiLienHe = 'Admin';
+            if ($khachHang->VaiTro === 'NhanVien') {
+                $nguoiLienHe = 'Quản lý cơ sở của bạn';
+            } elseif ($khachHang->VaiTro === 'QuanLySan') {
+                $nguoiLienHe = 'Admin hệ thống';
+            } elseif ($khachHang->VaiTro === 'Admin') {
+                $nguoiLienHe = 'Admin tối cao';
+            }
+
             $noiDung = $khachHang->TrangThaiKhoa 
-                ? 'Tài khoản nội bộ của bạn đã bị KHÓA quyền truy cập. Bạn sẽ không thể thao tác trên hệ thống quản trị. Vui lòng liên hệ Admin.'
-                : 'Tài khoản nội bộ của bạn đã được MỞ KHÓA. Bạn có thể tiếp tục công việc quản trị trên hệ thống.';
+                ? "Tài khoản nội bộ của bạn đã bị KHÓA quyền truy cập. Bạn sẽ không thể thao tác trên hệ thống quản trị. Vui lòng liên hệ {$nguoiLienHe} để được giải quyết."
+                : 'Tài khoản nội bộ của bạn đã được MỞ KHÓA. Bạn có thể tiếp tục công việc trên hệ thống.';
         }
 
         ThongBao::create([

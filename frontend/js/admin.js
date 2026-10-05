@@ -82,6 +82,12 @@ document.addEventListener(
             return;
         }
 
+        if (currentUser.VaiTro === 'QuanLySan') {
+            document.title = 'Quản lý sân - DN FOOTBALL';
+        } else if (currentUser.VaiTro === 'Admin') {
+            document.title = 'Admin - DN FOOTBALL';
+        }
+
         // CÔ LẬP GIAO DIỆN: Ẩn các menu không thuộc thẩm quyền
         const menuKhachHang = document.getElementById('menu-khachhang');
 
@@ -92,13 +98,21 @@ document.addEventListener(
             
             // HIỆN menu đặc quyền của Quản lý sân
             if(document.getElementById('menu-sancuatoi')) document.getElementById('menu-sancuatoi').style.display = 'flex';
+            if(document.getElementById('menu-datsan')) document.getElementById('menu-datsan').style.display = 'flex';
+            if(document.getElementById('menu-giaidau')) document.getElementById('menu-giaidau').style.display = 'flex';
+            if(document.getElementById('menu-huysan')) document.getElementById('menu-huysan').style.display = 'flex';
+            if(document.getElementById('menu-kho')) document.getElementById('menu-kho').style.display = 'flex';
 
             if(menuKhachHang) menuKhachHang.innerHTML = '<i class="fa-solid fa-users"></i> QUẢN LÝ TÀI KHOẢN';
         } 
         else if (currentUser.VaiTro === 'Admin') {
             // Admin nền tảng: TUYỆT ĐỐI ẨN menu đặc quyền của Quản lý sân
             if(document.getElementById('menu-sancuatoi')) document.getElementById('menu-sancuatoi').style.display = 'none';
-            
+            if(document.getElementById('menu-datsan')) document.getElementById('menu-datsan').style.display = 'none';
+            if(document.getElementById('menu-giaidau')) document.getElementById('menu-giaidau').style.display = 'none';
+            if(document.getElementById('menu-huysan')) document.getElementById('menu-huysan').style.display = 'none';
+            if(document.getElementById('menu-kho')) document.getElementById('menu-kho').style.display = 'none';
+
             // Đảm bảo hiển thị đầy đủ menu của Admin
             if(document.getElementById('menu-cumsan')) document.getElementById('menu-cumsan').style.display = 'flex';
             if(document.getElementById('menu-ruttien')) document.getElementById('menu-ruttien').style.display = 'flex';
@@ -215,10 +229,10 @@ document.addEventListener(
         // BẮT ĐẦU LẮNG NGHE TÍN HIỆU TOÀN HỆ THỐNG (Để cập nhật lịch sân Realtime)
         window.Echo.channel('system-updates')
             .listen('SystemDataUpdated', async (e) => {
-                console.log('⚡ Hệ thống có người vừa đặt sân...');
+                console.log('⚡ Hệ thống có tín hiệu cập nhật dữ liệu...');
                 
-                // CHỈ cập nhật nếu Admin đang đứng ở trang xem Ma trận lịch
-                if (currentPitchId !== null && document.querySelector('.schedule-table')) {
+                // 1. CHỈ cập nhật nếu Admin đang đứng ở trang xem Ma trận lịch
+                if (typeof currentPitchId !== 'undefined' && currentPitchId !== null && document.querySelector('.schedule-table')) {
                     try {
                         const dsRes = await fetch(`${API_BASE_URL}/dat-san/da-dat?id_san_bong=${currentPitchId}&_t=${new Date().getTime()}`);
                         const bookedSlots = (await dsRes.json()).data || [];
@@ -263,6 +277,20 @@ document.addEventListener(
                             }
                         });
                     } catch(err) { console.error("Lỗi cập nhật ngầm lịch Admin:", err); }
+                }
+
+                // 2. CẬP NHẬT REALTIME KHO HÀNG (MỚI THÊM)
+                // Nếu Quản lý đang mở Tab Danh sách Sản phẩm
+                if (document.getElementById('tab-sanpham') && document.getElementById('tab-sanpham').style.display !== 'none') {
+                    if (currentUser.ID_CumSan) loadDanhSachSanPhamKho(currentUser.ID_CumSan);
+                }
+                // Nếu Quản lý đang mở Tab Lịch sử Nhập hàng
+                if (document.getElementById('tab-phieunhap') && document.getElementById('tab-phieunhap').style.display !== 'none') {
+                    if (currentUser.ID_CumSan) loadLichSuNhapHang(currentUser.ID_CumSan);
+                }
+                // Nếu Quản lý đang mở Tab Hóa đơn bán hàng
+                if (document.getElementById('tab-hoadon') && document.getElementById('tab-hoadon').style.display !== 'none') {
+                    if (currentUser.ID_CumSan) loadQuanLyHoaDonBanHang(currentUser.ID_CumSan);
                 }
             });
 
@@ -2909,12 +2937,14 @@ function renderQuanLyKhachHang() {
     // UI TABS: Phân quyền hiển thị Tab
     let tabsHtml = '';
     if (isAdmin) {
+        const isAdminToiCao = Number(currentUser.ID) === 1;
+
         tabsHtml = `
             <div style="display: flex; gap: 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px; padding: 0 20px;">
                 <button class="nav-tab active" onclick="switchUserTab('KhachHang', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; border-bottom: 2px solid var(--primary); color: var(--primary);">Khách hàng</button>
                 <button class="nav-tab" onclick="switchUserTab('NhanVien', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Nhân viên</button>
                 <button class="nav-tab" onclick="switchUserTab('QuanLySan', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Quản lý sân</button>
-                <button class="nav-tab" onclick="switchUserTab('Admin', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Admin</button>
+                ${isAdminToiCao ? `<button class="nav-tab" onclick="switchUserTab('Admin', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Admin</button>` : ''}
             </div>
         `;
     } else {
@@ -3629,7 +3659,7 @@ async function renderTongQuan() {
 
         // 2. Logic Cảnh Báo Quên Chốt Sân cho Quản lý sân
         let alertHtml = '';
-        if (data.so_san_quen_chot > 0) {
+        if (currentUser.VaiTro === 'QuanLySan' && data.so_san_quen_chot > 0) {
             const d = new Date();
             d.setDate(d.getDate() - 1);
             const pad = n => n < 10 ? '0' + n : n;
@@ -4783,4 +4813,683 @@ async function submitOfflineBooking() {
         btn.disabled = false;
         btn.innerHTML = 'Chốt giữ sân';
     }
+}
+
+// ======================================================
+// MODULE: QUẢN LÝ SÂN - KHO & NHẬP HÀNG
+// ======================================================
+let allSanPhamKhoData = [];
+let sanPhamKhoPage = 1;
+const sanPhamKhoItemsPerPage = 5;
+let currentKhoSearchTerm = '';
+
+let allPhieuNhapData = [];
+let phieuNhapPage = 1;
+const phieuNhapItemsPerPage = 5;
+let phieuNhapFilterMonth = '';
+let phieuNhapFilterYear = '';
+
+let pnCart = [];
+
+function renderQuanLyKho() {
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+    
+    document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+    const menuLink = document.getElementById('menu-kho');
+    if (menuLink) menuLink.classList.add('active');
+
+    const today = new Date();
+    phieuNhapFilterMonth = (today.getMonth() + 1).toString().padStart(2, '0');
+    phieuNhapFilterYear = today.getFullYear().toString();
+
+    let yearOptions = '';
+    for(let y = today.getFullYear(); y >= 2024; y--) {
+        yearOptions += `<option value="${y}" ${y.toString() === phieuNhapFilterYear ? 'selected' : ''}>Năm ${y}</option>`;
+    }
+
+    const contentArea = document.querySelector('.admin-content');
+    contentArea.innerHTML = `
+        <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+            <div>
+                <h1 class="page-title">Quản lý Kho & Nhập Hàng</h1>
+                <p class="text-muted">Quản lý danh mục mặt hàng và theo dõi lịch sử nhập hàng tại cụm sân của bạn.</p>
+            </div>
+            <button class="btn-primary" onclick="openNhapHangModal()"><i class="fa-solid fa-truck-ramp-box" style="margin-right: 8px;"></i> Lập Phiếu Nhập Hàng</button>
+        </div>
+
+        <div class="panel">
+            <div style="display: flex; gap: 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px; padding: 0 20px;">
+                <button class="nav-tab active" onclick="switchKhoTab('tab-sanpham', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; border-bottom: 2px solid var(--primary); color: var(--primary);">Danh sách Sản phẩm</button>
+                <button class="nav-tab" onclick="switchKhoTab('tab-phieunhap', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Lịch sử Nhập hàng</button>
+                <button class="nav-tab" onclick="switchKhoTab('tab-hoadon', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Hóa đơn Bán hàng</button>
+            </div>
+
+            <!-- Tab 1: Danh sách sản phẩm -->
+            <div id="tab-sanpham" class="tab-pane active" style="padding: 0 20px 20px 20px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                    <div style="position: relative; width: 300px;">
+                        <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
+                        <input type="text" class="form-control" style="padding-left: 35px;" placeholder="Tìm tên sản phẩm..." oninput="handleKhoSearch(this.value)">
+                    </div>
+                    <button class="btn-primary" style="padding: 8px 16px; border-radius: 6px;" onclick="openSanPhamModal()"><i class="fa-solid fa-plus"></i> Thêm món</button>
+                </div>
+                <div class="table-responsive">
+                    <table class="admin-table">
+                        <thead style="background: #F8FAFC;">
+                            <tr>
+                                <th>Tên Mặt Hàng</th>
+                                <th>Giá Bán</th>
+                                <th style="text-align: center;">Tồn Kho</th>
+                                <th style="text-align: center;">Trạng Thái UI</th>
+                                <th style="text-align: center;">Hành động</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sanpham-table-body">
+                            <tr><td colspan="5" class="text-center" style="padding: 30px; text-align: center;">Đang tải danh sách...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="sanpham-pagination" style="display: flex; justify-content: center; gap: 8px; margin-top: 15px;"></div>
+            </div>
+
+            <!-- Tab 2: Lịch sử nhập hàng -->
+            <div id="tab-phieunhap" class="tab-pane" style="display: none; padding: 0 20px 20px 20px;">
+                <div style="display: flex; gap: 15px; margin-bottom: 15px;">
+                    <select class="form-control" style="width: 150px;" id="filter-phieunhap-month" onchange="handlePhieuNhapFilter()">
+                        <option value="All">Tất cả tháng</option>
+                        ${[...Array(12)].map((_, i) => {
+                            let m = (i + 1).toString().padStart(2, '0');
+                            return `<option value="${m}" ${m === phieuNhapFilterMonth ? 'selected' : ''}>Tháng ${m}</option>`;
+                        }).join('')}
+                    </select>
+                    <select class="form-control" style="width: 150px;" id="filter-phieunhap-year" onchange="handlePhieuNhapFilter()">
+                        <option value="All">Tất cả năm</option>
+                        ${yearOptions}
+                    </select>
+                </div>
+                <div class="table-responsive">
+                    <table class="admin-table">
+                        <thead style="background: #F8FAFC;">
+                            <tr>
+                                <th>Mã Phiếu</th>
+                                <th>Người Nhập</th>
+                                <th>Chi tiết hàng hóa</th>
+                                <th>Tổng thanh toán</th>
+                                <th>Ngày nhập</th>
+                            </tr>
+                        </thead>
+                        <tbody id="phieunhap-table-body">
+                            <tr><td colspan="5" class="text-center" style="padding: 30px; text-align: center;">Đang tải lịch sử...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="phieunhap-pagination" style="display: flex; justify-content: center; gap: 8px; margin-top: 15px;"></div>
+            </div>
+
+            <!-- Tab 3: Lịch sử hóa đơn bán hàng -->
+            <div id="tab-hoadon" class="tab-pane" style="display: none; padding: 0 20px 20px 20px;">
+                <div style="display: flex; gap: 15px; margin-bottom: 15px;">
+                    <input type="date" class="form-control" style="width: 180px;" id="qlhoadon-date-filter" onchange="handleQLHoaDonDateFilter(this.value)">
+                    <button class="btn-outline-sm" onclick="document.getElementById('qlhoadon-date-filter').value=''; handleQLHoaDonDateFilter('')" style="padding: 6px 12px;">Xóa lọc ngày</button>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="admin-table">
+                        <thead style="background: #F8FAFC;">
+                            <tr>
+                                <th>Mã Hóa Đơn</th>
+                                <th>Nhân Viên Lập</th>
+                                <th>Chi tiết món</th>
+                                <th>Tổng doanh thu</th>
+                                <th>Thời gian</th>
+                            </tr>
+                        </thead>
+                        <tbody id="qlhoadon-table-body">
+                            <tr><td colspan="5" class="text-center" style="padding: 30px; text-align: center;">Đang tải dữ liệu...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="qlhoadon-pagination" style="display: flex; justify-content: center; gap: 8px; margin-top: 15px;"></div>
+            </div>
+        </div>
+    `;
+
+    loadDanhSachSanPhamKho(currentUser.ID_CumSan);
+}
+
+function switchKhoTab(tabId, element) {
+    const tabs = element.parentElement.children;
+    for (let i = 0; i < tabs.length; i++) {
+        tabs[i].classList.remove('active');
+        tabs[i].style.borderBottom = 'none';
+        tabs[i].style.color = 'var(--text-muted)';
+    }
+    element.classList.add('active');
+    element.style.borderBottom = '2px solid var(--primary)';
+    element.style.color = 'var(--primary)';
+
+    document.getElementById('tab-sanpham').style.display = 'none';
+    document.getElementById('tab-phieunhap').style.display = 'none';
+    document.getElementById('tab-hoadon').style.display = 'none';
+    document.getElementById(tabId).style.display = 'block';
+
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+    if (tabId === 'tab-phieunhap') {
+        loadLichSuNhapHang(currentUser.ID_CumSan);
+    } else if (tabId === 'tab-hoadon') {
+        loadQuanLyHoaDonBanHang(currentUser.ID_CumSan);
+    } else {
+        loadDanhSachSanPhamKho(currentUser.ID_CumSan);
+    }
+}
+
+// ----------------------------------------------------
+// TAB 1: QUẢN LÝ SẢN PHẨM & TỒN KHO
+// ----------------------------------------------------
+async function loadDanhSachSanPhamKho(idCumSan) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/san-pham?id_cum_san=${idCumSan}`);
+        const res = await response.json();
+        
+        if (res.success) {
+            allSanPhamKhoData = res.data || [];
+            applySanPhamFilterAndRender();
+        }
+    } catch (e) {
+        document.getElementById('sanpham-table-body').innerHTML = `<tr><td colspan="5" class="text-center text-danger" style="padding: 30px;">Lỗi kết nối máy chủ!</td></tr>`;
+    }
+}
+
+function handleKhoSearch(val) {
+    currentKhoSearchTerm = val.toLowerCase().trim();
+    sanPhamKhoPage = 1;
+    applySanPhamFilterAndRender();
+}
+
+function applySanPhamFilterAndRender() {
+    let filtered = allSanPhamKhoData.filter(p => p.TenSanPham.toLowerCase().includes(currentKhoSearchTerm));
+
+    const totalPages = Math.ceil(filtered.length / sanPhamKhoItemsPerPage) || 1;
+    if (sanPhamKhoPage > totalPages) sanPhamKhoPage = totalPages;
+
+    const startIdx = (sanPhamKhoPage - 1) * sanPhamKhoItemsPerPage;
+    const pageData = filtered.slice(startIdx, startIdx + sanPhamKhoItemsPerPage);
+
+    const tbody = document.getElementById('sanpham-table-body');
+    if (pageData.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted" style="padding: 30px; text-align: center;">Không có sản phẩm nào.</td></tr>`;
+    } else {
+        tbody.innerHTML = pageData.map(p => {
+            const isHetHang = p.SoLuongTon <= 0;
+            const badgeHtml = isHetHang 
+                ? `<span style="padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; background: #fee2e2; color: #ef4444; font-weight: bold;">Đang mờ (Hết hàng)</span>` 
+                : `<span style="padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; background: #d1fae5; color: #047857; font-weight: bold;">Sáng (Đang bán)</span>`;
+            
+            const tonKhoStyle = isHetHang ? 'color: #ef4444; font-weight: bold;' : 'color: #1e293b; font-weight: bold;';
+
+            // Dữ liệu dùng để Sửa
+            const spDataStr = JSON.stringify(p).replace(/'/g, "\\'");
+
+            return `
+                <tr>
+                    <td><strong style="color: var(--text-dark);">${p.TenSanPham}</strong></td>
+                    <td><strong style="color: #ea580c;">${Number(p.GiaBan).toLocaleString('vi-VN')}đ</strong></td>
+                    <td style="text-align: center;"><span style="${tonKhoStyle}">${p.SoLuongTon}</span></td>
+                    <td style="text-align: center;">${badgeHtml}</td>
+                    <td style="text-align: center;">
+                        <button class="action-btn" onclick='openSanPhamModal(${spDataStr})'><i class="fa-solid fa-pen-to-square"></i> Sửa</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    renderSanPhamPagination(totalPages);
+}
+
+function renderSanPhamPagination(totalPages) {
+    const div = document.getElementById('sanpham-pagination');
+    if (totalPages <= 1) return div.innerHTML = '';
+    
+    let html = `<button class="btn-outline-sm" ${sanPhamKhoPage === 1 ? 'disabled style="opacity:0.5;"' : ''} onclick="sanPhamKhoPage--; applySanPhamFilterAndRender()"><i class="fa-solid fa-chevron-left"></i></button>`;
+    
+    const getPages = (current, total) => {
+        if (total <= 6) return Array.from({length: total}, (_, i) => i + 1);
+        if (current <= 3) return [1, 2, 3, 4, '...', total];
+        if (current >= total - 2) return [1, '...', total - 3, total - 2, total - 1, total];
+        return [1, '...', current - 1, current, current + 1, '...', total];
+    };
+
+    getPages(sanPhamKhoPage, totalPages).forEach(i => {
+        if (i === '...') {
+            html += `<span style="padding: 6px 10px; color: var(--text-muted); font-weight: bold;">...</span>`;
+        } else {
+            html += `<button class="${i === sanPhamKhoPage ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="sanPhamKhoPage=${i}; applySanPhamFilterAndRender()">${i}</button>`;
+        }
+    });
+
+    html += `<button class="btn-outline-sm" ${sanPhamKhoPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="sanPhamKhoPage++; applySanPhamFilterAndRender()"><i class="fa-solid fa-chevron-right"></i></button>`;
+    div.innerHTML = html;
+}
+
+// Logic Lưu Sản phẩm
+function showSPAlert(msg, isSuccess) {
+    const alert = document.getElementById('sanpham-alert');
+    alert.textContent = msg;
+    alert.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
+    alert.style.display = 'block';
+    setTimeout(() => alert.style.display = 'none', 3000);
+}
+
+function openSanPhamModal(sp = null) {
+    document.getElementById('sanpham-alert').style.display = 'none';
+    
+    // Reset file input & preview
+    document.getElementById('sp-hinhanh').value = '';
+    const imgPreview = document.getElementById('sp-img-preview');
+    const previewContainer = document.getElementById('sp-preview-container');
+    
+    if (sp) {
+        document.getElementById('sanpham-modal-title').textContent = 'Chỉnh Sửa Sản Phẩm';
+        document.getElementById('sp-id').value = sp.ID;
+        document.getElementById('sp-ten').value = sp.TenSanPham;
+        document.getElementById('sp-gia').value = sp.GiaBan;
+        
+        if (sp.HinhAnh) {
+            imgPreview.src = `http://127.0.0.1:8000${sp.HinhAnh}`;
+            previewContainer.style.display = 'block';
+        } else {
+            previewContainer.style.display = 'none';
+        }
+    } else {
+        document.getElementById('sanpham-modal-title').textContent = 'Thêm Sản Phẩm Mới';
+        document.getElementById('sp-id').value = '';
+        document.getElementById('sp-ten').value = '';
+        document.getElementById('sp-gia').value = '';
+        previewContainer.style.display = 'none';
+    }
+    document.getElementById('sanpham-modal').style.display = 'flex';
+}
+
+// Bổ sung sự kiện Preview Ảnh khi người dùng chọn file
+document.getElementById('sp-hinhanh').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    const previewContainer = document.getElementById('sp-preview-container');
+    const imgPreview = document.getElementById('sp-img-preview');
+    
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            imgPreview.src = e.target.result;
+            previewContainer.style.display = 'block';
+        }
+        reader.readAsDataURL(file);
+    } else {
+        previewContainer.style.display = 'none';
+    }
+});
+
+function closeSanPhamModal() { document.getElementById('sanpham-modal').style.display = 'none'; }
+
+async function saveSanPham() {
+    const id = document.getElementById('sp-id').value;
+    const ten = document.getElementById('sp-ten').value.trim();
+    const gia = document.getElementById('sp-gia').value;
+    const imageFile = document.getElementById('sp-hinhanh').files[0];
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+
+    if (!ten || !gia) return showSPAlert('Vui lòng nhập tên và giá bán!', false);
+
+    const btn = document.getElementById('btn-save-sp');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang lưu...';
+    btn.disabled = true;
+
+    const formData = new FormData();
+    formData.append('ID_CumSan', currentUser.ID_CumSan);
+    formData.append('TenSanPham', ten);
+    formData.append('GiaBan', gia);
+    
+    if (imageFile) {
+        formData.append('HinhAnh', imageFile);
+    }
+
+    if (id) {
+        formData.append('_method', 'PUT'); // Laravel yêu cầu gửi _method=PUT khi upload file dạng PUT
+    }
+
+    const url = id ? `${API_BASE_URL}/san-pham/${id}` : `${API_BASE_URL}/san-pham`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST', // Gửi bằng POST vì có file, Laravel sẽ tự bắt _method=PUT
+            headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` },
+            body: formData
+        });
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            showSPAlert('Lưu thành công!', true);
+            setTimeout(() => {
+                closeSanPhamModal();
+                loadDanhSachSanPhamKho(currentUser.ID_CumSan);
+            }, 1000);
+        } else {
+            showSPAlert(data.message || 'Lỗi xử lý', false);
+        }
+    } catch (e) {
+        showSPAlert('Lỗi kết nối máy chủ!', false);
+    } finally {
+        btn.innerHTML = 'Lưu Sản Phẩm';
+        btn.disabled = false;
+    }
+}
+
+// ----------------------------------------------------
+// TAB 2: LỊCH SỬ NHẬP HÀNG & PHIẾU NHẬP
+// ----------------------------------------------------
+async function loadLichSuNhapHang(idCumSan) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/phieu-nhap?id_cum_san=${idCumSan}`);
+        const res = await response.json();
+        
+        if (res.success) {
+            allPhieuNhapData = res.data || [];
+            applyPhieuNhapFiltersAndRender();
+        }
+    } catch (e) {
+        document.getElementById('phieunhap-table-body').innerHTML = `<tr><td colspan="5" class="text-center text-danger" style="padding: 30px;">Lỗi kết nối máy chủ!</td></tr>`;
+    }
+}
+
+function handlePhieuNhapFilter() {
+    phieuNhapFilterMonth = document.getElementById('filter-phieunhap-month').value;
+    phieuNhapFilterYear = document.getElementById('filter-phieunhap-year').value;
+    phieuNhapPage = 1;
+    applyPhieuNhapFiltersAndRender();
+}
+
+function applyPhieuNhapFiltersAndRender() {
+    let filtered = allPhieuNhapData.filter(pn => {
+        if (!pn.NgayNhap) return false;
+        
+        // Cắt lấy tháng và năm từ chuỗi YYYY-MM-DD
+        const dateParts = pn.NgayNhap.split('-'); 
+        if (dateParts.length < 2) return false;
+        
+        const y = dateParts[0];
+        const m = dateParts[1];
+
+        const matchMonth = (phieuNhapFilterMonth === 'All' || m === phieuNhapFilterMonth);
+        const matchYear = (phieuNhapFilterYear === 'All' || y === phieuNhapFilterYear);
+        
+        return matchMonth && matchYear;
+    });
+
+    const totalPages = Math.ceil(filtered.length / phieuNhapItemsPerPage) || 1;
+    if (phieuNhapPage > totalPages) phieuNhapPage = totalPages;
+
+    const startIdx = (phieuNhapPage - 1) * phieuNhapItemsPerPage;
+    const pageData = filtered.slice(startIdx, startIdx + phieuNhapItemsPerPage);
+
+    const tbody = document.getElementById('phieunhap-table-body');
+    if (pageData.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted" style="padding: 30px; text-align: center;">Không có phiếu nhập nào trong thời gian này.</td></tr>`;
+    } else {
+        tbody.innerHTML = pageData.map(pn => {
+            const listItems = pn.ChiTietNhap.map(item => `<li><i class="fa-solid fa-angle-right" style="font-size:0.7rem; color:#94a3b8; margin-right:4px;"></i> ${item.ten_san_pham}: <strong style="color:var(--text-dark);">${item.so_luong}</strong></li>`).join('');
+            
+            const dateStr = pn.NgayNhap.replace('T', ' ').substring(0, 16);
+
+            return `
+                <tr>
+                    <td><strong style="font-family: monospace; color: #475569;">#PN${pn.ID}</strong></td>
+                    <td>${pn.nhan_vien ? pn.nhan_vien.HoTen : 'N/A'}</td>
+                    <td><ul style="list-style: none; padding: 0; margin: 0; font-size: 0.85rem;">${listItems}</ul></td>
+                    <td><strong style="color: #b91c1c;">${Number(pn.TongTienThanhToan).toLocaleString('vi-VN')}đ</strong></td>
+                    <td><span style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> ${dateStr}</span></td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    renderPhieuNhapPagination(totalPages);
+}
+
+function renderPhieuNhapPagination(totalPages) {
+    const div = document.getElementById('phieunhap-pagination');
+    if (totalPages <= 1) return div.innerHTML = '';
+    
+    let html = `<button class="btn-outline-sm" ${phieuNhapPage === 1 ? 'disabled style="opacity:0.5;"' : ''} onclick="phieuNhapPage--; applyPhieuNhapFiltersAndRender()"><i class="fa-solid fa-chevron-left"></i></button>`;
+    
+    const getPages = (current, total) => {
+        if (total <= 6) return Array.from({length: total}, (_, i) => i + 1);
+        if (current <= 3) return [1, 2, 3, 4, '...', total];
+        if (current >= total - 2) return [1, '...', total - 3, total - 2, total - 1, total];
+        return [1, '...', current - 1, current, current + 1, '...', total];
+    };
+
+    getPages(phieuNhapPage, totalPages).forEach(i => {
+        if (i === '...') {
+            html += `<span style="padding: 6px 10px; color: var(--text-muted); font-weight: bold;">...</span>`;
+        } else {
+            html += `<button class="${i === phieuNhapPage ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="phieuNhapPage=${i}; applyPhieuNhapFiltersAndRender()">${i}</button>`;
+        }
+    });
+
+    html += `<button class="btn-outline-sm" ${phieuNhapPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="phieuNhapPage++; applyPhieuNhapFiltersAndRender()"><i class="fa-solid fa-chevron-right"></i></button>`;
+    div.innerHTML = html;
+}
+
+// Logic Phiếu Nhập Hàng
+function showPNAlert(msg, isSuccess) {
+    const alert = document.getElementById('phieunhap-alert');
+    alert.textContent = msg;
+    alert.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
+    alert.style.display = 'block';
+    setTimeout(() => alert.style.display = 'none', 3000);
+}
+
+function openNhapHangModal() {
+    document.getElementById('phieunhap-alert').style.display = 'none';
+    pnCart = [];
+    document.getElementById('pn-tongtien').value = '';
+    renderPnCart();
+
+    // Render danh sách sản phẩm vào Dropdown
+    const select = document.getElementById('pn-chon-sp');
+    if (allSanPhamKhoData.length === 0) {
+        select.innerHTML = '<option value="">-- Kho chưa có mặt hàng nào --</option>';
+    } else {
+        select.innerHTML = '<option value="">-- Chọn mặt hàng cần nhập --</option>' + allSanPhamKhoData.map(p => `<option value="${p.ID}" data-name="${p.TenSanPham}">${p.TenSanPham}</option>`).join('');
+    }
+
+    document.getElementById('phieunhap-modal').style.display = 'flex';
+}
+
+function closePhieuNhapModal() { document.getElementById('phieunhap-modal').style.display = 'none'; }
+
+function addSpToPhieuNhap() {
+    const select = document.getElementById('pn-chon-sp');
+    const slInput = document.getElementById('pn-soluong');
+    const id = select.value;
+    const sl = parseInt(slInput.value);
+
+    if (!id || isNaN(sl) || sl <= 0) {
+        return showPNAlert('Vui lòng chọn hàng và nhập số lượng hợp lệ!', false);
+    }
+
+    const name = select.options[select.selectedIndex].getAttribute('data-name');
+    
+    // Kiểm tra xem đã có trong giỏ chưa
+    const existing = pnCart.find(i => i.id_san_pham == id);
+    if (existing) {
+        existing.so_luong += sl;
+    } else {
+        pnCart.push({ id_san_pham: id, ten_san_pham: name, so_luong: sl });
+    }
+
+    slInput.value = '';
+    renderPnCart();
+}
+
+function removeSpFromPhieuNhap(index) {
+    pnCart.splice(index, 1);
+    renderPnCart();
+}
+
+function renderPnCart() {
+    const tbody = document.getElementById('pn-danhsach-sp');
+    if (pnCart.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="3" class="text-center text-muted">Chưa chọn mặt hàng nào.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = pnCart.map((item, idx) => `
+        <tr>
+            <td><strong style="color: var(--text-dark);">${item.ten_san_pham}</strong></td>
+            <td style="text-align: center;"><span style="font-weight: bold; color: var(--primary);">${item.so_luong}</span></td>
+            <td style="text-align: center;"><i class="fa-solid fa-trash-can" style="color: #ef4444; cursor: pointer;" onclick="removeSpFromPhieuNhap(${idx})"></i></td>
+        </tr>
+    `).join('');
+}
+
+async function submitPhieuNhap() {
+    if (pnCart.length === 0) return showPNAlert('Vui lòng thêm ít nhất 1 mặt hàng vào phiếu nhập.', false);
+    
+    const tongTien = document.getElementById('pn-tongtien').value;
+    if (!tongTien || tongTien < 0) return showPNAlert('Vui lòng nhập tổng tiền đã thanh toán.', false);
+
+    const btn = document.getElementById('btn-save-pn');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+    btn.disabled = true;
+
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+    const payload = {
+        ID_CumSan: currentUser.ID_CumSan,
+        ID_NhanVien: currentUser.ID,
+        TongTienThanhToan: tongTien,
+        ChiTietNhap: pnCart
+    };
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/phieu-nhap`, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            showPNAlert('Nhập hàng và cộng kho thành công!', true);
+            setTimeout(() => {
+                closePhieuNhapModal();
+                loadDanhSachSanPhamKho(currentUser.ID_CumSan); // Cập nhật lại kho
+                loadLichSuNhapHang(currentUser.ID_CumSan);     // Cập nhật lại lịch sử
+            }, 1000);
+        } else {
+            showPNAlert(data.message || 'Lỗi xử lý', false);
+        }
+    } catch (e) {
+        showPNAlert('Lỗi kết nối máy chủ!', false);
+    } finally {
+        btn.innerHTML = '<i class="fa-solid fa-check"></i> Hoàn Tất Nhập Kho';
+        btn.disabled = false;
+    }
+}
+
+// 3. Tab 3: Quản lý Hóa đơn bán hàng
+// KHAI BÁO BIẾN CHO TAB HÓA ĐƠN
+let allQuanLyHoaDonData = [];
+let quanLyHoaDonPage = 1;
+const quanLyHoaDonItemsPerPage = 5;
+let qlHoaDonDateFilter = '';
+
+// HÀM XỬ LÝ KHI THAY ĐỔI NGÀY LỌC
+function handleQLHoaDonDateFilter(val) {
+    qlHoaDonDateFilter = val;
+    quanLyHoaDonPage = 1; // Reset về trang 1 khi lọc
+    renderQuanLyHoaDonPagination();
+}
+
+// HÀM FETCH HÓA ĐƠN
+async function loadQuanLyHoaDonBanHang(idCumSan) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/ban-hang?id_cum_san=${idCumSan}`);
+        const res = await response.json();
+        
+        if (res.success) {
+            allQuanLyHoaDonData = res.data || [];
+            renderQuanLyHoaDonPagination();
+        }
+    } catch (e) {
+        document.getElementById('qlhoadon-table-body').innerHTML = `<tr><td colspan="5" class="text-center text-danger" style="padding: 30px;">Lỗi kết nối máy chủ!</td></tr>`;
+    }
+}
+
+// HÀM RENDER VÀ PHÂN TRANG HÓA ĐƠN (ĐÃ TÍCH HỢP LỌC NGÀY)
+function renderQuanLyHoaDonPagination() {
+    // 1. Lọc dữ liệu theo ngày nếu qlHoaDonDateFilter có giá trị
+    let filteredData = allQuanLyHoaDonData.filter(hd => {
+        if (!qlHoaDonDateFilter) return true;
+        const hdDate = hd.NgayTao ? hd.NgayTao.substring(0, 10) : '';
+        return hdDate === qlHoaDonDateFilter;
+    });
+
+    const totalPages = Math.ceil(filteredData.length / quanLyHoaDonItemsPerPage) || 1;
+    if (quanLyHoaDonPage > totalPages) quanLyHoaDonPage = totalPages;
+
+    const startIdx = (quanLyHoaDonPage - 1) * quanLyHoaDonItemsPerPage;
+    const pageData = filteredData.slice(startIdx, startIdx + quanLyHoaDonItemsPerPage);
+
+    const tbody = document.getElementById('qlhoadon-table-body');
+    if (pageData.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted" style="padding: 30px; text-align: center;">Không có hóa đơn nào phù hợp.</td></tr>`;
+    } else {
+        tbody.innerHTML = pageData.map(hd => {
+            let cacMon = '';
+            if (hd.chi_tiet_hoa_dons && hd.chi_tiet_hoa_dons.length > 0) {
+                cacMon = hd.chi_tiet_hoa_dons.map(ct => {
+                    const tenMon = ct.san_pham ? ct.san_pham.TenSanPham : 'Sản phẩm lỗi';
+                    return `<li><i class="fa-solid fa-angle-right" style="font-size:0.7rem; color:#94a3b8; margin-right:4px;"></i> ${tenMon}: <strong style="color:var(--text-dark);">${ct.SoLuong}</strong></li>`;
+                }).join('');
+            } else {
+                cacMon = '<span class="text-muted">Không có món</span>';
+            }
+
+            const dateStr = hd.NgayTao ? hd.NgayTao.replace('T', ' ').substring(0, 16) : '';
+            
+            return `
+                <tr>
+                    <td><strong style="font-family: monospace; color: #475569;">#HD${hd.ID}</strong></td>
+                    <td><div style="font-weight: 600; color: #3b82f6;">${hd.nhan_vien ? hd.nhan_vien.HoTen : 'N/A'}</div></td>
+                    <td><ul style="list-style: none; padding: 0; margin: 0; font-size: 0.85rem;">${cacMon}</ul></td>
+                    <td><strong style="color: #10b981;">${Number(hd.TongTien).toLocaleString('vi-VN')}đ</strong></td>
+                    <td><span style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> ${dateStr}</span></td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    const div = document.getElementById('qlhoadon-pagination');
+    if (totalPages <= 1) return div.innerHTML = '';
+    
+    let html = `<button class="btn-outline-sm" ${quanLyHoaDonPage === 1 ? 'disabled style="opacity:0.5;"' : ''} onclick="quanLyHoaDonPage--; renderQuanLyHoaDonPagination()"><i class="fa-solid fa-chevron-left"></i></button>`;
+    
+    const getPages = (current, total) => {
+        if (total <= 6) return Array.from({length: total}, (_, i) => i + 1);
+        if (current <= 3) return [1, 2, 3, 4, '...', total];
+        if (current >= total - 2) return [1, '...', total - 3, total - 2, total - 1, total];
+        return [1, '...', current - 1, current, current + 1, '...', total];
+    };
+
+    getPages(quanLyHoaDonPage, totalPages).forEach(i => {
+        if (i === '...') {
+            html += `<span style="padding: 6px 10px; color: var(--text-muted); font-weight: bold;">...</span>`;
+        } else {
+            html += `<button class="${i === quanLyHoaDonPage ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="quanLyHoaDonPage=${i}; renderQuanLyHoaDonPagination()">${i}</button>`;
+        }
+    });
+
+    html += `<button class="btn-outline-sm" ${quanLyHoaDonPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="quanLyHoaDonPage++; renderQuanLyHoaDonPagination()"><i class="fa-solid fa-chevron-right"></i></button>`;
+    div.innerHTML = html;
 }

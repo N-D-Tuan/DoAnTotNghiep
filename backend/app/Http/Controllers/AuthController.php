@@ -131,7 +131,7 @@ class AuthController extends Controller
         if (Auth::attempt($credentials)) {
             $user = Auth::user();
 
-            if (in_array($user->VaiTro, ['Admin', 'QuanLySan']) && $user->TrangThaiKhoa) {
+            if (in_array($user->VaiTro, ['Admin', 'QuanLySan', 'NhanVien']) && $user->TrangThaiKhoa) {
                 Auth::logout(); // Hủy session vừa tạo
                 return response()->json([
                     'message' => 'Tài khoản của bạn đã bị khóa quyền truy cập. Vui lòng liên hệ Admin hệ thống!'
