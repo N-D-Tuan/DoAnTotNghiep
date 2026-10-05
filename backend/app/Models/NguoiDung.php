@@ -102,4 +102,14 @@ class NguoiDung extends Authenticatable
     {
         return $this->hasMany(GiaoDich::class, 'ID_NhanVienXuLy', 'ID');
     }
+
+    public function hoaDonBanHangs()
+    {
+        return $this->hasMany(HoaDonBanHang::class, 'ID_NhanVien', 'ID');
+    }
+
+    public function phieuNhapHangs()
+    {
+        return $this->hasMany(PhieuNhapHang::class, 'ID_NhanVien', 'ID');
+    }
 }

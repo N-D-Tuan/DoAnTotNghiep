@@ -416,7 +416,7 @@ class DatSanController extends Controller
     public function datSanOffline(Request $request)
     {
         $userDangNhap = auth()->user();
-        if (!in_array($userDangNhap->VaiTro, ['Admin', 'QuanLySan'])) {
+        if (!in_array($userDangNhap->VaiTro, ['Admin', 'QuanLySan', 'NhanVien'])) {
             return response()->json(['success' => false, 'message' => 'Không có quyền thực hiện!'], 403);
         }
 

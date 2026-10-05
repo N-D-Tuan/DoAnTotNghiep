@@ -19,6 +19,7 @@ use App\Http\Controllers\YeuCauHuyGapController;
 use App\Http\Controllers\KhachHangController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ChatbotController;
+use App\Http\Controllers\PosController;
 use App\Services\ChromaDBService;
 
 Route::get('/seed-chromadb', function (ChromaDBService $chroma) {
@@ -117,4 +118,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/san-bong/{id}', [SanBongController::class, 'update']);
     
     Route::post('/gia-tien/save', [GiaTienController::class, 'saveBulk']);
+
+    // 8. Quản lý và Nhân viên bán hàng: POS & Kho (Sản phẩm, Nhập hàng, Bán hàng)
+    Route::get('/san-pham', [PosController::class, 'getSanPham']); 
+    
+    // API dành cho Quản lý sân
+    Route::post('/san-pham', [PosController::class, 'storeSanPham']);
+    Route::put('/san-pham/{id}', [PosController::class, 'updateSanPham']);
+    Route::get('/phieu-nhap', [PosController::class, 'getPhieuNhap']);
+    Route::post('/phieu-nhap', [PosController::class, 'storePhieuNhap']);
+    
+    // API dành cho Nhân viên bán hàng
+    Route::post('/ban-hang', [PosController::class, 'storeHoaDonBanHang']);
+    Route::get('/ban-hang', [PosController::class, 'getHoaDonBanHang']);
 });
