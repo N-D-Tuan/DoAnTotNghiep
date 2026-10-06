@@ -3806,14 +3806,24 @@ async function updateDashboardStats() {
         document.getElementById('stat-cho-duyet').innerText = `${data.cho_duyet} đơn`;
 
         // ==========================================
-        // CẬP NHẬT TỔNG TIỀN VÀ BIỂU ĐỒ DOANH THU
+        // CẬP NHẬT TỔNG TIỀN VÀ BIỂU ĐỒ DOANH THU/CHI PHÍ
         // ==========================================
         const labels = data.chart.map(c => c.ngay);
-        const chartData = data.chart.map(c => c.doanh_thu);
+        const revenueData = data.chart.map(c => c.doanh_thu);
+        const expenseData = data.chart.map(c => c.chi_phi); // Nạp data chi phí
 
-        // Tính tổng tiền theo mảng dữ liệu trả về từ API
-        const totalAmount = chartData.reduce((sum, amount) => sum + Number(amount), 0);
-        document.getElementById('chart-total-amount').innerText = `${totalAmount.toLocaleString('vi-VN')}đ`;
+        // Tính Toán Thu - Chi - Lợi Nhuận
+        const totalRevenue = revenueData.reduce((sum, amount) => sum + Number(amount), 0);
+        const totalExpense = expenseData.reduce((sum, amount) => sum + Number(amount), 0);
+        const netProfit = totalRevenue - totalExpense;
+        const profitColor = netProfit >= 0 ? '#10b981' : '#ef4444';
+
+        // Ghi ra giao diện
+        document.getElementById('chart-total-amount').innerHTML = `
+            Thu: ${totalRevenue.toLocaleString('vi-VN')}đ 
+            <span style="font-size: 1rem; font-weight: 600; color: #ef4444; margin-left: 10px;">(Chi: ${totalExpense.toLocaleString('vi-VN')}đ)</span>
+            <span style="font-size: 1rem; font-weight: 600; color: ${profitColor}; margin-left: 10px;">(Lãi: ${netProfit.toLocaleString('vi-VN')}đ)</span>
+        `;
 
         // Vẽ biểu đồ
         const ctx = document.getElementById('revenueChart').getContext('2d');
@@ -3821,27 +3831,38 @@ async function updateDashboardStats() {
             dashboardChartInstance.destroy();
         }
 
-        // Nếu xem hôm nay/hôm qua thì hiển thị dạng Cột (Bar), còn xem nhiều ngày thì hiện dạng Dây (Line)
         const chartType = (dashboardFilterTime === 'hom_nay' || dashboardFilterTime === 'hom_truoc') ? 'bar' : 'line';
 
         dashboardChartInstance = new Chart(ctx, {
             type: chartType,
             data: {
                 labels: labels,
-                datasets: [{
-                    label: 'Tổng thu (VNĐ)',
-                    data: chartData,
-                    borderColor: '#16A34A',
-                    backgroundColor: 'rgba(22, 163, 74, 0.4)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.3,
-                    borderRadius: 4
-                }]
+                datasets: [
+                    {
+                        label: 'Tổng thu (VNĐ)',
+                        data: revenueData,
+                        borderColor: '#16A34A',
+                        backgroundColor: 'rgba(22, 163, 74, 0.4)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.3,
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'Tổng chi (VNĐ)',
+                        data: expenseData,
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.4)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.3,
+                        borderRadius: 4
+                    }
+                ]
             },
             options: {
                 responsive: true,
-                plugins: { legend: { display: false } },
+                plugins: { legend: { display: true, position: 'bottom' } },
                 scales: {
                     x: { grid: { display: false } },
                     y: { 
