@@ -117,6 +117,7 @@ document.addEventListener(
             if(document.getElementById('menu-cumsan')) document.getElementById('menu-cumsan').style.display = 'flex';
             if(document.getElementById('menu-ruttien')) document.getElementById('menu-ruttien').style.display = 'flex';
             if(document.getElementById('menu-captaikhoan')) document.getElementById('menu-captaikhoan').style.display = 'flex';
+            if(document.getElementById('menu-xuatnhap-admin')) document.getElementById('menu-xuatnhap-admin').style.display = 'flex';
 
             if(menuKhachHang) menuKhachHang.innerHTML = '<i class="fa-solid fa-users-gear"></i> QUẢN LÝ TÀI KHOẢN';
         }
@@ -194,7 +195,7 @@ document.addEventListener(
 
                 // Nếu Admin đang mở tab TỔNG QUAN (Dashboard) -> TỰ ĐỘNG REFRESH BIỂU ĐỒ & SỐ LƯỢNG
                 if (document.getElementById('revenueChart')) {
-                    syncTongQuanData();
+                    updateDashboardStats();
                 }
 
                 // NẾU ADMIN ĐANG MỞ TAB DANH SÁCH KHÁCH HÀNG -> TỰ REFRESH BẢNG
@@ -3638,226 +3639,266 @@ async function executeToggleKhoaKhachHang() {
 // ======================================================
 // MODULE: ADMIN - TỔNG QUAN (DASHBOARD)
 // ======================================================
+let dashboardChartInstance = null;
+let dashboardFilterCumSan = 'all';
+let dashboardFilterTime = 'hom_nay';
+
 async function renderTongQuan() {
     const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
     if (!currentUser) return;
 
-    // 1. Cập nhật trạng thái Menu
+    // Chỉ Active Menu khi vừa load trang
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
     const menuLink = Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('TỔNG QUAN'));
     if (menuLink) menuLink.classList.add('active');
 
     const contentArea = document.querySelector('.admin-content');
-    contentArea.innerHTML = `<div style="text-align:center; padding: 50px;"><i class="fa-solid fa-spinner fa-spin text-primary" style="font-size: 2rem;"></i><br><br>Đang tải dữ liệu tổng quan...</div>`;
+    
+    // Giao diện tĩnh Ban đầu (Khung sườn, không chứa dữ liệu thô)
+    let selectCumSanHtml = '';
+    
+    // CHỈ RENDER DROPDOWN NẾU LÀ ADMIN
+    if (currentUser.VaiTro === 'Admin') {
+        try {
+            const csRes = await fetch(`${API_BASE_URL}/cum-san`);
+            const csData = await csRes.json();
+            const optHtml = csData.data.map(cs => `<option value="${cs.ID}">${cs.TenCumSan}</option>`).join('');
+            selectCumSanHtml = `<select class="form-control" style="width: 200px;" onchange="dashboardFilterCumSan=this.value; updateDashboardStats()">
+                                    <option value="all">Tất cả Cụm Sân</option>
+                                    ${optHtml}
+                                </select>`;
+        } catch(e) {}
+    }
+
+    // Nút "Xem tất cả" chỉ hiện cho Quản lý sân
+    const btnXemTatCa = currentUser.VaiTro === 'QuanLySan' 
+        ? `<button class="btn-outline-sm" onclick="renderQuanLyDatSan('All', null)">Xem tất cả</button>` 
+        : '';
+
+    // Ghi đè HTML, thay vì số ảo "2.500.000đ", để "..."
+    contentArea.innerHTML = `
+        <div class="page-header" style="margin-bottom: 24px;">
+            <h1 class="page-title">Tổng quan hệ thống</h1>
+            <p class="text-muted">Thống kê nhanh các chỉ số hoạt động của DN FOOTBALL</p>
+        </div>
+        
+        <div id="dashboard-alert-container"></div>
+
+        <div class="stat-grid" style="margin-bottom: 24px;">
+            <div class="stat-card">
+                <div class="stat-title">Doanh thu hôm nay</div>
+                <div id="stat-doanh-thu" class="stat-value" style="color: #047857;">...</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">Tổng số trận hôm nay</div>
+                <div id="stat-so-tran" class="stat-value" style="color: #2563eb;">...</div>
+                <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">(Hoàn thành / Đã chốt)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">Tổng Khách Hàng</div>
+                <div id="stat-khach-hang" class="stat-value" style="color: #8b5cf6;">...</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">Yêu cầu chờ xử lý</div>
+                <div id="stat-cho-duyet" class="stat-value" style="color: #ea580c;">...</div>
+            </div>
+        </div>
+
+        <div class="chart-layout" style="margin-bottom: 24px;">
+            <div class="panel">
+                <div class="panel-header" style="display:flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <div>
+                            <div style="font-size: 1.1rem; color: var(--text-dark); margin-bottom: 6px;">Biểu đồ doanh thu</div>
+                            <div style="display: flex; align-items: baseline; gap: 8px;">
+                                <span id="chart-total-amount" style="font-size: 1.8rem; font-weight: 800; color: #16A34A; letter-spacing: -0.5px;">...đ</span>
+                                <span style="font-size: 0.85rem; color: #64748b; background: #f1f5f9; padding: 3px 8px; border-radius: 12px;"><i class="fa-solid fa-circle-info" style="margin-right: 3px;"></i>Đã gồm tiền bán nước</span>
+                            </div>
+                        </div>
+                    <div style="display: flex; gap: 10px;">
+                        ${selectCumSanHtml}
+                        <select class="form-control" style="width: 170px;" onchange="dashboardFilterTime=this.value; updateDashboardStats()">
+                            <option value="hom_nay" selected>Hôm nay</option>
+                            <option value="hom_truoc">Hôm qua</option>
+                            <option value="7_ngay">7 ngày gần đây</option>
+                            <option value="30_ngay">1 tháng gần đây</option>
+                            <option value="nam">Năm nay</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="padding: 15px 0;">
+                    <canvas id="revenueChart" height="100"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header" style="display:flex; justify-content: space-between; align-items: center;">
+                <span>Booking mới nhất</span>
+                ${btnXemTatCa}
+            </div>
+            <div class="table-responsive">
+                <table class="admin-table">
+                    <thead style="background: #F8FAFC;">
+                        <tr>
+                            <th>Mã Đặt</th>
+                            <th>Khách hàng</th>
+                            <th>Thông tin Sân</th>
+                            <th>Ngày & Giờ</th>
+                            <th>Trạng thái</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recent-bookings-tbody">
+                        <tr><td colspan="5" class="text-center" style="padding: 20px; text-align: center;">Đang tải dữ liệu...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+
+    // Khởi tạo Chart mặc định rỗng (Tránh lỗi destroy)
+    const ctx = document.getElementById('revenueChart').getContext('2d');
+    dashboardChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: [], datasets: [] },
+        options: { responsive: true }
+    });
+
+    // Gọi API nạp dữ liệu thống kê
+    updateDashboardStats();
+}
+
+async function updateDashboardStats() {
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+    
+    // Ngăn lỗi nếu Admin chuyển qua tab khác mà JS vẫn ráng render lại biểu đồ
+    if (!document.getElementById('revenueChart') || !document.getElementById('stat-doanh-thu')) return;
 
     try {
-        const response = await fetch(`${API_BASE_URL}/admin/thong-ke`);
+        const response = await fetch(`${API_BASE_URL}/admin/thong-ke?id_cum_san=${dashboardFilterCumSan}&time_filter=${dashboardFilterTime}`);
         const res = await response.json();
 
-        if (!res.success) throw new Error('Không thể tải dữ liệu');
+        if (!res.success) return;
         const data = res.data;
 
-        // 2. Logic Cảnh Báo Quên Chốt Sân cho Quản lý sân
-        let alertHtml = '';
+        // Cập nhật Cảnh báo quên chốt sân (Chỉ quản lý mới bị nhắc)
+        const alertContainer = document.getElementById('dashboard-alert-container');
         if (currentUser.VaiTro === 'QuanLySan' && data.so_san_quen_chot > 0) {
-            const d = new Date();
-            d.setDate(d.getDate() - 1);
+            const d = new Date(); d.setDate(d.getDate() - 1);
             const pad = n => n < 10 ? '0' + n : n;
             const yesterday = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-            alertHtml = `
+            alertContainer.innerHTML = `
                 <div style="background: #fef2f2; border: 1px solid #f87171; border-left: 4px solid #ef4444; color: #b91c1c; padding: 16px 20px; border-radius: 8px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px rgba(239, 68, 68, 0.1);">
                     <div>
                         <h4 style="margin: 0 0 4px 0; font-size: 1.05rem;"><i class="fa-solid fa-triangle-exclamation"></i> CẢNH BÁO: CHƯA CHỐT SÂN NGÀY HÔM TRƯỚC</h4>
                         <p style="margin: 0; font-size: 0.9rem;">Hệ thống phát hiện có <strong>${data.so_san_quen_chot}</strong> lịch đặt sân của ngày hôm trước vẫn đang ở trạng thái "Đã cọc". Vui lòng kiểm tra và chốt sân ngay!</p>
                     </div>
                     <button onclick="renderQuanLyDatSan('DaCoc', '${yesterday}')" style="background: #ef4444; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s;">Xử lý ngay</button>
-                </div>
-            `;
-        }
-
-        // 3. Render Lưới 5 Booking mới nhất
-        let recentBookingsHtml = '';
-        if (data.recent_bookings.length === 0) {
-            recentBookingsHtml = `<tr><td colspan="6" class="text-center" style="padding: 20px; color: var(--text-muted);">Chưa có dữ liệu.</td></tr>`;
+                </div>`;
         } else {
-            recentBookingsHtml = data.recent_bookings.map(bk => {
-                let badgeColor = '#6b7280', badgeBg = '#f3f4f6', viStatus = bk.TrangThai;
-                if(bk.TrangThai === 'DaCoc') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; viStatus = 'Đã cọc'; }
-                else if(bk.TrangThai === 'DaHuy') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; viStatus = 'Đã hủy'; }
-                else if(bk.TrangThai === 'HoanThanh') { badgeColor = '#047857'; badgeBg = '#d1fae5'; viStatus = 'Hoàn thành'; }
-                else if(bk.TrangThai === 'KhongDen') { badgeColor = '#6b7280'; badgeBg = '#f3f4f6'; viStatus = 'Không đến'; }
-                const badgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${viStatus}</span>`;
-
-                const d = new Date(bk.NgayDa);
-                const dateStr = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
-                const timeStr = bk.khung_gio ? `${bk.khung_gio.GioBatDau.substring(0,5)} - ${bk.khung_gio.GioKetThuc.substring(0,5)}` : '';
-                
-                return `
-                    <tr>
-                        <td><strong style="font-family: monospace;">#${bk.ID_GiaiDau ? 'GD-'+bk.ID_GiaiDau : 'PT-'+bk.ID}</strong></td>
-                        <td>${bk.nguoi_dung ? bk.nguoi_dung.HoTen : 'N/A'}</td>
-                        <td><strong style="color: var(--primary);">${bk.san_bong ? bk.san_bong.TenSan : 'N/A'}</strong><br><span style="font-size:0.8rem;color:var(--text-muted);"><i class="fa-solid fa-location-dot"></i> ${bk.san_bong && bk.san_bong.cum_san ? bk.san_bong.cum_san.TenCumSan : ''}</span></td>
-                        <td>${dateStr}<br><strong style="font-size:0.85rem;color:var(--text-dark);">${timeStr}</strong></td>
-                        <td>${badgeHtml}</td>
-                    </tr>
-                `;
-            }).join('');
+            alertContainer.innerHTML = '';
         }
 
-        // 4. Bơm HTML vào Giao diện
-        contentArea.innerHTML = `
-            <div class="page-header" style="margin-bottom: 24px;">
-                <h1 class="page-title">Tổng quan hệ thống</h1>
-                <p class="text-muted">Thống kê nhanh các chỉ số hoạt động của DN FOOTBALL</p>
-            </div>
-            
-            ${alertHtml}
+        // Cập nhật 4 chỉ số trên cùng
+        document.getElementById('stat-doanh-thu').innerText = `${Number(data.doanh_thu_hom_nay).toLocaleString('vi-VN')}đ`;
+        document.getElementById('stat-so-tran').innerText = `${data.booking_hoan_thanh_hom_nay}/${data.booking_hom_nay} trận`;
+        document.getElementById('stat-khach-hang').innerText = `${data.tong_khach_hang} người`;
+        document.getElementById('stat-cho-duyet').innerText = `${data.cho_duyet} đơn`;
 
-            <div class="stat-grid" style="margin-bottom: 24px;">
-                <div class="stat-card">
-                    <div class="stat-title">Doanh thu hôm nay</div>
-                    <div id="stat-doanh-thu" class="stat-value" style="color: #047857;">${Number(data.doanh_thu_hom_nay).toLocaleString('vi-VN')}đ</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-title">Tổng số trận hôm nay</div>
-                    <div id="stat-so-tran" class="stat-value" style="color: #2563eb;">${data.booking_hoan_thanh_hom_nay}/${data.booking_hom_nay} trận</div>
-                    <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">(Hoàn thành / Đã chốt)</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-title">Tổng Khách Hàng</div>
-                    <div id="stat-khach-hang" class="stat-value" style="color: #8b5cf6;">${data.tong_khach_hang} người</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-title">Yêu cầu chờ xử lý</div>
-                    <div id="stat-cho-duyet" class="stat-value" style="color: #ea580c;">${data.cho_duyet} đơn</div>
-                </div>
-            </div>
-
-            <div class="chart-layout" style="margin-bottom: 24px;">
-                <div class="panel">
-                    <div class="panel-header">Biểu đồ doanh thu 7 ngày gần nhất</div>
-                    <canvas id="revenueChart" height="100"></canvas>
-                </div>
-            </div>
-
-            <div class="panel">
-                <div class="panel-header">
-                    Booking mới nhất
-                    <button class="btn-outline-sm" onclick="renderQuanLyDatSan('All', '')">Xem tất cả</button>
-                </div>
-                <div class="table-responsive">
-                    <table class="admin-table">
-                        <thead style="background: #F8FAFC;">
-                            <tr>
-                                <th>Mã Đặt</th>
-                                <th>Khách hàng</th>
-                                <th>Thông tin Sân</th>
-                                <th>Ngày & Giờ</th>
-                                <th>Trạng thái</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${recentBookingsHtml}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        `;
-
-        // 5. Cấu hình vẽ Chart.js
-        const ctx = document.getElementById('revenueChart').getContext('2d');
+        // ==========================================
+        // CẬP NHẬT TỔNG TIỀN VÀ BIỂU ĐỒ DOANH THU
+        // ==========================================
         const labels = data.chart.map(c => c.ngay);
         const chartData = data.chart.map(c => c.doanh_thu);
 
-        new Chart(ctx, {
-            type: 'line',
+        // Tính tổng tiền theo mảng dữ liệu trả về từ API
+        const totalAmount = chartData.reduce((sum, amount) => sum + Number(amount), 0);
+        document.getElementById('chart-total-amount').innerText = `${totalAmount.toLocaleString('vi-VN')}đ`;
+
+        // Vẽ biểu đồ
+        const ctx = document.getElementById('revenueChart').getContext('2d');
+        if (dashboardChartInstance) {
+            dashboardChartInstance.destroy();
+        }
+
+        // Nếu xem hôm nay/hôm qua thì hiển thị dạng Cột (Bar), còn xem nhiều ngày thì hiện dạng Dây (Line)
+        const chartType = (dashboardFilterTime === 'hom_nay' || dashboardFilterTime === 'hom_truoc') ? 'bar' : 'line';
+
+        dashboardChartInstance = new Chart(ctx, {
+            type: chartType,
             data: {
                 labels: labels,
                 datasets: [{
-                    label: 'Doanh thu (VNĐ)',
+                    label: 'Tổng thu (VNĐ)',
                     data: chartData,
                     borderColor: '#16A34A',
-                    backgroundColor: 'rgba(22, 163, 74, 0.1)',
+                    backgroundColor: 'rgba(22, 163, 74, 0.4)',
                     borderWidth: 2,
                     fill: true,
-                    tension: 0.3
+                    tension: 0.3,
+                    borderRadius: 4
                 }]
             },
             options: {
                 responsive: true,
                 plugins: { legend: { display: false } },
                 scales: {
+                    x: { grid: { display: false } },
                     y: { 
                         beginAtZero: true, 
-                        ticks: { callback: function(value) { return value.toLocaleString('vi-VN') + 'đ'; } } 
+                        border: { display: false },
+                        ticks: { callback: value => value.toLocaleString('vi-VN') + 'đ' } 
                     }
                 }
             }
         });
 
-    } catch (e) {
-        contentArea.innerHTML = `<div style="text-align:center; color:red; padding: 50px;">Lỗi kết nối máy chủ! Không thể tải dữ liệu thống kê.</div>`;
-    }
-}
+        // Đổ bảng Booking gần nhất (Đã sửa định dạng ngày giờ)
+        const tbody = document.getElementById('recent-bookings-tbody');
+        if (data.recent_bookings.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center" style="padding: 20px; color: var(--text-muted); text-align: center;">Chưa có dữ liệu.</td></tr>`;
+        } else {
+            tbody.innerHTML = data.recent_bookings.map(bk => {
+                let badgeColor = '#6b7280', badgeBg = '#f3f4f6', viStatus = bk.TrangThai;
+                if(bk.TrangThai === 'DaCoc') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; viStatus = 'Đã cọc'; }
+                else if(bk.TrangThai === 'DaHuy') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; viStatus = 'Đã hủy'; }
+                else if(bk.TrangThai === 'HoanThanh') { badgeColor = '#047857'; badgeBg = '#d1fae5'; viStatus = 'Hoàn thành'; }
+                else if(bk.TrangThai === 'KhongDen') { badgeColor = '#6b7280'; badgeBg = '#f3f4f6'; viStatus = 'Không đến'; }
 
-async function syncTongQuanData() {
-    // Chỉ chạy ngầm nếu sếp đang thực sự đứng ở trang Tổng quan
-    if (!document.getElementById('revenueChart')) return;
-
-    try {
-        const response = await fetch(`${API_BASE_URL}/admin/thong-ke`);
-        const res = await response.json();
-        
-        if (res.success) {
-            const data = res.data;
-            
-            // 1. Cập nhật ngầm 4 con số thống kê
-            const elDoanhThu = document.getElementById('stat-doanh-thu');
-            const elSoTran = document.getElementById('stat-so-tran');
-            const elKhachHang = document.getElementById('stat-khach-hang');
-            const elChoDuyet = document.getElementById('stat-cho-duyet');
-
-            if (elDoanhThu) elDoanhThu.innerText = `${Number(data.doanh_thu_hom_nay).toLocaleString('vi-VN')}đ`;
-            if (elSoTran) elSoTran.innerText = `${data.booking_hoan_thanh_hom_nay}/${data.booking_hom_nay} trận`;
-            if (elKhachHang) elKhachHang.innerText = `${data.tong_khach_hang} người`;
-            if (elChoDuyet) elChoDuyet.innerText = `${data.cho_duyet} đơn`;
-
-            // 2. Cập nhật ngầm bảng "Booking mới nhất" (Chỉ sửa phần ruột tbody)
-            const recentTbody = document.querySelector('.admin-table tbody');
-            if (recentTbody && !document.getElementById('khachhang-table-body')) { // Tránh nhầm với bảng khác
+                const badgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${viStatus}</span>`;
                 
-                if (data.recent_bookings.length === 0) {
-                    recentTbody.innerHTML = `<tr><td colspan="6" class="text-center" style="padding: 20px; color: var(--text-muted);">Chưa có dữ liệu.</td></tr>`;
-                } else {
-                    recentTbody.innerHTML = data.recent_bookings.map(bk => {
-                        let badgeColor = '#6b7280', badgeBg = '#f3f4f6', viStatus = bk.TrangThai;
-                        if(bk.TrangThai === 'DaCoc') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; viStatus = 'Đã cọc'; }
-                        else if(bk.TrangThai === 'DaHuy') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; viStatus = 'Đã hủy'; }
-                        else if(bk.TrangThai === 'HoanThanh') { badgeColor = '#047857'; badgeBg = '#d1fae5'; viStatus = 'Hoàn thành'; }
-                        else if(bk.TrangThai === 'KhongDen') { badgeColor = '#6b7280'; badgeBg = '#f3f4f6'; viStatus = 'Không đến'; }
-                        const badgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${viStatus}</span>`;
-
-                        const d = new Date(bk.NgayDa);
-                        const dateStr = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
-                        const timeStr = bk.khung_gio ? `${bk.khung_gio.GioBatDau.substring(0,5)} - ${bk.khung_gio.GioKetThuc.substring(0,5)}` : '';
-                        
-                        return `
-                            <tr>
-                                <td><strong style="font-family: monospace;">#${bk.ID_GiaiDau ? 'GD-'+bk.ID_GiaiDau : 'PT-'+bk.ID}</strong></td>
-                                <td>${bk.nguoi_dung ? bk.nguoi_dung.HoTen : 'N/A'}</td>
-                                <td><strong style="color: var(--primary);">${bk.san_bong ? bk.san_bong.TenSan : 'N/A'}</strong><br><span style="font-size:0.8rem;color:var(--text-muted);"><i class="fa-solid fa-location-dot"></i> ${bk.san_bong && bk.san_bong.cum_san ? bk.san_bong.cum_san.TenCumSan : ''}</span></td>
-                                <td>${dateStr}<br><strong style="font-size:0.85rem;color:var(--text-dark);">${timeStr}</strong></td>
-                                <td>${badgeHtml}</td>
-                            </tr>
-                        `;
-                    }).join('');
-                }
-            }
+                // THIẾT KẾ LẠI CỘT NGÀY GIỜ: Tách dòng và thêm icon
+                const dateParts = bk.NgayDa.split('-');
+                const dateStr = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`; // Định dạng DD/MM/YYYY
+                const timeStr = bk.khung_gio ? `${bk.khung_gio.GioBatDau.substring(0,5)} - ${bk.khung_gio.GioKetThuc.substring(0,5)}` : 'N/A';
+                
+                const dateTimeHtml = `
+                    <div style="display: flex; flex-direction: column; gap: 5px;">
+                        <div style="font-weight: 600; color: var(--text-dark); font-size: 0.9rem;">
+                            <i class="fa-regular fa-clock" style="color: var(--primary); width: 16px;"></i> ${timeStr}
+                        </div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted);">
+                            <i class="fa-regular fa-calendar" style="width: 16px;"></i> ${dateStr}
+                        </div>
+                    </div>
+                `;
+                
+                return `<tr>
+                    <td><strong style="font-family: monospace; color: var(--text-dark);">#${bk.ID_GiaiDau ? 'GD-'+bk.ID_GiaiDau : 'PT-'+bk.ID}</strong></td>
+                    <td>${bk.nguoi_dung ? bk.nguoi_dung.HoTen : 'N/A'}</td>
+                    <td>
+                        <strong style="color: var(--primary);">${bk.san_bong ? bk.san_bong.TenSan : 'N/A'}</strong><br>
+                        <span style="font-size:0.8rem; color:var(--text-muted);">
+                            <i class="fa-solid fa-location-dot"></i> ${bk.san_bong && bk.san_bong.cum_san ? bk.san_bong.cum_san.TenCumSan : ''}
+                        </span>
+                    </td>
+                    <td>${dateTimeHtml}</td>
+                    <td>${badgeHtml}</td>
+                </tr>`;
+            }).join('');
         }
-    } catch (error) {
-        console.error("Lỗi đồng bộ ngầm Dashboard:", error);
-    }
+
+    } catch (e) { console.error('Lỗi load thống kê', e); }
 }
 
 // ======================================================
@@ -5491,5 +5532,298 @@ function renderQuanLyHoaDonPagination() {
     });
 
     html += `<button class="btn-outline-sm" ${quanLyHoaDonPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="quanLyHoaDonPage++; renderQuanLyHoaDonPagination()"><i class="fa-solid fa-chevron-right"></i></button>`;
+    div.innerHTML = html;
+}
+
+// ======================================================
+// MODULE: ADMIN - QUẢN LÝ XUẤT/NHẬP HÀNG TỔNG
+// ======================================================
+let adminPhieuNhapData = [];
+let adminPhieuNhapPage = 1;
+let adminPhieuNhapSearch = '';
+let adminPhieuNhapDate = '';
+let adminPhieuNhapCumSan = 'All';
+
+let adminHoaDonData = [];
+let adminHoaDonPage = 1;
+let adminHoaDonSearch = '';
+let adminHoaDonDate = '';
+let adminHoaDonCumSan = 'All';
+
+const itemsPerAdminXNPage = 5;
+let adminCumSanOptions = ''; // Cache HTML Dropdown Cụm sân
+
+async function renderAdminXuatNhap() {
+    document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+    const menuLink = document.getElementById('menu-xuatnhap-admin');
+    if (menuLink) menuLink.classList.add('active');
+
+    // Fetch danh sách cụm sân để làm Dropdown Lọc nếu chưa có
+    if (!adminCumSanOptions) {
+        try {
+            const res = await fetch(`${API_BASE_URL}/cum-san`);
+            const data = await res.json();
+            if (data.success) {
+                adminCumSanOptions = data.data.map(cs => `<option value="${cs.ID}">${cs.TenCumSan}</option>`).join('');
+            }
+        } catch (e) { console.error(e); }
+    }
+
+    const contentArea = document.querySelector('.admin-content');
+    contentArea.innerHTML = `
+        <div class="page-header" style="margin-bottom: 24px;">
+            <h1 class="page-title">Quản lý Xuất / Nhập hàng Toàn Hệ Thống</h1>
+            <p class="text-muted">Giám sát lịch sử nhập kho và hóa đơn bán hàng của tất cả các cơ sở.</p>
+        </div>
+
+        <div class="panel">
+            <div style="display: flex; gap: 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px; padding: 0 20px;">
+                <button class="nav-tab active" onclick="switchAdminXuatNhapTab('tab-admin-phieunhap', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; border-bottom: 2px solid var(--primary); color: var(--primary);">Lịch sử Nhập hàng</button>
+                <button class="nav-tab" onclick="switchAdminXuatNhapTab('tab-admin-hoadon', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Hóa đơn Bán hàng</button>
+            </div>
+
+            <!-- TAB 1: PHIẾU NHẬP -->
+            <div id="tab-admin-phieunhap" class="tab-pane active" style="padding: 0 20px 20px 20px;">
+                <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
+                    <div style="position: relative; flex: 1; min-width: 200px;">
+                        <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
+                        <input type="text" class="form-control" style="padding-left: 35px;" placeholder="Tìm mã phiếu, người nhập, tên món..." oninput="handleAdminPNSearch(this.value)">
+                    </div>
+                    <select class="form-control" style="width: 200px;" onchange="handleAdminPNCumSan(this.value)">
+                        <option value="All">Tất cả Cơ sở</option>
+                        ${adminCumSanOptions}
+                    </select>
+                    <input type="date" class="form-control" style="width: 150px;" onchange="handleAdminPNDate(this.value)">
+                    <button class="btn-outline-sm" onclick="document.querySelector('input[type=date]').value=''; handleAdminPNDate('')">Xóa lọc ngày</button>
+                </div>
+                
+                <div class="table-responsive">
+                    <table class="admin-table">
+                        <thead style="background: #F8FAFC;">
+                            <tr>
+                                <th>Mã Phiếu</th>
+                                <th>Cơ sở</th>
+                                <th>Người Nhập</th>
+                                <th>Chi tiết hàng hóa</th>
+                                <th>Tổng thanh toán</th>
+                                <th>Ngày nhập</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-pn-tbody"><tr><td colspan="6" class="text-center" style="text-align: center;">Đang tải...</td></tr></tbody>
+                    </table>
+                </div>
+                <div id="admin-pn-pagination" style="display: flex; justify-content: center; gap: 8px; margin-top: 15px;"></div>
+            </div>
+
+            <!-- TAB 2: HÓA ĐƠN BÁN HÀNG -->
+            <div id="tab-admin-hoadon" class="tab-pane" style="display: none; padding: 0 20px 20px 20px;">
+                <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
+                    <div style="position: relative; flex: 1; min-width: 200px;">
+                        <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
+                        <input type="text" class="form-control" style="padding-left: 35px;" placeholder="Tìm mã HĐ, thu ngân, tên món..." oninput="handleAdminHDSearch(this.value)">
+                    </div>
+                    <select class="form-control" style="width: 200px;" onchange="handleAdminHDCumSan(this.value)">
+                        <option value="All">Tất cả Cơ sở</option>
+                        ${adminCumSanOptions}
+                    </select>
+                    <input type="date" class="form-control" style="width: 150px;" onchange="handleAdminHDDate(this.value)">
+                    <button class="btn-outline-sm" onclick="document.querySelectorAll('input[type=date]')[1].value=''; handleAdminHDDate('')">Xóa lọc ngày</button>
+                </div>
+                
+                <div class="table-responsive">
+                    <table class="admin-table">
+                        <thead style="background: #F8FAFC;">
+                            <tr>
+                                <th>Mã HĐ</th>
+                                <th>Cơ sở</th>
+                                <th>Thu ngân</th>
+                                <th>Chi tiết món</th>
+                                <th>Tổng doanh thu</th>
+                                <th>Thời gian</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-hd-tbody"><tr><td colspan="6" class="text-center" style="text-align: center;">Đang tải...</td></tr></tbody>
+                    </table>
+                </div>
+                <div id="admin-hd-pagination" style="display: flex; justify-content: center; gap: 8px; margin-top: 15px;"></div>
+            </div>
+        </div>
+    `;
+
+    loadAdminPhieuNhap();
+    loadAdminHoaDon();
+}
+
+function switchAdminXuatNhapTab(tabId, element) {
+    const tabs = element.parentElement.children;
+    for (let i = 0; i < tabs.length; i++) {
+        tabs[i].classList.remove('active');
+        tabs[i].style.borderBottom = 'none';
+        tabs[i].style.color = 'var(--text-muted)';
+    }
+    element.classList.add('active');
+    element.style.borderBottom = '2px solid var(--primary)';
+    element.style.color = 'var(--primary)';
+
+    document.getElementById('tab-admin-phieunhap').style.display = 'none';
+    document.getElementById('tab-admin-hoadon').style.display = 'none';
+    document.getElementById(tabId).style.display = 'block';
+}
+
+// ----------------------------------------------------
+// LOGIC TAB 1: PHIẾU NHẬP
+// ----------------------------------------------------
+async function loadAdminPhieuNhap() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/phieu-nhap`); // Không truyền id_cum_san để lấy tất cả
+        const res = await response.json();
+        if (res.success) {
+            adminPhieuNhapData = res.data || [];
+            applyAdminPNFiltersAndRender();
+        }
+    } catch (e) { console.error(e); }
+}
+
+function handleAdminPNSearch(val) { adminPhieuNhapSearch = val.toLowerCase().trim(); adminPhieuNhapPage = 1; applyAdminPNFiltersAndRender(); }
+function handleAdminPNCumSan(val) { adminPhieuNhapCumSan = val; adminPhieuNhapPage = 1; applyAdminPNFiltersAndRender(); }
+function handleAdminPNDate(val) { adminPhieuNhapDate = val; adminPhieuNhapPage = 1; applyAdminPNFiltersAndRender(); }
+
+function applyAdminPNFiltersAndRender() {
+    let filtered = adminPhieuNhapData.filter(pn => {
+        // Lọc Cụm sân
+        const matchCumSan = (adminPhieuNhapCumSan === 'All' || String(pn.ID_CumSan) === String(adminPhieuNhapCumSan));
+        
+        // Lọc Ngày
+        const dateOnly = pn.NgayNhap ? pn.NgayNhap.substring(0, 10) : '';
+        const matchDate = (adminPhieuNhapDate === '' || dateOnly === adminPhieuNhapDate);
+        
+        // Lọc Tìm kiếm (Mã, Tên người nhập, Tên món)
+        const maPhieu = `pn${pn.ID}`.toLowerCase();
+        const tenNhanVien = pn.nhan_vien ? pn.nhan_vien.HoTen.toLowerCase() : '';
+        const tenMonStr = pn.ChiTietNhap ? pn.ChiTietNhap.map(i => i.ten_san_pham).join(' ').toLowerCase() : '';
+        const matchSearch = maPhieu.includes(adminPhieuNhapSearch) || tenNhanVien.includes(adminPhieuNhapSearch) || tenMonStr.includes(adminPhieuNhapSearch);
+
+        return matchCumSan && matchDate && matchSearch;
+    });
+
+    const totalPages = Math.ceil(filtered.length / itemsPerAdminXNPage) || 1;
+    if (adminPhieuNhapPage > totalPages) adminPhieuNhapPage = totalPages;
+    const startIdx = (adminPhieuNhapPage - 1) * itemsPerAdminXNPage;
+    
+    renderAdminPNTable(filtered.slice(startIdx, startIdx + itemsPerAdminXNPage));
+    renderAdminPNPagination(totalPages);
+}
+
+function renderAdminPNTable(data) {
+    const tbody = document.getElementById('admin-pn-tbody');
+    if (data.length === 0) return tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="padding: 30px; text-align: center;">Không tìm thấy phiếu nhập nào.</td></tr>`;
+
+    tbody.innerHTML = data.map(pn => {
+        const listItems = pn.ChiTietNhap ? pn.ChiTietNhap.map(item => `<li><i class="fa-solid fa-angle-right" style="font-size:0.7rem; color:#94a3b8; margin-right:4px;"></i> ${item.ten_san_pham}: <strong>${item.so_luong}</strong></li>`).join('') : '';
+        const dateStr = pn.NgayNhap ? pn.NgayNhap.replace('T', ' ').substring(0, 16) : '';
+        const tenCumSan = pn.cum_san ? pn.cum_san.TenCumSan : 'N/A';
+        
+        return `
+            <tr>
+                <td><strong style="font-family: monospace; color: #475569;">#PN${pn.ID}</strong></td>
+                <td><span style="color: var(--primary); font-weight: 600;"><i class="fa-solid fa-location-dot"></i> ${tenCumSan}</span></td>
+                <td>${pn.nhan_vien ? pn.nhan_vien.HoTen : 'N/A'}</td>
+                <td><ul style="list-style: none; padding: 0; margin: 0; font-size: 0.85rem;">${listItems}</ul></td>
+                <td><strong style="color: #b91c1c;">${Number(pn.TongTienThanhToan).toLocaleString('vi-VN')}đ</strong></td>
+                <td><span style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> ${dateStr}</span></td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function renderAdminPNPagination(totalPages) {
+    const div = document.getElementById('admin-pn-pagination');
+    if (totalPages <= 1) return div.innerHTML = '';
+    let html = `<button class="btn-outline-sm" ${adminPhieuNhapPage === 1 ? 'disabled style="opacity:0.5;"' : ''} onclick="adminPhieuNhapPage--; applyAdminPNFiltersAndRender()"><i class="fa-solid fa-chevron-left"></i></button>`;
+    for(let i=1; i<=totalPages; i++) {
+        html += `<button class="${i === adminPhieuNhapPage ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="adminPhieuNhapPage=${i}; applyAdminPNFiltersAndRender()">${i}</button>`;
+    }
+    html += `<button class="btn-outline-sm" ${adminPhieuNhapPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="adminPhieuNhapPage++; applyAdminPNFiltersAndRender()"><i class="fa-solid fa-chevron-right"></i></button>`;
+    div.innerHTML = html;
+}
+
+// ----------------------------------------------------
+// LOGIC TAB 2: HÓA ĐƠN BÁN HÀNG
+// ----------------------------------------------------
+async function loadAdminHoaDon() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/ban-hang`); // Lấy tất cả hoá đơn
+        const res = await response.json();
+        if (res.success) {
+            adminHoaDonData = res.data || [];
+            applyAdminHDFiltersAndRender();
+        }
+    } catch (e) { console.error(e); }
+}
+
+function handleAdminHDSearch(val) { adminHoaDonSearch = val.toLowerCase().trim(); adminHoaDonPage = 1; applyAdminHDFiltersAndRender(); }
+function handleAdminHDCumSan(val) { adminHoaDonCumSan = val; adminHoaDonPage = 1; applyAdminHDFiltersAndRender(); }
+function handleAdminHDDate(val) { adminHoaDonDate = val; adminHoaDonPage = 1; applyAdminHDFiltersAndRender(); }
+
+function applyAdminHDFiltersAndRender() {
+    let filtered = adminHoaDonData.filter(hd => {
+        // Lọc Cụm sân
+        const matchCumSan = (adminHoaDonCumSan === 'All' || String(hd.ID_CumSan) === String(adminHoaDonCumSan));
+        
+        // Lọc Ngày
+        const dateOnly = hd.NgayTao ? hd.NgayTao.substring(0, 10) : '';
+        const matchDate = (adminHoaDonDate === '' || dateOnly === adminHoaDonDate);
+        
+        // Lọc Tìm kiếm
+        const maHD = `hd${hd.ID}`.toLowerCase();
+        const thuNgan = hd.nhan_vien ? hd.nhan_vien.HoTen.toLowerCase() : '';
+        const tenMonStr = (hd.chi_tiet_hoa_dons && hd.chi_tiet_hoa_dons.length > 0) 
+            ? hd.chi_tiet_hoa_dons.map(i => i.san_pham ? i.san_pham.TenSanPham : '').join(' ').toLowerCase() : '';
+        const matchSearch = maHD.includes(adminHoaDonSearch) || thuNgan.includes(adminHoaDonSearch) || tenMonStr.includes(adminHoaDonSearch);
+
+        return matchCumSan && matchDate && matchSearch;
+    });
+
+    const totalPages = Math.ceil(filtered.length / itemsPerAdminXNPage) || 1;
+    if (adminHoaDonPage > totalPages) adminHoaDonPage = totalPages;
+    const startIdx = (adminHoaDonPage - 1) * itemsPerAdminXNPage;
+    
+    renderAdminHDTable(filtered.slice(startIdx, startIdx + itemsPerAdminXNPage));
+    renderAdminHDPagination(totalPages);
+}
+
+function renderAdminHDTable(data) {
+    const tbody = document.getElementById('admin-hd-tbody');
+    if (data.length === 0) return tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="padding: 30px; text-align: center;">Không tìm thấy hóa đơn nào.</td></tr>`;
+
+    tbody.innerHTML = data.map(hd => {
+        let cacMon = hd.chi_tiet_hoa_dons && hd.chi_tiet_hoa_dons.length > 0 
+            ? hd.chi_tiet_hoa_dons.map(ct => `<li><i class="fa-solid fa-angle-right" style="font-size:0.7rem; color:#94a3b8; margin-right:4px;"></i> ${ct.san_pham ? ct.san_pham.TenSanPham : 'Lỗi món'}: <strong>${ct.SoLuong}</strong></li>`).join('')
+            : '<span class="text-muted">Trống</span>';
+
+        const dateStr = hd.NgayTao ? hd.NgayTao.replace('T', ' ').substring(0, 16) : '';
+        const tenCumSan = hd.cum_san ? hd.cum_san.TenCumSan : 'N/A';
+
+        return `
+            <tr>
+                <td><strong style="font-family: monospace; color: #475569;">#HD${hd.ID}</strong></td>
+                <td><span style="color: var(--primary); font-weight: 600;"><i class="fa-solid fa-location-dot"></i> ${tenCumSan}</span></td>
+                <td><div style="font-weight: 600; color: #3b82f6;">${hd.nhan_vien ? hd.nhan_vien.HoTen : 'N/A'}</div></td>
+                <td><ul style="list-style: none; padding: 0; margin: 0; font-size: 0.85rem;">${cacMon}</ul></td>
+                <td><strong style="color: #10b981;">${Number(hd.TongTien).toLocaleString('vi-VN')}đ</strong></td>
+                <td><span style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> ${dateStr}</span></td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function renderAdminHDPagination(totalPages) {
+    const div = document.getElementById('admin-hd-pagination');
+    if (totalPages <= 1) return div.innerHTML = '';
+    let html = `<button class="btn-outline-sm" ${adminHoaDonPage === 1 ? 'disabled style="opacity:0.5;"' : ''} onclick="adminHoaDonPage--; applyAdminHDFiltersAndRender()"><i class="fa-solid fa-chevron-left"></i></button>`;
+    for(let i=1; i<=totalPages; i++) {
+        html += `<button class="${i === adminHoaDonPage ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="adminHoaDonPage=${i}; applyAdminHDFiltersAndRender()">${i}</button>`;
+    }
+    html += `<button class="btn-outline-sm" ${adminHoaDonPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="adminHoaDonPage++; applyAdminHDFiltersAndRender()"><i class="fa-solid fa-chevron-right"></i></button>`;
     div.innerHTML = html;
 }
