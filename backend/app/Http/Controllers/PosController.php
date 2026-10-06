@@ -91,14 +91,17 @@ class PosController extends Controller
 
     public function getPhieuNhap(Request $request)
     {
-        $request->validate(['id_cum_san' => 'required|integer']);
+        $request->validate(['id_cum_san' => 'nullable|integer']);
         
-        $phieuNhaps = PhieuNhapHang::with('nhanVien:ID,HoTen') // Lấy tên quản lý đã nhập
-            ->where('ID_CumSan', $request->id_cum_san)
-            ->orderBy('NgayNhap', 'desc')
-            ->get();
+        $query = PhieuNhapHang::with(['nhanVien:ID,HoTen', 'cumSan:ID,TenCumSan'])
+            ->orderBy('NgayNhap', 'desc');
 
-        return response()->json(['success' => true, 'data' => $phieuNhaps]);
+        // Nếu có truyền id_cum_san thì lọc, không thì lấy tất cả
+        if ($request->filled('id_cum_san')) {
+            $query->where('ID_CumSan', $request->id_cum_san);
+        }
+
+        return response()->json(['success' => true, 'data' => $query->get()]);
     }
 
     public function storePhieuNhap(Request $request)
@@ -194,13 +197,15 @@ class PosController extends Controller
 
     public function getHoaDonBanHang(Request $request)
     {
-        $request->validate(['id_cum_san' => 'required|integer']);
+        $request->validate(['id_cum_san' => 'nullable|integer']);
         
-        $hoaDons = HoaDonBanHang::with(['nhanVien:ID,HoTen', 'chiTietHoaDons.sanPham'])
-            ->where('ID_CumSan', $request->id_cum_san)
-            ->orderBy('NgayTao', 'desc')
-            ->get();
+        $query = HoaDonBanHang::with(['nhanVien:ID,HoTen', 'chiTietHoaDons.sanPham', 'cumSan:ID,TenCumSan'])
+            ->orderBy('NgayTao', 'desc');
 
-        return response()->json(['success' => true, 'data' => $hoaDons]);
+        if ($request->filled('id_cum_san')) {
+            $query->where('ID_CumSan', $request->id_cum_san);
+        }
+
+        return response()->json(['success' => true, 'data' => $query->get()]);
     }
 }
