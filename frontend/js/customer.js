@@ -1570,44 +1570,31 @@ async function checkoutBooking() {
 
             // 1. LƯU NGAY DANH SÁCH SLOT VỪA THANH TOÁN
             const bookedSlots = [...selectedSlots];
-            console.log('Các slot vừa thanh toán:', bookedSlots);
 
-            // 2. HIỂN THỊ THÔNG BÁO THANH TOÁN THÀNH CÔNG
-            showCartAlert(data.message, true);
+            // 2. ĐỒNG BỘ SỐ DƯ VÍ
+            syncUserWallet();
 
-            // 3. ĐỒNG BỘ SỐ DƯ VÍ
-            await syncUserWallet();
-
-            // 4. RESET MỤC ĐÍCH ĐẶT SÂN
+            // 3. RESET MỤC ĐÍCH ĐẶT SÂN
             if (currentBookingPurpose !== 'normal') {
                 currentBookingPurpose = 'normal';
                 sessionStorage.setItem('dn_football_booking_purpose','normal');
             }
 
-            // 5. CHUYỂN TỪ "ĐÃ CHỌN" -> "ĐÃ ĐẶT"
+            // 4. CHUYỂN TỪ "ĐÃ CHỌN" -> "ĐÃ ĐẶT"
             bookedSlots.forEach(slot => markSlotAsBooked(slot));
 
-            // 6. XÓA SLOT KHỎI GIỎ HÀNG
+            // 5. XÓA SLOT KHỎI GIỎ HÀNG
             selectedSlots = [];
 
-            // 7. LƯU SESSION
+            // 6. LƯU SESSION
             saveToSession();
 
-            // 8. ĐỢI 2 GIÂY CHO KHÁCH ĐỌC THÔNG BÁO
-            setTimeout(() => {             
+            // 7. ĐÓNG MODAL NGAY LẬP TỨC
+            const cartModal = document.getElementById('cart-modal');
+            if (cartModal) cartModal.style.display = 'none';
 
-                // 9. ĐÓNG MODAL TRỰC TIẾP
-                const cartModal = document.getElementById('cart-modal');
-                if (cartModal) {
-                    cartModal.style.display = 'none';
-                }
-
-                // 10. ẨN THÔNG BÁO TRONG MODAL
-                const alertBox = document.getElementById('cart-alert');
-                if (alertBox) {
-                    alertBox.style.display = 'none';
-                }
-            }, 1000);
+            // 8. HIỂN THỊ THÔNG BÁO TOAST NỔI (Không chặn UI)
+            showToast("Đặt sân thành công! Số dư đã được trừ.");
         } else {
             // Thông báo màu đỏ (Lỗi hết tiền, lỗi sân bị người khác đặt...)
             showCartAlert(data.message, false);

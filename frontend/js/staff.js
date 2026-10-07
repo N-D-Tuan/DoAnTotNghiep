@@ -242,6 +242,16 @@ function showSystemModal(title, message, type = 'success') {
         </div>
     `;
     modal.style.display = 'flex';
+
+    if (type === 'success') {
+        if (modal.hideTimeout) clearTimeout(modal.hideTimeout);
+        
+        modal.hideTimeout = setTimeout(() => {
+            if (modal.style.display === 'flex') {
+                modal.style.display = 'none';
+            }
+        }, 2000);
+    }
 }
 
 // ======================================================
@@ -1176,14 +1186,8 @@ async function submitOfflineBooking() {
         const data = await response.json();
 
         if (response.ok && data.success) {
-            alertBox.textContent = "Giữ sân thành công!";
-            alertBox.className = "modal-alert success";
-            alertBox.style.display = "block";
-            
+            // 1. Tự động chuyển các ô trên lưới sang xám "Đã đặt"
             const bookedSlotIds = selectedOfflineSlots.map(s => s.id);
-            selectedOfflineSlots = []; 
-            updateOfflineCartUI();     
-            
             bookedSlotIds.forEach(id => {
                 const el = document.querySelector(`.schedule-table .slot[data-slot-id="${id}"]`);
                 if (el) {
@@ -1194,11 +1198,21 @@ async function submitOfflineBooking() {
                 }
             });
 
-            setTimeout(() => {
-                closeOfflineModal();
-                btn.disabled = false;
-                btn.innerHTML = 'Chốt giữ sân';
-            }, 1500);
+            // 2. Reset giỏ hàng và ẩn thanh Floating Cart
+            selectedOfflineSlots = []; 
+            updateOfflineCartUI();     
+
+            // 3. Đóng Modal ngay lập tức
+            closeOfflineModal();
+            btn.disabled = false;
+            btn.innerHTML = 'Chốt giữ sân';
+
+            // 4. Mượn hàm alert của trình duyệt hoặc Toast (nếu có) để báo thành công
+            if (typeof showSystemModal === "function") {
+                showSystemModal("Thành công", "Đã chốt giữ sân thành công!", "success");
+            } else {
+                alert("Giữ sân thành công!");
+            }
             
         } else {
             alertBox.textContent = data.message || "Lỗi xử lý!";
