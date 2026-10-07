@@ -19,7 +19,7 @@ class GiaoDich extends Model
 
     protected $fillable = [
         'ID_NguoiDung',
-        'ID_DatSan',
+        'ID_NhanVienXuLy',
         'LoaiGiaoDich',
         'DongTien',
         'SoTien',
@@ -34,10 +34,10 @@ class GiaoDich extends Model
         return $this->belongsTo(NguoiDung::class, 'ID_NguoiDung', 'ID');
     }
 
-    // Liên kết với bảng DatSan (Khi nào tạo Model DatSan mới có tác dụng)
-    public function datSan()
+    // Liên kết với bảng DatSan
+    public function danhSachDatSan()
     {
-        return $this->belongsTo(DatSan::class, 'ID_DatSan', 'ID');
+        return $this->hasMany(DatSan::class, 'ID_GiaoDich', 'ID');
     }
 
     // Liên kết 1-1 với YeuCauRutTien

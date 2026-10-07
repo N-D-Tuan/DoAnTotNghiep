@@ -1607,7 +1607,7 @@ async function checkoutBooking() {
                 if (alertBox) {
                     alertBox.style.display = 'none';
                 }
-            }, 2000);
+            }, 1000);
         } else {
             // Thông báo màu đỏ (Lỗi hết tiền, lỗi sân bị người khác đặt...)
             showCartAlert(data.message, false);

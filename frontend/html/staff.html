@@ -6,6 +6,7 @@
     <title>Nhân viên - DN FOOTBALL</title>
     <link rel="stylesheet" href="../css/admin.css"> <!-- Tận dụng lại CSS của Admin -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <div class="admin-layout">
@@ -172,6 +173,8 @@
                 <div id="offline-cart-list" style="max-height: 200px; overflow-y: auto; margin-bottom: 15px; border-bottom: 1px dashed var(--border); padding-bottom: 10px;">
                     <!-- Danh sách sân đổ bằng JS -->
                 </div>
+
+                <input type="hidden" id="off-total-price" value="0">
 
                 <div class="form-group">
                     <label>Số điện thoại khách <span style="color: red;">*</span></label>
