@@ -76,6 +76,24 @@ class DatSanController extends Controller
         // 3. BẮT ĐẦU TRANSACTION
         DB::beginTransaction();
         try {
+            // 1. TẠO GIAO DỊCH TRƯỚC (ĐỂ LẤY ID)
+            $soDuTruoc = $user->SoDuVi;
+            $soDuSau = $soDuTruoc - $tienCoc;
+            
+            $giaoDich = GiaoDich::create([
+                'ID_NguoiDung' => $user->ID,
+                'LoaiGiaoDich' => 'DatSan',
+                'DongTien'     => 'Tru',
+                'SoTien'       => $tienCoc,
+                'SoDuTruoc'    => $soDuTruoc,
+                'SoDuSau'      => $soDuSau,
+                'NoiDung'      => "Thanh toán cọc đặt sân (" . count($slots) . " khung giờ)"
+            ]);
+
+            // 2. CẬP NHẬT SỐ DƯ NGAY
+            $user->update(['SoDuVi' => $soDuSau]);
+
+            // 3. TẠO CÁC LỊCH ĐẶT SÂN
             $failed_slots = [];
             $failed_messages = [];
 
@@ -108,6 +126,7 @@ class DatSanController extends Controller
                         'ID_SanBong'   => $slot['pitchId'],
                         'ID_KhungGio'  => $khungGio->ID,
                         'ID_GiaiDau'   => ($purpose !== 'normal') ? $purpose : null,
+                        'ID_GiaoDich'  => $giaoDich->ID,
                         'NgayDa'       => $ngayDa,
                         'TongTien'     => $slot['price'],
                         'TienCoc'      => $slot['price'] * $tyLeCoc,
@@ -126,21 +145,6 @@ class DatSanController extends Controller
                     'failed_slot_ids' => $failed_slots // Trả về dạng Mảng (Array)
                 ]);
             }
-
-            // 4. TRỪ TIỀN USER VÀ TẠO GIAO DỊCH
-            $soDuTruoc = $user->SoDuVi;
-            $soDuSau = $soDuTruoc - $tienCoc;
-            $user->update(['SoDuVi' => $soDuSau]);
-
-            GiaoDich::create([
-                'ID_NguoiDung' => $user->ID,
-                'LoaiGiaoDich' => 'DatSan',
-                'DongTien'     => 'Tru',
-                'SoTien'       => $tienCoc,
-                'SoDuTruoc'    => $soDuTruoc,
-                'SoDuSau'      => $soDuSau,
-                'NoiDung'      => "Thanh toán cọc đặt sân (" . count($slots) . " khung giờ)"
-            ]);
 
             // 5. CẬP NHẬT TRẠNG THÁI GIẢI ĐẤU
             if ($purpose !== 'normal') {
@@ -321,6 +325,8 @@ class DatSanController extends Controller
 
     public function chotTrangThaiAdmin(Request $request, $id)
     {
+        $userDangNhap = auth()->user();
+
         $request->validate(['trang_thai' => 'required|in:HoanThanh,KhongDen,DaHuy']);
 
         DB::beginTransaction();
@@ -347,12 +353,13 @@ class DatSanController extends Controller
 
                 GiaoDich::create([
                     'ID_NguoiDung' => $user->ID,
+                    'ID_NhanVienXuLy' => $userDangNhap->ID,
                     'LoaiGiaoDich' => 'HoanTienHuySan',
                     'DongTien'     => 'Cong',
                     'SoTien'       => $tienHoan,
                     'SoDuTruoc'    => $soDuTruoc,
                     'SoDuSau'      => $soDuSau,
-                    'NoiDung'      => "Admin hỗ trợ hủy lịch gấp và hoàn cọc: " . ($datSan->sanBong ? $datSan->sanBong->TenSan : 'Sân bóng')
+                    'NoiDung'      => "Quản lý hỗ trợ hủy lịch gấp và hoàn cọc: " . ($datSan->sanBong ? $datSan->sanBong->TenSan : 'Sân bóng')
                 ]);
             }
 
@@ -445,11 +452,30 @@ class DatSanController extends Controller
                 ]);
             }
 
+            // 2. TẠO GIAO DỊCH TRƯỚC
+            $giaoDich = null;
+            if ($request->tien_coc > 0) {
+                $giaoDich = GiaoDich::create([
+                    'ID_NguoiDung'    => $khachHang->ID,
+                    'ID_NhanVienXuLy' => $userDangNhap->ID,
+                    'LoaiGiaoDich'    => 'DatSan',
+                    'DongTien'        => 'Tru',
+                    'SoTien'          => $request->tien_coc,
+                    'SoDuTruoc'       => $khachHang->SoDuVi,
+                    'SoDuSau'         => $khachHang->SoDuVi, // Không trừ ví
+                    'NoiDung'         => "Thu tiền cọc trực tiếp tại sân (" . count($request->slots) . " khung giờ)"
+                ]);
+            }
+
             $failed_slots = [];
             $failed_messages = [];
 
-            // 2. LẶP QUA CÁC SLOT ĐỂ CHỐNG TRÙNG LỊCH (Pessimistic Locking)
-            foreach ($request->slots as $slot) {
+            // Thuật toán chia đều tiền cọc
+            $soLuongSlot = count($request->slots);
+            $tienCocMoiSlot = ($request->tien_coc > 0) ? round($request->tien_coc / $soLuongSlot) : 0;
+
+            // 3. LẶP QUA CÁC SLOT ĐỂ CHỐNG TRÙNG LỊCH (Pessimistic Locking)
+            foreach ($request->slots as $index => $slot) {
                 $daDat = DatSan::where('ID_SanBong', $slot['pitchId'])
                                ->where('NgayDa', $slot['dateDb'])
                                ->where('ID_KhungGio', $slot['kgId'])
@@ -461,15 +487,23 @@ class DatSanController extends Controller
                     $failed_slots[] = $slot['id'];
                     $failed_messages[] = "[{$slot['timeStr']} ngày {$slot['dateDisplay']}]";
                 } else if (empty($failed_slots)) {
+
+                    $cocThucTe = $tienCocMoiSlot;
+                    if ($index === $soLuongSlot - 1) {
+                        $cocThucTe = $request->tien_coc - ($tienCocMoiSlot * ($soLuongSlot - 1));
+                    }
+
                     // 3. TẠO LỊCH ĐẶT SÂN
                     DatSan::create([
                         'ID_NguoiDung' => $khachHang->ID,
                         'ID_SanBong'   => $slot['pitchId'],
                         'ID_KhungGio'  => $slot['kgId'],
                         'ID_GiaiDau'   => null,
+                        'ID_NhanVienXuLy' => $userDangNhap->ID,
+                        'ID_GiaoDich'     => $giaoDich ? $giaoDich->ID : null,
                         'NgayDa'       => $slot['dateDb'],
                         'TongTien'     => $slot['price'],
-                        'TienCoc'      => 0, // Cọc sẽ gom 1 cục ở dưới, ở đây để 0 để tránh lặp
+                        'TienCoc'      => $cocThucTe,
                         'TrangThai'    => 'DaCoc' 
                     ]);
                 }
@@ -484,23 +518,6 @@ class DatSanController extends Controller
                     'message' => "Lỗi! Các khung giờ sau vừa bị khách hàng khác đặt mất: {$msg_gop}. Đã tự động gỡ khỏi giỏ!",
                     'failed_slot_ids' => $failed_slots
                 ]);
-            }
-
-            // Lưu tổng tiền cọc mà Quản lý đã thu tay vào 1 giao dịch ảo (để quản lý theo dõi)
-            if ($request->tien_coc > 0) {
-                GiaoDich::create([
-                    'ID_NguoiDung' => $khachHang->ID,
-                    'LoaiGiaoDich' => 'DatSan',
-                    'DongTien'     => 'Tru',
-                    'SoTien'       => $request->tien_coc,
-                    'SoDuTruoc'    => $khachHang->SoDuVi,
-                    'SoDuSau'      => $khachHang->SoDuVi, // Không trừ ví vì khách nạp tiền mặt
-                    'NoiDung'      => "Thu tiền cọc trực tiếp tại sân (" . count($request->slots) . " khung giờ)"
-                ]);
-                
-                // Trét tiền cọc vào slot đầu tiên để DB có dữ liệu đối soát
-                $firstSlot = DatSan::where('ID_NguoiDung', $khachHang->ID)->orderBy('ID', 'desc')->first();
-                if ($firstSlot) $firstSlot->update(['TienCoc' => $request->tien_coc]);
             }
 
             DB::commit();

@@ -95,7 +95,8 @@ document.addEventListener(
             // Quản lý sân: TUYỆT ĐỐI ẨN menu của Admin
             if(document.getElementById('menu-cumsan')) document.getElementById('menu-cumsan').style.display = 'none';
             if(document.getElementById('menu-ruttien')) document.getElementById('menu-ruttien').style.display = 'none';
-            
+            if(document.getElementById('menu-xuatnhap-admin')) document.getElementById('menu-xuatnhap-admin').style.display = 'none';
+
             // HIỆN menu đặc quyền của Quản lý sân
             if(document.getElementById('menu-sancuatoi')) document.getElementById('menu-sancuatoi').style.display = 'flex';
             if(document.getElementById('menu-datsan')) document.getElementById('menu-datsan').style.display = 'flex';
@@ -3647,6 +3648,9 @@ async function renderTongQuan() {
     const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
     if (!currentUser) return;
 
+    dashboardFilterCumSan = 'all';
+    dashboardFilterTime = 'hom_nay';
+
     // Chỉ Active Menu khi vừa load trang
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
     const menuLink = Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('TỔNG QUAN'));
@@ -4748,6 +4752,8 @@ function openOfflineCartModal() {
     });
     
     listContainer.innerHTML = html;
+
+    document.getElementById('off-total-price').value = totalAmount;
     
     // Mặc định gợi ý cọc 30% làm chẵn
     document.getElementById('off-deposit').value = Math.round(totalAmount * 0.3);
@@ -4784,6 +4790,8 @@ async function submitOfflineBooking() {
     const ten = document.getElementById('off-name').value.trim();
     const tienCoc = document.getElementById('off-deposit').value;
     
+    const tongTienSan = Number(document.getElementById('off-total-price').value);
+
     const alertBox = document.getElementById('offline-booking-alert');
     alertBox.style.display = 'none';
 
@@ -4791,6 +4799,19 @@ async function submitOfflineBooking() {
         alertBox.textContent = "Số điện thoại là bắt buộc để lưu lịch sử cho khách!";
         alertBox.className = "modal-alert error";
         alertBox.style.display = "block";
+        return;
+    }
+
+    if (Number(tienCoc) > tongTienSan) {
+        alertBox.textContent = `Tiền cọc (${Number(tienCoc).toLocaleString('vi-VN')}đ) không được vượt quá tổng tiền sân (${tongTienSan.toLocaleString('vi-VN')}đ)!`;
+        alertBox.className = "modal-alert error";
+        alertBox.style.display = "block";
+        
+        // Nhấp nháy ô tiền cọc để gây chú ý
+        const depositInput = document.getElementById('off-deposit');
+        depositInput.style.borderColor = '#ef4444';
+        depositInput.focus();
+        setTimeout(() => depositInput.style.borderColor = '#cbd5e1', 2000);
         return;
     }
 

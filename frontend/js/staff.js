@@ -20,6 +20,9 @@ let currentPitchId = null;
 let currentCumSanId = null;
 let currentLoaiSanId = null;
 
+let staffChartInstance = null;
+let staffDashboardFilterTime = 'hom_nay';
+
 // 2. DOM READY
 document.addEventListener('DOMContentLoaded', () => {
     const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
@@ -149,6 +152,15 @@ document.addEventListener('DOMContentLoaded', () => {
             // Nếu Nhân viên đang mở Tab Lịch sử Hóa Đơn
             if (document.getElementById('tab-pos-lichsu') && document.getElementById('tab-pos-lichsu').style.display !== 'none') {
                 loadHoaDonHistory();
+            }
+
+            // 3. CẬP NHẬT REALTIME THỐNG KÊ NHÂN VIÊN
+            if (document.getElementById('staff-stat-sotran')) {
+                const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+                if(currentUser && currentUser.ID_CumSan) {
+                    updateStaffDailyStats(currentUser.ID_CumSan);
+                    updateStaffDashboardStats(); // Cập nhật luôn Biểu đồ ở dưới
+                }
             }
         });
 
@@ -622,6 +634,8 @@ async function renderManHinhThuNgan() {
     const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
     if (!currentUser || currentUser.VaiTro !== 'NhanVien') return;
     
+    staffDashboardFilterTime = 'hom_nay';
+
     // Tự động lấy ID Cụm sân của chính nhân viên này
     const cumSanId = currentUser.ID_CumSan;
 
@@ -649,42 +663,8 @@ async function renderManHinhThuNgan() {
         const sbResponse = await fetch(`${API_BASE_URL}/san-bong?cum_san_id=${cumSanId}`);
         const sbRes = await sbResponse.json();
         const sanBongs = sbRes.data || [];
-
-        // 3. TÍNH TOÁN THỐNG KÊ NGÀY HÔM NAY CHO NHÂN VIÊN
-        const todayStr = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10);
-        let soTranHomNay = 0;
-        let choNhanSan = 0; // Trạng thái DaCoc
-        let hoanThanh = 0;  // Trạng thái HoanThanh
-        let tongDoanhThu = 0;
-
-        try {
-            const dsResponse = await fetch(`${API_BASE_URL}/admin/dat-san`);
-            const dsRes = await dsResponse.json();
-            if (dsRes.success) {
-                // Lọc những trận của ngày hôm nay VÀ thuộc cụm sân của nhân viên
-                const datSanHnay = dsRes.data.filter(item => 
-                    item.NgayDa === todayStr && 
-                    item.san_bong && 
-                    item.san_bong.ID_CumSan === cumSanId
-                );
-                
-                soTranHomNay = datSanHnay.length;
-                choNhanSan = datSanHnay.filter(i => i.TrangThai === 'DaCoc').length;
-                hoanThanh = datSanHnay.filter(i => i.TrangThai === 'HoanThanh').length;
-                
-                datSanHnay.forEach(i => {
-                    const isGiaiDau = i.ID_GiaiDau !== null;
-                    
-                    if (i.TrangThai === 'HoanThanh' || isGiaiDau) {
-                        tongDoanhThu += Number(i.TongTien);
-                    } else if (i.TrangThai === 'KhongDen') {
-                        tongDoanhThu += Number(i.TienCoc || 0);
-                    }
-                });
-            }
-        } catch(e) { console.log('Không tải được thống kê hôm nay', e); }
-
-        // 4. Tạo Giao diện chọn sân dạng Card đẹp mắt
+       
+        // 3. Tạo Giao diện chọn sân dạng Card đẹp mắt
         let sanBongCards = '';
         if (sanBongs.length > 0) {
             sanBongs.forEach(sb => {
@@ -720,30 +700,59 @@ async function renderManHinhThuNgan() {
             });
         }
 
-        // 5. RENDER TOÀN BỘ GIAO DIỆN
+        // 4. RENDER TOÀN BỘ GIAO DIỆN
         contentArea.innerHTML = `
             <div class="page-header" style="margin-bottom: 24px;">
                 <h1 class="page-title">Màn hình Thu Ngân - ${cs.TenCumSan}</h1>
                 <p class="text-muted">Tổng quan ca làm việc và thao tác xử lý lịch đặt sân.</p>
             </div>
 
-            <!-- BỔ SUNG: KHU VỰC THỐNG KÊ NHANH TRONG NGÀY -->
+            <!-- KHU VỰC THỐNG KÊ NHANH TRONG NGÀY -->
             <div class="stat-grid" style="margin-bottom: 24px;">
                 <div class="stat-card" style="border-left: 4px solid #3b82f6;">
                     <div class="stat-title">Lịch đá hôm nay</div>
-                    <div class="stat-value" style="color: #1e293b;">${soTranHomNay} <span style="font-size: 1rem; font-weight: 500; color: #64748b;">trận</span></div>
+                    <div id="staff-stat-sotran" class="stat-value" style="color: #1e293b;">...</div>
                 </div>
                 <div class="stat-card" style="border-left: 4px solid #f59e0b;">
                     <div class="stat-title">Chờ nhận sân (Check-in)</div>
-                    <div class="stat-value" style="color: #d97706;">${choNhanSan} <span style="font-size: 1rem; font-weight: 500; color: #64748b;">khách</span></div>
+                    <div id="staff-stat-chonhan" class="stat-value" style="color: #d97706;">...</div>
                 </div>
                 <div class="stat-card" style="border-left: 4px solid #10b981;">
                     <div class="stat-title">Đã hoàn thành (Ra về)</div>
-                    <div class="stat-value" style="color: #047857;">${hoanThanh} <span style="font-size: 1rem; font-weight: 500; color: #64748b;">trận</span></div>
+                    <div id="staff-stat-hoanthanh" class="stat-value" style="color: #047857;">...</div>
                 </div>
                 <div class="stat-card" style="border-left: 4px solid #8b5cf6;">
                     <div class="stat-title">Doanh thu sân</div>
-                    <div class="stat-value" style="color: #6d28d9;">${tongDoanhThu.toLocaleString('vi-VN')}đ</div>
+                    <div id="staff-stat-doanhthu" class="stat-value" style="color: #6d28d9;">...</div>
+                </div>
+            </div>
+
+            <!-- BIỂU ĐỒ DOANH THU & CHI PHÍ -->
+            <div class="chart-layout" style="margin-bottom: 24px;">
+                <div class="panel">
+                    <div class="panel-header" style="display:flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 15px; border-bottom: 1px solid #f1f5f9; padding-bottom: 20px;">
+                        <div>
+                            <div style="font-size: 1.1rem; color: var(--text-dark); margin-bottom: 6px; font-weight: 700;">Biểu đồ doanh thu & chi phí</div>
+                            <div style="display: flex; align-items: baseline; gap: 8px;">
+                                <span id="staff-chart-total-amount" style="font-size: 1.5rem; font-weight: 800; color: #16A34A; letter-spacing: -0.5px;">Đang tải...</span>
+                                <span style="font-size: 0.85rem; color: #64748b; background: #f8fafc; padding: 4px 10px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                                    <i class="fa-solid fa-circle-info" style="margin-right: 4px; color: #3b82f6;"></i>Đã gồm bán nước
+                                </span>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <select class="form-control" style="width: 170px; border-color: #cbd5e1; font-weight: 500;" onchange="staffDashboardFilterTime=this.value; updateStaffDashboardStats()">
+                                <option value="hom_nay" selected>Hôm nay</option>
+                                <option value="hom_truoc">Hôm qua</option>
+                                <option value="7_ngay">7 ngày gần đây</option>
+                                <option value="30_ngay">1 tháng gần đây</option>
+                                <option value="nam">Năm nay</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="padding: 15px 0;">
+                        <canvas id="staffRevenueChart" height="100"></canvas>
+                    </div>
                 </div>
             </div>
             
@@ -766,8 +775,149 @@ async function renderManHinhThuNgan() {
             loadStaffSchedule(cumSanId, sanBongs[0].TenSan, sanBongs[0].ID, sanBongs[0].ID_LoaiSan);
         }
 
+        updateStaffDailyStats(cumSanId);
+        updateStaffDashboardStats();
+
     } catch (error) {
         contentArea.innerHTML = `<div style="text-align:center; color:red; padding: 50px;">Lỗi tải dữ liệu cơ sở!</div>`;
+    }
+}
+
+// ======================================================
+// HÀM CẬP NHẬT 4 THẺ THỐNG KÊ NHANH CHO MÀN HÌNH THU NGÂN
+// ======================================================
+async function updateStaffDailyStats(cumSanId) {
+    const todayStr = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10);
+    let soTranHomNay = 0;
+    let choNhanSan = 0; 
+    let hoanThanh = 0;  
+    let tongDoanhThu = 0;
+
+    try {
+        const dsResponse = await fetch(`${API_BASE_URL}/admin/dat-san`);
+        const dsRes = await dsResponse.json();
+        
+        if (dsRes.success) {
+            const datSanHnay = dsRes.data.filter(item => 
+                item.NgayDa === todayStr && 
+                item.san_bong && 
+                item.san_bong.ID_CumSan === cumSanId
+            );
+            
+            // Tính số lượng trận
+            soTranHomNay = datSanHnay.filter(i => i.TrangThai === 'DaCoc').length + datSanHnay.filter(i => i.TrangThai === 'HoanThanh').length;
+            choNhanSan = datSanHnay.filter(i => i.TrangThai === 'DaCoc').length;
+            hoanThanh = datSanHnay.filter(i => i.TrangThai === 'HoanThanh').length;
+            
+            // Tính tổng tiền
+            datSanHnay.forEach(i => {
+                const isGiaiDau = i.ID_GiaiDau !== null;
+                if (i.TrangThai === 'HoanThanh' || isGiaiDau) {
+                    tongDoanhThu += Number(i.TongTien);
+                } else if (i.TrangThai === 'KhongDen') {
+                    tongDoanhThu += Number(i.TienCoc || 0);
+                }
+            });
+
+            // Ghi đè số liệu mới lên giao diện (Nếu các thẻ HTML này đang hiển thị)
+            const elSoTran = document.getElementById('staff-stat-sotran');
+            const elChoNhan = document.getElementById('staff-stat-chonhan');
+            const elHoanThanh = document.getElementById('staff-stat-hoanthanh');
+            const elDoanhThu = document.getElementById('staff-stat-doanhthu');
+
+            if (elSoTran) elSoTran.innerHTML = `${soTranHomNay} <span style="font-size: 1rem; font-weight: 500; color: #64748b;">trận</span>`;
+            if (elChoNhan) elChoNhan.innerHTML = `${choNhanSan} <span style="font-size: 1rem; font-weight: 500; color: #64748b;">khách</span>`;
+            if (elHoanThanh) elHoanThanh.innerHTML = `${hoanThanh} <span style="font-size: 1rem; font-weight: 500; color: #64748b;">trận</span>`;
+            if (elDoanhThu) elDoanhThu.innerHTML = `${tongDoanhThu.toLocaleString('vi-VN')}đ`;
+        }
+    } catch(e) { 
+        console.log('Lỗi tính toán thống kê thu ngân:', e); 
+    }
+}
+
+// ======================================================
+// HÀM VẼ BIỂU ĐỒ NHÂN VIÊN
+// ======================================================
+async function updateStaffDashboardStats() {
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+    if (!document.getElementById('staffRevenueChart')) return;
+
+    try {
+        // Truyền chính xác ID Cụm Sân của Nhân viên để lấy thống kê
+        const response = await fetch(`${API_BASE_URL}/admin/thong-ke?id_cum_san=${currentUser.ID_CumSan}&time_filter=${staffDashboardFilterTime}`);
+        const res = await response.json();
+
+        if (!res.success) return;
+        const data = res.data;
+
+        const labels = data.chart.map(c => c.ngay);
+        const revenueData = data.chart.map(c => c.doanh_thu);
+        const expenseData = data.chart.map(c => c.chi_phi);
+
+        // Tính Toán Thu - Chi - Lợi Nhuận
+        const totalRevenue = revenueData.reduce((sum, amount) => sum + Number(amount), 0);
+        const totalExpense = expenseData.reduce((sum, amount) => sum + Number(amount), 0);
+        const netProfit = totalRevenue - totalExpense;
+        const profitColor = netProfit >= 0 ? '#10b981' : '#ef4444';
+
+        // Ghi ra giao diện
+        document.getElementById('staff-chart-total-amount').innerHTML = `
+            Thu: ${totalRevenue.toLocaleString('vi-VN')}đ 
+            <span style="font-size: 1rem; font-weight: 600; color: #ef4444; margin-left: 10px;">(Chi: ${totalExpense.toLocaleString('vi-VN')}đ)</span>
+            <span style="font-size: 1rem; font-weight: 600; color: ${profitColor}; margin-left: 10px;">(Lãi: ${netProfit.toLocaleString('vi-VN')}đ)</span>
+        `;
+
+        // Vẽ biểu đồ
+        const ctx = document.getElementById('staffRevenueChart').getContext('2d');
+        if (staffChartInstance) {
+            staffChartInstance.destroy();
+        }
+
+        const chartType = (staffDashboardFilterTime === 'hom_nay' || staffDashboardFilterTime === 'hom_truoc') ? 'bar' : 'line';
+
+        staffChartInstance = new Chart(ctx, {
+            type: chartType,
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Tổng thu (VNĐ)',
+                        data: revenueData,
+                        borderColor: '#16A34A',
+                        backgroundColor: 'rgba(22, 163, 74, 0.4)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.3,
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'Tổng chi (VNĐ)',
+                        data: expenseData,
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.4)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.3,
+                        borderRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: true, position: 'bottom' } },
+                scales: {
+                    x: { grid: { display: false } },
+                    y: { 
+                        beginAtZero: true, 
+                        border: { display: false },
+                        ticks: { callback: value => value.toLocaleString('vi-VN') + 'đ' } 
+                    }
+                }
+            }
+        });
+
+    } catch (e) { 
+        console.error('Lỗi load biểu đồ nhân viên', e); 
     }
 }
 
@@ -955,6 +1105,9 @@ function openOfflineCartModal() {
     });
     
     listContainer.innerHTML = html;
+
+    document.getElementById('off-total-price').value = totalAmount;
+
     document.getElementById('off-deposit').value = Math.round(totalAmount * 0.3);
     document.getElementById('offline-booking-modal').style.display = 'flex';
 }
@@ -980,6 +1133,9 @@ async function submitOfflineBooking() {
     const sdt = document.getElementById('off-phone').value.trim();
     const ten = document.getElementById('off-name').value.trim();
     const tienCoc = document.getElementById('off-deposit').value;
+
+    const tongTienSan = Number(document.getElementById('off-total-price').value);
+
     const alertBox = document.getElementById('offline-booking-alert');
     alertBox.style.display = 'none';
 
@@ -987,6 +1143,19 @@ async function submitOfflineBooking() {
         alertBox.textContent = "Số điện thoại khách hàng là bắt buộc!";
         alertBox.className = "modal-alert error";
         alertBox.style.display = "block";
+        return;
+    }
+
+    if (Number(tienCoc) > tongTienSan) {
+        alertBox.textContent = `Tiền cọc (${Number(tienCoc).toLocaleString('vi-VN')}đ) không được vượt quá tổng tiền sân (${tongTienSan.toLocaleString('vi-VN')}đ)!`;
+        alertBox.className = "modal-alert error";
+        alertBox.style.display = "block";
+        
+        // Nhấp nháy ô tiền cọc để gây chú ý
+        const depositInput = document.getElementById('off-deposit');
+        depositInput.style.borderColor = '#ef4444';
+        depositInput.focus();
+        setTimeout(() => depositInput.style.borderColor = '#cbd5e1', 2000);
         return;
     }
 

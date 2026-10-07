@@ -19,7 +19,9 @@ class DatSan extends Model
         'ID_NguoiDung', 
         'ID_SanBong', 
         'ID_KhungGio', 
-        'ID_GiaiDau', 
+        'ID_GiaiDau',
+        'ID_GiaoDich',
+        'ID_NhanVienXuLy', 
         'NgayDa', 
         'TongTien', 
         'TienCoc', 
@@ -31,5 +33,5 @@ class DatSan extends Model
     public function khungGio() { return $this->belongsTo(KhungGio::class, 'ID_KhungGio', 'ID'); }
     public function giaiDau() { return $this->belongsTo(GiaiDau::class, 'ID_GiaiDau', 'ID'); }
     public function yeuCauHuyGaps() { return $this->hasMany(YeuCauHuyGap::class, 'ID_DatSan', 'ID'); }
-    public function giaoDichs() { return $this->hasMany(GiaoDich::class, 'ID_DatSan', 'ID'); }
+    public function giaoDich() { return $this->belongsTo(GiaoDich::class, 'ID_GiaoDich', 'ID'); }
 }

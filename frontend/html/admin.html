@@ -32,8 +32,8 @@
 
                 <!-- Dành riêng cho Admin -->
                 <a href="#" id="menu-ruttien" onclick="renderQuanLyRutTien(); return false;"><i class="fa-solid fa-wallet"></i> YÊU CẦU RÚT TIỀN</a>
-                <a href="#" id="menu-captaikhoan" onclick="renderCapTaiKhoan(); return false;"><i class="fa-solid fa-user-plus"></i> CẤP TÀI KHOẢN</a>
                 <a href="#" id="menu-xuatnhap-admin" onclick="renderAdminXuatNhap(); return false;"><i class="fa-solid fa-file-invoice-dollar"></i> XUẤT/NHẬP HÀNG</a>
+                <a href="#" id="menu-captaikhoan" onclick="renderCapTaiKhoan(); return false;"><i class="fa-solid fa-user-plus"></i> CẤP TÀI KHOẢN</a>
                 
                 <hr>
                 <a href="#" onclick="renderAdminProfile(); return false;"><i class="fa-solid fa-user"></i> TRANG CÁ NHÂN</a>
@@ -456,6 +456,8 @@
                 <div id="offline-cart-list" style="max-height: 200px; overflow-y: auto; margin-bottom: 15px; border-bottom: 1px dashed var(--border); padding-bottom: 10px;">
                     <!-- Danh sách sân đổ bằng JS -->
                 </div>
+
+                <input type="hidden" id="off-total-price" value="0">
 
                 <div class="form-group">
                     <label>Số điện thoại khách <span style="color: red;">*</span></label>
