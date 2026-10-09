@@ -70,17 +70,10 @@ class YeuCauHuyGapController extends Controller
                 'TrangThai'    => 'ChoDuyet'
             ]);
 
-            // 1. Tìm TẤT CẢ Super Admin trên hệ thống
-            $superAdmins = NguoiDung::where('VaiTro', 'Admin')->get();
-
-            // 2. Tìm TẤT CẢ Quản lý sân đang quản lý trực tiếp Cụm sân chứa Sân bóng đang xin hủy
             $idCumSanTuongUng = $datSan->sanBong->ID_CumSan;
-            $quanLySans = NguoiDung::where('VaiTro', 'QuanLySan')
+            $nguoiNhanThongBao = NguoiDung::where('VaiTro', 'QuanLySan')
                                    ->where('ID_CumSan', $idCumSanTuongUng)
                                    ->get();
-
-            // 3. Gộp danh sách
-            $nguoiNhanThongBao = $superAdmins->merge($quanLySans);
 
             foreach ($nguoiNhanThongBao as $nhanSu) {
                 ThongBao::create([
