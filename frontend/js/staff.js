@@ -559,12 +559,19 @@ async function saveStaffProfile() {
 // MODULE: ĐỔI MẬT KHẨU
 // ======================================================
 
+// ======================================================
+// MODULE: ĐỔI MẬT KHẨU
+// ======================================================
+
 function showPasswordAlert(message, isSuccess) {
     const alertBox = document.getElementById('password-alert');
     alertBox.textContent = message;
     alertBox.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
     alertBox.style.display = 'block';
-    setTimeout(() => alertBox.style.display = 'none', 2500);
+
+    setTimeout(() => {
+        alertBox.style.display = 'none';
+    }, 2500);
 }
 
 function openChangePasswordModal() {
@@ -572,12 +579,12 @@ function openChangePasswordModal() {
     if (!user) return;
 
     document.getElementById('password-alert').style.display = 'none';
-    document.getElementById('pwd-step-1').style.display = 'block';
-    document.getElementById('pwd-step-2').style.display = 'none';
-    document.getElementById('pwd-otp').value = '';
-    document.getElementById('new-password').value = '';
     
-    document.getElementById('pwd-user-email').textContent = user.Email;
+    // Giao diện đã được thiết kế lại, chỉ có 1 bước nhập Mật khẩu
+    document.getElementById('old-password').value = '';
+    document.getElementById('new-password').value = '';
+    document.getElementById('confirm-password').value = '';
+    
     document.getElementById('password-modal').style.display = 'flex';
 
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
@@ -585,72 +592,69 @@ function openChangePasswordModal() {
     if (pwdMenu) pwdMenu.classList.add('active');
 }
 
-function closeChangePasswordModal() { document.getElementById('password-modal').style.display = 'none'; }
-
-async function sendPasswordOTP() {
-    const btn = document.getElementById('btn-send-otp');
-    btn.disabled = true; btn.textContent = 'Đang gửi mã...';
-    const user = JSON.parse(sessionStorage.getItem('dn_football_user'));
-
-    try {
-        const response = await fetch(`${API_BASE_URL}/gui-otp`, {
-            method: 'POST',
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: user.Email })
-        });
-        const data = await response.json();
-
-        if (!response.ok) {
-            showPasswordAlert(data.message || 'Lỗi gửi OTP', false);
-            btn.disabled = false; btn.textContent = 'Gửi mã OTP';
-            return;
-        }
-
-        showPasswordAlert('Đã gửi mã đến email!', true);
-        document.getElementById('pwd-step-1').style.display = 'none';
-        document.getElementById('pwd-step-2').style.display = 'block';
-
-    } catch (error) {
-        showPasswordAlert('Lỗi mạng', false);
-    } finally {
-        btn.disabled = false; btn.textContent = 'Gửi mã OTP';
-    }
+function closeChangePasswordModal() { 
+    document.getElementById('password-modal').style.display = 'none'; 
 }
 
-async function verifyAndChangePassword() {
-    const otp = document.getElementById('pwd-otp').value.trim();
+// BỎ 2 HÀM sendPasswordOTP() VÀ verifyAndChangePassword() CŨ, THAY BẰNG HÀM MỚI SAU:
+async function executeChangePassword() {
+    const oldPassword = document.getElementById('old-password').value;
     const newPassword = document.getElementById('new-password').value;
+    const confirmPassword = document.getElementById('confirm-password').value;
     const btn = document.getElementById('btn-confirm-pwd');
 
-    if (otp.length !== 6) return showPasswordAlert('Mã OTP phải 6 số', false);
-    if (newPassword.length < 6) return showPasswordAlert('Mật khẩu tối thiểu 6 ký tự', false);
+    if (!oldPassword || !newPassword || !confirmPassword) {
+        return showPasswordAlert('Vui lòng nhập đầy đủ các trường', false);
+    }
+    if (newPassword.length < 6) {
+        return showPasswordAlert('Mật khẩu mới tối thiểu 6 ký tự', false);
+    }
+    if (newPassword !== confirmPassword) {
+        return showPasswordAlert('Xác nhận mật khẩu không khớp', false);
+    }
 
-    btn.disabled = true; btn.textContent = 'Đang xử lý...';
-    const user = JSON.parse(sessionStorage.getItem('dn_football_user'));
+    btn.disabled = true; 
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
 
     try {
-        const response = await fetch(`${API_BASE_URL}/dat-lai-mat-khau`, {
+        const response = await fetch(`${API_BASE_URL}/doi-mat-khau`, {
             method: 'POST',
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: user.Email, otp: otp, mat_khau_moi: newPassword })
+            headers: { 
+                'Accept': 'application/json', 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}`
+            },
+            body: JSON.stringify({ 
+                mat_khau_cu: oldPassword, 
+                mat_khau_moi: newPassword,
+                xac_nhan_mat_khau: confirmPassword
+            })
         });
+        
         const data = await response.json();
 
-        if (!response.ok) {
-            showPasswordAlert(data.message || 'OTP không hợp lệ', false);
-            btn.disabled = false; btn.textContent = 'Xác nhận đổi mật khẩu';
+        if (!response.ok || !data.success) {
+            let errorMsg = data.message || 'Mật khẩu hiện tại không đúng';
+            if (data.errors) errorMsg = Object.values(data.errors)[0][0]; // Lấy lỗi validate đầu tiên
+            
+            showPasswordAlert(errorMsg, false);
+            btn.disabled = false; 
+            btn.innerHTML = 'Xác nhận đổi mật khẩu';
             return;
         }
 
         showPasswordAlert('Đổi mật khẩu thành công!', true);
+        
         setTimeout(() => {
             closeChangePasswordModal();
-            btn.disabled = false; btn.textContent = 'Xác nhận đổi mật khẩu';
+            btn.disabled = false; 
+            btn.innerHTML = 'Xác nhận đổi mật khẩu';
         }, 2000);
 
     } catch (error) {
-        showPasswordAlert('Lỗi mạng', false);
-        btn.disabled = false; btn.textContent = 'Xác nhận đổi mật khẩu';
+        showPasswordAlert('Lỗi kết nối máy chủ', false);
+        btn.disabled = false; 
+        btn.innerHTML = 'Xác nhận đổi mật khẩu';
     }
 }
 

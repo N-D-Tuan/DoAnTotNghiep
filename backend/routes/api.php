@@ -58,6 +58,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/dang-xuat', [AuthController::class, 'dangXuat']);
     Route::put('/cap-nhat-profile', [AuthController::class, 'capNhatProfile']);
     Route::get('/thong-tin-ca-nhan', [AuthController::class, 'layThongTin']);
+    Route::post('/doi-mat-khau', [AuthController::class, 'doiMatKhau']);
 
     // 2. Thông báo
     Route::get('/thong-bao', [ThongBaoController::class, 'layDanhSachCuaToi']);

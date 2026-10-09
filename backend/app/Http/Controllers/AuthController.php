@@ -272,6 +272,41 @@ class AuthController extends Controller
         return response()->json(['message' => 'Đổi mật khẩu thành công!']);
     }
 
+    public function doiMatKhau(Request $request)
+    {
+        $user = $request->user();
+
+        // Kiểm tra dữ liệu đầu vào
+        $request->validate([
+            'mat_khau_cu' => 'required|string',
+            'mat_khau_moi' => 'required|string|min:6',
+            'xac_nhan_mat_khau' => 'required|string|same:mat_khau_moi'
+        ], [
+            'mat_khau_cu.required' => 'Vui lòng nhập mật khẩu hiện tại.',
+            'mat_khau_moi.required' => 'Vui lòng nhập mật khẩu mới.',
+            'mat_khau_moi.min' => 'Mật khẩu mới phải có ít nhất 6 ký tự.',
+            'xac_nhan_mat_khau.required' => 'Vui lòng nhập lại mật khẩu mới.',
+            'xac_nhan_mat_khau.same' => 'Xác nhận mật khẩu không khớp.'
+        ]);
+
+        // Kiểm tra mật khẩu cũ có đúng không
+        if (!Hash::check($request->mat_khau_cu, $user->MatKhau)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Mật khẩu hiện tại không chính xác!'
+            ], 400);
+        }
+
+        // Cập nhật mật khẩu mới
+        $user->MatKhau = Hash::make($request->mat_khau_moi);
+        $user->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Đổi mật khẩu thành công!'
+        ]);
+    }
+
     private function tuDongCapNhatHeThong()
     {
         // Tính theo mốc ngày (không theo giờ)
