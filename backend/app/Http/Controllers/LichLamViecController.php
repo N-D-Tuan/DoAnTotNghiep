@@ -68,30 +68,6 @@ class LichLamViecController extends Controller
         return response()->json(['success' => true, 'message' => 'Đăng ký ca thành công! Vui lòng chờ duyệt.', 'data' => $lich]);
     }
 
-    // 3. QUẢN LÝ DUYỆT HOẶC TỪ CHỐI ĐƠN ĐĂNG KÝ
-    public function quanLyDuyetCa(Request $request, $id)
-    {
-        $request->validate([
-            'trang_thai' => 'required|in:DaDuyet,TuChoi',
-            'cong_viec' => 'required_if:trang_thai,DaDuyet|in:ThuNgan,PhucVu'
-        ]);
-
-        $lich = LichLamViec::find($id);
-        if (!$lich || $lich->TrangThaiXepLich !== 'DangKy') {
-            return response()->json(['success' => false, 'message' => 'Lịch không tồn tại hoặc không ở trạng thái chờ duyệt!']);
-        }
-
-        $lich->TrangThaiXepLich = $request->trang_thai;
-        if ($request->trang_thai === 'DaDuyet') {
-            $lich->CongViec = $request->cong_viec;
-        }
-        $lich->save();
-
-        broadcast(new \App\Events\SystemDataUpdated())->toOthers();
-
-        return response()->json(['success' => true, 'message' => 'Đã ' . ($request->trang_thai == 'DaDuyet' ? 'duyệt' : 'từ chối') . ' ca làm việc!']);
-    }
-
     // 4. QUẢN LÝ TRỰC TIẾP XẾP CA
     public function quanLyTrucTiepXepCa(Request $request)
     {
@@ -191,19 +167,37 @@ class LichLamViecController extends Controller
             'ngay_lam' => 'required|date'
         ]);
 
-        // Tìm ca đúng của nhân viên này và phải đang ở trạng thái 'DangKy'
-        $lich = LichLamViec::where('ID_NhanVien', $user->ID)
-                           ->where('ID_CaLamViec', $request->id_ca_lam_viec)
-                           ->where('NgayLam', $request->ngay_lam)
-                           ->where('TrangThaiXepLich', 'DangKy')
-                           ->first();
-
-        if ($lich) {
-            $lich->delete(); // Xóa khỏi DB
-            broadcast(new \App\Events\SystemDataUpdated())->toOthers();
-            return response()->json(['success' => true, 'message' => 'Đã hủy đăng ký ca làm việc!']);
+        // Nếu là Quản lý hoặc Admin xóa ca của nhân viên (Nhận ID từ Frontend truyền lên)
+        if (in_array($user->VaiTro, ['Admin', 'QuanLySan']) && $request->has('id_nhan_vien')) {
+            $lich = LichLamViec::where('ID_NhanVien', $request->id_nhan_vien)
+                               ->where('ID_CaLamViec', $request->id_ca_lam_viec)
+                               ->where('NgayLam', $request->ngay_lam)
+                               ->first();
+        } else {
+            // Nhân viên tự hủy ca (Chỉ được hủy khi đang chờ duyệt)
+            $lich = LichLamViec::where('ID_NhanVien', $user->ID)
+                               ->where('ID_CaLamViec', $request->id_ca_lam_viec)
+                               ->where('NgayLam', $request->ngay_lam)
+                               ->where('TrangThaiXepLich', 'DangKy')
+                               ->first();
         }
 
-        return response()->json(['success' => false, 'message' => 'Không tìm thấy ca chờ duyệt để hủy!']);
+        if ($lich) {
+            // Quản lý xóa ca thì update trạng thái thành TuChoi. Nhân viên tự xóa thì delete khỏi DB.
+            if (in_array($user->VaiTro, ['Admin', 'QuanLySan']) && $request->has('id_nhan_vien')) {
+                $lich->TrangThaiXepLich = 'TuChoi';
+                $lich->CongViec = null; // Xóa vị trí công việc
+                $lich->save();
+                
+                broadcast(new \App\Events\SystemDataUpdated())->toOthers();
+                return response()->json(['success' => true, 'message' => 'Đã gỡ nhân sự khỏi ca làm việc!']);
+            } else {
+                $lich->delete(); // Nhân viên tự hủy ca
+                broadcast(new \App\Events\SystemDataUpdated())->toOthers();
+                return response()->json(['success' => true, 'message' => 'Đã hủy đăng ký ca làm việc!']);
+            }
+        }
+
+        return response()->json(['success' => false, 'message' => 'Không tìm thấy ca làm việc để hủy!']);
     }
 }

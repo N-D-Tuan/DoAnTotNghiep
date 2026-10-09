@@ -3699,7 +3699,9 @@ async function renderTongQuan() {
                             <div style="font-size: 1.1rem; color: var(--text-dark); margin-bottom: 6px;">Biểu đồ doanh thu</div>
                             <div style="display: flex; align-items: baseline; gap: 8px;">
                                 <span id="chart-total-amount" style="font-size: 1.8rem; font-weight: 800; color: #16A34A; letter-spacing: -0.5px;">...đ</span>
-                                <span style="font-size: 0.85rem; color: #64748b; background: #f1f5f9; padding: 3px 8px; border-radius: 12px;"><i class="fa-solid fa-circle-info" style="margin-right: 3px;"></i>Đã gồm tiền bán nước</span>
+                                <span style="font-size: 0.85rem; color: #64748b; background: #f8fafc; padding: 4px 10px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                                    <i class="fa-solid fa-circle-info" style="margin-right: 4px; color: #3b82f6;"></i>Đã gồm bán nước
+                                </span>
                             </div>
                         </div>
                     <div style="display: flex; gap: 10px;">
@@ -5864,18 +5866,23 @@ function renderAdminHDPagination(totalPages) {
 // Helper lấy mảng 7 ngày của 1 tuần (offsetWeeks = 0 là tuần này, 1 là tuần sau)
 function getWeekDatesAdmin(offsetWeeks = 0) {
     let curr = new Date();
-    // Đưa về thứ 2 của tuần hiện tại
     let first = curr.getDate() - curr.getDay() + 1 + (offsetWeeks * 7); 
-    if (curr.getDay() === 0) first -= 7; // Fix lỗi Chủ Nhật
+    if (curr.getDay() === 0) first -= 7; 
     let monday = new Date(curr.setDate(first));
     
     let dates = [];
     for(let i=0; i<7; i++) {
         let next = new Date(monday);
         next.setDate(monday.getDate() + i);
+        
+        // FIX LỖI MÚI GIỜ: Lấy chính xác ngày theo Local
+        const yyyy = next.getFullYear();
+        const mm = String(next.getMonth() + 1).padStart(2, '0');
+        const dd = String(next.getDate()).padStart(2, '0');
+
         dates.push({
-            dbDate: next.toISOString().split('T')[0],
-            display: `${next.getDate().toString().padStart(2,'0')}/${(next.getMonth()+1).toString().padStart(2,'0')}`,
+            dbDate: `${yyyy}-${mm}-${dd}`,
+            display: `${dd}/${mm}`,
             dayName: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][next.getDay()]
         });
     }
@@ -5930,9 +5937,10 @@ function renderLichLamViecAdmin() {
             <div id="admin-cal-next" class="tab-pane" style="display: none; padding: 0 20px 20px 20px;">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 20px;">
                     
-                    <!-- Lưới lịch tuần sau (Đã thêm min-width: 0) -->
+                    <!-- Lưới lịch tuần sau -->
                     <div style="flex: 1; min-width: 0;">
-                        <div style="display: flex; justify-content: flex-end; margin-bottom: 15px;">
+                        <div style="display: flex; justify-content: flex-end; margin-bottom: 15px; gap: 10px;">
+                            <button id="btn-cancel-edit-next-week" class="btn-outline-sm" style="display: none; color: #ef4444; border-color: #fecaca; background: #fef2f2;" onclick="cancelEditNextWeek()"><i class="fa-solid fa-xmark"></i> Đóng chỉnh sửa</button>
                             <button id="btn-lock-schedule" class="btn-primary" onclick="lockNextWeekSchedule()"><i class="fa-solid fa-lock"></i> Chốt lịch & Thông báo</button>
                         </div>
                         <div id="grid-next-week">Đang tải...</div>
@@ -6014,18 +6022,21 @@ async function loadAdminCalendarData(weekOffset, containerId) {
 
         // TRỘN DỮ LIỆU LOCAL
         pendingManagerAssignments.forEach(pending => {
-            // Dùng String() để đảm bảo khớp dữ liệu ID và không ghi đè nhầm ca
+            // Loại bỏ nhân sự cũ (Nếu có lệnh xếp ghi đè hoặc lệnh xóa)
             lichData = lichData.filter(l => !(String(l.ID_CaLamViec) === String(pending.id_ca_lam_viec) && l.NgayLam === pending.ngay_lam && String(l.ID_NhanVien) === String(pending.id_nhan_vien)));
             
-            lichData.push({
-                ID_CaLamViec: pending.id_ca_lam_viec,
-                NgayLam: pending.ngay_lam,
-                ID_NhanVien: pending.id_nhan_vien,
-                CongViec: pending.cong_viec,
-                TrangThaiXepLich: 'DaDuyet',
-                nhan_vien: { HoTen: pending.ten_nhan_vien },
-                is_pending_local: true
-            });
+            // NẾU KHÔNG PHẢI LỆNH XÓA THÌ MỚI PUSH VÀO ĐỂ HIỂN THỊ
+            if (!pending.is_delete) {
+                lichData.push({
+                    ID_CaLamViec: pending.id_ca_lam_viec,
+                    NgayLam: pending.ngay_lam,
+                    ID_NhanVien: pending.id_nhan_vien,
+                    CongViec: pending.cong_viec,
+                    TrangThaiXepLich: 'DaDuyet',
+                    nhan_vien: { HoTen: pending.ten_nhan_vien },
+                    is_pending_local: true
+                });
+            }
         });
 
         if (caData.length === 0) {
@@ -6042,6 +6053,11 @@ async function loadAdminCalendarData(weekOffset, containerId) {
             }
 
             const btnLock = document.getElementById('btn-lock-schedule');
+            const btnCancelEdit = document.getElementById('btn-cancel-edit-next-week');
+
+            if (btnCancelEdit) {
+                btnCancelEdit.style.display = isForceUnlockedNextWeek ? 'inline-block' : 'none';
+            }
             
             if (pendingManagerAssignments.length > 0) {
                 btnLock.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Chốt lịch & Thông báo';
@@ -6090,7 +6106,9 @@ async function loadAdminCalendarData(weekOffset, containerId) {
                 else if (approvedCount < reqCount) { bgColor = '#fffbeb'; borderColor = '#fde68a'; } 
                 else { bgColor = '#ecfdf5'; borderColor = '#a7f3d0'; } 
 
-                let staffHtml = shifts.map(s => {
+                const displayShifts = shifts.filter(s => s.TrangThaiXepLich !== 'TuChoi');
+
+                let staffHtml = displayShifts.map(s => {
                     const isPending = s.TrangThaiXepLich === 'DangKy';
                     const isLocal = s.is_pending_local === true;
 
@@ -6101,8 +6119,20 @@ async function loadAdminCalendarData(weekOffset, containerId) {
                     
                     // Thêm nút Xóa cho những ca Lưu tạm ở Tuần Sau
                     let removeBtn = '';
-                    if (weekOffset === 1 && isLocal) {
-                        removeBtn = `<i class="fa-solid fa-circle-xmark" style="color: #ef4444; cursor: pointer; margin-left: 6px; font-size: 0.9rem;" title="Xóa phân công tạm" onclick="event.stopPropagation(); window.removePendingAssignment(${ca.ID}, '${date.dbDate}', ${s.ID_NhanVien})"></i>`;
+                    
+                    // Logic hiển thị nút X
+                    const showRemoveBtn = (weekOffset === 1 && isLocal) || // Tuần sau: Hiện X ở các ca mới ghép tạm
+                                          (weekOffset === 1 && (!isNextWeekLocked || pendingManagerAssignments.length > 0) && s.TrangThaiXepLich === 'DaDuyet') || // Tuần sau: Mở khóa chỉnh sửa -> Hiện X ở ca đã duyệt
+                                          (weekOffset === 0 && isEditModeCurrentWeek && s.TrangThaiXepLich === 'DaDuyet'); // Tuần này: Bật chế độ chỉnh sửa -> Hiện X ở ca đã duyệt
+                    
+                    if (showRemoveBtn) {
+                        // Nếu là xóa ca tạm thời thì gọi hàm gỡ local, nếu là xóa ca đã duyệt thì gọi hàm gỡ DB
+                        const isTuChoiTuanSau = (weekOffset === 1 && s.TrangThaiXepLich === 'DaDuyet');
+                        const clickAction = (isLocal || isTuChoiTuanSau)
+                            ? `window.removePendingAssignment(${ca.ID}, '${date.dbDate}', ${s.ID_NhanVien}, ${isTuChoiTuanSau})` 
+                            : `window.executeRemoveApprovedShift(${s.ID_CaLamViec}, '${s.NgayLam}', ${s.ID_NhanVien}, ${weekOffset})`;
+                            
+                        removeBtn = `<i class="fa-solid fa-circle-xmark" style="color: #ef4444; cursor: pointer; margin-left: 6px; font-size: 1rem;" title="Xóa phân công" onclick="event.stopPropagation(); ${clickAction}"></i>`;
                     }
 
                     // Thêm background nhạt để làm nổi bật ô chứa nhân viên vừa lưu tạm
@@ -6116,6 +6146,9 @@ async function loadAdminCalendarData(weekOffset, containerId) {
                                 </div>
                             </div>`;
                 }).join('');
+
+                // Cập nhật lại logic mảng rỗng theo displayShifts
+                if(displayShifts.length === 0) staffHtml = `<div style="font-size: 0.8rem; color: #94a3b8; text-align: center;">Chưa có người</div>`;
 
                 if(shifts.length === 0) staffHtml = `<div style="font-size: 0.8rem; color: #94a3b8; text-align: center;">Chưa có người</div>`;
 
@@ -6180,17 +6213,26 @@ async function loadAdminCalendarData(weekOffset, containerId) {
 }
 
 // Hàm Gỡ bỏ nhân sự vừa phân công tạm thời
-window.removePendingAssignment = function(idCa, ngayLam, idNhanVien) {
-    // 1. Lọc bỏ ca trùng khớp ra khỏi mảng lưu tạm
+window.removePendingAssignment = function(idCa, ngayLam, idNhanVien, isRemoveApproved = false) {
+    // Nếu là hủy 1 ca mà quản lý vừa ghép thêm -> Chỉ cần loại bỏ khỏi mảng
     pendingManagerAssignments = pendingManagerAssignments.filter(p => 
         !(String(p.id_ca_lam_viec) === String(idCa) && p.ngay_lam === ngayLam && String(p.id_nhan_vien) === String(idNhanVien))
     );
     
-    // 2. Cập nhật lại giao diện lưới và danh sách đăng ký
+    // Nếu đây là hành động Xóa 1 ca ĐÃ ĐƯỢC CHỐT TRƯỚC ĐÓ trên DB -> Ghi đè vào mảng với cờ is_delete
+    if (isRemoveApproved) {
+        pendingManagerAssignments.push({
+            id_ca_lam_viec: idCa,
+            ngay_lam: ngayLam,
+            id_nhan_vien: idNhanVien,
+            is_delete: true // Đánh dấu đây là lệnh XÓA để đẩy API
+        });
+    }
+
     loadAdminCalendarData(1, 'grid-next-week');
     loadStaffRegistrationStatus();
     
-    // 3. Nếu quản lý xóa hết toàn bộ các ca lưu tạm, trả nút Chốt lịch về trạng thái vô hiệu hóa ban đầu
+    // Check lại nút Chốt lịch
     if (pendingManagerAssignments.length === 0 && !isNextWeekLocked) {
         const btnLock = document.getElementById('btn-lock-schedule');
         btnLock.innerHTML = '<i class="fa-solid fa-lock"></i> Chưa có phân công nào';
@@ -6306,21 +6348,41 @@ async function executeLockScheduleAPI() {
     try {
         // 1. Nếu có phân công mới, bắn hàng loạt qua API xếp ca trước
         if (pendingManagerAssignments.length > 0) {
-            const promises = pendingManagerAssignments.map(payload => 
-                fetch(`${API_BASE_URL}/lich-lam-viec/xep-ca`, {
-                    method: 'POST',
-                    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        id_ca_lam_viec: payload.id_ca_lam_viec,
-                        ngay_lam: payload.ngay_lam,
-                        id_nhan_vien: payload.id_nhan_vien,
-                        cong_viec: payload.cong_viec,
-                        thong_bao_thay_doi: false // Chốt tuần không cần nổ chuông lắt nhắt
-                    })
-                }).then(res => res.json())
-            );
+            const promises = [];
+            
+            // Tách làm 2 hành động: Xếp/Sửa và Xóa
+            const shiftsToAssign = pendingManagerAssignments.filter(p => !p.is_delete);
+            const shiftsToDelete = pendingManagerAssignments.filter(p => p.is_delete);
+
+            // 1a. Vòng lặp Xếp ca
+            shiftsToAssign.forEach(payload => {
+                promises.push(
+                    fetch(`${API_BASE_URL}/lich-lam-viec/xep-ca`, {
+                        method: 'POST',
+                        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            id_ca_lam_viec: payload.id_ca_lam_viec,
+                            ngay_lam: payload.ngay_lam,
+                            id_nhan_vien: payload.id_nhan_vien,
+                            cong_viec: payload.cong_viec,
+                            thong_bao_thay_doi: false 
+                        })
+                    }).then(res => res.json())
+                );
+            });
+
+            // 1b. Vòng lặp Xóa ca đã chốt (Bắn lên DB)
+            shiftsToDelete.forEach(payload => {
+                promises.push(
+                    fetch(`${API_BASE_URL}/lich-lam-viec/dang-ky?id_ca_lam_viec=${payload.id_ca_lam_viec}&ngay_lam=${payload.ngay_lam}&id_nhan_vien=${payload.id_nhan_vien}`, {
+                        method: 'DELETE',
+                        headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` }
+                    }).then(res => res.json())
+                );
+            });
+
             await Promise.all(promises);
-            pendingManagerAssignments = []; // Xóa mảng
+            pendingManagerAssignments = []; 
         }
 
         // 2. Bắn lệnh Chốt Tuần để hệ thống xóa đơn rác và gửi thông báo chung
@@ -6355,54 +6417,92 @@ async function openManagerShiftModal(caId, tenCa, ngayLam, displayDate, cacheKey
         return;
     }
 
-    // Lấy dữ liệu mảng các nhân viên có liên quan đến ca này từ biến toàn cục
-    const shifts = window.adminShiftCache[cacheKey] || [];
-    const isEditMode = (weekOffset === 0);
+    const isEditModeCurrentWeek = (weekOffset === 0);
+    // CHỈNH SỬA YÊU CẦU 2: Xác định chế độ "Chỉnh sửa" chung 
+    // Chế độ chỉnh sửa bật lên khi: Sửa tuần hiện tại HOẶC Sửa tuần sau khi đã Mở khóa
+    const isEditing = isEditModeCurrentWeek || (weekOffset === 1 && (!isNextWeekLocked || pendingManagerAssignments.length > 0));
+
     const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
 
     document.getElementById('manager-assign-info').innerHTML = `${tenCa} - Ngày ${displayDate}`;
     document.getElementById('manager-assign-ca-id').value = caId;
     document.getElementById('manager-assign-date').value = ngayLam;
-    document.getElementById('manager-assign-is-edit').value = isEditMode;
-    document.getElementById('manager-assign-title').innerText = isEditMode ? 'Chỉnh sửa đột xuất' : 'Phân công nhân sự';
+    document.getElementById('manager-assign-is-edit').value = isEditModeCurrentWeek;
+    document.getElementById('manager-assign-title').innerText = isEditing ? 'Chỉnh sửa đột xuất' : 'Phân công nhân sự';
 
     const btn = document.getElementById('btn-confirm-manager-assign');
-    btn.innerHTML = 'Lưu tạm';
-    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang tải...';
+    btn.disabled = true;
     
     document.getElementById('manager-assign-shift-modal').style.display = 'flex';
 
-    let optionsHtml = '<option value="">-- Chọn nhân sự muốn xếp vào ca --</option>';
-    
-    // 1. LUÔN LUÔN hiển thị Quản lý đang đăng nhập ở đầu danh sách (Dùng data-name)
-    optionsHtml += `<option value="${currentUser.ID}" data-name="${currentUser.HoTen}">Tôi (${currentUser.HoTen})</option>`;
-
-    // 2. DUYỆT QUA MẢNG SHIFTS (Chỉ những người đã từng tương tác với ca này)
-    shifts.forEach(staff => {
-        // Bỏ qua nếu trùng với quản lý đang đăng nhập (vì đã add thủ công ở trên)
-        if (String(staff.ID_NhanVien) === String(currentUser.ID)) return;
-
-        // LOGIC PHÂN CÔNG (Tuần sau): Bỏ qua những người có trạng thái 'TuChoi'
-        if (!isEditMode && staff.TrangThaiXepLich === 'TuChoi') return;
-
-        const isAlreadyApproved = staff.TrangThaiXepLich === 'DaDuyet';
-        let label = staff.nhan_vien.HoTen;
+    try {
+        const res = await fetch(`${API_BASE_URL}/admin/khach-hang`);
+        const usersData = await res.json();
         
-        // Hiển thị ghi chú cạnh tên theo Format yêu cầu (Không dùng icon chấm xanh)
-        if (staff.GhiChu) label += ` (${staff.GhiChu})`;
+        const allStaffs = usersData.data.filter(u => 
+            u.VaiTro === 'NhanVien' && 
+            (u.TrangThaiKhoa == 0 || u.TrangThaiKhoa === false) && 
+            String(u.ID_CumSan) === String(currentUser.ID_CumSan)
+        );
 
-        // LOGIC CHỈNH SỬA (Tuần này): Nếu là trạng thái Từ chối, thêm chữ Bị từ chối
-        if (isEditMode && staff.TrangThaiXepLich === 'TuChoi') label += ` - Bị từ chối`;
+        let optionsHtml = '<option value="">-- Chọn nhân sự muốn xếp vào ca --</option>';
+        optionsHtml += `<option value="${currentUser.ID}" data-name="${currentUser.HoTen}">Tôi (${currentUser.HoTen})</option>`;
 
-        if (isAlreadyApproved) {
-            optionsHtml += `<option value="${staff.ID_NhanVien}" data-name="${staff.nhan_vien.HoTen}" disabled style="color: #94a3b8;">${staff.nhan_vien.HoTen} (Đã nằm trong ca này)</option>`;
+        const shifts = window.adminShiftCache[cacheKey] || [];
+        
+        // CHỈNH SỬA YÊU CẦU 2: Phân nhánh đổ dữ liệu
+        if (isEditing) {
+            // TRƯỜNG HỢP A: ĐANG CHỈNH SỬA -> HIỆN FULL NHÂN VIÊN
+            allStaffs.forEach(staff => {
+                const staffShift = shifts.find(s => String(s.ID_NhanVien) === String(staff.ID));
+                // Nếu người này ĐÃ NẰM SẴN trong ca (do chốt từ trước hoặc vừa ghép tạm) -> Disable
+                const isAlreadyApproved = staffShift && (staffShift.TrangThaiXepLich === 'DaDuyet' || pendingManagerAssignments.some(p => String(p.id_ca_lam_viec) === String(caId) && p.ngay_lam === ngayLam && String(p.id_nhan_vien) === String(staff.ID) && !p.is_delete));
+                
+                let label = staff.HoTen;
+
+                if (staffShift && (staffShift.TrangThaiXepLich === 'DangKy' || staffShift.TrangThaiXepLich === 'TuChoi')) {
+                    label += ' *';
+                }
+
+                if (staffShift && staffShift.GhiChu) {
+                    label += ` (${staffShift.GhiChu})`;
+                }
+
+                if (isAlreadyApproved) {
+                    optionsHtml += `<option value="${staff.ID}" data-name="${staff.HoTen}" disabled style="color: #94a3b8;">${staff.HoTen} (Đã nằm trong ca này)</option>`;
+                } else {
+                    optionsHtml += `<option value="${staff.ID}" data-name="${staff.HoTen}">${label}</option>`;
+                }
+            });
         } else {
-            optionsHtml += `<option value="${staff.ID_NhanVien}" data-name="${staff.nhan_vien.HoTen}">${label}</option>`;
-        }
-    });
+            // TRƯỜNG HỢP B: ĐANG XẾP LỊCH BÌNH THƯỜNG -> CHỈ HIỆN NHỮNG NGƯỜI CÓ TƯƠNG TÁC CA ĐÓ
+            shifts.forEach(staffShift => {
+                if (String(staffShift.ID_NhanVien) === String(currentUser.ID)) return;
+                
+                if (staffShift.TrangThaiXepLich === 'TuChoi') return; // Ẩn đơn từ chối
 
-    // Đẩy trực tiếp vào HTML mà không cần await fetch API
-    document.getElementById('manager-assign-staff-id').innerHTML = optionsHtml;
+                const isAlreadyApproved = staffShift.TrangThaiXepLich === 'DaDuyet';
+                let label = staffShift.nhan_vien.HoTen;
+                
+                if (staffShift.GhiChu) label += ` (${staffShift.GhiChu})`;
+
+                if (isAlreadyApproved) {
+                    optionsHtml += `<option value="${staffShift.ID_NhanVien}" data-name="${staffShift.nhan_vien.HoTen}" disabled style="color: #94a3b8;">${staffShift.nhan_vien.HoTen} (Đã nằm trong ca này)</option>`;
+                } else {
+                    optionsHtml += `<option value="${staffShift.ID_NhanVien}" data-name="${staffShift.nhan_vien.HoTen}">${label}</option>`;
+                }
+            });
+        }
+
+        document.getElementById('manager-assign-staff-id').innerHTML = optionsHtml;
+        
+    } catch (e) {
+        document.getElementById('manager-assign-staff-id').innerHTML = '<option value="">Lỗi tải danh sách nhân sự</option>';
+    } finally {
+        btn.innerHTML = 'Lưu tạm';
+        btn.disabled = false;
+    }
 }
 
 async function executeManagerAssignShift() {
@@ -6606,3 +6706,87 @@ async function submitCauHinhCa() {
         btn.disabled = false;
     }
 }
+
+// Hàm gỡ nhân viên khỏi ca đã chốt trên Server (Tuần Hiện Tại)
+window.executeRemoveApprovedShift = async function(idCa, ngayLam, idNhanVien, weekOffset) {
+    // 1. Tạo modal popup nếu chưa tồn tại trên giao diện
+    let modal = document.getElementById('remove-shift-confirm-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'remove-shift-confirm-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 10000;';
+        document.body.appendChild(modal);
+    }
+
+    // 2. Gắn nội dung (HTML) cho modal báo "Bạn có chắc xóa ca này không"
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 400px; text-align: center; padding: 30px 20px;">
+            <div style="font-size: 3.5rem; color: #ef4444; margin-bottom: 15px;"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <h3 style="margin-bottom: 10px; font-size: 1.4rem;">Xác nhận xóa ca</h3>
+            <p style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5;">Bạn có chắc chắn muốn xóa ca này không?</p>
+            <div style="display: flex; justify-content: center; gap: 12px;">
+                <button class="btn-outline" style="width: auto; padding: 10px 24px;" id="btn-cancel-remove-shift">Hủy bỏ</button>
+                <button class="btn-primary" style="width: auto; padding: 10px 24px; background-color: #ef4444; border-color: #ef4444;" id="btn-confirm-remove-shift">Đồng ý xóa</button>
+            </div>
+        </div>
+    `;
+    
+    // Hiển thị modal
+    modal.style.display = 'flex';
+
+    // 3. Xử lý khi bấm nút "Hủy bỏ"
+    document.getElementById('btn-cancel-remove-shift').onclick = function() {
+        modal.style.display = 'none';
+    };
+
+    // 4. Xử lý khi bấm nút "Đồng ý xóa" -> Bắt đầu gọi API
+    document.getElementById('btn-confirm-remove-shift').onclick = async function() {
+        const btn = this;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+        btn.disabled = true;
+
+        try {
+            // Gọi API với phương thức DELETE kèm các tham số để xác định đúng ca làm và nhân viên
+            const response = await fetch(`${API_BASE_URL}/lich-lam-viec/dang-ky?id_ca_lam_viec=${idCa}&ngay_lam=${ngayLam}&id_nhan_vien=${idNhanVien}`, {
+                method: 'DELETE',
+                headers: { 
+                    'Accept': 'application/json', 
+                    'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` 
+                }
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok && data.success) {
+                modal.style.display = 'none'; // Ẩn modal sau khi xóa thành công
+                showSystemModal('Thành công', 'Đã gỡ nhân sự khỏi ca làm việc', 'success');
+                
+                // Tự động load lại đúng tab lưới lịch đang đứng
+                loadAdminCalendarData(weekOffset, weekOffset === 0 ? 'grid-current-week' : 'grid-next-week');
+                
+                // Cập nhật lại số liệu bên danh sách nếu đang ở Tuần Sau
+                if (weekOffset === 1) loadStaffRegistrationStatus();
+            } else {
+                modal.style.display = 'none';
+                showSystemModal('Lỗi', data.message || 'Không thể xóa ca này', 'error');
+            }
+        } catch (e) {
+            modal.style.display = 'none';
+            showSystemModal('Lỗi kết nối', 'Mất kết nối máy chủ!', 'error');
+        }
+    };
+};
+
+// Hàm đóng chế độ chỉnh sửa Lịch Tuần Sau
+window.cancelEditNextWeek = function() {
+    // 1. Tắt cờ mở khóa
+    isForceUnlockedNextWeek = false;
+    
+    // 2. Xóa sạch các thao tác ghép ca/hủy ca mà quản lý vừa làm dở dang chưa lưu
+    pendingManagerAssignments = []; 
+    
+    // 3. Tải lại lưới lịch và danh sách thống kê bên phải từ Database
+    loadAdminCalendarData(1, 'grid-next-week');
+    loadStaffRegistrationStatus();
+};
