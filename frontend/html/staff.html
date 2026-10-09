@@ -109,34 +109,43 @@
         <div class="modal-content" style="max-width: 450px;">
             <div class="modal-header">
                 <h3>Đổi mật khẩu</h3>
-                <i class="fa-solid fa-xmark" onclick="closeChangePasswordModal()"></i>
+                <i class="fa-solid fa-xmark" style="cursor: pointer;" onclick="closeChangePasswordModal()"></i>
             </div>
-            <div id="password-alert" class="modal-alert"></div>
+
+            <!-- Vùng hiển thị thông báo nội bộ -->
+            <div id="password-alert" class="modal-alert" style="margin: 10px 24px;"></div>
+            
             <div class="modal-body">
-                <div id="pwd-step-1">
-                    <p class="text-muted" style="font-size: 0.95rem; margin-bottom: 20px;">
-                        Để đảm bảo an toàn, hệ thống sẽ gửi mã xác nhận (OTP) đến email của bạn:<br>
-                        <strong id="pwd-user-email" style="color: var(--text-dark); display: block; margin-top: 5px;"></strong>
-                    </p>
-                    <button type="button" id="btn-send-otp" class="btn-primary" style="width: 100%;" onclick="sendPasswordOTP()">Gửi mã OTP</button>
-                </div>
-                <div id="pwd-step-2" style="display: none;">
-                    <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 16px;">
-                        Mã OTP 6 số đã được gửi. Vui lòng kiểm tra hộp thư.
-                    </p>
-                    <div class="form-group">
-                        <label>Mã OTP</label>
-                        <input type="text" id="pwd-otp" class="form-control" placeholder="Nhập mã 6 số" maxlength="6">
+                <div class="form-group">
+                    <label>Mật khẩu hiện tại <span style="color: red;">*</span></label>
+                    <div style="position: relative;">
+                        <input type="password" id="old-password" class="form-control" placeholder="Nhập mật khẩu cũ">
+                        <button type="button" class="btn-toggle-password" tabindex="-1">
+                            <i class="fa-solid fa-eye"></i>
+                        </button>
                     </div>
-                    <div class="form-group" style="margin-bottom: 24px;">
-                        <label>Mật khẩu mới</label>
-                        <div style="position: relative;">
-                            <input type="password" id="new-password" class="form-control" placeholder="Từ 6 ký tự trở lên">
-                            <!-- Nút ẩn hiện pass tạm thời ẩn icon do lucide không tải trực tiếp ở đây, nếu cần tự bổ sung class tương ứng bên auth -->
-                        </div>
-                    </div>
-                    <button type="button" id="btn-confirm-pwd" class="btn-primary" style="width: 100%;" onclick="verifyAndChangePassword()">Xác nhận đổi mật khẩu</button>
                 </div>
+                <div class="form-group">
+                    <label>Mật khẩu mới <span style="color: red;">*</span></label>
+                    <div style="position: relative;">
+                        <input type="password" id="new-password" class="form-control" placeholder="Từ 6 ký tự trở lên">
+                        <button type="button" class="btn-toggle-password" tabindex="-1">
+                            <i class="fa-solid fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom: 24px;">
+                    <label>Xác nhận mật khẩu mới <span style="color: red;">*</span></label>
+                    <div style="position: relative;">
+                        <input type="password" id="confirm-password" class="form-control" placeholder="Nhập lại mật khẩu mới">
+                        <button type="button" class="btn-toggle-password" tabindex="-1">
+                            <i class="fa-solid fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+                <button type="button" id="btn-confirm-pwd" class="btn-primary" style="width: 100%;" onclick="executeChangePassword()">
+                    Xác nhận đổi mật khẩu
+                </button>
             </div>
         </div>
     </div>
