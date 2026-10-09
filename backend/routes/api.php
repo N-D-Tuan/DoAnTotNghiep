@@ -20,6 +20,8 @@ use App\Http\Controllers\KhachHangController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ChatbotController;
 use App\Http\Controllers\PosController;
+use App\Http\Controllers\CaLamViecController;
+use App\Http\Controllers\LichLamViecController;
 use App\Services\ChromaDBService;
 
 Route::get('/seed-chromadb', function (ChromaDBService $chroma) {
@@ -131,4 +133,24 @@ Route::middleware('auth:sanctum')->group(function () {
     // API dành cho Nhân viên bán hàng
     Route::post('/ban-hang', [PosController::class, 'storeHoaDonBanHang']);
     Route::get('/ban-hang', [PosController::class, 'getHoaDonBanHang']);
+
+    //9. Ca làm việc và lịch làm việc
+    // Quản lý sân lấy và tạo cấu hình ca
+    Route::get('/ca-lam-viec', [CaLamViecController::class, 'layDanhSach']);
+    Route::post('/ca-lam-viec', [CaLamViecController::class, 'luuCauHinhCa']); 
+    
+    // ==========================================
+    // LỊCH LÀM VIỆC (Xếp lịch & Đăng ký)
+    // ==========================================
+    // API chung lấy dữ liệu lưới lịch
+    Route::get('/lich-lam-viec', [LichLamViecController::class, 'layLichLamViec']);
+    
+    // Dành cho NHÂN VIÊN
+    Route::post('/lich-lam-viec/dang-ky', [LichLamViecController::class, 'nhanVienDangKyCa']);
+    Route::delete('/lich-lam-viec/dang-ky', [LichLamViecController::class, 'nhanVienHuyDangKyCa']);
+    
+    // Dành cho QUẢN LÝ SÂN
+    Route::put('/lich-lam-viec/{id}/duyet', [LichLamViecController::class, 'quanLyDuyetCa']);
+    Route::post('/lich-lam-viec/xep-ca', [LichLamViecController::class, 'quanLyTrucTiepXepCa']);
+    Route::post('/lich-lam-viec/chot-tuan', [LichLamViecController::class, 'chotLichTuan']);
 });

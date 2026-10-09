@@ -281,7 +281,7 @@ document.addEventListener(
                     } catch(err) { console.error("Lỗi cập nhật ngầm lịch Admin:", err); }
                 }
 
-                // 2. CẬP NHẬT REALTIME KHO HÀNG (MỚI THÊM)
+                // 2. CẬP NHẬT REALTIME KHO HÀNG
                 // Nếu Quản lý đang mở Tab Danh sách Sản phẩm
                 if (document.getElementById('tab-sanpham') && document.getElementById('tab-sanpham').style.display !== 'none') {
                     if (currentUser.ID_CumSan) loadDanhSachSanPhamKho(currentUser.ID_CumSan);
@@ -293,6 +293,25 @@ document.addEventListener(
                 // Nếu Quản lý đang mở Tab Hóa đơn bán hàng
                 if (document.getElementById('tab-hoadon') && document.getElementById('tab-hoadon').style.display !== 'none') {
                     if (currentUser.ID_CumSan) loadQuanLyHoaDonBanHang(currentUser.ID_CumSan);
+                }
+
+                // 3. CẬP NHẬT REALTIME LỊCH LÀM VIỆC
+                const currentTabAdmin = document.getElementById('admin-cal-current');
+                const nextTabAdmin = document.getElementById('admin-cal-next');
+                
+                // Nếu Quản lý đang đứng ở Tab "Tuần Hiện Tại" (Xem nhân viên bị đổi ca đột xuất)
+                if (currentTabAdmin && currentTabAdmin.style.display !== 'none') {
+                    loadAdminCalendarData(0, 'grid-current-week');
+                }
+                
+                // Nếu Quản lý đang đứng ở Tab "Tuần Sau" (Nhận đơn đăng ký mới của nhân viên)
+                if (nextTabAdmin && nextTabAdmin.style.display !== 'none') {
+                    // Nếu Quản lý đang có những ô xếp dở dang chưa lưu (pendingManagerAssignments.length > 0)
+                    // -> Bỏ qua không tự refresh để tránh làm mất thao tác xếp tay của quản lý
+                    if (typeof pendingManagerAssignments !== 'undefined' && pendingManagerAssignments.length === 0) {
+                        loadAdminCalendarData(1, 'grid-next-week');
+                        loadStaffRegistrationStatus(); // Cập nhật lại cột đếm ca đăng ký
+                    }
                 }
             });
 
@@ -5871,4 +5890,754 @@ function renderAdminHDPagination(totalPages) {
     }
     html += `<button class="btn-outline-sm" ${adminHoaDonPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="adminHoaDonPage++; applyAdminHDFiltersAndRender()"><i class="fa-solid fa-chevron-right"></i></button>`;
     div.innerHTML = html;
+}
+
+// ======================================================
+// MODULE: QUẢN LÝ XẾP LỊCH LÀM VIỆC (DÀNH CHO QUẢN LÝ SÂN)
+// ======================================================
+
+// Helper lấy mảng 7 ngày của 1 tuần (offsetWeeks = 0 là tuần này, 1 là tuần sau)
+function getWeekDatesAdmin(offsetWeeks = 0) {
+    let curr = new Date();
+    // Đưa về thứ 2 của tuần hiện tại
+    let first = curr.getDate() - curr.getDay() + 1 + (offsetWeeks * 7); 
+    if (curr.getDay() === 0) first -= 7; // Fix lỗi Chủ Nhật
+    let monday = new Date(curr.setDate(first));
+    
+    let dates = [];
+    for(let i=0; i<7; i++) {
+        let next = new Date(monday);
+        next.setDate(monday.getDate() + i);
+        dates.push({
+            dbDate: next.toISOString().split('T')[0],
+            display: `${next.getDate().toString().padStart(2,'0')}/${(next.getMonth()+1).toString().padStart(2,'0')}`,
+            dayName: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][next.getDay()]
+        });
+    }
+    return dates;
+}
+
+let isNextWeekLocked = false;
+let isForceUnlockedNextWeek = false;
+window.adminShiftCache = {};
+
+function renderLichLamViecAdmin() {
+    document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+    const menuLink = document.getElementById('menu-lichlamviec');
+    if (menuLink) menuLink.classList.add('active');
+
+    const contentArea = document.querySelector('.admin-content');
+    contentArea.innerHTML = `
+        <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+            <div>
+                <h1 class="page-title">Xếp lịch làm việc</h1>
+                <p class="text-muted">Quản lý và điều phối nhân sự trực sân</p>
+            </div>
+            <button class="btn-outline-sm" style="color: var(--primary); border-color: var(--primary);" onclick="openCauHinhCaModal()"><i class="fa-solid fa-gear"></i> Cấu hình Ca làm việc</button>
+        </div>
+
+        <div class="panel">
+            <div style="display: flex; gap: 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px; padding: 0 20px;">
+                <button class="nav-tab active" onclick="switchAdminCalTab('admin-cal-current', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; border-bottom: 2px solid var(--primary); color: var(--primary);">Tuần Hiện Tại</button>
+                <button class="nav-tab" onclick="switchAdminCalTab('admin-cal-next', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Tuần Sau</button>
+            </div>
+
+            <!-- LƯỚI 1: TUẦN HIỆN TẠI -->
+            <div id="admin-cal-current" class="tab-pane active" style="padding: 0 20px 20px 20px;">
+                <div style="display: flex; gap: 20px; align-items: flex-start;">
+                    <!-- Lưới View (Đã thêm min-width: 0 để cho phép scroll ngang) -->
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="display: flex; justify-content: flex-end; margin-bottom: 15px;">
+                            <button id="btn-edit-current-week" class="btn-outline-sm" style="color: #f59e0b; border-color: #fcd34d;" onclick="toggleEditModeCurrentWeek()"><i class="fa-solid fa-pen-to-square"></i> Chỉnh sửa ca đột xuất</button>
+                        </div>
+                        <div id="grid-current-week">Đang tải...</div>
+                    </div>
+                    
+                    <!-- Box ca của tôi (NẾU QUẢN LÝ CÓ CA) -->
+                    <div id="manager-my-shifts-container" style="display: none; width: 300px; flex-shrink: 0; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 15px;">
+                        <h4 style="margin: 0 0 15px 0; color: var(--primary); font-size: 1rem;"><i class="fa-solid fa-user-clock"></i> Các ca bạn trực tuần này</h4>
+                        <div id="manager-my-shifts-list">Đang tải...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LƯỚI 2: TUẦN SAU -->
+            <div id="admin-cal-next" class="tab-pane" style="display: none; padding: 0 20px 20px 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 20px;">
+                    
+                    <!-- Lưới lịch tuần sau (Đã thêm min-width: 0) -->
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="display: flex; justify-content: flex-end; margin-bottom: 15px;">
+                            <button id="btn-lock-schedule" class="btn-primary" onclick="lockNextWeekSchedule()"><i class="fa-solid fa-lock"></i> Chốt lịch & Thông báo</button>
+                        </div>
+                        <div id="grid-next-week">Đang tải...</div>
+                    </div>
+
+                    <!-- Danh sách nhân sự & Thống kê đăng ký -->
+                    <div style="width: 300px; flex-shrink: 0; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 15px;">
+                        <h4 style="margin: 0 0 15px 0; color: var(--text-dark); font-size: 1rem;"><i class="fa-solid fa-users"></i> Thống kê đăng ký tuần sau</h4>
+                        <div id="admin-staff-status-list">Đang tải...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Khởi chạy load dữ liệu cho tab mặc định
+    loadAdminCalendarData(0, 'grid-current-week');
+}
+
+function switchAdminCalTab(tabId, element) {
+    const tabs = element.parentElement.children;
+    for (let i = 0; i < tabs.length; i++) {
+        tabs[i].classList.remove('active');
+        tabs[i].style.borderBottom = 'none';
+        tabs[i].style.color = 'var(--text-muted)';
+    }
+    element.classList.add('active');
+    element.style.borderBottom = '2px solid var(--primary)';
+    element.style.color = 'var(--primary)';
+
+    document.getElementById('admin-cal-current').style.display = 'none';
+    document.getElementById('admin-cal-next').style.display = 'none';
+    document.getElementById(tabId).style.display = 'block';
+
+    isForceUnlockedNextWeek = false;
+
+    if (tabId === 'admin-cal-next') {
+        loadAdminCalendarData(1, 'grid-next-week');
+        loadStaffRegistrationStatus(); // Tải danh sách NV bên phải
+    } else {
+        loadAdminCalendarData(0, 'grid-current-week');
+    }
+}
+
+let isEditModeCurrentWeek = false;
+
+function toggleEditModeCurrentWeek() {
+    isEditModeCurrentWeek = !isEditModeCurrentWeek;
+    const btn = document.getElementById('btn-edit-current-week');
+    if (isEditModeCurrentWeek) {
+        btn.innerHTML = '<i class="fa-solid fa-check"></i> Hoàn tất chỉnh sửa';
+        btn.style.background = '#fef3c7';
+        showSystemModal('Chế độ chỉnh sửa bật', 'Bây giờ bạn có thể nhấp vào các ô trong Tuần Hiện Tại để thay thế nhân sự đột xuất.', 'success');
+    } else {
+        btn.innerHTML = '<i class="fa-solid fa-pen-to-square"></i> Chỉnh sửa ca đột xuất';
+        btn.style.background = 'transparent';
+    }
+    loadAdminCalendarData(0, 'grid-current-week'); // Vẽ lại lưới để bật/tắt hiệu ứng pointer (bàn tay)
+}
+
+let pendingManagerAssignments = [];
+
+async function loadAdminCalendarData(weekOffset, containerId) {
+    const container = document.getElementById(containerId);
+    const dates = getWeekDatesAdmin(weekOffset);
+    const tuNgay = dates[0].dbDate;
+    const denNgay = dates[6].dbDate;
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+
+    try {
+        const [caRes, lichRes] = await Promise.all([
+            fetch(`${API_BASE_URL}/ca-lam-viec`),
+            fetch(`${API_BASE_URL}/lich-lam-viec?tu_ngay=${tuNgay}&den_ngay=${denNgay}`)
+        ]);
+
+        const caData = (await caRes.json()).data || [];
+        const serverLichData = (await lichRes.json()).data || [];
+        let lichData = [...serverLichData];
+
+        // TRỘN DỮ LIỆU LOCAL
+        pendingManagerAssignments.forEach(pending => {
+            // Dùng String() để đảm bảo khớp dữ liệu ID và không ghi đè nhầm ca
+            lichData = lichData.filter(l => !(String(l.ID_CaLamViec) === String(pending.id_ca_lam_viec) && l.NgayLam === pending.ngay_lam && String(l.ID_NhanVien) === String(pending.id_nhan_vien)));
+            
+            lichData.push({
+                ID_CaLamViec: pending.id_ca_lam_viec,
+                NgayLam: pending.ngay_lam,
+                ID_NhanVien: pending.id_nhan_vien,
+                CongViec: pending.cong_viec,
+                TrangThaiXepLich: 'DaDuyet',
+                nhan_vien: { HoTen: pending.ten_nhan_vien },
+                is_pending_local: true
+            });
+        });
+
+        if (caData.length === 0) {
+            container.innerHTML = `<div class="modal-alert error" style="display:block;">Vui lòng cài đặt Ca Mẫu (Ca Sáng/Tối) trước khi xếp lịch.</div>`;
+            return;
+        }
+
+        // Tạm đánh giá xem tuần sau đã bị chốt chưa
+        if (weekOffset === 1) {
+            if (!isForceUnlockedNextWeek) {
+                isNextWeekLocked = serverLichData.some(l => l.TrangThaiXepLich === 'DaDuyet');
+            } else {
+                isNextWeekLocked = false;
+            }
+
+            const btnLock = document.getElementById('btn-lock-schedule');
+            
+            if (pendingManagerAssignments.length > 0) {
+                btnLock.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Chốt lịch & Thông báo';
+                btnLock.className = 'btn-primary';
+                btnLock.style.borderColor = '';
+                btnLock.style.color = '';
+            } else if (isNextWeekLocked) {
+                btnLock.innerHTML = '<i class="fa-solid fa-pen-to-square"></i> Mở khóa chỉnh sửa';
+                btnLock.className = 'btn-outline-sm';
+                btnLock.style.borderColor = '#f59e0b';
+                btnLock.style.color = '#b45309';
+            } else {
+                btnLock.innerHTML = '<i class="fa-solid fa-lock"></i> Chốt lịch & Thông báo';
+                btnLock.className = 'btn-primary';
+                btnLock.style.borderColor = '';
+                btnLock.style.color = '';
+            }
+        }
+
+        let html = `
+            <div style="width: 100%; overflow-x: auto; border-radius: 8px; border: 1px solid var(--border);">
+                <table class="admin-table table-bordered" style="min-width: 1000px; width: 100%; margin: 0; border: none;">
+                    <thead style="background: #F8FAFC;">
+                        <tr>
+                            <th style="width: 90px; min-width: 90px; text-align: center; vertical-align: middle; position: sticky; left: 0; z-index: 10; background: #F8FAFC; border-right: 2px solid #e2e8f0; box-shadow: 2px 0 5px rgba(0,0,0,0.05);">CA LÀM</th>
+                            ${dates.map(d => `<th style="min-width: 130px; text-align: center; vertical-align: middle; padding: 10px 5px;">${d.dayName}<br><small style="color:var(--text-muted); font-weight:normal;">${d.display}</small></th>`).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        let myShiftsHtml = ''; 
+        window.adminShiftCache = {}; // Reset mảng cache trước khi vẽ lịch
+
+        caData.forEach(ca => {
+            html += `<tr><td style="text-align: center; font-weight: bold; background: #f8fafc; border-right: 2px solid #e2e8f0; position: sticky; left: 0; z-index: 5; box-shadow: 2px 0 5px rgba(0,0,0,0.05);">${ca.TenCa}</td>`;
+            
+            dates.forEach(date => {
+                const shifts = lichData.filter(l => String(l.ID_CaLamViec) === String(ca.ID) && l.NgayLam === date.dbDate);
+                const approvedCount = shifts.filter(s => s.TrangThaiXepLich === 'DaDuyet').length;
+                const reqCount = ca.SoLuongNhanVien;
+                
+                let bgColor = '#fff';
+                let borderColor = '#e2e8f0';
+                if (approvedCount === 0) { bgColor = '#fef2f2'; borderColor = '#fca5a5'; } 
+                else if (approvedCount < reqCount) { bgColor = '#fffbeb'; borderColor = '#fde68a'; } 
+                else { bgColor = '#ecfdf5'; borderColor = '#a7f3d0'; } 
+
+                let staffHtml = shifts.map(s => {
+                    const isPending = s.TrangThaiXepLich === 'DangKy';
+                    const isLocal = s.is_pending_local === true;
+
+                    const color = isPending ? '#ea580c' : '#047857';
+                    const icon = isPending ? 'fa-circle-question' : 'fa-check-circle';
+                    const role = s.CongViec ? (s.CongViec === 'ThuNgan' ? 'TN' : 'PV') : '?';
+                    let noteStr = s.GhiChu ? ` <span style="font-style:italic; font-weight:normal; opacity:0.8;">(${s.GhiChu})</span>` : '';
+                    
+                    // Thêm nút Xóa cho những ca Lưu tạm ở Tuần Sau
+                    let removeBtn = '';
+                    if (weekOffset === 1 && isLocal) {
+                        removeBtn = `<i class="fa-solid fa-circle-xmark" style="color: #ef4444; cursor: pointer; margin-left: 6px; font-size: 0.9rem;" title="Xóa phân công tạm" onclick="event.stopPropagation(); window.removePendingAssignment(${ca.ID}, '${date.dbDate}', ${s.ID_NhanVien})"></i>`;
+                    }
+
+                    // Thêm background nhạt để làm nổi bật ô chứa nhân viên vừa lưu tạm
+                    const localStyle = isLocal ? 'background: #f0f9ff; padding: 3px 6px; border-radius: 4px; border: 1px dashed #bae6fd;' : '';
+
+                    return `<div style="font-size: 0.8rem; color: ${color}; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; gap: 8px; ${localStyle}">
+                                <span style="white-space: nowrap;" title="${s.nhan_vien.HoTen} ${s.GhiChu ? '- '+s.GhiChu : ''}"><i class="fa-solid ${icon}"></i> ${s.nhan_vien.HoTen}${noteStr}</span>
+                                <div style="flex-shrink: 0; display: flex; align-items: center;">
+                                    <strong>[${role}]</strong>
+                                    ${removeBtn}
+                                </div>
+                            </div>`;
+                }).join('');
+
+                if(shifts.length === 0) staffHtml = `<div style="font-size: 0.8rem; color: #94a3b8; text-align: center;">Chưa có người</div>`;
+
+                if (weekOffset === 0) {
+                    const myShift = shifts.find(s => s.ID_NhanVien == currentUser.ID && s.TrangThaiXepLich === 'DaDuyet');
+                    if (myShift) {
+                        const roleName = myShift.CongViec === 'ThuNgan' ? 'Thu Ngân' : 'Phục Vụ';
+                        myShiftsHtml += `
+                            <div style="background: white; border: 1px solid #e2e8f0; border-left: 4px solid var(--primary); padding: 10px; margin-bottom: 10px; border-radius: 6px;">
+                                <div style="font-weight: bold; color: var(--text-dark); margin-bottom: 4px;">${date.dayName} - ${date.display}</div>
+                                <div style="font-size: 0.85rem; color: var(--primary);"><i class="fa-regular fa-clock"></i> ${ca.TenCa}</div>
+                                <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;"><i class="fa-solid fa-user-tag"></i> Vị trí: ${roleName}</div>
+                            </div>
+                        `;
+                    }
+                }
+
+                // Lưu danh sách nhân viên vào biến toàn cục thay vì nhét vào thuộc tính HTML
+                const cacheKey = `${ca.ID}_${date.dbDate}`;
+                window.adminShiftCache[cacheKey] = shifts;
+
+                let pointerStyle = '';
+                let clickEvent = '';
+
+                if (weekOffset === 1 && (!isNextWeekLocked || pendingManagerAssignments.length > 0)) {
+                    pointerStyle = 'cursor: pointer; transition: 0.2s;';
+                    // Chỉ truyền cacheKey thay vì chuỗi JSON
+                    clickEvent = `onmouseover="this.style.filter='brightness(0.95)'" onmouseout="this.style.filter='brightness(1)'" onclick="openManagerShiftModal(${ca.ID}, '${ca.TenCa}', '${date.dbDate}', '${date.display}', '${cacheKey}', 1)"`;
+                } else if (weekOffset === 0 && isEditModeCurrentWeek) {
+                    pointerStyle = 'cursor: pointer; outline: 2px dashed #f59e0b; outline-offset: -2px; transition: 0.2s;';
+                    clickEvent = `onmouseover="this.style.filter='brightness(0.95)'" onmouseout="this.style.filter='brightness(1)'" onclick="openManagerShiftModal(${ca.ID}, '${ca.TenCa}', '${date.dbDate}', '${date.display}', '${cacheKey}', 0)"`;
+                }
+
+                html += `
+                    <td style="background: ${bgColor}; border: 1px solid ${borderColor}; ${pointerStyle} vertical-align: top;" ${clickEvent}>
+                        <div style="font-size: 0.75rem; font-weight: bold; text-align: right; margin-bottom: 5px; color: var(--text-muted);">${approvedCount}/${reqCount}</div>
+                        ${staffHtml}
+                    </td>
+                `;
+            });
+            html += `</tr>`;
+        });
+
+        html += `</tbody></table></div>`;
+        container.innerHTML = html;
+
+        if (weekOffset === 0) {
+            const boxContainer = document.getElementById('manager-my-shifts-container');
+            const listEl = document.getElementById('manager-my-shifts-list');
+            if (myShiftsHtml !== '') {
+                listEl.innerHTML = myShiftsHtml;
+                boxContainer.style.display = 'block'; 
+            } else {
+                boxContainer.style.display = 'none';  
+            }
+        }
+
+    } catch (e) {
+        console.error("Lỗi vẽ lịch:", e);
+        container.innerHTML = `<div class="modal-alert error" style="display:block;">Lỗi kết nối máy chủ! Vui lòng tải lại trang.</div>`;
+    }
+}
+
+// Hàm Gỡ bỏ nhân sự vừa phân công tạm thời
+window.removePendingAssignment = function(idCa, ngayLam, idNhanVien) {
+    // 1. Lọc bỏ ca trùng khớp ra khỏi mảng lưu tạm
+    pendingManagerAssignments = pendingManagerAssignments.filter(p => 
+        !(String(p.id_ca_lam_viec) === String(idCa) && p.ngay_lam === ngayLam && String(p.id_nhan_vien) === String(idNhanVien))
+    );
+    
+    // 2. Cập nhật lại giao diện lưới và danh sách đăng ký
+    loadAdminCalendarData(1, 'grid-next-week');
+    loadStaffRegistrationStatus();
+    
+    // 3. Nếu quản lý xóa hết toàn bộ các ca lưu tạm, trả nút Chốt lịch về trạng thái vô hiệu hóa ban đầu
+    if (pendingManagerAssignments.length === 0 && !isNextWeekLocked) {
+        const btnLock = document.getElementById('btn-lock-schedule');
+        btnLock.innerHTML = '<i class="fa-solid fa-lock"></i> Chưa có phân công nào';
+        btnLock.className = 'btn-outline-sm';
+        btnLock.style.borderColor = '';
+        btnLock.style.color = '';
+    }
+};
+
+// Logic hiển thị Danh sách nhân sự & Đếm số ca đăng ký (Tab Tuần Sau)
+async function loadStaffRegistrationStatus() {
+    const listContainer = document.getElementById('admin-staff-status-list');
+    try {
+        const dates = getWeekDatesAdmin(1);
+        const tuNgay = dates[0].dbDate;
+        const denNgay = dates[6].dbDate;
+
+        const [usersRes, lichRes] = await Promise.all([
+            fetch(`${API_BASE_URL}/admin/khach-hang`), 
+            fetch(`${API_BASE_URL}/lich-lam-viec?tu_ngay=${tuNgay}&den_ngay=${denNgay}`)
+        ]);
+
+        const usersData = await usersRes.json();
+        const lichData = (await lichRes.json()).data || [];
+        const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+
+        const activeStaff = usersData.data.filter(u => 
+            (u.VaiTro === 'NhanVien' || u.VaiTro === 'QuanLySan') && 
+            (u.TrangThaiKhoa == 0 || u.TrangThaiKhoa === false) && 
+            String(u.ID_CumSan) === String(currentUser.ID_CumSan)
+        );
+
+        let html = '';
+        activeStaff.forEach(staff => {
+            // Lấy TẤT CẢ các ca thuộc về nhân viên này (cả đăng ký trên server + xếp cục bộ của quản lý)
+            let userShifts = lichData.filter(l => String(l.ID_NhanVien) === String(staff.ID));
+            const localShifts = pendingManagerAssignments.filter(p => String(p.id_nhan_vien) === String(staff.ID));
+            
+            // Số lượng ca đăng ký (từ server)
+            const totalRequested = userShifts.length;
+            
+            // Số lượng ca ĐÃ ĐƯỢC CHỐT (trên server + local) - YÊU CẦU 4
+            const approvedOnServer = userShifts.filter(l => l.TrangThaiXepLich === 'DaDuyet').length;
+            const approvedTotal = approvedOnServer + localShifts.length;
+
+            const color = totalRequested === 0 ? '#ef4444' : '#10b981';
+            const alertIcon = totalRequested === 0 ? `<i class="fa-solid fa-triangle-exclamation" style="color:#ef4444;" title="Chưa đăng ký ca nào"></i>` : '';
+
+            // YÊU CẦU 4: Format hiển thị "Chốt / Đăng ký" (VD: 3/4)
+            html += `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px dashed #e2e8f0;">
+                    <div>
+                        <div style="font-size: 0.9rem; color: var(--text-dark); font-weight: 500;">${staff.HoTen} ${alertIcon}</div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted);">${staff.SoDienThoai}</div>
+                    </div>
+                    <div style="font-weight: bold; color: ${color}; font-size: 0.95rem;">${approvedTotal}/${totalRequested}</div>
+                </div>
+            `;
+        });
+        
+        listContainer.innerHTML = html || '<div style="font-size: 0.85rem; color: var(--text-muted); text-align: center;">Không có nhân sự.</div>';
+
+    } catch(e) {
+        listContainer.innerHTML = '<div style="color:red; font-size: 0.85rem;">Lỗi tải dữ liệu.</div>';
+    }
+}
+
+// Logic Chốt lịch
+async function lockNextWeekSchedule() {
+    if (isNextWeekLocked && pendingManagerAssignments.length === 0) {
+        showSystemModal('Chế độ chỉnh sửa bật', 'Đã mở khóa. Bạn có thể bấm vào các ô để phân công.', 'success');
+        isForceUnlockedNextWeek = true;
+        isNextWeekLocked = false;
+        loadAdminCalendarData(1, 'grid-next-week'); // Render lại đổi màu nút
+        return;
+    }
+
+    if (pendingManagerAssignments.length === 0 && !isNextWeekLocked) {
+        showSystemModal("Cảnh báo", "Bạn chưa xếp bất kỳ nhân viên nào vào lịch.", "error");
+        return;
+    }
+
+    // Modal thay thế confirm() mặc định (Yêu Cầu 6)
+    let confModal = document.getElementById('lock-confirm-modal');
+    if (!confModal) {
+        confModal = document.createElement('div');
+        confModal.id = 'lock-confirm-modal';
+        confModal.className = 'modal-overlay';
+        confModal.style.cssText = 'display: flex; z-index: 10000;';
+        document.body.appendChild(confModal);
+    }
+    
+    confModal.innerHTML = `
+        <div class="modal-content" style="max-width: 400px; text-align: center; padding: 30px 20px;">
+            <div style="font-size: 3.5rem; color: #10b981; margin-bottom: 15px;"><i class="fa-solid fa-paper-plane"></i></div>
+            <h3 style="margin-bottom: 10px; font-size: 1.4rem;">Chốt lịch & Phát thông báo</h3>
+            <p style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5;">Hệ thống sẽ lưu ${pendingManagerAssignments.length} phân công và chốt sổ tuần sau. Xác nhận?</p>
+            <div style="display: flex; justify-content: center; gap: 12px;">
+                <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="document.getElementById('lock-confirm-modal').style.display='none'">Hủy bỏ</button>
+                <button class="btn-primary" id="btn-agree-lock" style="width: auto; padding: 10px 24px; background-color: #10b981; border-color: #10b981;" onclick="executeLockScheduleAPI()">Đồng ý chốt</button>
+            </div>
+        </div>
+    `;
+    confModal.style.display = 'flex';
+}
+
+// Chạy API
+async function executeLockScheduleAPI() {
+    const btn = document.getElementById('btn-agree-lock');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang gửi...';
+    btn.disabled = true;
+
+    try {
+        // 1. Nếu có phân công mới, bắn hàng loạt qua API xếp ca trước
+        if (pendingManagerAssignments.length > 0) {
+            const promises = pendingManagerAssignments.map(payload => 
+                fetch(`${API_BASE_URL}/lich-lam-viec/xep-ca`, {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id_ca_lam_viec: payload.id_ca_lam_viec,
+                        ngay_lam: payload.ngay_lam,
+                        id_nhan_vien: payload.id_nhan_vien,
+                        cong_viec: payload.cong_viec,
+                        thong_bao_thay_doi: false // Chốt tuần không cần nổ chuông lắt nhắt
+                    })
+                }).then(res => res.json())
+            );
+            await Promise.all(promises);
+            pendingManagerAssignments = []; // Xóa mảng
+        }
+
+        // 2. Bắn lệnh Chốt Tuần để hệ thống xóa đơn rác và gửi thông báo chung
+        const dates = getWeekDatesAdmin(1);
+        const response = await fetch(`${API_BASE_URL}/lich-lam-viec/chot-tuan`, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tu_ngay: dates[0].dbDate, den_ngay: dates[6].dbDate })
+        });
+        const data = await response.json();
+
+        document.getElementById('lock-confirm-modal').style.display = 'none';
+        
+        if (response.ok && data.success) {
+            showSystemModal("Thành công!", data.message, "success");
+            isForceUnlockedNextWeek = false;
+            loadAdminCalendarData(1, 'grid-next-week');
+            loadStaffRegistrationStatus();
+        } else {
+            showSystemModal("Lỗi", data.message, "error");
+        }
+    } catch(e) {
+        showSystemModal("Lỗi mạng", "Không kết nối được server.", "error");
+        btn.innerHTML = 'Đồng ý chốt';
+        btn.disabled = false;
+    }
+}
+
+async function openManagerShiftModal(caId, tenCa, ngayLam, displayDate, cacheKey, weekOffset) {
+    if (weekOffset === 1 && isNextWeekLocked && pendingManagerAssignments.length === 0) {
+        showSystemModal('Đã khóa lịch', 'Bạn đã chốt lịch tuần sau. Vui lòng bấm "Mở khóa chỉnh sửa" để tiếp tục.', 'error');
+        return;
+    }
+
+    // Lấy dữ liệu mảng các nhân viên có liên quan đến ca này từ biến toàn cục
+    const shifts = window.adminShiftCache[cacheKey] || [];
+    const isEditMode = (weekOffset === 0);
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+
+    document.getElementById('manager-assign-info').innerHTML = `${tenCa} - Ngày ${displayDate}`;
+    document.getElementById('manager-assign-ca-id').value = caId;
+    document.getElementById('manager-assign-date').value = ngayLam;
+    document.getElementById('manager-assign-is-edit').value = isEditMode;
+    document.getElementById('manager-assign-title').innerText = isEditMode ? 'Chỉnh sửa đột xuất' : 'Phân công nhân sự';
+
+    const btn = document.getElementById('btn-confirm-manager-assign');
+    btn.innerHTML = 'Lưu tạm';
+    btn.disabled = false;
+    
+    document.getElementById('manager-assign-shift-modal').style.display = 'flex';
+
+    let optionsHtml = '<option value="">-- Chọn nhân sự muốn xếp vào ca --</option>';
+    
+    // 1. LUÔN LUÔN hiển thị Quản lý đang đăng nhập ở đầu danh sách (Dùng data-name)
+    optionsHtml += `<option value="${currentUser.ID}" data-name="${currentUser.HoTen}">Tôi (${currentUser.HoTen})</option>`;
+
+    // 2. DUYỆT QUA MẢNG SHIFTS (Chỉ những người đã từng tương tác với ca này)
+    shifts.forEach(staff => {
+        // Bỏ qua nếu trùng với quản lý đang đăng nhập (vì đã add thủ công ở trên)
+        if (String(staff.ID_NhanVien) === String(currentUser.ID)) return;
+
+        // LOGIC PHÂN CÔNG (Tuần sau): Bỏ qua những người có trạng thái 'TuChoi'
+        if (!isEditMode && staff.TrangThaiXepLich === 'TuChoi') return;
+
+        const isAlreadyApproved = staff.TrangThaiXepLich === 'DaDuyet';
+        let label = staff.nhan_vien.HoTen;
+        
+        // Hiển thị ghi chú cạnh tên theo Format yêu cầu (Không dùng icon chấm xanh)
+        if (staff.GhiChu) label += ` (${staff.GhiChu})`;
+
+        // LOGIC CHỈNH SỬA (Tuần này): Nếu là trạng thái Từ chối, thêm chữ Bị từ chối
+        if (isEditMode && staff.TrangThaiXepLich === 'TuChoi') label += ` - Bị từ chối`;
+
+        if (isAlreadyApproved) {
+            optionsHtml += `<option value="${staff.ID_NhanVien}" data-name="${staff.nhan_vien.HoTen}" disabled style="color: #94a3b8;">${staff.nhan_vien.HoTen} (Đã nằm trong ca này)</option>`;
+        } else {
+            optionsHtml += `<option value="${staff.ID_NhanVien}" data-name="${staff.nhan_vien.HoTen}">${label}</option>`;
+        }
+    });
+
+    // Đẩy trực tiếp vào HTML mà không cần await fetch API
+    document.getElementById('manager-assign-staff-id').innerHTML = optionsHtml;
+}
+
+async function executeManagerAssignShift() {
+    const idCa = document.getElementById('manager-assign-ca-id').value;
+    const ngayLam = document.getElementById('manager-assign-date').value;
+    const selectEl = document.getElementById('manager-assign-staff-id');
+    const idNhanVien = selectEl.value;
+    
+    if (!idNhanVien) {
+        showSystemModal("Lỗi", "Vui lòng chọn 1 nhân sự!", "error");
+        return;
+    }
+
+    // ĐÃ SỬA BUG LẤY TÊN: Lấy tên chuẩn xác từ thuộc tính data-name thay vì chặt chuỗi
+    const tenNhanVien = selectEl.options[selectEl.selectedIndex].getAttribute('data-name'); 
+
+    const isEdit = document.getElementById('manager-assign-is-edit').value === 'true'; 
+    const congViec = document.querySelector('input[name="manager_assign_role"]:checked').value;
+
+    // Nếu là tuần hiện tại, gửi API luôn vì là sửa đột xuất
+    if (isEdit) {
+        const btn = document.getElementById('btn-confirm-manager-assign');
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+        btn.disabled = true;
+
+        try {
+            const payload = {
+                id_ca_lam_viec: idCa, ngay_lam: ngayLam, id_nhan_vien: idNhanVien, cong_viec: congViec, thong_bao_thay_doi: true 
+            };
+
+            const response = await fetch(`${API_BASE_URL}/lich-lam-viec/xep-ca`, {
+                method: 'POST',
+                headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await response.json();
+            if (response.ok && data.success) {
+                document.getElementById('manager-assign-shift-modal').style.display = 'none';
+                showSystemModal("Thành công", "Đã thay thế ca làm đột xuất và phát thông báo.", "success");
+                loadAdminCalendarData(0, 'grid-current-week');
+            } else {
+                showSystemModal("Lỗi", data.message, "error");
+            }
+        } catch(e) {
+            showSystemModal("Lỗi kết nối", "Lỗi mạng.", "error");
+        } finally {
+            btn.innerHTML = 'Lưu phân công';
+            btn.disabled = false;
+        }
+    } else {
+        // Nếu là tuần sau, CHỈ LƯU LOCAL
+        pendingManagerAssignments = pendingManagerAssignments.filter(p => !(String(p.id_ca_lam_viec) === String(idCa) && p.ngay_lam === ngayLam && String(p.id_nhan_vien) === String(idNhanVien)));
+        
+        pendingManagerAssignments.push({
+            id_ca_lam_viec: idCa,
+            ngay_lam: ngayLam,
+            id_nhan_vien: idNhanVien,
+            cong_viec: congViec,
+            ten_nhan_vien: tenNhanVien // Tên nhân viên được lấy sạch sẽ nhờ data-name
+        });
+
+        document.getElementById('manager-assign-shift-modal').style.display = 'none';
+        loadAdminCalendarData(1, 'grid-next-week'); 
+        loadStaffRegistrationStatus(); 
+    }
+}
+
+// ======================================================
+// LOGIC: CẤU HÌNH CA LÀM VIỆC (MẪU)
+// ======================================================
+
+function showCauHinhCaAlert(msg, isSuccess) {
+    const alert = document.getElementById('cauhinh-ca-alert');
+    alert.textContent = msg;
+    alert.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
+    alert.style.display = 'block';
+    setTimeout(() => alert.style.display = 'none', 3000);
+}
+
+// Khi Quản lý bấm nút "Cấu hình Ca làm việc"
+async function openCauHinhCaModal() {
+    // 1. Dựng 1 Modal trung gian nhỏ nhắn để hỏi muốn cấu hình ca nào
+    let selectModal = document.getElementById('select-ca-modal');
+    if (!selectModal) {
+        selectModal = document.createElement('div');
+        selectModal.id = 'select-ca-modal';
+        selectModal.className = 'modal-overlay';
+        selectModal.style.cssText = 'display: none; z-index: 10000;';
+        selectModal.innerHTML = `
+            <div class="modal-content" style="max-width: 350px; text-align: center; padding: 30px 20px;">
+                <h3 style="margin-bottom: 10px; font-size: 1.2rem; color: var(--text-dark);"><i class="fa-solid fa-layer-group"></i> Chọn ca để cấu hình</h3>
+                <p style="color: var(--text-muted); margin-bottom: 25px; font-size: 0.9rem;">Hệ thống chia làm 2 ca mặc định (giao ca lúc 15:00)</p>
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <button class="btn-outline" style="width: 100%; border-color: #3b82f6; color: #1d4ed8; padding: 12px;" onclick="loadAndShowCauHinhForm('Ca Sáng')"><i class="fa-regular fa-sun" style="margin-right: 8px;"></i> Cấu hình Ca Sáng</button>
+                    <button class="btn-outline" style="width: 100%; border-color: #6366f1; color: #4338ca; padding: 12px;" onclick="loadAndShowCauHinhForm('Ca Tối')"><i class="fa-solid fa-moon" style="margin-right: 8px;"></i> Cấu hình Ca Tối</button>
+                    <button type="button" onclick="document.getElementById('select-ca-modal').style.display='none'" style="width: 100%; margin-top: 12px; padding: 10px 16px; background-color: #fee2e2; color: #ef4444; border: 1px solid #fecaca; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s ease;">Hủy</button>
+                </div>
+            </div>`;
+        document.body.appendChild(selectModal);
+    }
+    selectModal.style.display = 'flex';
+}
+
+// Mở form nhập thông tin sau khi chọn Ca Sáng/Tối
+async function loadAndShowCauHinhForm(tenCa) {
+    document.getElementById('select-ca-modal').style.display = 'none';
+    document.getElementById('cauhinh-ca-alert').style.display = 'none';
+    
+    // Gán tên ca lên form
+    document.getElementById('cc-tenca').value = tenCa;
+    document.getElementById('cc-tenca-display').value = tenCa;
+    
+    // Nút lưu ở trạng thái chờ
+    const btn = document.getElementById('btn-save-cauhinh-ca');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang tải dữ liệu cũ...';
+    btn.disabled = true;
+    
+    document.getElementById('cauhinh-ca-modal').style.display = 'flex';
+
+    try {
+        // Tải dữ liệu cũ nếu đã từng cài đặt
+        const response = await fetch(`${API_BASE_URL}/ca-lam-viec`);
+        const res = await response.json();
+        
+        if (res.success) {
+            const dataCu = res.data.find(c => c.TenCa === tenCa);
+            if (dataCu) {
+                document.getElementById('cc-soluong').value = dataCu.SoLuongNhanVien;
+                document.getElementById('cc-luong-tn').value = dataCu.LuongThuNgan;
+                document.getElementById('cc-luong-pv').value = dataCu.LuongPhucVu;
+            } else {
+                document.getElementById('cc-soluong').value = '';
+                document.getElementById('cc-luong-tn').value = '';
+                document.getElementById('cc-luong-pv').value = '';
+            }
+        }
+    } catch(e) {
+        showCauHinhCaAlert('Không thể tải dữ liệu cũ', false);
+    } finally {
+        btn.innerHTML = 'Lưu cấu hình';
+        btn.disabled = false;
+    }
+}
+
+function closeCauHinhCaModal() {
+    document.getElementById('cauhinh-ca-modal').style.display = 'none';
+}
+
+async function submitCauHinhCa() {
+    const tenCa = document.getElementById('cc-tenca').value;
+    const soLuong = document.getElementById('cc-soluong').value;
+    const luongTN = document.getElementById('cc-luong-tn').value;
+    const luongPV = document.getElementById('cc-luong-pv').value;
+
+    if (!soLuong || !luongTN || !luongPV) {
+        return showCauHinhCaAlert('Vui lòng điền đầy đủ số lượng và mức lương!', false);
+    }
+
+    if (Number(soLuong) <= 0) {
+        return showCauHinhCaAlert('Số lượng nhân viên tối đa phải lớn hơn 0!', false);
+    }
+    
+    if (Number(luongTN) <= 0 || Number(luongPV) <= 0) {
+        return showCauHinhCaAlert('Mức lương không được là số âm hoặc bằng 0!', false);
+    }
+
+    const btn = document.getElementById('btn-save-cauhinh-ca');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang lưu...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/ca-lam-viec`, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                TenCa: tenCa,
+                SoLuongNhanVien: soLuong,
+                LuongThuNgan: luongTN,
+                LuongPhucVu: luongPV
+            })
+        });
+
+        const data = await response.json();
+        if (response.ok && data.success) {
+            showCauHinhCaAlert(data.message, true);
+            setTimeout(() => {
+                closeCauHinhCaModal();
+                // NẾU ĐANG Ở TAB LỊCH, RENDER LẠI ĐỂ MẤT CẢNH BÁO "Vui lòng cài đặt..."
+                const activeTab = document.querySelector('.nav-tab.active').innerText;
+                if (activeTab === 'Tuần Hiện Tại') loadAdminCalendarData(0, 'grid-current-week');
+                else loadAdminCalendarData(1, 'grid-next-week');
+            }, 1500);
+        } else {
+            showCauHinhCaAlert(data.message || 'Lỗi khi lưu.', false);
+        }
+    } catch (e) {
+        showCauHinhCaAlert('Mất kết nối máy chủ.', false);
+    } finally {
+        btn.innerHTML = 'Lưu cấu hình';
+        btn.disabled = false;
+    }
 }

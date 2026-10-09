@@ -67,16 +67,9 @@ class GiaiDauController extends Controller
         $admins = NguoiDung::where('VaiTro', 'Admin')->get();
         $nguoiTao = NguoiDung::find(Auth::id()); // Lấy tên người dùng vừa tạo
         
-        // 1. Tìm TẤT CẢ Super Admin trên hệ thống
-        $superAdmins = NguoiDung::where('VaiTro', 'Admin')->get();
-
-        // 2. Tìm TẤT CẢ Quản lý sân đang quản lý trực tiếp Cụm sân này
-        $quanLySans = NguoiDung::where('VaiTro', 'QuanLySan')
+        $nguoiNhanThongBao = NguoiDung::where('VaiTro', 'QuanLySan')
                                ->where('ID_CumSan', $request->id_cum_san)
                                ->get();
-
-        // 3. Gộp 2 danh sách lại thành 1 mảng duy nhất để gửi thông báo
-        $nguoiNhanThongBao = $superAdmins->merge($quanLySans);
 
         foreach ($nguoiNhanThongBao as $nhanSu) {
             ThongBao::create([

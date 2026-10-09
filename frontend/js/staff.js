@@ -162,6 +162,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     updateStaffDashboardStats(); // Cập nhật luôn Biểu đồ ở dưới
                 }
             }
+
+            // 4. CẬP NHẬT REALTIME LỊCH NHÂN VIÊN
+            const currentTabStaff = document.getElementById('staff-cal-current');
+            const nextTabStaff = document.getElementById('staff-cal-next');
+
+            // Nếu Nhân viên đang đứng ở Tab "Lịch Tuần Này" (Xem lịch sửa đột xuất)
+            if (currentTabStaff && currentTabStaff.style.display !== 'none') {
+                loadStaffCalendarData(0, 'grid-staff-current-week');
+            }
+
+            // Nếu Nhân viên đang đứng ở Tab "Đăng Ký Tuần Sau" (Quản lý vừa chốt lịch)
+            if (nextTabStaff && nextTabStaff.style.display !== 'none') {
+                // Tương tự, nếu nhân viên đang có các thao tác chọn/bỏ ca chưa bấm "Gửi" thì không load lại
+                if (typeof pendingStaffShifts !== 'undefined' && pendingStaffShifts.length === 0) {
+                    loadStaffCalendarData(1, 'grid-staff-next-week');
+                }
+            }
         });
 
     // Lắng nghe kênh CÁ NHÂN của chính nhân viên này
@@ -1914,4 +1931,386 @@ function renderHoaDonPagination(pageInit) {
 
     html += `<button class="btn-outline-sm" ${hoaDonPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="hoaDonPage++; renderHoaDonPagination()"><i class="fa-solid fa-chevron-right"></i></button>`;
     div.innerHTML = html;
+}
+
+// ======================================================
+// MODULE: NHÂN VIÊN ĐĂNG KÝ LỊCH LÀM VIỆC
+// ======================================================
+
+function getWeekDatesStaff(offsetWeeks = 0) {
+    let curr = new Date();
+    let first = curr.getDate() - curr.getDay() + 1 + (offsetWeeks * 7); 
+    if (curr.getDay() === 0) first -= 7; 
+    let monday = new Date(curr.setDate(first));
+    
+    let dates = [];
+    for(let i=0; i<7; i++) {
+        let next = new Date(monday);
+        next.setDate(monday.getDate() + i);
+        dates.push({
+            dbDate: next.toISOString().split('T')[0],
+            display: `${next.getDate().toString().padStart(2,'0')}/${(next.getMonth()+1).toString().padStart(2,'0')}`,
+            dayName: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][next.getDay()]
+        });
+    }
+    return dates;
+}
+
+function renderLichLamViecStaff() {
+    document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+    const menuLink = document.getElementById('menu-lichlamviec');
+    if (menuLink) menuLink.classList.add('active');
+
+    const contentArea = document.querySelector('.admin-content');
+    contentArea.innerHTML = `
+        <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+            <div>
+                <h1 class="page-title">Lịch làm việc của bạn</h1>
+                <p class="text-muted">Đăng ký ca tuần tới và theo dõi lịch tuần này</p>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div style="display: flex; gap: 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px; padding: 0 20px;">
+                <button class="nav-tab active" onclick="switchStaffCalTab('staff-cal-next', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; border-bottom: 2px solid var(--primary); color: var(--primary);">Đăng ký Tuần Sau</button>
+                <button class="nav-tab" onclick="switchStaffCalTab('staff-cal-current', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Lịch Tuần Này</button>
+            </div>
+
+            <!-- LƯỚI 1: TUẦN SAU (ĐỂ ĐĂNG KÝ) -->
+            <div id="staff-cal-next" class="tab-pane active" style="padding: 0 20px 20px 20px;">
+                <div style="display: flex; justify-content: flex-end; margin-bottom: 15px;">
+                    <button id="btn-submit-staff-schedule" class="btn-primary" onclick="submitStaffSchedule()"><i class="fa-solid fa-paper-plane"></i> Gửi lịch làm việc</button>
+                </div>
+                <div id="grid-staff-next-week">Đang tải...</div>
+            </div>
+
+            <!-- LƯỚI 2: TUẦN HIỆN TẠI (VIEW ONLY & DANH SÁCH CA CỦA MÌNH) -->
+            <div id="staff-cal-current" class="tab-pane" style="display: none; padding: 0 20px 20px 20px;">
+                <div style="display: flex; gap: 20px; align-items: flex-start;">
+                    <!-- Lưới View -->
+                    <div style="flex: 1;" id="grid-staff-current-week">Đang tải...</div>
+                    
+                    <!-- Box ca của tôi -->
+                    <div style="width: 300px; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 15px;">
+                        <h4 style="margin: 0 0 15px 0; color: var(--primary); font-size: 1rem;"><i class="fa-solid fa-user-clock"></i> Các ca của bạn tuần này</h4>
+                        <div id="my-shifts-list">Đang tải...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    loadStaffCalendarData(1, 'grid-staff-next-week');
+}
+
+function switchStaffCalTab(tabId, element) {
+    const tabs = element.parentElement.children;
+    for (let i = 0; i < tabs.length; i++) {
+        tabs[i].classList.remove('active');
+        tabs[i].style.borderBottom = 'none';
+        tabs[i].style.color = 'var(--text-muted)';
+    }
+    element.classList.add('active');
+    element.style.borderBottom = '2px solid var(--primary)';
+    element.style.color = 'var(--primary)';
+
+    document.getElementById('staff-cal-next').style.display = 'none';
+    document.getElementById('staff-cal-current').style.display = 'none';
+    document.getElementById(tabId).style.display = 'block';
+
+    if (tabId === 'staff-cal-current') {
+        loadStaffCalendarData(0, 'grid-staff-current-week');
+    } else {
+        loadStaffCalendarData(1, 'grid-staff-next-week');
+    }
+}
+
+// Khai báo mảng lưu trữ tạm thời các ca nhân viên vừa đăng ký/chỉnh sửa
+let pendingStaffShifts = [];
+// Biến đánh dấu xem người dùng có thực hiện thay đổi nào chưa
+let isStaffScheduleChanged = false;
+
+async function loadStaffCalendarData(weekOffset, containerId) {
+    const container = document.getElementById(containerId);
+    const dates = getWeekDatesStaff(weekOffset);
+    const tuNgay = dates[0].dbDate;
+    const denNgay = dates[6].dbDate;
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+
+    try {
+        const [caRes, lichRes] = await Promise.all([
+            fetch(`${API_BASE_URL}/ca-lam-viec`),
+            fetch(`${API_BASE_URL}/lich-lam-viec?tu_ngay=${tuNgay}&den_ngay=${denNgay}`)
+        ]);
+
+        const caData = (await caRes.json()).data || [];
+        let lichData = (await lichRes.json()).data || [];
+
+        // TRỘN DỮ LIỆU LOCAL: Đưa các ca vừa đăng ký tạm thời vào mảng lichData để hiển thị lên lưới
+        pendingStaffShifts.forEach(pending => {
+            lichData = lichData.filter(l => !(String(l.ID_CaLamViec) === String(pending.id_ca_lam_viec) && l.NgayLam === pending.ngay_lam && String(l.ID_NhanVien) === String(currentUser.ID)));
+            
+            // Nếu không phải là lệnh xóa, ta thêm vào mảng hiển thị với trạng thái DangKy
+            if (!pending.is_delete) {
+                lichData.push({
+                    ID_CaLamViec: pending.id_ca_lam_viec,
+                    NgayLam: pending.ngay_lam,
+                    ID_NhanVien: currentUser.ID,
+                    TrangThaiXepLich: 'DangKy',
+                    GhiChu: pending.ghi_chu,
+                    nhan_vien: { HoTen: currentUser.HoTen }
+                });
+            }
+        });
+
+        if (caData.length === 0) {
+            container.innerHTML = `<div class="modal-alert error" style="display:block;">Cơ sở chưa có cấu hình ca làm việc.</div>`;
+            return;
+        }
+
+        // Logic ẩn/hiện nút Gửi Lịch dựa vào biến isStaffScheduleChanged
+        if (weekOffset === 1) {
+            const isLocked = lichData.some(l => l.TrangThaiXepLich === 'DaDuyet' && String(l.ID_NhanVien) !== String(currentUser.ID)); 
+            const isPastDeadline = new Date().getDay() === 0; // Hàm getDay() trả về 0 nếu hôm nay là Chủ Nhật
+            const btnSubmit = document.getElementById('btn-submit-staff-schedule');
+            
+            if (isLocked) {
+                btnSubmit.innerHTML = '<i class="fa-solid fa-lock"></i> Đã khóa đăng ký';
+                btnSubmit.disabled = true;
+                btnSubmit.classList.add('btn-disabled');
+            } else if (isPastDeadline) {
+                // Nếu là Chủ Nhật, vô hiệu hóa việc đăng ký
+                btnSubmit.innerHTML = '<i class="fa-solid fa-clock"></i> Hết hạn đăng ký (Chỉ từ T2 - T7)';
+                btnSubmit.disabled = true;
+                btnSubmit.classList.add('btn-disabled');
+                btnSubmit.style.opacity = '0.7';
+                btnSubmit.style.cursor = 'not-allowed';
+            } else if (!isStaffScheduleChanged) {
+                // Nếu chưa có thay đổi gì, disable nút Gửi đi
+                btnSubmit.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Gửi lịch làm việc';
+                btnSubmit.disabled = true;
+                btnSubmit.style.opacity = '0.5';
+                btnSubmit.style.cursor = 'not-allowed';
+            } else {
+                // Đã có thay đổi, bật nút Gửi lên
+                btnSubmit.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Gửi lịch làm việc';
+                btnSubmit.disabled = false;
+                btnSubmit.style.opacity = '1';
+                btnSubmit.style.cursor = 'pointer';
+            }
+        }
+
+        let html = `
+            <div class="table-responsive">
+                <table class="admin-table table-bordered">
+                    <thead style="background: #F8FAFC;">
+                        <tr>
+                            <th style="width: 100px; text-align: center;">CA LÀM</th>
+                            ${dates.map(d => `<th style="text-align: center;">${d.dayName}<br><small style="color:var(--text-muted); font-weight:normal;">${d.display}</small></th>`).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        let myShiftsHtml = ''; 
+
+        caData.forEach(ca => {
+            html += `<tr><td style="text-align: center; font-weight: bold; background: #f8fafc; border-right: 1px solid var(--border);">${ca.TenCa}</td>`;
+            
+            dates.forEach(date => {
+                const shifts = lichData.filter(l => String(l.ID_CaLamViec) === String(ca.ID) && l.NgayLam === date.dbDate);
+                const approvedCount = shifts.filter(s => s.TrangThaiXepLich === 'DaDuyet').length;
+                const reqCount = ca.SoLuongNhanVien;
+                
+                let bgColor = '#fff';
+                let borderColor = '#e2e8f0';
+                if (approvedCount === 0) { bgColor = '#fef2f2'; borderColor = '#fca5a5'; } 
+                else if (approvedCount < reqCount) { bgColor = '#fffbeb'; borderColor = '#fde68a'; } 
+                else { bgColor = '#ecfdf5'; borderColor = '#a7f3d0'; } 
+
+                const myShift = shifts.find(s => String(s.ID_NhanVien) === String(currentUser.ID));
+                let myStatusHtml = '';
+                
+                if (myShift) {
+                    let noteStr = myShift.GhiChu ? ` <span style="font-style:italic; font-weight:normal; opacity:0.8;">(${myShift.GhiChu})</span>` : '';
+                    if (myShift.TrangThaiXepLich === 'DangKy') {
+                        myStatusHtml = `<div style="margin-top:5px; background: #fef3c7; color:#b45309; padding: 4px; border-radius:4px; font-size:0.75rem; text-align:left; font-weight:bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="Đang chờ duyệt ${myShift.GhiChu ? '- '+myShift.GhiChu : ''}"><i class="fa-solid fa-hourglass-half"></i> Bạn đăng ký${noteStr}</div>`;
+                    } else if (myShift.TrangThaiXepLich === 'DaDuyet') {
+                        myStatusHtml = `<div style="margin-top:5px; background: #d1fae5; color:#047857; padding: 4px; border-radius:4px; font-size:0.75rem; text-align:left; font-weight:bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="Đã duyệt ${myShift.GhiChu ? '- '+myShift.GhiChu : ''}"><i class="fa-solid fa-check"></i> Đã duyệt${noteStr}</div>`;
+                    } else if (myShift.TrangThaiXepLich === 'TuChoi') {
+                        myStatusHtml = `<div style="margin-top:5px; background: #fee2e2; color:#b91c1c; padding: 4px; border-radius:4px; font-size:0.75rem; text-align:left; font-weight:bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="Bị từ chối ${myShift.GhiChu ? '- '+myShift.GhiChu : ''}"><i class="fa-solid fa-xmark"></i> Bị từ chối${noteStr}</div>`;
+                    }
+                
+                    if (weekOffset === 0 && myShift.TrangThaiXepLich === 'DaDuyet') {
+                        const roleName = myShift.CongViec === 'ThuNgan' ? 'Thu Ngân' : 'Phục Vụ';
+                        myShiftsHtml += `
+                            <div style="background: white; border: 1px solid #e2e8f0; border-left: 4px solid var(--primary); padding: 10px; margin-bottom: 10px; border-radius: 6px;">
+                                <div style="font-weight: bold; color: var(--text-dark); margin-bottom: 4px;">${date.dayName} - ${date.display}</div>
+                                <div style="font-size: 0.85rem; color: var(--primary);"><i class="fa-regular fa-clock"></i> ${ca.TenCa}</div>
+                                <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;"><i class="fa-solid fa-user-tag"></i> Vị trí: ${roleName}</div>
+                            </div>
+                        `;
+                    }
+                }
+
+                // Giao diện ô lưới chỉ trỏ chuột được nếu tuần sau chưa bị khóa
+                const isClickable = (weekOffset === 1 && document.getElementById('btn-submit-staff-schedule').innerHTML.includes('paper-plane'));
+                const pointerStyle = isClickable ? 'cursor: pointer; transition: 0.2s;' : '';
+                const hoverLogic = isClickable ? `onmouseover="this.style.filter='brightness(0.95)'" onmouseout="this.style.filter='brightness(1)'"` : '';
+                
+                const currentNote = myShift ? (myShift.GhiChu || '') : '';
+                // Cho phép click để mở modal nạp dữ liệu cũ
+                const clickEvent = isClickable 
+                    ? `onclick="openStaffRegisterModal(${ca.ID}, '${ca.TenCa}', '${date.dbDate}', '${date.display}', '${currentNote}', ${myShift !== undefined})"` 
+                    : '';
+
+                html += `
+                    <td style="background: ${bgColor}; border: 1px solid ${borderColor}; ${pointerStyle} vertical-align: top;" ${hoverLogic} ${clickEvent}>
+                        <div style="font-size: 0.75rem; font-weight: bold; text-align: right; margin-bottom: 5px; color: var(--text-muted);">${approvedCount}/${reqCount}</div>
+                        ${myStatusHtml}
+                    </td>
+                `;
+            });
+            html += `</tr>`;
+        });
+
+        html += `</tbody></table></div>`;
+        container.innerHTML = html;
+
+        if (weekOffset === 0) {
+            const listEl = document.getElementById('my-shifts-list');
+            if (listEl) listEl.innerHTML = myShiftsHtml || '<div style="color:var(--text-muted); font-size:0.85rem;">Bạn không có ca nào tuần này.</div>';
+        }
+
+    } catch (e) {
+        container.innerHTML = `<div class="modal-alert error" style="display:block;">Lỗi kết nối máy chủ!</div>`;
+    }
+}
+
+// Mở Modal ghi chú
+function openStaffRegisterModal(caId, tenCa, ngayLam, displayDate, currentNote, isAlreadyRegistered) {
+    document.getElementById('staff-reg-shift-info').innerText = `${tenCa} - Ngày ${displayDate}`;
+    document.getElementById('staff-reg-ca-id').value = caId;
+    document.getElementById('staff-reg-date').value = ngayLam;
+    document.getElementById('staff-reg-note').value = currentNote; 
+    
+    const btnCancel = document.getElementById('btn-cancel-staff-reg');
+    const btnSubmit = document.getElementById('staff-register-shift-modal').querySelector('.btn-primary');
+    
+    if (btnCancel) {
+        if (isAlreadyRegistered) {
+            btnCancel.style.display = 'inline-block';
+            btnCancel.onclick = function() { executeStaffRegisterShift(true); }; // Bấm để XÓA ca
+            btnSubmit.innerHTML = 'Cập nhật ghi chú';
+        } else {
+            btnCancel.style.display = 'none';
+            btnSubmit.innerHTML = 'Xác nhận Đăng ký';
+        }
+    }
+
+    document.getElementById('staff-register-shift-modal').style.display = 'flex';
+}
+
+// Hàm Xử lý Lưu Tạm Giao Diện (Đánh dấu isStaffScheduleChanged = true)
+function executeStaffRegisterShift(isDelete = false) {
+    const caId = document.getElementById('staff-reg-ca-id').value;
+    const ngayLam = document.getElementById('staff-reg-date').value;
+    const note = document.getElementById('staff-reg-note').value.trim();
+    
+    // Ghi nhận đã có thay đổi để Lưới bật sáng nút "Gửi lịch làm việc"
+    isStaffScheduleChanged = true;
+
+    // Loại bỏ ca này ra khỏi mảng tạm trước để tránh trùng lặp
+    pendingStaffShifts = pendingStaffShifts.filter(p => !(String(p.id_ca_lam_viec) === String(caId) && p.ngay_lam === ngayLam));
+    
+    if (!isDelete) {
+        // Hành động: Đăng ký mới hoặc Cập nhật ghi chú
+        pendingStaffShifts.push({
+            id_ca_lam_viec: caId,
+            ngay_lam: ngayLam,
+            ghi_chu: note,
+            is_delete: false
+        });
+    } else {
+        // Hành động: Xóa ca
+        pendingStaffShifts.push({
+            id_ca_lam_viec: caId,
+            ngay_lam: ngayLam,
+            is_delete: true
+        });
+    }
+
+    document.getElementById('staff-register-shift-modal').style.display = 'none';
+    loadStaffCalendarData(1, 'grid-staff-next-week'); 
+}
+
+// GỬI HÀNG LOẠT LÊN SERVER BAO GỒM CẢ LỆNH THÊM/SỬA VÀ XÓA
+async function submitStaffSchedule() {
+    if (pendingStaffShifts.length === 0) {
+        return showSystemModal("Thông báo", "Bạn chưa có thay đổi nào để gửi.", "error");
+    }
+
+    const btn = document.getElementById('btn-submit-staff-schedule');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+    btn.disabled = true;
+
+    try {
+        // Tách làm 2 mảng: Mảng Đăng ký/Sửa và Mảng Xóa
+        const shiftsToAddUpdate = pendingStaffShifts.filter(p => !p.is_delete);
+        const shiftsToDelete = pendingStaffShifts.filter(p => p.is_delete);
+
+        const promises = [];
+
+        // 1. Chạy vòng lặp gọi API Đăng ký mới / Cập nhật ghi chú
+        shiftsToAddUpdate.forEach(payload => {
+            promises.push(
+                fetch(`${API_BASE_URL}/lich-lam-viec/dang-ky`, {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` },
+                    body: JSON.stringify({
+                        id_ca_lam_viec: payload.id_ca_lam_viec,
+                        ngay_lam: payload.ngay_lam,
+                        ghi_chu: payload.ghi_chu
+                    })
+                }).then(res => res.json())
+            );
+        });
+
+        // 2. Chạy vòng lặp gọi API Xóa (Hủy đăng ký)
+        shiftsToDelete.forEach(payload => {
+            promises.push(
+                // Đẩy tham số id_ca_lam_viec và ngay_lam trực tiếp lên URL
+                fetch(`${API_BASE_URL}/lich-lam-viec/dang-ky?id_ca_lam_viec=${payload.id_ca_lam_viec}&ngay_lam=${payload.ngay_lam}`, {
+                    method: 'DELETE',
+                    headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` }
+                    // Không dùng body cho method DELETE
+                }).then(res => res.json())
+            );
+        });
+
+        // Hứng toàn bộ phản hồi từ Backend
+        const results = await Promise.all(promises);
+
+        // Kiểm tra xem có API nào bị từ chối (success = false) không
+        const hasError = results.some(res => !res.success);
+
+        if (hasError) {
+            // Lấy thông báo lỗi đầu tiên tìm thấy để báo cho nhân viên
+            const errorMsg = results.find(res => !res.success)?.message || "Một số thay đổi không thể lưu.";
+            showSystemModal("Có lỗi xảy ra", errorMsg, "error");
+        } else {
+            // Thành công hoàn toàn: Xóa mảng tạm, tắt cờ trạng thái, báo thành công
+            pendingStaffShifts = [];
+            isStaffScheduleChanged = false;
+            
+            showSystemModal("Thành công", "Đã đồng bộ lịch làm việc của bạn lên hệ thống.", "success");
+        }
+
+        loadStaffCalendarData(1, 'grid-staff-next-week'); 
+
+    } catch(e) {
+        showSystemModal("Mất kết nối", "Lỗi kết nối máy chủ!", "error");
+        btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Gửi lịch làm việc';
+        btn.disabled = false;
+    }
 }
