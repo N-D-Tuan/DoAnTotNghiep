@@ -151,7 +151,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/lich-lam-viec/dang-ky', [LichLamViecController::class, 'nhanVienHuyDangKyCa']);
     
     // Dành cho QUẢN LÝ SÂN
-    Route::put('/lich-lam-viec/{id}/duyet', [LichLamViecController::class, 'quanLyDuyetCa']);
     Route::post('/lich-lam-viec/xep-ca', [LichLamViecController::class, 'quanLyTrucTiepXepCa']);
     Route::post('/lich-lam-viec/chot-tuan', [LichLamViecController::class, 'chotLichTuan']);
 });

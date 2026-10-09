@@ -1951,9 +1951,15 @@ function getWeekDatesStaff(offsetWeeks = 0) {
     for(let i=0; i<7; i++) {
         let next = new Date(monday);
         next.setDate(monday.getDate() + i);
+        
+        // FIX LỖI MÚI GIỜ: Lấy chính xác ngày theo Local
+        const yyyy = next.getFullYear();
+        const mm = String(next.getMonth() + 1).padStart(2, '0');
+        const dd = String(next.getDate()).padStart(2, '0');
+
         dates.push({
-            dbDate: next.toISOString().split('T')[0],
-            display: `${next.getDate().toString().padStart(2,'0')}/${(next.getMonth()+1).toString().padStart(2,'0')}`,
+            dbDate: `${yyyy}-${mm}-${dd}`,
+            display: `${dd}/${mm}`,
             dayName: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][next.getDay()]
         });
     }
@@ -2140,7 +2146,13 @@ async function loadStaffCalendarData(weekOffset, containerId) {
                     if (myShift.TrangThaiXepLich === 'DangKy') {
                         myStatusHtml = `<div style="margin-top:5px; background: #fef3c7; color:#b45309; padding: 4px; border-radius:4px; font-size:0.75rem; text-align:left; font-weight:bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="Đang chờ duyệt ${myShift.GhiChu ? '- '+myShift.GhiChu : ''}"><i class="fa-solid fa-hourglass-half"></i> Bạn đăng ký${noteStr}</div>`;
                     } else if (myShift.TrangThaiXepLich === 'DaDuyet') {
-                        myStatusHtml = `<div style="margin-top:5px; background: #d1fae5; color:#047857; padding: 4px; border-radius:4px; font-size:0.75rem; text-align:left; font-weight:bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="Đã duyệt ${myShift.GhiChu ? '- '+myShift.GhiChu : ''}"><i class="fa-solid fa-check"></i> Đã duyệt${noteStr}</div>`;
+                        const role = myShift.CongViec ? (myShift.CongViec === 'ThuNgan' ? 'TN' : 'PV') : '?';
+                        
+                        myStatusHtml = `
+                        <div style="margin-top:5px; background: #d1fae5; color:#047857; padding: 4px; border-radius:4px; font-size:0.75rem; display: flex; justify-content: space-between; align-items: center;" title="Đã duyệt ${myShift.GhiChu ? '- '+myShift.GhiChu : ''}">
+                            <div style="font-weight:bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><i class="fa-solid fa-check"></i> Đã duyệt${noteStr}</div>
+                            <strong style="flex-shrink: 0; margin-left: 5px;">[${role}]</strong>
+                        </div>`;
                     } else if (myShift.TrangThaiXepLich === 'TuChoi') {
                         myStatusHtml = `<div style="margin-top:5px; background: #fee2e2; color:#b91c1c; padding: 4px; border-radius:4px; font-size:0.75rem; text-align:left; font-weight:bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="Bị từ chối ${myShift.GhiChu ? '- '+myShift.GhiChu : ''}"><i class="fa-solid fa-xmark"></i> Bị từ chối${noteStr}</div>`;
                     }
