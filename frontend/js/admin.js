@@ -6078,7 +6078,7 @@ async function loadAdminCalendarData(weekOffset, containerId) {
         }
 
         let html = `
-            <div style="width: 100%; overflow-x: auto; border-radius: 8px; border: 1px solid var(--border);">
+            <div class="schedule-scroll-wrapper" style="width: 100%; overflow-x: auto; border-radius: 8px; border: 1px solid var(--border);">
                 <table class="admin-table table-bordered" style="min-width: 1000px; width: 100%; margin: 0; border: none;">
                     <thead style="background: #F8FAFC;">
                         <tr>
@@ -6127,7 +6127,7 @@ async function loadAdminCalendarData(weekOffset, containerId) {
                     
                     if (showRemoveBtn) {
                         // Nếu là xóa ca tạm thời thì gọi hàm gỡ local, nếu là xóa ca đã duyệt thì gọi hàm gỡ DB
-                        const isTuChoiTuanSau = (weekOffset === 1 && s.TrangThaiXepLich === 'DaDuyet');
+                        const isTuChoiTuanSau = (weekOffset === 1 && s.TrangThaiXepLich === 'DaDuyet' && !isLocal);
                         const clickAction = (isLocal || isTuChoiTuanSau)
                             ? `window.removePendingAssignment(${ca.ID}, '${date.dbDate}', ${s.ID_NhanVien}, ${isTuChoiTuanSau})` 
                             : `window.executeRemoveApprovedShift(${s.ID_CaLamViec}, '${s.NgayLam}', ${s.ID_NhanVien}, ${weekOffset})`;
@@ -6193,7 +6193,22 @@ async function loadAdminCalendarData(weekOffset, containerId) {
         });
 
         html += `</tbody></table></div>`;
+
+        // 1. Tìm thanh cuộn cũ và cất vị trí hiện tại đi
+        let savedScrollLeft = 0;
+        const oldScrollWrapper = container.querySelector('.schedule-scroll-wrapper');
+        if (oldScrollWrapper) {
+            savedScrollLeft = oldScrollWrapper.scrollLeft;
+        }
+
+        // 2. Ghi đè HTML (Vẽ lại lưới mới tinh)
         container.innerHTML = html;
+
+        // 3. Tìm thanh cuộn mới vừa được tạo ra và bắt nó cuộn tới đúng vị trí lúc nãy
+        const newScrollWrapper = container.querySelector('.schedule-scroll-wrapper');
+        if (newScrollWrapper && savedScrollLeft > 0) {
+            newScrollWrapper.scrollLeft = savedScrollLeft;
+        }
 
         if (weekOffset === 0) {
             const boxContainer = document.getElementById('manager-my-shifts-container');
@@ -6516,11 +6531,42 @@ async function executeManagerAssignShift() {
         return;
     }
 
-    // ĐÃ SỬA BUG LẤY TÊN: Lấy tên chuẩn xác từ thuộc tính data-name thay vì chặt chuỗi
+    // Lấy tên chuẩn xác từ thuộc tính data-name thay vì chặt chuỗi
     const tenNhanVien = selectEl.options[selectEl.selectedIndex].getAttribute('data-name'); 
 
     const isEdit = document.getElementById('manager-assign-is-edit').value === 'true'; 
     const congViec = document.querySelector('input[name="manager_assign_role"]:checked').value;
+
+    if (congViec === 'ThuNgan') {
+        const cacheKey = `${idCa}_${ngayLam}`;
+        const dbShifts = window.adminShiftCache[cacheKey] || [];
+        let countThuNgan = 0;
+
+        // 1. Đếm Thu ngân đã chốt trên Server (và chưa bị quản lý ấn Xóa ở Local)
+        dbShifts.forEach(s => {
+            if (s.TrangThaiXepLich === 'DaDuyet' && s.CongViec === 'ThuNgan') {
+                const isDeletedLocal = pendingManagerAssignments.some(p => 
+                    String(p.id_ca_lam_viec) === String(idCa) && 
+                    p.ngay_lam === ngayLam && 
+                    String(p.id_nhan_vien) === String(s.ID_NhanVien) && 
+                    p.is_delete
+                );
+                if (!isDeletedLocal) countThuNgan++;
+            }
+        });
+
+        // 2. Đếm số Thu Ngân mới vừa được Quản lý xếp tạm ở Local
+        pendingManagerAssignments.forEach(p => {
+            if (String(p.id_ca_lam_viec) === String(idCa) && p.ngay_lam === ngayLam && p.cong_viec === 'ThuNgan' && !p.is_delete) {
+                countThuNgan++;
+            }
+        });
+
+        if (countThuNgan >= 1) {
+            showSystemModal("Không thể xếp ca", "Mỗi ca làm việc chỉ được phép có tối đa 1 Thu Ngân. Vui lòng chọn vị trí Phục Vụ hoặc gỡ Thu Ngân hiện tại ra trước.", "error");
+            return; // Dừng lại, không cho phép lưu
+        }
+    }
 
     // Nếu là tuần hiện tại, gửi API luôn vì là sửa đột xuất
     if (isEdit) {

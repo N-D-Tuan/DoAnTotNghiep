@@ -1988,7 +1988,27 @@ function renderLichLamViecStaff() {
 
             <!-- LƯỚI 1: TUẦN SAU (ĐỂ ĐĂNG KÝ) -->
             <div id="staff-cal-next" class="tab-pane active" style="padding: 0 20px 20px 20px;">
-                <div style="display: flex; justify-content: flex-end; margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; position: relative;">
+                    
+                    <!-- Phần Quy tắc đăng ký -->
+                    <div style="position: relative; display: flex; align-items: center;">
+                        <span style="font-weight: 600; color: var(--text-dark); font-size: 0.95rem;">Quy tắc đăng ký</span>
+                        <i id="btn-show-rules" class="fa-solid fa-circle-exclamation" style="color: #f59e0b; cursor: pointer; font-size: 1.15rem; margin-left: 6px; transition: 0.2s;" onclick="toggleStaffRules(event)"></i>
+                        
+                        <!-- Khung Modal Quy tắc (Mặc định ẩn) -->
+                        <div id="staff-rules-box" style="display: none; position: absolute; top: 25px; left: 0; background: white; border: 1px solid var(--border); box-shadow: 0 4px 15px rgba(0,0,0,0.1); border-radius: 8px; width: 410px; padding: 15px; z-index: 100;" onclick="event.stopPropagation()">
+                            <h4 style="margin: 0 0 10px 0; color: var(--primary); font-size: 0.95rem; display: flex; align-items: center; gap: 6px;">
+                                <i class="fa-solid fa-clipboard-list"></i> Quy định xếp ca
+                            </h4>
+                            <ul style="margin: 0; padding-left: 20px; font-size: 0.85rem; color: var(--text-muted); line-height: 1.6;">
+                                <li>Chỉ được phép thao tác từ <strong>Thứ 2 đến Thứ 7</strong>.</li>
+                                <li>Hệ thống <strong>khóa đăng ký</strong> vào 00:00 sáng Chủ Nhật.</li>
+                                <li>Sau khi Quản lý chốt (Đã duyệt), không thể tự ý hủy ca.</li>
+                                <li>Có việc đột xuất phải báo trực tiếp với Quản lý sân.</li>
+                            </ul>
+                        </div>
+                    </div>
+
                     <button id="btn-submit-staff-schedule" class="btn-primary" onclick="submitStaffSchedule()"><i class="fa-solid fa-paper-plane"></i> Gửi lịch làm việc</button>
                 </div>
                 <div id="grid-staff-next-week">Đang tải...</div>
@@ -2330,3 +2350,34 @@ async function submitStaffSchedule() {
         btn.disabled = false;
     }
 }
+
+// ======================================================
+// LOGIC: BẬT / TẮT QUY TẮC ĐĂNG KÝ CA CHO NHÂN VIÊN
+// ======================================================
+
+// Hàm bật/tắt popup hộp thoại quy tắc
+window.toggleStaffRules = function(event) {
+    event.stopPropagation(); // Ngăn không cho sự kiện click lan ra ngoài document
+    const ruleBox = document.getElementById('staff-rules-box');
+    if (ruleBox) {
+        if (ruleBox.style.display === 'none' || ruleBox.style.display === '') {
+            ruleBox.style.display = 'block';
+        } else {
+            ruleBox.style.display = 'none';
+        }
+    }
+};
+
+// Bắt sự kiện click toàn màn hình để tự động đóng box nếu click ra ngoài
+document.addEventListener('click', function(event) {
+    const ruleBox = document.getElementById('staff-rules-box');
+    const btnShow = document.getElementById('btn-show-rules');
+    
+    // Nếu hộp thoại đang bật
+    if (ruleBox && ruleBox.style.display === 'block') {
+        // Kiểm tra vị trí chuột: Nếu click KHÔNG nằm trong ruleBox VÀ KHÔNG phải click vào cái dấu chấm than
+        if (!ruleBox.contains(event.target) && event.target !== btnShow) {
+            ruleBox.style.display = 'none';
+        }
+    }
+});
