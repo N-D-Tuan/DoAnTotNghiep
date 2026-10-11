@@ -2016,12 +2016,14 @@ function renderLichLamViecStaff() {
 
             <!-- LƯỚI 2: TUẦN HIỆN TẠI (VIEW ONLY & DANH SÁCH CA CỦA MÌNH) -->
             <div id="staff-cal-current" class="tab-pane" style="display: none; padding: 0 20px 20px 20px;">
-                <div style="display: flex; gap: 20px; align-items: flex-start;">
+                <div style="display: flex; gap: 20px; align-items: flex-start; overflow: hidden;">
                     <!-- Lưới View -->
-                    <div style="flex: 1;" id="grid-staff-current-week">Đang tải...</div>
+                    <div style="flex: 1; min-width: 0; overflow-x: auto; border: 1px solid var(--border); border-radius: 8px;" class="schedule-scroll-wrapper">
+                        <div id="grid-staff-current-week">Đang tải...</div>
+                    </div>
                     
                     <!-- Box ca của tôi -->
-                    <div style="width: 300px; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 15px;">
+                    <div style="width: 300px; flex-shrink: 0; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 15px;">
                         <h4 style="margin: 0 0 15px 0; color: var(--primary); font-size: 1rem;"><i class="fa-solid fa-user-clock"></i> Các ca của bạn tuần này</h4>
                         <div id="my-shifts-list">Đang tải...</div>
                     </div>
@@ -2131,8 +2133,8 @@ async function loadStaffCalendarData(weekOffset, containerId) {
         }
 
         let html = `
-            <div class="table-responsive">
-                <table class="admin-table table-bordered">
+            <div class="schedule-scroll-wrapper" style="width: 100%; overflow-x: auto; border-radius: 8px; border: 1px solid var(--border);">
+                <table class="admin-table table-bordered" style="min-width: 1000px; width: 100%; margin: 0; border: none;">
                     <thead style="background: #F8FAFC;">
                         <tr>
                             <th style="width: 100px; text-align: center;">CA LÀM</th>
@@ -2142,7 +2144,7 @@ async function loadStaffCalendarData(weekOffset, containerId) {
                     <tbody>
         `;
 
-        let myShiftsHtml = ''; 
+        let myShiftsArray = [];
 
         caData.forEach(ca => {
             html += `<tr><td style="text-align: center; font-weight: bold; background: #f8fafc; border-right: 1px solid var(--border);">${ca.TenCa}</td>`;
@@ -2161,15 +2163,13 @@ async function loadStaffCalendarData(weekOffset, containerId) {
                 // Tách riêng: Lấy ca của tôi để vẽ danh sách (Box tổng hợp) bên tay phải
                 const myShift = shifts.find(s => String(s.ID_NhanVien) === String(currentUser.ID));
                 
+                // Nếu tìm thấy ca của mình ở Tuần hiện tại, đẩy cục data đó vào mảng
                 if (myShift && weekOffset === 0 && myShift.TrangThaiXepLich === 'DaDuyet') {
-                    const roleName = myShift.CongViec === 'ThuNgan' ? 'Thu Ngân' : 'Phục Vụ';
-                    myShiftsHtml += `
-                        <div style="background: white; border: 1px solid #e2e8f0; border-left: 4px solid var(--primary); padding: 10px; margin-bottom: 10px; border-radius: 6px;">
-                            <div style="font-weight: bold; color: var(--text-dark); margin-bottom: 4px;">${date.dayName} - ${date.display}</div>
-                            <div style="font-size: 0.85rem; color: var(--primary);"><i class="fa-regular fa-clock"></i> ${ca.TenCa}</div>
-                            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;"><i class="fa-solid fa-user-tag"></i> Vị trí: ${roleName}</div>
-                        </div>
-                    `;
+                    myShiftsArray.push({
+                        dateObj: date, // Chứa { dbDate, display, dayName }
+                        caObj: ca,     // Chứa { TenCa, GioBatDau, ... }
+                        shiftObj: myShift // Chứa { CongViec, ... }
+                    });
                 }
 
                 let staffHtml = '';
@@ -2179,7 +2179,7 @@ async function loadStaffCalendarData(weekOffset, containerId) {
                     // ==========================================
                     // LƯỚI TUẦN HIỆN TẠI: HIỂN THỊ DANH SÁCH TOÀN BỘ NHÂN VIÊN
                     // ==========================================
-                    const displayShifts = shifts.filter(s => s.TrangThaiXepLich === 'DaDuyet' || String(s.ID_NhanVien) === String(currentUser.ID));
+                    const displayShifts = shifts.filter(s => s.TrangThaiXepLich === 'DaDuyet');
 
                     staffHtml = displayShifts.map(s => {
                         const isMyShift = String(s.ID_NhanVien) === String(currentUser.ID);
@@ -2210,10 +2210,16 @@ async function loadStaffCalendarData(weekOffset, containerId) {
                         }
 
                         let rightEl = roleStr ? `<strong>[${roleStr}]</strong>` : '';
+                        
+                        // XỬ LÝ LỖI GIAO DIỆN (Cắt chuỗi thông minh, chống tràn)
+                        const fullText = `${nameDisplay}${noteStr.replace(/<[^>]*>?/gm, '')}`; // Bỏ thẻ HTML để đưa vào tooltip (title)
 
                         return `
-                            <div style="font-size: 0.8rem; color: ${color}; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; gap: 4px; ${bgStyle}" title="${nameDisplay} ${noteStr}">
-                                <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><i class="fa-solid ${icon}"></i> ${nameDisplay}${noteStr}</span>
+                            <div style="font-size: 0.8rem; color: ${color}; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; gap: 8px; ${bgStyle}" title="${fullText}">
+                                <div style="display: flex; align-items: center; min-width: 0; flex: 1;">
+                                    <i class="fa-solid ${icon}" style="margin-right: 4px; flex-shrink: 0;"></i> 
+                                    <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; max-width: 100%;">${nameDisplay}${noteStr}</span>
+                                </div>
                                 <div style="flex-shrink: 0;">${rightEl}</div>
                             </div>`;
                     }).join('');
@@ -2266,6 +2272,31 @@ async function loadStaffCalendarData(weekOffset, containerId) {
         container.innerHTML = html;
 
         if (weekOffset === 0) {
+            let myShiftsHtml = '';
+            
+            // 1. Sắp xếp mảng: Ưu tiên Ngày trước, nếu cùng ngày thì ưu tiên Giờ Bắt Đầu (Sáng trước, Tối sau)
+            myShiftsArray.sort((a, b) => {
+                // So sánh theo ngày (Ví dụ: 2026-10-12 và 2026-10-13)
+                if (a.dateObj.dbDate !== b.dateObj.dbDate) {
+                    return new Date(a.dateObj.dbDate) - new Date(b.dateObj.dbDate);
+                }
+                // Nếu cùng 1 ngày, so sánh tiếp đến Giờ Bắt Đầu ca (Ví dụ: 07:00 và 15:00)
+                return a.caObj.GioBatDau.localeCompare(b.caObj.GioBatDau);
+            });
+
+            // 2. Chạy vòng lặp để sinh chuỗi HTML từ mảng đã sắp xếp
+            myShiftsArray.forEach(item => {
+                const roleName = item.shiftObj.CongViec === 'ThuNgan' ? 'Thu Ngân' : 'Phục Vụ';
+                myShiftsHtml += `
+                    <div style="background: white; border: 1px solid #e2e8f0; border-left: 4px solid var(--primary); padding: 10px; margin-bottom: 10px; border-radius: 6px;">
+                        <div style="font-weight: bold; color: var(--text-dark); margin-bottom: 4px;">${item.dateObj.dayName} - ${item.dateObj.display}</div>
+                        <div style="font-size: 0.85rem; color: var(--primary);"><i class="fa-regular fa-clock"></i> ${item.caObj.TenCa}</div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;"><i class="fa-solid fa-user-tag"></i> Vị trí: ${roleName}</div>
+                    </div>
+                `;
+            });
+
+            // 3. Đổ ra giao diện
             const listEl = document.getElementById('my-shifts-list');
             if (listEl) listEl.innerHTML = myShiftsHtml || '<div style="color:var(--text-muted); font-size:0.85rem;">Bạn không có ca nào tuần này.</div>';
         }
