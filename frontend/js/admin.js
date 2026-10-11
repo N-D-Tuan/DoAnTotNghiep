@@ -6171,7 +6171,7 @@ async function loadAdminCalendarData(weekOffset, containerId) {
                     <tbody>
         `;
 
-        let myShiftsHtml = ''; 
+        let myShiftsArray = [];
         window.adminShiftCache = {}; // Reset mảng cache trước khi vẽ lịch
 
         caData.forEach(ca => {
@@ -6193,22 +6193,27 @@ async function loadAdminCalendarData(weekOffset, containerId) {
                 let staffHtml = displayShifts.map(s => {
                     const isPending = s.TrangThaiXepLich === 'DangKy';
                     const isLocal = s.is_pending_local === true;
+                    
+                    // BƯỚC 1: KIỂM TRA XEM CÓ PHẢI CA CỦA QUẢN LÝ ĐANG ĐĂNG NHẬP KHÔNG
+                    const isMyShift = String(s.ID_NhanVien) === String(currentUser.ID);
 
                     const color = isPending ? '#ea580c' : '#047857';
                     const icon = isPending ? 'fa-circle-question' : 'fa-check-circle';
                     const role = s.CongViec ? (s.CongViec === 'ThuNgan' ? 'TN' : 'PV') : '?';
                     let noteStr = s.GhiChu ? ` <span style="font-style:italic; font-weight:normal; opacity:0.8;">(${s.GhiChu})</span>` : '';
                     
+                    // BƯỚC 2: HIỂN THỊ TÊN - Đổi thành "Tôi" nếu là ca của mình
+                    let nameDisplay = isMyShift ? 'Tôi' : (s.nhan_vien ? s.nhan_vien.HoTen : 'N/A');
+
                     // Thêm nút Xóa cho những ca Lưu tạm ở Tuần Sau
                     let removeBtn = '';
                     
                     // Logic hiển thị nút X
-                    const showRemoveBtn = (weekOffset === 1 && isLocal) || // Tuần sau: Hiện X ở các ca mới ghép tạm
-                                          (weekOffset === 1 && (!isNextWeekLocked || pendingManagerAssignments.length > 0) && s.TrangThaiXepLich === 'DaDuyet') || // Tuần sau: Mở khóa chỉnh sửa -> Hiện X ở ca đã duyệt
-                                          (weekOffset === 0 && isEditModeCurrentWeek && s.TrangThaiXepLich === 'DaDuyet'); // Tuần này: Bật chế độ chỉnh sửa -> Hiện X ở ca đã duyệt
+                    const showRemoveBtn = (weekOffset === 1 && isLocal) || 
+                                          (weekOffset === 1 && (!isNextWeekLocked || pendingManagerAssignments.length > 0) && s.TrangThaiXepLich === 'DaDuyet') || 
+                                          (weekOffset === 0 && isEditModeCurrentWeek && s.TrangThaiXepLich === 'DaDuyet'); 
                     
                     if (showRemoveBtn) {
-                        // Nếu là xóa ca tạm thời thì gọi hàm gỡ local, nếu là xóa ca đã duyệt thì gọi hàm gỡ DB
                         const isTuChoiTuanSau = (weekOffset === 1 && s.TrangThaiXepLich === 'DaDuyet' && !isLocal);
                         const clickAction = (isLocal || isTuChoiTuanSau)
                             ? `window.removePendingAssignment(${ca.ID}, '${date.dbDate}', ${s.ID_NhanVien}, ${isTuChoiTuanSau})` 
@@ -6217,11 +6222,22 @@ async function loadAdminCalendarData(weekOffset, containerId) {
                         removeBtn = `<i class="fa-solid fa-circle-xmark" style="color: #ef4444; cursor: pointer; margin-left: 6px; font-size: 1rem;" title="Xóa phân công" onclick="event.stopPropagation(); ${clickAction}"></i>`;
                     }
 
-                    // Thêm background nhạt để làm nổi bật ô chứa nhân viên vừa lưu tạm
-                    const localStyle = isLocal ? 'background: #f0f9ff; padding: 3px 6px; border-radius: 4px; border: 1px dashed #bae6fd;' : '';
+                    // BƯỚC 3: XỬ LÝ BACKGROUND - Bôi xanh nền nếu là ca của mình
+                    let localStyle = '';
+                    if (isMyShift && s.TrangThaiXepLich === 'DaDuyet') {
+                        localStyle = 'background: #d1fae5; padding: 2px 4px; border-radius: 4px;'; // Nền xanh ngọc nhạt
+                    } else if (isLocal) {
+                        localStyle = 'background: #f0f9ff; padding: 3px 6px; border-radius: 4px; border: 1px dashed #bae6fd;'; // Nền xanh dương lưu tạm
+                    }
 
-                    return `<div style="font-size: 0.8rem; color: ${color}; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; gap: 8px; ${localStyle}">
-                                <span style="white-space: nowrap;" title="${s.nhan_vien.HoTen} ${s.GhiChu ? '- '+s.GhiChu : ''}"><i class="fa-solid ${icon}"></i> ${s.nhan_vien.HoTen}${noteStr}</span>
+                    // Xử lý title tooltip để không bị tràn HTML
+                    const fullText = `${nameDisplay}${noteStr.replace(/<[^>]*>?/gm, '')}`;
+
+                    return `<div style="font-size: 0.8rem; color: ${color}; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; gap: 8px; ${localStyle}" title="${fullText}">
+                                <div style="display: flex; align-items: center; min-width: 0; flex: 1;">
+                                    <i class="fa-solid ${icon}" style="margin-right: 4px; flex-shrink: 0;"></i>
+                                    <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; max-width: 100%;">${nameDisplay}${noteStr}</span>
+                                </div>
                                 <div style="flex-shrink: 0; display: flex; align-items: center;">
                                     <strong>[${role}]</strong>
                                     ${removeBtn}
@@ -6235,16 +6251,13 @@ async function loadAdminCalendarData(weekOffset, containerId) {
                 if(shifts.length === 0) staffHtml = `<div style="font-size: 0.8rem; color: #94a3b8; text-align: center;">Chưa có người</div>`;
 
                 if (weekOffset === 0) {
-                    const myShift = shifts.find(s => s.ID_NhanVien == currentUser.ID && s.TrangThaiXepLich === 'DaDuyet');
+                    const myShift = shifts.find(s => String(s.ID_NhanVien) === String(currentUser.ID) && s.TrangThaiXepLich === 'DaDuyet');
                     if (myShift) {
-                        const roleName = myShift.CongViec === 'ThuNgan' ? 'Thu Ngân' : 'Phục Vụ';
-                        myShiftsHtml += `
-                            <div style="background: white; border: 1px solid #e2e8f0; border-left: 4px solid var(--primary); padding: 10px; margin-bottom: 10px; border-radius: 6px;">
-                                <div style="font-weight: bold; color: var(--text-dark); margin-bottom: 4px;">${date.dayName} - ${date.display}</div>
-                                <div style="font-size: 0.85rem; color: var(--primary);"><i class="fa-regular fa-clock"></i> ${ca.TenCa}</div>
-                                <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;"><i class="fa-solid fa-user-tag"></i> Vị trí: ${roleName}</div>
-                            </div>
-                        `;
+                        myShiftsArray.push({
+                            dateObj: date, 
+                            caObj: ca,     
+                            shiftObj: myShift 
+                        });
                     }
                 }
 
@@ -6286,17 +6299,31 @@ async function loadAdminCalendarData(weekOffset, containerId) {
         // 2. Ghi đè HTML (Vẽ lại lưới mới tinh)
         container.innerHTML = html;
 
-        // 3. Tìm thanh cuộn mới vừa được tạo ra và bắt nó cuộn tới đúng vị trí lúc nãy
-        const newScrollWrapper = container.querySelector('.schedule-scroll-wrapper');
-        if (newScrollWrapper && savedScrollLeft > 0) {
-            newScrollWrapper.scrollLeft = savedScrollLeft;
-        }
-
         if (weekOffset === 0) {
             const boxContainer = document.getElementById('manager-my-shifts-container');
             const listEl = document.getElementById('manager-my-shifts-list');
-            if (myShiftsHtml !== '') {
-                listEl.innerHTML = myShiftsHtml;
+            
+            if (myShiftsArray.length > 0) {
+                // Sắp xếp
+                myShiftsArray.sort((a, b) => {
+                    if (a.dateObj.dbDate !== b.dateObj.dbDate) return new Date(a.dateObj.dbDate) - new Date(b.dateObj.dbDate);
+                    return a.caObj.GioBatDau.localeCompare(b.caObj.GioBatDau);
+                });
+
+                // Chuyển mảng thành HTML
+                let resultHtml = '';
+                myShiftsArray.forEach(item => {
+                    const roleName = item.shiftObj.CongViec === 'ThuNgan' ? 'Thu Ngân' : 'Phục Vụ';
+                    resultHtml += `
+                        <div style="background: white; border: 1px solid #e2e8f0; border-left: 4px solid var(--primary); padding: 10px; margin-bottom: 10px; border-radius: 6px;">
+                            <div style="font-weight: bold; color: var(--text-dark); margin-bottom: 4px;">${item.dateObj.dayName} - ${item.dateObj.display}</div>
+                            <div style="font-size: 0.85rem; color: var(--primary);"><i class="fa-regular fa-clock"></i> ${item.caObj.TenCa}</div>
+                            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;"><i class="fa-solid fa-user-tag"></i> Vị trí: ${roleName}</div>
+                        </div>
+                    `;
+                });
+
+                listEl.innerHTML = resultHtml;
                 boxContainer.style.display = 'block'; 
             } else {
                 boxContainer.style.display = 'none';  

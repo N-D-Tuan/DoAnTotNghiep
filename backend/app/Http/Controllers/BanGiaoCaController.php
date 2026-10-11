@@ -223,12 +223,6 @@ class BanGiaoCaController extends Controller
             }
         }
 
-        LichLamViec::where('ID_CaLamViec', $bgc->ID_CaLamViec)
-            ->where('NgayLam', $bgc->Ngay)
-            ->where('TrangThaiDiemDanh', 'DaLam')
-            ->where('TrangThaiXepLich', 'DaDuyet')
-            ->update(['TrangThaiXepLich' => 'DaChotCa']);
-
         broadcast(new \App\Events\SystemDataUpdated())->toOthers();
 
         return response()->json(['success' => true, 'message' => 'Đã chốt và bàn giao ca thành công!']);
