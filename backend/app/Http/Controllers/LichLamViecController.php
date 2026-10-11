@@ -200,4 +200,108 @@ class LichLamViecController extends Controller
 
         return response()->json(['success' => false, 'message' => 'Không tìm thấy ca làm việc để hủy!']);
     }
+
+    // 7. NHÂN VIÊN TỰ ĐIỂM DANH (CHECK-IN)
+    public function nhanVienDiemDanh(Request $request, $id)
+    {
+        $user = $request->user();
+        
+        $lich = LichLamViec::with('caLamViec')
+            ->where('ID', $id)
+            ->where('ID_NhanVien', $user->ID)
+            ->where('TrangThaiXepLich', 'DaDuyet')
+            ->first();
+
+        if (!$lich) {
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy ca làm việc hợp lệ.']);
+        }
+
+        if ($lich->TrangThaiDiemDanh !== 'ChuaLam') {
+            return response()->json(['success' => false, 'message' => 'Ca này đã được điểm danh hoặc đã chốt.']);
+        }
+
+        $now = Carbon::now();
+        $ngayLam = Carbon::parse($lich->NgayLam);
+        
+        // Kiểm tra đúng ngày mới cho điểm danh
+        if (!$now->isSameDay($ngayLam)) {
+            return response()->json(['success' => false, 'message' => 'Chỉ có thể điểm danh trong đúng ngày làm việc.']);
+        }
+
+        $gioBatDau = Carbon::parse($lich->NgayLam . ' ' . $lich->caLamViec->GioBatDau);
+        $gioKetThuc = Carbon::parse($lich->NgayLam . ' ' . $lich->caLamViec->GioKetThuc);
+        
+        if ($gioKetThuc->lessThan($gioBatDau)) {
+            $gioKetThuc->addDay(); // Qua ngày mới
+        }
+
+        // Không cho điểm danh sớm hơn 30 phút
+        $thoiGianChoPhepDiemDanh = $gioBatDau->copy()->subMinutes(30);
+        if ($now->lessThan($thoiGianChoPhepDiemDanh)) {
+            return response()->json(['success' => false, 'message' => 'Chưa đến giờ nhận ca (Chỉ được nhận ca trước 30 phút).']);
+        }
+
+        // Không cho điểm danh nếu đã hết ca
+        if ($now->greaterThan($gioKetThuc)) {
+            return response()->json(['success' => false, 'message' => 'Ca làm việc đã kết thúc, không thể tự điểm danh.']);
+        }
+
+        // Tính số phút đi muộn (nếu check-in sau giờ bắt đầu)
+        $soPhutDiMuon = 0;
+        if ($now->greaterThan($gioBatDau)) {
+            $soPhutDiMuon = $gioBatDau->diffInMinutes($now);
+        }
+
+        $lich->TrangThaiDiemDanh = 'DaLam';
+        $lich->SoPhutDiMuon = $soPhutDiMuon;
+        $lich->save();
+
+        broadcast(new \App\Events\SystemDataUpdated())->toOthers();
+
+        return response()->json([
+            'success' => true, 
+            'message' => 'Điểm danh nhận ca thành công!', 
+            'so_phut_di_muon' => $soPhutDiMuon
+        ]);
+    }
+
+    // 8. QUẢN LÝ CHỐT CÔNG / SỬA CÔNG THỦ CÔNG
+    public function quanLyChotCong(Request $request, $id)
+    {
+        $request->validate([
+            'trang_thai_diem_danh' => 'required|in:ChuaLam,DaLam,VangMat',
+            'so_phut_di_muon' => 'nullable|integer|min:0',
+            'tien_phat' => 'nullable|numeric|min:0',
+            'tien_thuong' => 'nullable|numeric|min:0',
+            'ly_do_dieu_chinh' => 'nullable|string|max:255'
+        ]);
+
+        $lich = LichLamViec::find($id);
+
+        if (!$lich) {
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy ca làm việc.']);
+        }
+
+        $lich->TrangThaiDiemDanh = $request->trang_thai_diem_danh;
+        $lich->SoPhutDiMuon = $request->so_phut_di_muon ?? 0;
+        $lich->TienPhat = $request->tien_phat ?? 0;
+        $lich->TienThuong = $request->tien_thuong ?? 0;
+        $lich->LyDoDieuChinh = $request->ly_do_dieu_chinh;
+        $lich->save();
+
+        // Phát thông báo cho nhân viên nếu Quản lý ép Vắng Mặt hoặc có áp dụng tiền phạt/thưởng
+        if ($request->trang_thai_diem_danh === 'VangMat' || $request->tien_phat > 0 || $request->tien_thuong > 0) {
+            ThongBao::create([
+                'ID_NguoiDung' => $lich->ID_NhanVien,
+                'TieuDe' => 'Cập nhật chấm công',
+                'NoiDung' => 'Quản lý vừa cập nhật trạng thái chấm công ca ' . date('d/m/Y', strtotime($lich->NgayLam)) . ' của bạn.',
+                'LoaiThongBao' => 'HeThong'
+            ]);
+            broadcast(new \App\Events\UserDataUpdated($lich->ID_NhanVien))->toOthers();
+        }
+
+        broadcast(new \App\Events\SystemDataUpdated())->toOthers();
+
+        return response()->json(['success' => true, 'message' => 'Đã cập nhật trạng thái điểm danh.']);
+    }
 }
