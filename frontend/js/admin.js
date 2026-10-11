@@ -6984,7 +6984,7 @@ function renderAdminChamCongTable() {
         let trStyle = '';
         
         if (item.TrangThaiDiemDanh === 'DaLam') {
-            const treStr = item.SoPhutDiMuon > 0 ? `<br><small style="color: #ef4444;">Đi muộn ${item.SoPhutDiMuon} phút</small>` : '';
+            const treStr = item.SoPhutDiMuon > 0 ? `<br><small style="color: #ef4444;">Đi muộn ${formatMinutesToHours(item.SoPhutDiMuon)}</small>` : '';
             statusHtml = `<span style="background: #d1fae5; color: #047857; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: bold;"><i class="fa-solid fa-check"></i> Có mặt</span>${treStr}`;
         } else if (item.TrangThaiDiemDanh === 'VangMat') {
             statusHtml = `<span style="background: #fee2e2; color: #b91c1c; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: bold;"><i class="fa-solid fa-xmark"></i> Vắng mặt</span>`;
@@ -7236,13 +7236,13 @@ function renderAdminLichSuGiaoCa(data) {
         // Trạng thái phiếu
         let badgeColor = '#64748b', badgeBg = '#f1f5f9', viStatus = 'Chưa xác định';
         if (item.TrangThai === 'DangTrongCa') { badgeColor = '#047857'; badgeBg = '#d1fae5'; viStatus = 'Đang trong ca'; }
-        else if (item.TrangThai === 'DaChot') { badgeColor = '#1d4ed8'; badgeBg = '#dbeafe'; viStatus = 'Đã chốt sổ'; }
+        else if (item.TrangThai === 'DaChotCa') { badgeColor = '#1d4ed8'; badgeBg = '#dbeafe'; viStatus = 'Đã chốt sổ'; }
         
         const badgeHtml = `<span style="padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; background: ${badgeBg}; color: ${badgeColor};">${viStatus}</span>`;
 
         // Tính toán độ lệch
         let lechHtml = '';
-        if (item.TrangThai === 'DaChot') {
+        if (item.TrangThai === 'DaChotCa') {
             const tongThucTe = Number(item.TienGiao) + Number(item.TienNopDoanhThu);
             const lech = Number(item.TienHeThong) - tongThucTe;
             
@@ -7402,3 +7402,17 @@ window.executeAdminChotCuongChe = function(bgcId) {
         }
     };
 };
+
+// Hàm chuyển đổi số phút sang định dạng "X giờ Y phút"
+function formatMinutesToHours(minutes) {
+    if (minutes <= 0) return '';
+    if (minutes < 60) return `${minutes} phút`;
+    
+    const hours = Math.floor(minutes / 60);
+    const remainMinutes = minutes % 60;
+    
+    if (remainMinutes === 0) {
+        return `${hours}h`;
+    }
+    return `${hours}h${remainMinutes}p`;
+}
