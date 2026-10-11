@@ -8,6 +8,7 @@ use App\Models\ThongBao;
 use App\Models\BanGiaoCa;
 use App\Models\ChiPhiPhatSinh;
 use App\Models\CaLamViec;
+use App\Models\LichLamViec;
 use App\Models\DatSan;
 use App\Models\HoaDonBanHang;
 use Carbon\Carbon;
@@ -58,6 +59,8 @@ class BanGiaoCaController extends Controller
             'GhiChuNhan' => $request->ghi_chu_nhan,
             'TrangThai' => 'DangTrongCa'
         ]);
+
+        broadcast(new \App\Events\SystemDataUpdated())->toOthers();
 
         return response()->json(['success' => true, 'message' => 'Tạo phiếu nhận ca thành công!', 'data' => $bgc]);
     }
@@ -170,13 +173,33 @@ class BanGiaoCaController extends Controller
         $bgc = BanGiaoCa::find($id);
         if (!$bgc) return response()->json(['success' => false, 'message' => 'Không tìm thấy phiếu.']);
 
+        $caLamViec = CaLamViec::find($bgc->ID_CaLamViec);
+        if ($caLamViec) {
+            $now = Carbon::now();
+            $gioKetThucCa = Carbon::parse($bgc->Ngay . ' ' . $caLamViec->GioKetThuc);
+            
+            // Nếu là ca qua ngày hôm sau (Ví dụ: 15h đến 05h sáng hôm sau)
+            if ($gioKetThucCa->lessThan(Carbon::parse($bgc->Ngay . ' ' . $caLamViec->GioBatDau))) {
+                $gioKetThucCa->addDay();
+            }
+
+            $thoiGianChoPhepChot = $gioKetThucCa->copy()->subMinutes(30);
+
+            if ($now->lessThan($thoiGianChoPhepChot)) {
+                return response()->json([
+                    'success' => false, 
+                    'message' => 'Bạn không được chốt ca quá sớm! Vui lòng chờ đến ' . $thoiGianChoPhepChot->format('H:i') . ' mới có thể bàn giao.'
+                ]);
+            }
+        }
+
         $bgc->ID_NhanVienGiao = $user->ID;
         $bgc->ThoiGianGiao = Carbon::now();
         $bgc->TienGiao = $request->tien_giao;
         $bgc->TienNopDoanhThu = $request->tien_nop_doanh_thu;
         $bgc->TienHeThong = $request->tien_he_thong;
         $bgc->GhiChuGiao = $request->ghi_chu_giao;
-        $bgc->TrangThai = 'DaChot';
+        $bgc->TrangThai = 'DaChotCa';
         $bgc->save();
 
         if ($request->tien_nop_doanh_thu > 0) {
@@ -199,6 +222,14 @@ class BanGiaoCaController extends Controller
                 broadcast(new \App\Events\UserDataUpdated($mgr->ID))->toOthers();
             }
         }
+
+        LichLamViec::where('ID_CaLamViec', $bgc->ID_CaLamViec)
+            ->where('NgayLam', $bgc->Ngay)
+            ->where('TrangThaiDiemDanh', 'DaLam')
+            ->where('TrangThaiXepLich', 'DaDuyet')
+            ->update(['TrangThaiXepLich' => 'DaChotCa']);
+
+        broadcast(new \App\Events\SystemDataUpdated())->toOthers();
 
         return response()->json(['success' => true, 'message' => 'Đã chốt và bàn giao ca thành công!']);
     }
@@ -285,6 +316,8 @@ class BanGiaoCaController extends Controller
         $bgc->GhiChuGiao = 'Hệ thống chốt cưỡng chế do nhân viên quên chốt ca.';
         $bgc->TrangThai = 'ChotCuongChe';
         $bgc->save();
+
+        broadcast(new \App\Events\SystemDataUpdated())->toOthers();
 
         return response()->json(['success' => true, 'message' => 'Đã chốt cưỡng chế thành công!']);
     }

@@ -2528,7 +2528,8 @@ async function loadDanhSachCaHomNay() {
                         } else if (bgc.TrangThai === 'DangTrongCa') {
                             // BƯỚC 3: Đã lập phiếu nhận, đang trong thời gian làm việc
                             borderStyle = 'border-top: 4px solid #10b981;';
-                            statusHtml = `<span style="background: #d1fae5; color: #047857; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;"><i class="fa-solid fa-user-clock"></i> Đang trong ca</span>`;
+                            const treHtml = shift.SoPhutDiMuon > 0 ? `<br><small style="color: #ef4444; font-weight: 500;">Đi muộn ${formatMinutesToHours(shift.SoPhutDiMuon)}</small>` : '';
+                            statusHtml = `<div style="text-align: right;"><span style="background: #d1fae5; color: #047857; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;"><i class="fa-solid fa-user-clock"></i> Đang trong ca</span>${treHtml}</div>`;
                             actionHtml = `
                                 <div style="display: flex; gap: 10px; margin-top: 15px;">
                                     <button class="btn-outline-sm" style="flex: 1; color: #3b82f6; border-color: #bfdbfe; background: #eff6ff;" onclick="openDanhSachPhieuChiModal(${bgc.ID})"><i class="fa-solid fa-list-ul"></i> Lịch sử Thu/Chi</button>
@@ -2547,10 +2548,30 @@ async function loadDanhSachCaHomNay() {
                     // LUỒNG DÀNH CHO PHỤC VỤ (Chỉ cần điểm danh có mặt là xong)
                     // ==========================================
                     else {
-                        borderStyle = 'border-top: 4px solid #10b981;';
-                        const treHtml = shift.SoPhutDiMuon > 0 ? `<br><small style="color: #ef4444;">Đi muộn ${shift.SoPhutDiMuon} phút</small>` : '';
-                        statusHtml = `<div style="text-align:right;"><span style="background: #d1fae5; color: #047857; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;"><i class="fa-solid fa-check"></i> Đã điểm danh</span>${treHtml}</div>`;
-                        actionHtml = `<div style="text-align: center; margin-top: 15px; padding: 12px; background: #f8fafc; border-radius: 8px; color: #10b981; font-weight: bold;"><i class="fa-solid fa-clipboard-check"></i> Đã điểm danh thành công</div>`;
+                        // Tính toán thời gian kết thúc ca để tự động đổi giao diện
+                        const [endH, endM] = ca.GioKetThuc.split(':');
+                        const [y, m, d] = todayStr.split('-');
+                        let endTime = new Date(y, m - 1, d, endH, endM);
+                        
+                        // Nếu là ca qua đêm (Giờ kết thúc < Giờ bắt đầu)
+                        if (endTime < new Date(y, m - 1, d, ca.GioBatDau.split(':')[0], ca.GioBatDau.split(':')[1])) {
+                            endTime.setDate(endTime.getDate() + 1);
+                        }
+
+                        const isPastEnd = new Date() >= endTime; // Kiểm tra xem đã qua giờ kết thúc chưa
+
+                        // Nếu ca đã bị đổi trạng thái (Do Thu Ngân chốt) HOẶC Đã qua giờ kết thúc ca
+                        if (shift.TrangThaiXepLich === 'DaChotCa' || isPastEnd) {
+                            borderStyle = 'border-top: 4px solid #64748b;';
+                            statusHtml = `<span style="background: #f1f5f9; color: #475569; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;"><i class="fa-solid fa-lock"></i> Đã chốt sổ</span>`;
+                            actionHtml = `<div style="text-align: center; margin-top: 15px; padding: 12px; background: #f8fafc; border-radius: 8px; color: #64748b; font-weight: bold;"><i class="fa-solid fa-clipboard-check"></i> Ca làm việc đã hoàn tất</div>`;
+                        } else {
+                            // Phục vụ đang trong ca làm việc, hiển thị trạng thái chờ
+                            borderStyle = 'border-top: 4px solid #10b981;';
+                            const treHtml = shift.SoPhutDiMuon > 0 ? `<br><small style="color: #ef4444; font-weight: 500;">Đi muộn ${formatMinutesToHours(shift.SoPhutDiMuon)}</small>` : '';
+                            statusHtml = `<div style="text-align:right;"><span style="background: #d1fae5; color: #047857; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;"><i class="fa-solid fa-user-clock"></i> Đang trong ca</span>${treHtml}</div>`;
+                            actionHtml = `<div style="text-align: center; margin-top: 15px; padding: 12px; background: #f8fafc; border-radius: 8px; color: #10b981; font-weight: bold;"></i> Hệ thống sẽ tự động chốt khi qua giờ kết thúc ca</div>`;
+                        }
                     }
                 } 
                 // VẮNG MẶT
@@ -2620,7 +2641,7 @@ window.openNhanCaModal = function(caId, tenCa) {
     let tienHeThong = 200000; // Mặc định là 200.000đ cho Ca Sáng
     if (tenCa.toLowerCase().includes('tối') || tenCa.toLowerCase().includes('chiều')) {
         // Nếu là ca tối, tìm Phiếu Bàn Giao Ca của ca trước đó đã chốt
-        const caTruoc = window.bgcTodayData ? window.bgcTodayData.find(b => b.TrangThai === 'DaChot' || b.TrangThai === 'ChotCuongChe') : null;
+        const caTruoc = window.bgcTodayData ? window.bgcTodayData.find(b => b.TrangThai === 'DaChotCa' || b.TrangThai === 'ChotCuongChe') : null;
         if (caTruoc) {
             tienHeThong = Number(caTruoc.TienGiao);
         }
@@ -2916,8 +2937,8 @@ window.openGiaoCaModal = async function(bgcId, tenCa) {
                 elNop.value = tienNop;
                 elGiao.value = tienGiao;
 
-                elNop.oninput = function() { elGiao.value = tienHT - Number(this.value); };
-                elGiao.oninput = function() { elNop.value = tienHT - Number(this.value); };
+                elNop.oninput = null;
+                elGiao.oninput = null;
             } else {
                 if (groupNop) groupNop.style.display = 'none';
                 elNop.value = 0; 
@@ -2983,3 +3004,17 @@ window.submitGiaoCa = async function() {
         btn.disabled = false;
     }
 };
+
+// Hàm chuyển đổi số phút sang định dạng "X giờ Y phút"
+function formatMinutesToHours(minutes) {
+    if (minutes <= 0) return '';
+    if (minutes < 60) return `${minutes} phút`;
+    
+    const hours = Math.floor(minutes / 60);
+    const remainMinutes = minutes % 60;
+    
+    if (remainMinutes === 0) {
+        return `${hours}h`;
+    }
+    return `${hours}h${remainMinutes}p`;
+}
