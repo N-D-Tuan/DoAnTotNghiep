@@ -2158,34 +2158,86 @@ async function loadStaffCalendarData(weekOffset, containerId) {
                 else if (approvedCount < reqCount) { bgColor = '#fffbeb'; borderColor = '#fde68a'; } 
                 else { bgColor = '#ecfdf5'; borderColor = '#a7f3d0'; } 
 
+                // Tách riêng: Lấy ca của tôi để vẽ danh sách (Box tổng hợp) bên tay phải
                 const myShift = shifts.find(s => String(s.ID_NhanVien) === String(currentUser.ID));
-                let myStatusHtml = '';
                 
-                if (myShift) {
-                    let noteStr = myShift.GhiChu ? ` <span style="font-style:italic; font-weight:normal; opacity:0.8;">(${myShift.GhiChu})</span>` : '';
-                    if (myShift.TrangThaiXepLich === 'DangKy') {
-                        myStatusHtml = `<div style="margin-top:5px; background: #fef3c7; color:#b45309; padding: 4px; border-radius:4px; font-size:0.75rem; text-align:left; font-weight:bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="Đang chờ duyệt ${myShift.GhiChu ? '- '+myShift.GhiChu : ''}"><i class="fa-solid fa-hourglass-half"></i> Bạn đăng ký${noteStr}</div>`;
-                    } else if (myShift.TrangThaiXepLich === 'DaDuyet') {
-                        const role = myShift.CongViec ? (myShift.CongViec === 'ThuNgan' ? 'TN' : 'PV') : '?';
+                if (myShift && weekOffset === 0 && myShift.TrangThaiXepLich === 'DaDuyet') {
+                    const roleName = myShift.CongViec === 'ThuNgan' ? 'Thu Ngân' : 'Phục Vụ';
+                    myShiftsHtml += `
+                        <div style="background: white; border: 1px solid #e2e8f0; border-left: 4px solid var(--primary); padding: 10px; margin-bottom: 10px; border-radius: 6px;">
+                            <div style="font-weight: bold; color: var(--text-dark); margin-bottom: 4px;">${date.dayName} - ${date.display}</div>
+                            <div style="font-size: 0.85rem; color: var(--primary);"><i class="fa-regular fa-clock"></i> ${ca.TenCa}</div>
+                            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;"><i class="fa-solid fa-user-tag"></i> Vị trí: ${roleName}</div>
+                        </div>
+                    `;
+                }
+
+                let staffHtml = '';
+
+                // KIỂM TRA ĐANG Ở TUẦN NÀO ĐỂ HIỂN THỊ
+                if (weekOffset === 0) {
+                    // ==========================================
+                    // LƯỚI TUẦN HIỆN TẠI: HIỂN THỊ DANH SÁCH TOÀN BỘ NHÂN VIÊN
+                    // ==========================================
+                    const displayShifts = shifts.filter(s => s.TrangThaiXepLich === 'DaDuyet' || String(s.ID_NhanVien) === String(currentUser.ID));
+
+                    staffHtml = displayShifts.map(s => {
+                        const isMyShift = String(s.ID_NhanVien) === String(currentUser.ID);
+                        const isPending = s.TrangThaiXepLich === 'DangKy';
+                        const isRejected = s.TrangThaiXepLich === 'TuChoi';
+
+                        let color = '#047857'; // Xanh ngọc (DaDuyet)
+                        let icon = 'fa-check';
+                        let roleStr = s.CongViec ? (s.CongViec === 'ThuNgan' ? 'TN' : 'PV') : '';
+                        let noteStr = s.GhiChu && isMyShift ? ` <span style="font-style:italic; font-weight:normal; opacity:0.8;">(${s.GhiChu})</span>` : '';
+                        let nameDisplay = isMyShift ? 'Tôi' : (s.nhan_vien ? s.nhan_vien.HoTen : 'N/A');
                         
-                        myStatusHtml = `
-                        <div style="margin-top:5px; background: #d1fae5; color:#047857; padding: 4px; border-radius:4px; font-size:0.75rem; display: flex; justify-content: space-between; align-items: center;" title="Đã duyệt ${myShift.GhiChu ? '- '+myShift.GhiChu : ''}">
-                            <div style="font-weight:bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><i class="fa-solid fa-check"></i> Đã duyệt${noteStr}</div>
-                            <strong style="flex-shrink: 0; margin-left: 5px;">[${role}]</strong>
-                        </div>`;
-                    } else if (myShift.TrangThaiXepLich === 'TuChoi') {
-                        myStatusHtml = `<div style="margin-top:5px; background: #fee2e2; color:#b91c1c; padding: 4px; border-radius:4px; font-size:0.75rem; text-align:left; font-weight:bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="Bị từ chối ${myShift.GhiChu ? '- '+myShift.GhiChu : ''}"><i class="fa-solid fa-xmark"></i> Bị từ chối${noteStr}</div>`;
-                    }
-                
-                    if (weekOffset === 0 && myShift.TrangThaiXepLich === 'DaDuyet') {
-                        const roleName = myShift.CongViec === 'ThuNgan' ? 'Thu Ngân' : 'Phục Vụ';
-                        myShiftsHtml += `
-                            <div style="background: white; border: 1px solid #e2e8f0; border-left: 4px solid var(--primary); padding: 10px; margin-bottom: 10px; border-radius: 6px;">
-                                <div style="font-weight: bold; color: var(--text-dark); margin-bottom: 4px;">${date.dayName} - ${date.display}</div>
-                                <div style="font-size: 0.85rem; color: var(--primary);"><i class="fa-regular fa-clock"></i> ${ca.TenCa}</div>
-                                <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;"><i class="fa-solid fa-user-tag"></i> Vị trí: ${roleName}</div>
-                            </div>
-                        `;
+                        let bgStyle = '';
+                        if (isMyShift && s.TrangThaiXepLich === 'DaDuyet') {
+                            bgStyle = 'background: #d1fae5; padding: 2px 4px; border-radius: 4px;'; // Highlight nền xanh nhạt cho ca của mình
+                        }
+
+                        if (isPending) {
+                            color = '#b45309'; icon = 'fa-hourglass-half'; 
+                            bgStyle = 'background: #fef3c7; padding: 2px 4px; border-radius: 4px;';
+                            roleStr = ''; // Chưa duyệt nên ẩn vị trí
+                            nameDisplay = 'Bạn đăng ký';
+                        } else if (isRejected) {
+                            color = '#b91c1c'; icon = 'fa-xmark'; 
+                            bgStyle = 'background: #fee2e2; padding: 2px 4px; border-radius: 4px; text-decoration: line-through;';
+                            roleStr = '';
+                            nameDisplay = 'Bị từ chối';
+                        }
+
+                        let rightEl = roleStr ? `<strong>[${roleStr}]</strong>` : '';
+
+                        return `
+                            <div style="font-size: 0.8rem; color: ${color}; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; gap: 4px; ${bgStyle}" title="${nameDisplay} ${noteStr}">
+                                <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><i class="fa-solid ${icon}"></i> ${nameDisplay}${noteStr}</span>
+                                <div style="flex-shrink: 0;">${rightEl}</div>
+                            </div>`;
+                    }).join('');
+
+                    if (displayShifts.length === 0) staffHtml = `<div style="font-size: 0.8rem; color: #94a3b8; text-align: center;">Chưa có người</div>`;
+                } else {
+                    // ==========================================
+                    // LƯỚI TUẦN SAU: CHỈ HIỂN THỊ TRẠNG THÁI CỦA BẢN THÂN
+                    // ==========================================
+                    if (myShift) {
+                        let noteStr = myShift.GhiChu ? ` <span style="font-style:italic; font-weight:normal; opacity:0.8;">(${myShift.GhiChu})</span>` : '';
+                        if (myShift.TrangThaiXepLich === 'DangKy') {
+                            staffHtml = `<div style="margin-top:5px; background: #fef3c7; color:#b45309; padding: 4px; border-radius:4px; font-size:0.75rem; text-align:left; font-weight:bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="Đang chờ duyệt ${myShift.GhiChu ? '- '+myShift.GhiChu : ''}"><i class="fa-solid fa-hourglass-half"></i> Bạn đăng ký${noteStr}</div>`;
+                        } else if (myShift.TrangThaiXepLich === 'DaDuyet') {
+                            const role = myShift.CongViec ? (myShift.CongViec === 'ThuNgan' ? 'TN' : 'PV') : '?';
+                            
+                            staffHtml = `
+                            <div style="margin-top:5px; background: #d1fae5; color:#047857; padding: 4px; border-radius:4px; font-size:0.75rem; display: flex; justify-content: space-between; align-items: center;" title="Đã duyệt ${myShift.GhiChu ? '- '+myShift.GhiChu : ''}">
+                                <div style="font-weight:bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><i class="fa-solid fa-check"></i> Đã duyệt${noteStr}</div>
+                                <strong style="flex-shrink: 0; margin-left: 5px;">[${role}]</strong>
+                            </div>`;
+                        } else if (myShift.TrangThaiXepLich === 'TuChoi') {
+                            staffHtml = `<div style="margin-top:5px; background: #fee2e2; color:#b91c1c; padding: 4px; border-radius:4px; font-size:0.75rem; text-align:left; font-weight:bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="Bị từ chối ${myShift.GhiChu ? '- '+myShift.GhiChu : ''}"><i class="fa-solid fa-xmark"></i> Bị từ chối${noteStr}</div>`;
+                        }
                     }
                 }
 
@@ -2203,7 +2255,7 @@ async function loadStaffCalendarData(weekOffset, containerId) {
                 html += `
                     <td style="background: ${bgColor}; border: 1px solid ${borderColor}; ${pointerStyle} vertical-align: top;" ${hoverLogic} ${clickEvent}>
                         <div style="font-size: 0.75rem; font-weight: bold; text-align: right; margin-bottom: 5px; color: var(--text-muted);">${approvedCount}/${reqCount}</div>
-                        ${myStatusHtml}
+                        ${staffHtml}
                     </td>
                 `;
             });
@@ -2381,3 +2433,553 @@ document.addEventListener('click', function(event) {
         }
     }
 });
+
+// ======================================================
+// MODULE: NHÂN VIÊN ĐIỂM DANH NHẬN CA (CHECK-IN)
+// ======================================================
+function renderDiemDanhNhanCa() {
+    document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+    const menuLink = document.getElementById('menu-nhangiaoca');
+    if (menuLink) menuLink.classList.add('active');
+
+    const contentArea = document.querySelector('.admin-content');
+    contentArea.innerHTML = `
+        <div class="page-header" style="margin-bottom: 24px;">
+            <h1 class="page-title">Điểm danh Nhận ca</h1>
+            <p class="text-muted">Nhấn nhận ca trước khi bắt đầu làm việc. Chú ý: Chỉ có thể nhận ca trước giờ làm tối đa 30 phút.</p>
+        </div>
+
+        <div id="diemdanh-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;">
+            <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-muted);">
+                <i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem;"></i><br><br>Đang tải ca làm việc hôm nay...
+            </div>
+        </div>
+    `;
+
+    loadDanhSachCaHomNay();
+}
+
+async function loadDanhSachCaHomNay() {
+    const container = document.getElementById('diemdanh-container');
+    if (!container) return;
+
+    // Lấy ngày hôm nay (YYYY-MM-DD) theo múi giờ Local
+    const todayStr = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10);
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+
+    try {
+        // GỌI SONG SONG 2 API ĐỂ LẤY LỊCH LÀM VÀ LỊCH SỬ BÀN GIAO CA
+        const [lichRes, bgcRes] = await Promise.all([
+            fetch(`${API_BASE_URL}/lich-lam-viec?tu_ngay=${todayStr}&den_ngay=${todayStr}`),
+            fetch(`${API_BASE_URL}/ban-giao-ca?ngay=${todayStr}`, { headers: { 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` } })
+        ]);
+
+        const res = await lichRes.json();
+        const resBgc = await bgcRes.json();
+
+        if (res.success && resBgc.success) {
+            const myShifts = (res.data || []).filter(l => String(l.ID_NhanVien) === String(currentUser.ID) && l.TrangThaiXepLich === 'DaDuyet');
+            const allBgc = resBgc.data || []; // Chứa danh sách phiếu bàn giao ca hôm nay
+            window.bgcTodayData = allBgc;
+
+            if (myShifts.length === 0) {
+                container.innerHTML = `
+                    <div style="grid-column: 1/-1; text-align: center; padding: 50px; background: white; border-radius: 12px; border: 1px dashed var(--border);">
+                        <div style="font-size: 3rem; color: #cbd5e1; margin-bottom: 15px;"><i class="fa-solid fa-mug-hot"></i></div>
+                        <h3 style="color: var(--text-dark); font-size: 1.1rem; margin-bottom: 5px;">Hôm nay bạn không có ca làm việc nào!</h3>
+                        <p style="color: var(--text-muted); font-size: 0.9rem;">Hãy nghỉ ngơi thật tốt nhé.</p>
+                    </div>`;
+                return;
+            }
+
+            let html = '';
+            myShifts.forEach(shift => {
+                const ca = shift.ca_lam_viec || shift.caLamViec;
+                if (!ca) return;
+
+                const role = shift.CongViec === 'ThuNgan' ? 'Thu Ngân' : 'Phục Vụ';
+                const timeStr = `${ca.GioBatDau.substring(0,5)} - ${ca.GioKetThuc.substring(0,5)}`;
+                
+                // Tìm phiếu Bàn giao ca thuộc về Ca Làm Việc này
+                const bgc = allBgc.find(b => String(b.ID_CaLamViec) === String(ca.ID));
+
+                let statusHtml = '';
+                let actionHtml = '';
+                let borderStyle = '';
+
+                // BƯỚC 1: CHƯA LÀM GÌ CẢ -> YÊU CẦU ĐIỂM DANH ĐẦU CA
+                if (shift.TrangThaiDiemDanh === 'ChuaLam') {
+                    borderStyle = 'border-top: 4px solid #f59e0b;';
+                    statusHtml = `<span style="background: #fef3c7; color: #b45309; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">Chưa điểm danh</span>`;
+                    actionHtml = `<button class="btn-primary" style="width: 100%; margin-top: 15px; padding: 12px; font-size: 1rem;" onclick="executeDiemDanh(${shift.ID}, event)"><i class="fa-solid fa-fingerprint" style="margin-right: 8px;"></i> ĐIỂM DANH ĐẦU CA</button>`;
+                } 
+                // BƯỚC N: ĐÃ ĐIỂM DANH -> XỬ LÝ THEO CHỨC VỤ THỰC TẾ TRONG CA
+                else if (shift.TrangThaiDiemDanh === 'DaLam') {
+                    
+                    // ==========================================
+                    // LUỒNG DÀNH CHO THU NGÂN (Kiểm đếm két, nhận bàn giao)
+                    // ==========================================
+                    if (shift.CongViec === 'ThuNgan') {
+                        if (!bgc) {
+                            // BƯỚC 2: Đã điểm danh nhưng CHƯA CÓ PHIẾU NHẬN CA
+                            borderStyle = 'border-top: 4px solid #3b82f6;';
+                            statusHtml = `<span style="background: #eff6ff; color: #1d4ed8; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;"><i class="fa-solid fa-clipboard"></i> Chờ đếm tiền đầu ca</span>`;
+                            actionHtml = `<button class="btn-primary" style="width: 100%; margin-top: 15px; padding: 12px; font-size: 1rem; background: #3b82f6; border-color: #3b82f6;" onclick="openNhanCaModal(${ca.ID}, '${ca.TenCa}')"><i class="fa-solid fa-file-invoice-dollar" style="margin-right: 8px;"></i> TẠO PHIẾU NHẬN CA</button>`;
+                        } else if (bgc.TrangThai === 'DangTrongCa') {
+                            // BƯỚC 3: Đã lập phiếu nhận, đang trong thời gian làm việc
+                            borderStyle = 'border-top: 4px solid #10b981;';
+                            statusHtml = `<span style="background: #d1fae5; color: #047857; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;"><i class="fa-solid fa-user-clock"></i> Đang trong ca</span>`;
+                            actionHtml = `
+                                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                                    <button class="btn-outline-sm" style="flex: 1; color: #3b82f6; border-color: #bfdbfe; background: #eff6ff;" onclick="openDanhSachPhieuChiModal(${bgc.ID})"><i class="fa-solid fa-list-ul"></i> Lịch sử Thu/Chi</button>
+                                    <button class="btn-outline-sm" style="flex: 1; color: #ef4444; border-color: #fecaca; background: #fef2f2;" onclick="openLapPhieuChiModal(${bgc.ID})"><i class="fa-solid fa-money-bill-transfer"></i> Lập phiếu mới</button>
+                                </div>
+                                <button class="btn-primary" style="width: 100%; margin-top: 10px; padding: 12px; font-size: 1rem; background: #10b981; border-color: #10b981;" onclick="openGiaoCaModal(${bgc.ID}, '${ca.TenCa}')"><i class="fa-solid fa-arrow-right-arrow-left" style="margin-right: 8px;"></i> Bàn giao & Chốt ca</button>
+                            `;
+                        } else { 
+                            // BƯỚC 4: CA ĐÃ ĐƯỢC CHỐT (DaChot hoặc ChotCuongChe)
+                            borderStyle = 'border-top: 4px solid #64748b;';
+                            statusHtml = `<span style="background: #f1f5f9; color: #475569; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;"><i class="fa-solid fa-lock"></i> Đã chốt sổ</span>`;
+                            actionHtml = `<div style="text-align: center; margin-top: 15px; padding: 12px; background: #f8fafc; border-radius: 8px; color: #64748b; font-weight: bold;"><i class="fa-solid fa-clipboard-check"></i> Ca làm việc đã hoàn tất</div>`;
+                        }
+                    } 
+                    // ==========================================
+                    // LUỒNG DÀNH CHO PHỤC VỤ (Chỉ cần điểm danh có mặt là xong)
+                    // ==========================================
+                    else {
+                        borderStyle = 'border-top: 4px solid #10b981;';
+                        const treHtml = shift.SoPhutDiMuon > 0 ? `<br><small style="color: #ef4444;">Đi muộn ${shift.SoPhutDiMuon} phút</small>` : '';
+                        statusHtml = `<div style="text-align:right;"><span style="background: #d1fae5; color: #047857; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;"><i class="fa-solid fa-check"></i> Đã điểm danh</span>${treHtml}</div>`;
+                        actionHtml = `<div style="text-align: center; margin-top: 15px; padding: 12px; background: #f8fafc; border-radius: 8px; color: #10b981; font-weight: bold;"><i class="fa-solid fa-clipboard-check"></i> Đã điểm danh thành công</div>`;
+                    }
+                } 
+                // VẮNG MẶT
+                else if (shift.TrangThaiDiemDanh === 'VangMat') {
+                    borderStyle = 'border-top: 4px solid #ef4444;';
+                    statusHtml = `<span style="background: #fee2e2; color: #b91c1c; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;"><i class="fa-solid fa-xmark"></i> Vắng mặt</span>`;
+                    actionHtml = `<div style="text-align: center; margin-top: 15px; padding: 12px; background: #fef2f2; border-radius: 8px; color: #ef4444; font-weight: bold;">Ca này đã bị chốt vắng mặt</div>`;
+                }
+
+                html += `
+                    <div class="panel" style="padding: 20px; ${borderStyle} box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
+                            <div>
+                                <h3 style="margin: 0 0 5px 0; color: var(--primary); font-size: 1.2rem;">${ca.TenCa}</h3>
+                                <div style="font-size: 0.9rem; color: var(--text-dark);"><i class="fa-regular fa-clock" style="color: #94a3b8; width: 16px;"></i> ${timeStr}</div>
+                            </div>
+                            ${statusHtml}
+                        </div>
+                        <div style="font-size: 0.95rem; color: var(--text-muted); margin-bottom: 10px;">
+                            <i class="fa-solid fa-user-tag" style="color: #94a3b8; width: 16px;"></i> Vị trí: <strong style="color: var(--text-dark);">${role}</strong>
+                        </div>
+                        ${actionHtml}
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+    } catch(e) {
+        container.innerHTML = `<div style="grid-column: 1/-1; text-align: center; padding: 20px; color: red;">Lỗi kết nối máy chủ!</div>`;
+    }
+}
+
+async function executeDiemDanh(idLich, event) {
+    const btn = event.currentTarget;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/lich-lam-viec/${idLich}/diem-danh`, {
+            method: 'PUT',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` }
+        });
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            showSystemModal("Thành công!", data.message, "success");
+            loadDanhSachCaHomNay();
+        } else {
+            showSystemModal("Lỗi điểm danh", data.message, "error");
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    } catch(e) {
+        showSystemModal("Lỗi mạng", "Không kết nối được server.", "error");
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+
+// --- LOGIC PHIẾU NHẬN CA ---
+window.openNhanCaModal = function(caId, tenCa) {
+    document.getElementById('nc-ca-id').value = caId;
+    
+    // XÁC ĐỊNH TIỀN HỆ THỐNG GỢI Ý ĐẦU CA
+    let tienHeThong = 200000; // Mặc định là 200.000đ cho Ca Sáng
+    if (tenCa.toLowerCase().includes('tối') || tenCa.toLowerCase().includes('chiều')) {
+        // Nếu là ca tối, tìm Phiếu Bàn Giao Ca của ca trước đó đã chốt
+        const caTruoc = window.bgcTodayData ? window.bgcTodayData.find(b => b.TrangThai === 'DaChot' || b.TrangThai === 'ChotCuongChe') : null;
+        if (caTruoc) {
+            tienHeThong = Number(caTruoc.TienGiao);
+        }
+    }
+
+    // Hiển thị thêm thông tin Tiền Hệ Thống lên giao diện
+    document.getElementById('nc-info').innerHTML = `${tenCa} <br><span style="font-size:0.85rem; color:#64748b; font-weight:normal;">(Hệ thống báo trong két đang có: <strong style="color:#047857">${tienHeThong.toLocaleString('vi-VN')}đ</strong>)</span>`;
+    
+    document.getElementById('nc-tien-nhan').value = tienHeThong;
+    document.getElementById('nc-ghi-chu').value = '';
+    document.getElementById('nhan-ca-modal').style.display = 'flex';
+};
+
+window.submitNhanCa = async function() {
+    const caId = document.getElementById('nc-ca-id').value;
+    const tien = document.getElementById('nc-tien-nhan').value;
+    const note = document.getElementById('nc-ghi-chu').value;
+    const todayStr = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10);
+
+    if (!tien || Number(tien) < 0) return showSystemModal("Lỗi", "Vui lòng nhập số tiền nhận đầu ca hợp lệ.", "error");
+
+    const btn = document.getElementById('btn-submit-nc');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/ban-giao-ca/nhan-ca`, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` },
+            body: JSON.stringify({ id_ca_lam_viec: caId, ngay: todayStr, tien_nhan: tien, ghi_chu_nhan: note })
+        });
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            document.getElementById('nhan-ca-modal').style.display = 'none';
+            showSystemModal("Thành công", "Đã tạo phiếu nhận ca.", "success");
+            loadDanhSachCaHomNay(); // Load lại lưới để đổi nút
+        } else {
+            showSystemModal("Lỗi", data.message, "error");
+        }
+    } catch(e) {
+        showSystemModal("Lỗi mạng", "Kiểm tra kết nối", "error");
+    } finally {
+        btn.innerHTML = 'Tạo phiếu nhận ca';
+        btn.disabled = false;
+    }
+};
+
+// --- LOGIC PHIẾU THU/CHI ---
+window.openLapPhieuChiModal = function(bgcId) {
+    document.getElementById('pc-bgc-id').value = bgcId;
+    document.getElementById('pc-so-tien').value = '';
+    document.getElementById('pc-noi-dung').value = '';
+    
+    // Reset về Phiếu Chi mặc định mỗi khi mở
+    document.querySelector('input[name="pc_loai_phieu"][value="Chi"]').checked = true;
+    changePhieuType(); 
+    
+    document.getElementById('phieu-chi-modal').style.display = 'flex';
+};
+
+// Mở Modal xem danh sách Thu/Chi
+window.openDanhSachPhieuChiModal = async function(bgcId) {
+    const listContainer = document.getElementById('ds-phieu-chi-list');
+    listContainer.innerHTML = '<div style="text-align:center; padding: 30px;"><i class="fa-solid fa-spinner fa-spin text-primary" style="font-size: 1.5rem;"></i><br><br>Đang tải dữ liệu...</div>';
+    document.getElementById('danh-sach-phieu-chi-modal').style.display = 'flex';
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/ban-giao-ca/${bgcId}/phieu-chi`, {
+            headers: { 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` }
+        });
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            if (data.data.length === 0) {
+                listContainer.innerHTML = `
+                    <div style="text-align: center; padding: 30px; color: var(--text-muted);">
+                        <i class="fa-solid fa-folder-open" style="font-size: 2.5rem; color: #cbd5e1; margin-bottom: 10px;"></i><br>
+                        Chưa có phát sinh Thu/Chi nào trong ca này.
+                    </div>`;
+                return;
+            }
+            
+            let html = '';
+            data.data.forEach(p => {
+                // Theo logic ta đã quy ước: Số âm là Thu (Cộng tiền), Số dương là Chi (Trừ tiền)
+                const isThu = Number(p.SoTien) < 0; 
+                const color = isThu ? '#10b981' : '#ef4444';
+                const sign = isThu ? '+' : '-';
+                const val = Math.abs(Number(p.SoTien));
+                const badge = isThu 
+                    ? `<span style="background: #d1fae5; color: #047857; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold;">THU</span>`
+                    : `<span style="background: #fee2e2; color: #b91c1c; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold;">CHI</span>`;
+                
+                const timeStr = p.ThoiGian ? p.ThoiGian.substring(11, 16) : ''; // Lấy HH:mm
+
+                html += `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px dashed #e2e8f0;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; color: var(--text-dark); font-size: 0.95rem; margin-bottom: 4px;">${badge} ${p.NoiDung}</div>
+                            <div style="font-size: 0.8rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> Lúc ${timeStr}</div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div style="font-weight: bold; font-size: 1.05rem; color: ${color};">${sign}${val.toLocaleString('vi-VN')}đ</div>
+                            <i class="fa-solid fa-trash-can" style="color: #cbd5e1; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#cbd5e1'" onclick="executeXoaPhieuChi(${p.ID}, ${bgcId})"></i>
+                        </div>
+                    </div>
+                `;
+            });
+            listContainer.innerHTML = html;
+        } else {
+            listContainer.innerHTML = '<div style="text-align:center; padding: 20px; color: red;">Lỗi tải dữ liệu.</div>';
+        }
+    } catch(e) {
+        listContainer.innerHTML = '<div style="text-align:center; padding: 20px; color: red;">Mất kết nối máy chủ!</div>';
+    }
+};
+
+window.executeXoaPhieuChi = function(idPhieu, bgcId) {
+    // 1. Tạo Modal động nếu chưa có
+    let modal = document.getElementById('xoa-phieu-chi-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'xoa-phieu-chi-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 10000;';
+        document.body.appendChild(modal);
+    }
+
+    // 2. Nạp nội dung HTML
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 400px; text-align: center; padding: 30px 20px;">
+            <div style="font-size: 3.5rem; color: #ef4444; margin-bottom: 15px;"><i class="fa-solid fa-trash-can"></i></div>
+            <h3 style="margin-bottom: 10px; font-size: 1.4rem;">Xóa phiếu thu/chi</h3>
+            <p style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5;">Bạn có chắc chắn muốn xóa dữ liệu này không? Hành động không thể hoàn tác.</p>
+            <div style="display: flex; justify-content: center; gap: 12px;">
+                <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="document.getElementById('xoa-phieu-chi-modal').style.display='none'">Hủy bỏ</button>
+                <button class="btn-primary" style="width: auto; padding: 10px 24px; background-color: #ef4444; border-color: #ef4444;" id="btn-confirm-xoa-phieu">Đồng ý xóa</button>
+            </div>
+        </div>
+    `;
+    
+    // Hiển thị Modal nổi lên trên cùng
+    modal.style.display = 'flex';
+
+    // 3. Xử lý logic gọi API
+    document.getElementById('btn-confirm-xoa-phieu').onclick = async function() {
+        const btn = this;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xóa...';
+        btn.disabled = true;
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/ban-giao-ca/phieu-chi/${idPhieu}`, {
+                method: 'DELETE',
+                headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` }
+            });
+            const data = await response.json();
+            
+            if (response.ok && data.success) {
+                modal.style.display = 'none';
+                // Tận dụng hàm Toast có sẵn để báo hiệu
+                showSystemModal("Thành công", "Đã xóa phiếu", "success");
+                // Tải lại danh sách ngay trên Modal Lịch sử
+                openDanhSachPhieuChiModal(bgcId);
+            } else {
+                modal.style.display = 'none';
+                showSystemModal("Lỗi", data.message, "error");
+            }
+        } catch (e) {
+            modal.style.display = 'none';
+            showSystemModal("Lỗi mạng", "Kết nối thất bại", "error");
+        }
+    };
+};
+
+// Đổi màu sắc giao diện tuỳ theo Thu hay Chi
+window.changePhieuType = function() {
+    const isChi = document.querySelector('input[name="pc_loai_phieu"]:checked').value === 'Chi';
+    const inputTien = document.getElementById('pc-so-tien');
+    const btn = document.getElementById('btn-submit-pc');
+    
+    if (isChi) {
+        inputTien.style.color = '#ef4444'; // Đỏ
+        btn.style.background = '#ef4444';
+        btn.style.borderColor = '#ef4444';
+        btn.innerHTML = '<i class="fa-solid fa-arrow-down"></i> Lập Phiếu Chi';
+    } else {
+        inputTien.style.color = '#10b981'; // Xanh
+        btn.style.background = '#10b981';
+        btn.style.borderColor = '#10b981';
+        btn.innerHTML = '<i class="fa-solid fa-arrow-up"></i> Lập Phiếu Thu';
+    }
+};
+
+window.submitPhieuChi = async function() {
+    const bgcId = document.getElementById('pc-bgc-id').value;
+    const tien = document.getElementById('pc-so-tien').value;
+    const noidung = document.getElementById('pc-noi-dung').value.trim();
+    const loaiPhieu = document.querySelector('input[name="pc_loai_phieu"]:checked').value;
+
+    if (!tien || Number(tien) < 1000 || !noidung) return showSystemModal("Lỗi", "Vui lòng nhập số tiền (tối thiểu 1000đ) và ghi rõ nội dung.", "error");
+
+    const btn = document.getElementById('btn-submit-pc');
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/ban-giao-ca/phieu-chi`, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` },
+            body: JSON.stringify({ id_ban_giao_ca: bgcId, loai_phieu: loaiPhieu, so_tien: tien, noi_dung: noidung })
+        });
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            document.getElementById('phieu-chi-modal').style.display = 'none';
+            showSystemModal("Thành công", data.message, "success");
+        } else {
+            showSystemModal("Lỗi", data.message, "error");
+        }
+    } catch(e) {
+        showSystemModal("Lỗi", "Kết nối thất bại", "error");
+    } finally {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+    }
+};
+
+// --- LOGIC BÀN GIAO & CHỐT CA ---
+window.openGiaoCaModal = async function(bgcId, tenCa) {
+    document.getElementById('gc-title-info').innerText = `Bàn Giao - ${tenCa}`;
+    document.getElementById('gc-tien-nop').value = '';
+    document.getElementById('gc-tien-giao').value = '';
+    document.getElementById('gc-ghi-chu').value = '';
+    document.getElementById('gc-bgc-id').value = bgcId;
+
+    const btn = document.getElementById('btn-submit-gc');
+    btn.disabled = true;
+
+    const isCaToi = tenCa.toLowerCase().includes('tối') || tenCa.toLowerCase().includes('chiều');
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/ban-giao-ca/${bgcId}/thong-tin-chot`, {
+            headers: { 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` }
+        });
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            document.getElementById('gc-tien-nhan').innerText = Number(data.tien_nhan).toLocaleString('vi-VN') + 'đ';
+            document.getElementById('gc-doanh-thu').innerText = '+' + Number(data.doanh_thu_tien_mat).toLocaleString('vi-VN') + 'đ';
+            
+            // XỬ LÝ HIỂN THỊ DẤU (+ / -) CHO THU/CHI PHÁT SINH
+            let colorThuChi = '#ef4444';
+            let signThuChi = '-';
+            let absTongChi = Math.abs(Number(data.tong_chi));
+            
+            if (Number(data.tong_chi) < 0) { // Nếu DB lưu số âm -> Nghĩa là tổng Thu > Chi
+                colorThuChi = '#10b981';
+                signThuChi = '+';
+            } else if (Number(data.tong_chi) > 0) { // Chi > Thu
+                colorThuChi = '#ef4444';
+                signThuChi = '-';
+            } else {
+                colorThuChi = 'var(--text-muted)';
+                signThuChi = '';
+            }
+
+            document.getElementById('gc-tong-chi').innerText = `${signThuChi}${absTongChi.toLocaleString('vi-VN')}đ`;
+            document.getElementById('gc-tong-chi').style.color = colorThuChi;
+            
+            const tienHT = Number(data.tien_he_thong);
+            document.getElementById('gc-tien-he-thong').innerText = tienHT.toLocaleString('vi-VN') + 'đ';
+            document.getElementById('gc-tien-he-thong-val').value = tienHT;
+
+            const lblNop = document.getElementById('gc-tien-nop').previousElementSibling;
+            if (lblNop) lblNop.innerHTML = 'Tiền nộp doanh thu <span style="color: red;">*</span>';
+
+            const elNop = document.getElementById('gc-tien-nop');
+            const elGiao = document.getElementById('gc-tien-giao');
+            const groupNop = elNop.closest('.form-group');
+
+            if (isCaToi) {
+                if (groupNop) groupNop.style.display = 'block';
+                let tienGiao = 200000;
+                let tienNop = tienHT - 200000;
+                
+                if (tienNop < 0) {
+                    tienNop = 0;
+                    tienGiao = tienHT;
+                }
+                
+                elNop.value = tienNop;
+                elGiao.value = tienGiao;
+
+                elNop.oninput = function() { elGiao.value = tienHT - Number(this.value); };
+                elGiao.oninput = function() { elNop.value = tienHT - Number(this.value); };
+            } else {
+                if (groupNop) groupNop.style.display = 'none';
+                elNop.value = 0; 
+                elGiao.value = tienHT;
+                elNop.oninput = null; elGiao.oninput = null;
+            }
+
+            document.getElementById('giao-ca-modal').style.display = 'flex';
+        } else {
+            showSystemModal("Lỗi", "Không tải được số liệu chốt ca.", "error");
+        }
+    } catch(e) {
+        showSystemModal("Lỗi", "Lỗi tải số liệu máy chủ", "error");
+    } finally {
+        btn.disabled = false;
+    }
+};
+
+window.submitGiaoCa = async function() {
+    const bgcId = document.getElementById('gc-bgc-id').value;
+    const tienNop = document.getElementById('gc-tien-nop').value;
+    const tienGiao = document.getElementById('gc-tien-giao').value;
+    const tienHeThong = document.getElementById('gc-tien-he-thong-val').value;
+    const ghiChu = document.getElementById('gc-ghi-chu').value.trim();
+
+    if (tienNop === '' || tienGiao === '' || Number(tienNop) < 0 || Number(tienGiao) < 0) {
+        return showSystemModal("Lỗi", "Vui lòng nhập tiền nộp và tiền giao hợp lệ (>= 0).", "error");
+    }
+
+    const lech = Number(tienHeThong) - (Number(tienNop) + Number(tienGiao));
+    if (lech !== 0 && !ghiChu) {
+        return showSystemModal("Cảnh báo", `Tiền thực tế đang lệch ${Math.abs(lech).toLocaleString('vi-VN')}đ so với hệ thống. Vui lòng ghi chú giải trình!`, "error");
+    }
+
+    const btn = document.getElementById('btn-submit-gc');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang chốt...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/ban-giao-ca/${bgcId}/giao-ca`, {
+            method: 'PUT',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` },
+            body: JSON.stringify({
+                tien_giao: tienGiao,
+                tien_nop_doanh_thu: tienNop,
+                tien_he_thong: tienHeThong,
+                ghi_chu_giao: ghiChu
+            })
+        });
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            document.getElementById('giao-ca-modal').style.display = 'none';
+            showSystemModal("Tuyệt vời!", "Bàn giao ca thành công! Bạn có thể ra về.", "success");
+            loadDanhSachCaHomNay(); // Đổi nút thành "Đã chốt sổ"
+        } else {
+            showSystemModal("Lỗi", data.message, "error");
+        }
+    } catch(e) {
+        showSystemModal("Lỗi mạng", "Vui lòng thử lại", "error");
+    } finally {
+        btn.innerHTML = '<i class="fa-solid fa-lock" style="margin-right: 8px;"></i> Chốt Bàn Giao';
+        btn.disabled = false;
+    }
+};

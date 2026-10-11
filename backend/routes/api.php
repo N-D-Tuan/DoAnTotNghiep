@@ -22,6 +22,7 @@ use App\Http\Controllers\ChatbotController;
 use App\Http\Controllers\PosController;
 use App\Http\Controllers\CaLamViecController;
 use App\Http\Controllers\LichLamViecController;
+use App\Http\Controllers\BanGiaoCaController;
 use App\Services\ChromaDBService;
 
 Route::get('/seed-chromadb', function (ChromaDBService $chroma) {
@@ -149,8 +150,23 @@ Route::middleware('auth:sanctum')->group(function () {
     // Dành cho NHÂN VIÊN
     Route::post('/lich-lam-viec/dang-ky', [LichLamViecController::class, 'nhanVienDangKyCa']);
     Route::delete('/lich-lam-viec/dang-ky', [LichLamViecController::class, 'nhanVienHuyDangKyCa']);
-    
+    Route::put('/lich-lam-viec/{id}/diem-danh', [LichLamViecController::class, 'nhanVienDiemDanh']);
+
     // Dành cho QUẢN LÝ SÂN
     Route::post('/lich-lam-viec/xep-ca', [LichLamViecController::class, 'quanLyTrucTiepXepCa']);
     Route::post('/lich-lam-viec/chot-tuan', [LichLamViecController::class, 'chotLichTuan']);
+    Route::put('/lich-lam-viec/{id}/chot-cong', [LichLamViecController::class, 'quanLyChotCong']);
+
+
+    // ==========================================
+    // NHẬN CA & BÀN GIAO CA
+    // ==========================================
+    Route::get('/ban-giao-ca', [BanGiaoCaController::class, 'layDanhSachTrongNgay']);
+    Route::post('/ban-giao-ca/nhan-ca', [BanGiaoCaController::class, 'nhanCa']);
+    Route::get('/ban-giao-ca/{id}/thong-tin-chot', [BanGiaoCaController::class, 'thongTinChotCa']);
+    Route::put('/ban-giao-ca/{id}/giao-ca', [BanGiaoCaController::class, 'giaoCa']);
+    Route::post('/ban-giao-ca/phieu-chi', [BanGiaoCaController::class, 'taoPhieuChi']);
+    Route::get('/ban-giao-ca/{id}/phieu-chi', [BanGiaoCaController::class, 'layDanhSachPhieuChi']);
+    Route::delete('/ban-giao-ca/phieu-chi/{id}', [\App\Http\Controllers\BanGiaoCaController::class, 'xoaPhieuChi']);
+    Route::put('/admin/ban-giao-ca/{id}/chot-cuong-che', [\App\Http\Controllers\BanGiaoCaController::class, 'chotCuongChe']);
 });
