@@ -1971,31 +1971,47 @@ function renderLichLamViecStaff() {
     const menuLink = document.getElementById('menu-lichlamviec');
     if (menuLink) menuLink.classList.add('active');
 
+    // Tạo HTML cho Dropdown chọn tháng (Dùng cho tab Lịch sử)
+    let thangOptions = '';
+    const startYear = 2024;
+    const currentYear = new Date().getFullYear();
+    const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+    const currentThangNam = `${currentMonth}-${currentYear}`;
+
+    for (let y = currentYear; y >= startYear; y--) {
+        for (let m = 12; m >= 1; m--) {
+            const mm = String(m).padStart(2, '0');
+            const val = `${mm}-${y}`;
+            const selected = val === currentThangNam ? 'selected' : '';
+            thangOptions += `<option value="${val}" ${selected}>Tháng ${mm}/${y}</option>`;
+        }
+    }
+
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
         <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
             <div>
                 <h1 class="page-title">Lịch làm việc của bạn</h1>
-                <p class="text-muted">Đăng ký ca tuần tới và theo dõi lịch tuần này</p>
+                <p class="text-muted">Đăng ký ca tuần tới, theo dõi lịch tuần này và xem lịch sử các ca đã nhận</p>
             </div>
         </div>
 
         <div class="panel">
+            <!-- THANH TABS -->
             <div style="display: flex; gap: 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px; padding: 0 20px;">
                 <button class="nav-tab active" onclick="switchStaffCalTab('staff-cal-next', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; border-bottom: 2px solid var(--primary); color: var(--primary);">Đăng ký Tuần Sau</button>
                 <button class="nav-tab" onclick="switchStaffCalTab('staff-cal-current', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Lịch Tuần Này</button>
+                <button class="nav-tab" onclick="switchStaffCalTab('staff-cal-history', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Lịch Sử Ca Làm</button>
             </div>
 
             <!-- LƯỚI 1: TUẦN SAU (ĐỂ ĐĂNG KÝ) -->
             <div id="staff-cal-next" class="tab-pane active" style="padding: 0 20px 20px 20px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; position: relative;">
-                    
                     <!-- Phần Quy tắc đăng ký -->
                     <div style="position: relative; display: flex; align-items: center;">
                         <span style="font-weight: 600; color: var(--text-dark); font-size: 0.95rem;">Quy tắc đăng ký</span>
                         <i id="btn-show-rules" class="fa-solid fa-circle-exclamation" style="color: #f59e0b; cursor: pointer; font-size: 1.15rem; margin-left: 6px; transition: 0.2s;" onclick="toggleStaffRules(event)"></i>
-                        
-                        <!-- Khung Modal Quy tắc (Mặc định ẩn) -->
+                        <!-- Khung Modal Quy tắc -->
                         <div id="staff-rules-box" style="display: none; position: absolute; top: 25px; left: 0; background: white; border: 1px solid var(--border); box-shadow: 0 4px 15px rgba(0,0,0,0.1); border-radius: 8px; width: 410px; padding: 15px; z-index: 100;" onclick="event.stopPropagation()">
                             <h4 style="margin: 0 0 10px 0; color: var(--primary); font-size: 0.95rem; display: flex; align-items: center; gap: 6px;">
                                 <i class="fa-solid fa-clipboard-list"></i> Quy định xếp ca
@@ -2008,30 +2024,57 @@ function renderLichLamViecStaff() {
                             </ul>
                         </div>
                     </div>
-
                     <button id="btn-submit-staff-schedule" class="btn-primary" onclick="submitStaffSchedule()"><i class="fa-solid fa-paper-plane"></i> Gửi lịch làm việc</button>
                 </div>
                 <div id="grid-staff-next-week">Đang tải...</div>
             </div>
 
-            <!-- LƯỚI 2: TUẦN HIỆN TẠI (VIEW ONLY & DANH SÁCH CA CỦA MÌNH) -->
+            <!-- LƯỚI 2: TUẦN HIỆN TẠI -->
             <div id="staff-cal-current" class="tab-pane" style="display: none; padding: 0 20px 20px 20px;">
                 <div style="display: flex; gap: 20px; align-items: flex-start; overflow: hidden;">
-                    <!-- Lưới View -->
                     <div style="flex: 1; min-width: 0; overflow-x: auto; border: 1px solid var(--border); border-radius: 8px;" class="schedule-scroll-wrapper">
                         <div id="grid-staff-current-week">Đang tải...</div>
                     </div>
-                    
-                    <!-- Box ca của tôi -->
                     <div style="width: 300px; flex-shrink: 0; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 15px;">
                         <h4 style="margin: 0 0 15px 0; color: var(--primary); font-size: 1rem;"><i class="fa-solid fa-user-clock"></i> Các ca của bạn tuần này</h4>
                         <div id="my-shifts-list">Đang tải...</div>
                     </div>
                 </div>
             </div>
+
+            <!-- LƯỚI 3: LỊCH SỬ CA LÀM THEO THÁNG (MỚI) -->
+            <div id="staff-cal-history" class="tab-pane" style="display: none; padding: 0 20px 20px 20px;">
+                <div style="display: flex; gap: 15px; margin-bottom: 20px; align-items: center;">
+                    <div style="font-weight: 600; color: var(--text-dark);">Chọn tháng:</div>
+                    <select class="form-control" style="width: 200px; font-weight: bold; color: var(--primary);" id="staff-history-thangnam" onchange="handleStaffHistoryFilter()">
+                        ${thangOptions}
+                    </select>
+                    <button class="btn-outline-sm" onclick="loadStaffHistoryData()"><i class="fa-solid fa-rotate-right"></i> Tải lại</button>
+                </div>
+                
+                <div class="table-responsive">
+                    <table class="admin-table">
+                        <thead style="background: #F8FAFC;">
+                            <tr>
+                                <th>Ngày làm việc</th>
+                                <th>Thông tin Ca</th>
+                                <th style="text-align: center;">Trạng thái Duyệt</th>
+                                <th style="text-align: center;">Điểm danh</th>
+                                <th style="text-align: right;">Phạt / Thưởng</th>
+                                <th style="text-align: right;">Ghi chú</th>
+                            </tr>
+                        </thead>
+                        <tbody id="staff-history-tbody">
+                            <tr><td colspan="5" class="text-center" style="padding: 40px;"><i class="fa-solid fa-spinner fa-spin text-primary"></i> Đang tải...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="staff-history-pagination" style="display: flex; justify-content: center; gap: 8px; margin-top: 15px;"></div>
+            </div>
         </div>
     `;
 
+    // Mặc định load Tab đăng ký tuần sau
     loadStaffCalendarData(1, 'grid-staff-next-week');
 }
 
@@ -2048,12 +2091,20 @@ function switchStaffCalTab(tabId, element) {
 
     document.getElementById('staff-cal-next').style.display = 'none';
     document.getElementById('staff-cal-current').style.display = 'none';
+    document.getElementById('staff-cal-history').style.display = 'none';
+    
     document.getElementById(tabId).style.display = 'block';
 
     if (tabId === 'staff-cal-current') {
         loadStaffCalendarData(0, 'grid-staff-current-week');
-    } else {
+    } else if (tabId === 'staff-cal-next') {
         loadStaffCalendarData(1, 'grid-staff-next-week');
+    } else if (tabId === 'staff-cal-history') {
+        // Biến toàn cục lưu tháng hiện tại nếu chưa chọn
+        if(!window.currentStaffHistoryThangNam) {
+            window.currentStaffHistoryThangNam = document.getElementById('staff-history-thangnam').value;
+        }
+        loadStaffHistoryData();
     }
 }
 
@@ -3048,4 +3099,539 @@ function formatMinutesToHours(minutes) {
         return `${hours}h`;
     }
     return `${hours}h${remainMinutes}p`;
+}
+
+// ======================================================
+// MODULE: NHÂN VIÊN - XEM & XÁC NHẬN BẢNG LƯƠNG
+// ======================================================
+
+function renderBangLuongStaff() {
+    document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+    const menuLink = document.getElementById('menu-bangluong-staff');
+    if (menuLink) menuLink.classList.add('active');
+
+    const contentArea = document.querySelector('.admin-content');
+    contentArea.innerHTML = `
+        <div class="page-header" style="margin-bottom: 24px;">
+            <h1 class="page-title">Bảng Lương của Bạn</h1>
+            <p class="text-muted">Theo dõi thu nhập và xác nhận thanh toán hàng tháng</p>
+        </div>
+
+        <!-- Khung hiển thị Lương Tạm Tính (Tháng Hiện Tại) -->
+        <div class="panel" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: white; padding: 25px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 10px 25px rgba(15, 23, 42, 0.2);">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 20px;">
+                <div>
+                    <h3 style="margin: 0 0 10px 0; color: #94a3b8; font-size: 1rem; font-weight: 500; text-transform: uppercase; letter-spacing: 1px;"><i class="fa-solid fa-bolt" style="color: #f59e0b;"></i> Lương Tạm Tính Tháng Này</h3>
+                    <div style="font-size: 2.5rem; font-weight: 800; color: #10b981; letter-spacing: -1px; text-shadow: 0 2px 10px rgba(16, 185, 129, 0.2);" id="staff-luong-tam-tinh">Đang tải...</div>
+                </div>
+                <div style="display: flex; gap: 15px;">
+                    <div style="background: rgba(255,255,255,0.1); padding: 12px 20px; border-radius: 8px; text-align: center; min-width: 100px;">
+                        <div style="font-size: 0.85rem; color: #cbd5e1; margin-bottom: 5px;">Số ca đã làm</div>
+                        <div style="font-size: 1.2rem; font-weight: bold; color: white;" id="staff-ca-tam-tinh">--</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Danh sách Lịch sử Các kỳ lương -->
+        <div class="panel">
+            <div class="panel-header"><i class="fa-solid fa-clock-rotate-left"></i> Lịch sử các kỳ lương</div>
+            <div class="table-responsive">
+                <table class="admin-table">
+                    <thead style="background: #F8FAFC;">
+                        <tr>
+                            <th>Kỳ Lương (Tháng)</th>
+                            <th style="text-align: center;">Tổng ca</th>
+                            <th style="text-align: right;">THỰC LÃNH</th>
+                            <th style="text-align: center;">Trạng thái</th>
+                            <th style="text-align: center;">Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody id="staff-bang-luong-tbody">
+                        <tr><td colspan="5" class="text-center" style="padding: 40px; text-align: center;"><i class="fa-solid fa-spinner fa-spin text-primary"></i> Đang tải dữ liệu...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+
+    loadBangLuongStaffData();
+}
+
+async function loadBangLuongStaffData() {
+    const tbody = document.getElementById('staff-bang-luong-tbody');
+    const txtTamTinh = document.getElementById('staff-luong-tam-tinh');
+    const txtCa = document.getElementById('staff-ca-tam-tinh');
+
+    try {
+        // 1. GỌI API LẤY LỊCH SỬ CÁC THÁNG ĐÃ CHỐT
+        const historyRes = await fetch(`${API_BASE_URL}/nhan-vien/bang-luong`, {
+            headers: { 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` }
+        });
+        const historyData = await historyRes.json();
+
+        if (historyData.success) {
+            const list = historyData.data;
+
+            if (list.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted" style="padding: 40px; text-align: center;">Chưa có kỳ lương nào được chốt.</td></tr>`;
+            } else {
+                let html = '';
+                list.forEach(item => {
+                    let badgeHtml = '';
+                    let actionHtml = '';
+
+                    const btnDetail = `<button class="btn-outline-sm" style="padding: 4px 8px; margin-bottom: 5px; border-color: #cbd5e1; color: #475569;" onclick="openLuoiLichLuongModal(null, '${item.ThangNam}', '')"><i class="fa-solid fa-calendar-days"></i> Xem bảng công</button><br>`;
+
+                    if (item.TrangThai === 'ChoXacNhan') {
+                        badgeHtml = `<span style="background: #fef3c7; color: #b45309; padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;"><i class="fa-solid fa-bell fa-shake"></i> Chờ Xác Nhận</span>`;
+                        actionHtml = btnDetail + `
+                            <div style="display: flex; gap: 8px; justify-content: center; margin-top: 5px;">
+                                <button class="btn-primary" style="background: #10b981; border-color: #10b981; padding: 6px 12px; font-size: 0.8rem;" onclick="staffMoXacNhanLuong(${item.ID})"><i class="fa-solid fa-check"></i> Xác nhận đúng</button>
+                                <button class="btn-outline-sm" style="background: #fef2f2; border-color: #fecaca; color: #ef4444; padding: 6px 12px; font-size: 0.8rem;" onclick="staffMoKhieuNai(${item.ID})"><i class="fa-solid fa-triangle-exclamation"></i> Báo sai</button>
+                            </div>
+                        `;
+                    } 
+                    else if (item.TrangThai === 'KhieuNai') {
+                        badgeHtml = `<span style="background: #fee2e2; color: #b91c1c; padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">Đang chờ xử lý lại</span>`;
+                        actionHtml = btnDetail + `<span style="color: #ef4444; font-size: 0.8rem; font-style: italic;">Quản lý đang xem xét...</span>`;
+                    } 
+                    else if (item.TrangThai === 'ChoThanhToan') {
+                        badgeHtml = `<span style="background: #e0e7ff; color: #4338ca; padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;"><i class="fa-solid fa-money-check-dollar"></i> Chờ chuyển khoản</span>`;
+                        actionHtml = btnDetail + `<span style="color: #4338ca; font-size: 0.8rem; font-style: italic;">Đã xác nhận lúc: ${item.NgayXacNhan ? item.NgayXacNhan.substring(0,10) : ''}</span>`;
+                    } 
+                    else if (item.TrangThai === 'DaThanhToan') {
+                        badgeHtml = `<span style="background: #d1fae5; color: #047857; padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;"><i class="fa-solid fa-check-double"></i> Đã thanh toán</span>`;
+                        actionHtml = btnDetail + `<span style="color: #047857; font-size: 0.8rem; font-style: italic;">Ngày CK: ${item.NgayThanhToan ? item.NgayThanhToan.substring(0,10) : ''}</span>`;
+                    }
+
+                    html += `
+                        <tr>
+                            <td><strong style="color: var(--text-dark); font-size: 1.05rem;">Kỳ tháng ${item.ThangNam}</strong></td>
+                            <td style="text-align: center; font-weight: 500;">${item.TongCaLam} ca</td>
+                            <td style="text-align: right;"><strong style="color: #2563eb; font-size: 1.15rem;">${Number(item.ThucLanh).toLocaleString('vi-VN')}đ</strong></td>
+                            <td style="text-align: center; white-space: nowrap;">${badgeHtml}</td>
+                            <td style="text-align: center;">${actionHtml}</td>
+                        </tr>
+                    `;
+                });
+                tbody.innerHTML = html;
+            }
+        }
+
+        // 2. GỌI API LẤY LƯƠNG TẠM TÍNH THÁNG NÀY (Bằng cách tái sử dụng hàm xem chi tiết tháng hiện tại)
+        const today = new Date();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const yyyy = today.getFullYear();
+        const curThangNam = `${mm}-${yyyy}`;
+
+        const tamTinhRes = await fetch(`${API_BASE_URL}/bang-luong/chi-tiet?thang_nam=${curThangNam}`, {
+            headers: { 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` }
+        });
+        const tamTinhData = await tamTinhRes.json();
+
+        if (tamTinhData.success && tamTinhData.tong_quan) {
+            txtTamTinh.innerText = `${Number(tamTinhData.tong_quan.ThucLanh).toLocaleString('vi-VN')}đ`;
+            txtCa.innerText = tamTinhData.tong_quan.TongCaLam;
+        } else {
+            txtTamTinh.innerText = '0đ';
+            txtCa.innerText = '0';
+        }
+
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">Lỗi kết nối máy chủ!</td></tr>`;
+        txtTamTinh.innerText = 'Lỗi!';
+    }
+}
+
+// ---- LOGIC XÁC NHẬN VÀ NHẬP STK ----
+function staffMoXacNhanLuong(id) {
+    document.getElementById('staff-luong-id-to-confirm').value = id;
+    
+    // Reset Form
+    document.getElementById('staff-luong-bank-name').value = '';
+    document.getElementById('staff-luong-stk').value = '';
+    document.getElementById('staff-luong-owner').value = '';
+
+    document.getElementById('staff-xac-nhan-luong-modal').style.display = 'flex';
+}
+
+async function executeStaffXacNhanLuong() {
+    const id = document.getElementById('staff-luong-id-to-confirm').value;
+    const bank = document.getElementById('staff-luong-bank-name').value.trim();
+    const stk = document.getElementById('staff-luong-stk').value.trim();
+    const owner = document.getElementById('staff-luong-owner').value.trim();
+
+    if (!bank || !stk || !owner) {
+        return showSystemModal("Thiếu thông tin", "Vui lòng nhập đầy đủ Tên Ngân Hàng, STK và Tên người nhận để kế toán chuyển khoản chính xác.", "error");
+    }
+
+    const chuoiGop = `${bank} - ${stk} - ${owner.toUpperCase()}`;
+
+    const btn = document.getElementById('btn-submit-xac-nhan-luong');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang gửi...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/nhan-vien/bang-luong/${id}/xac-nhan`, {
+            method: 'PUT',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` },
+            body: JSON.stringify({ thong_tin_ngan_hang: chuoiGop })
+        });
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            document.getElementById('staff-xac-nhan-luong-modal').style.display = 'none';
+            showSystemModal("Thành công", data.message, "success");
+            loadBangLuongStaffData(); // Tải lại lưới
+        } else {
+            showSystemModal("Lỗi", data.message, "error");
+        }
+    } catch(e) {
+        showSystemModal("Lỗi mạng", "Vui lòng kiểm tra kết nối", "error");
+    } finally {
+        btn.innerHTML = '<i class="fa-solid fa-check"></i> Chốt & Gửi Yêu Cầu';
+        btn.disabled = false;
+    }
+}
+
+// ---- LOGIC BÁO SAI SÓT (KHIẾU NẠI) ----
+function staffMoKhieuNai(id) {
+    document.getElementById('staff-luong-id-to-khieu-nai').value = id;
+    document.getElementById('staff-khieu-nai-lydo').value = '';
+    document.getElementById('staff-khieu-nai-luong-modal').style.display = 'flex';
+}
+
+async function executeStaffKhieuNai() {
+    const id = document.getElementById('staff-luong-id-to-khieu-nai').value;
+    const lydo = document.getElementById('staff-khieu-nai-lydo').value.trim();
+
+    if (!lydo) {
+        return showSystemModal("Bắt buộc", "Vui lòng ghi rõ lý do để quản lý dễ dàng rà soát lại lịch làm của bạn.", "error");
+    }
+
+    const btn = document.getElementById('btn-submit-khieu-nai');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang gửi...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/nhan-vien/bang-luong/${id}/khieu-nai`, {
+            method: 'PUT',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` },
+            body: JSON.stringify({ ly_do: lydo })
+        });
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            document.getElementById('staff-khieu-nai-luong-modal').style.display = 'none';
+            showSystemModal("Thành công", data.message, "success");
+            loadBangLuongStaffData(); // Tải lại lưới
+        } else {
+            showSystemModal("Lỗi", data.message, "error");
+        }
+    } catch(e) {
+        showSystemModal("Lỗi mạng", "Vui lòng kiểm tra kết nối", "error");
+    } finally {
+        btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Gửi phản hồi';
+        btn.disabled = false;
+    }
+}
+
+async function openLuoiLichLuongModal(idNhanVien, thangNam, tenNhanVien = '') {
+    const tbody = document.getElementById('luoi-lich-tbody');
+    const tongQuanDiv = document.getElementById('luoi-lich-tong-quan');
+    
+    document.getElementById('luoi-lich-title').innerText = `Lịch làm việc tháng ${thangNam} ${tenNhanVien ? '- '+tenNhanVien : ''}`;
+    tongQuanDiv.innerHTML = '<div style="text-align:center; width:100%;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải thông tin...</div>';
+    tbody.innerHTML = '';
+    
+    document.getElementById('luoi-lich-luong-modal').style.display = 'flex';
+
+    try {
+        const url = idNhanVien 
+            ? `${API_BASE_URL}/bang-luong/chi-tiet?id_nhan_vien=${idNhanVien}&thang_nam=${thangNam}` // Admin gọi
+            : `${API_BASE_URL}/bang-luong/chi-tiet?thang_nam=${thangNam}`; // Nhân viên tự gọi chính mình
+
+        const response = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` }
+        });
+        const res = await response.json();
+
+        if (res.success) {
+            const tq = res.tong_quan;
+            const lichData = res.lich_thang;
+
+            // 1. Vẽ Khung Tổng Quan
+            // Tính lại thực lãnh ngay trên Frontend để đảm bảo luôn đúng 100% (cộng dồn từ dữ liệu trả về của Backend)
+            const calculatedThucLanh = Number(tq.TongTienLuong) + Number(tq.TongTienThuong) - Number(tq.TongTienPhat);
+            const finalThucLanh = calculatedThucLanh > 0 ? calculatedThucLanh : 0;
+
+            tongQuanDiv.innerHTML = `
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <span style="font-size: 0.85rem; color: var(--text-muted);">Tổng số ca đi làm</span>
+                    <strong style="color: var(--text-dark); font-size: 1.1rem;">${tq.TongCaLam} ca</strong>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <span style="font-size: 0.85rem; color: var(--text-muted);">Lương cơ bản</span>
+                    <strong style="color: var(--text-dark); font-size: 1.1rem;">${Number(tq.TongTienLuong).toLocaleString('vi-VN')}đ</strong>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <span style="font-size: 0.85rem; color: var(--text-muted);">Tổng Thưởng / Phạt</span>
+                    <strong style="font-size: 1.1rem;"><span style="color: #10b981;">+${Number(tq.TongTienThuong).toLocaleString('vi-VN')}đ</span> / <span style="color: #ef4444;">-${Number(tq.TongTienPhat).toLocaleString('vi-VN')}đ</span></strong>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 4px; padding-left: 15px; border-left: 2px solid #cbd5e1;">
+                    <span style="font-size: 0.85rem; color: var(--text-muted);">Thực lãnh</span>
+                    <strong style="color: #2563eb; font-size: 1.3rem;">${finalThucLanh.toLocaleString('vi-VN')}đ</strong>
+                </div>
+            `;
+
+            // 2. Vẽ Lưới Lịch Chi Tiết
+            if (lichData.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted" style="padding: 30px;">Không có ca làm việc nào.</td></tr>`;
+            } else {
+                let html = '';
+                lichData.forEach(l => {
+                    const d = new Date(l.ngay_lam);
+                    const dateStr = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+                    const dayName = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][d.getDay()];
+                    
+                    const role = l.cong_viec === 'ThuNgan' ? 'Thu Ngân' : 'Phục Vụ';
+                    
+                    let bgStatus = '', iconStatus = '', txtStatus = '';
+                    if (l.trang_thai_diem_danh === 'DaLam') {
+                        bgStatus = 'background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0;';
+                        iconStatus = '<i class="fa-solid fa-circle-check"></i>';
+                        txtStatus = 'Đã Đi Làm';
+                    } else if (l.trang_thai_diem_danh === 'VangMat') {
+                        bgStatus = 'background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;';
+                        iconStatus = '<i class="fa-solid fa-circle-xmark"></i>';
+                        txtStatus = 'Vắng Mặt';
+                    } else {
+                        bgStatus = 'background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;';
+                        iconStatus = '<i class="fa-solid fa-clock"></i>';
+                        txtStatus = 'Chờ làm';
+                    }
+
+                    let tienHtml = '';
+                    if (l.trang_thai_diem_danh === 'DaLam') {
+                        tienHtml += `<div style="font-size: 0.85rem; color: var(--text-dark);">LCB: <strong>${Number(l.luong_co_ban).toLocaleString('vi-VN')}đ</strong></div>`;
+                    }
+                    if (l.tien_thuong > 0) tienHtml += `<div style="font-size: 0.85rem; color: #10b981;">Thưởng: <strong>+${Number(l.tien_thuong).toLocaleString('vi-VN')}đ</strong></div>`;
+                    if (l.tien_phat > 0) tienHtml += `<div style="font-size: 0.85rem; color: #ef4444;">Phạt: <strong>-${Number(l.tien_phat).toLocaleString('vi-VN')}đ</strong></div>`;
+                    if (l.ly_do) tienHtml += `<div style="font-size: 0.8rem; color: var(--text-muted); font-style: italic; max-width: 200px; margin-left: auto;">${l.ly_do}</div>`;
+
+                    if (!tienHtml) tienHtml = '-';
+
+                    html += `
+                        <tr style="border-bottom: 1px solid #f1f5f9;">
+                            <td style="padding-left: 20px;">
+                                <strong style="color: var(--text-dark);">${dayName}</strong><br>
+                                <span style="font-size: 0.85rem; color: var(--text-muted);">${dateStr}</span>
+                            </td>
+                            <td>
+                                <strong style="color: var(--primary);">${l.ten_ca}</strong><br>
+                                <span style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-solid fa-user-tag"></i> ${role}</span>
+                            </td>
+                            <td style="text-align: center;">
+                                <span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; display: inline-block; white-space: nowrap; ${bgStatus}">${iconStatus} ${txtStatus}</span>
+                            </td>
+                            <td style="text-align: right; padding-right: 20px;">
+                                ${tienHtml}
+                            </td>
+                        </tr>
+                    `;
+                });
+                tbody.innerHTML = html;
+            }
+        } else {
+            tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger">${res.message}</td></tr>`;
+        }
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger">Lỗi kết nối máy chủ!</td></tr>`;
+    }
+}
+
+// ======================================================
+// MODULE: NHÂN VIÊN - XEM LỊCH SỬ CA LÀM
+// ======================================================
+let allStaffHistoryData = [];
+let staffHistoryPage = 1;
+const staffHistoryItemsPerPage = 7; // Hiển thị 7 ca 1 trang cho gọn
+window.currentStaffHistoryThangNam = '';
+
+function handleStaffHistoryFilter() {
+    window.currentStaffHistoryThangNam = document.getElementById('staff-history-thangnam').value;
+    staffHistoryPage = 1; // Reset về trang 1
+    loadStaffHistoryData();
+}
+
+async function loadStaffHistoryData() {
+    const tbody = document.getElementById('staff-history-tbody');
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center" style="padding: 40px;"><i class="fa-solid fa-spinner fa-spin text-primary"></i> Đang tải dữ liệu...</td></tr>`;
+    document.getElementById('staff-history-pagination').innerHTML = '';
+
+    // LẤY MẶC ĐỊNH LÀ THÁNG HIỆN TẠI NẾU CHƯA CÓ
+    if (!window.currentStaffHistoryThangNam) {
+        const today = new Date();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const yyyy = today.getFullYear();
+        window.currentStaffHistoryThangNam = `${mm}-${yyyy}`;
+        // Gán ngược lại vào Select để UI đồng bộ
+        const sel = document.getElementById('staff-history-thangnam');
+        if (sel) sel.value = window.currentStaffHistoryThangNam;
+    }
+
+    const thangNam = window.currentStaffHistoryThangNam; 
+    const parts = thangNam.split('-');
+    const m = parts[0];
+    const y = parts[1];
+    
+    // Tìm ngày đầu và ngày cuối của tháng đó
+    const firstDay = `${y}-${m}-01`;
+    // Lấy ngày cuối bằng cách lùi 1 ngày từ tháng tiếp theo
+    const lastDayObj = new Date(y, m, 0); 
+    const lastDay = `${y}-${m}-${String(lastDayObj.getDate()).padStart(2, '0')}`;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/lich-lam-viec?tu_ngay=${firstDay}&den_ngay=${lastDay}`, {
+            headers: { 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` }
+        });
+        
+        const res = await response.json();
+        
+        if (res.success) {
+            const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+            
+            // CHỈ LẤY CA CỦA MÌNH & CÓ TRẠNG THÁI ĐIỂM DANH LÀ ĐÃ LÀM HOẶC VẮNG MẶT
+            allStaffHistoryData = (res.data || []).filter(item => 
+                String(item.ID_NhanVien) === String(currentUser.ID) &&
+                (item.TrangThaiDiemDanh === 'DaLam' || item.TrangThaiDiemDanh === 'VangMat')
+            );
+            
+            // Sắp xếp ngày giảm dần (Mới nhất lên đầu)
+            allStaffHistoryData.sort((a, b) => new Date(b.NgayLam) - new Date(a.NgayLam));
+
+            renderStaffHistoryPagination();
+        } else {
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">${res.message}</td></tr>`;
+        }
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">Lỗi kết nối máy chủ!</td></tr>`;
+    }
+}
+
+function renderStaffHistoryPagination() {
+    const totalPages = Math.ceil(allStaffHistoryData.length / staffHistoryItemsPerPage) || 1;
+    if (staffHistoryPage > totalPages) staffHistoryPage = totalPages;
+
+    const startIdx = (staffHistoryPage - 1) * staffHistoryItemsPerPage;
+    const pageData = allStaffHistoryData.slice(startIdx, startIdx + staffHistoryItemsPerPage);
+
+    const tbody = document.getElementById('staff-history-tbody');
+    
+    if (pageData.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="padding: 40px;">Tháng này bạn chưa đăng ký ca nào hoặc đơn đã bị từ chối.</td></tr>`;
+        document.getElementById('staff-history-pagination').innerHTML = '';
+        return;
+    }
+
+    let html = '';
+    pageData.forEach(item => {
+        const ca = item.ca_lam_viec || item.caLamViec || {};
+        
+        // --- 1. Thời gian ---
+        const d = new Date(item.NgayLam);
+        const dateStr = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+        const dayName = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][d.getDay()];
+        const timeStr = ca.GioBatDau ? `${ca.GioBatDau.substring(0,5)} - ${ca.GioKetThuc.substring(0,5)}` : '';
+        
+        // --- 2. Thông tin ca ---
+        const tenCa = ca.TenCa || 'Không rõ';
+        const role = item.CongViec === 'ThuNgan' ? 'Thu Ngân' : 'Phục Vụ';
+
+        // --- 3. Trạng thái Duyệt (Trạng thái xếp lịch) ---
+        let bgDuyet = '', iconDuyet = '', txtDuyet = '';
+        if (item.TrangThaiXepLich === 'DaDuyet') {
+            bgDuyet = 'background: #d1fae5; color: #047857;'; iconDuyet = '<i class="fa-solid fa-check"></i>'; txtDuyet = 'Đã duyệt';
+        } else if (item.TrangThaiXepLich === 'DangKy') {
+            bgDuyet = 'background: #fef3c7; color: #b45309;'; iconDuyet = '<i class="fa-solid fa-hourglass-half"></i>'; txtDuyet = 'Chờ duyệt';
+        }
+
+        // --- 4. Điểm danh ---
+        let bgDiemDanh = '', iconDiemDanh = '', txtDiemDanh = '';
+        if (item.TrangThaiDiemDanh === 'DaLam') {
+            bgDiemDanh = 'background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0;'; iconDiemDanh = '<i class="fa-solid fa-circle-check"></i>'; txtDiemDanh = 'Đã làm';
+            if (item.SoPhutDiMuon > 0) txtDiemDanh += ` (Trễ ${item.SoPhutDiMuon}p)`;
+        } else if (item.TrangThaiDiemDanh === 'VangMat') {
+            bgDiemDanh = 'background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;'; iconDiemDanh = '<i class="fa-solid fa-circle-xmark"></i>'; txtDiemDanh = 'Vắng mặt';
+        } else {
+            bgDiemDanh = 'background: #f8fafc; color: #94a3b8; border: 1px dashed #cbd5e1;'; iconDiemDanh = '<i class="fa-solid fa-minus"></i>'; txtDiemDanh = 'Chưa diễn ra';
+        }
+
+        const displayDiemDanh = item.TrangThaiXepLich === 'DaDuyet'
+            ? `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; display: inline-block; white-space: nowrap; ${bgDiemDanh}">${iconDiemDanh} ${txtDiemDanh}</span>`
+            : `<span style="color: #cbd5e1; font-size: 0.85rem;">-</span>`;
+
+        // --- 5. Tiền Thưởng / Phạt ---
+        let thuongPhatHtml = '';
+        if (item.TienPhat > 0) thuongPhatHtml += `<div style="color: #ef4444; font-size: 0.85rem; font-weight: bold; margin-bottom: 2px;">- ${Number(item.TienPhat).toLocaleString('vi-VN')}đ</div>`;
+        if (item.TienThuong > 0) thuongPhatHtml += `<div style="color: #10b981; font-size: 0.85rem; font-weight: bold; margin-bottom: 2px;">+ ${Number(item.TienThuong).toLocaleString('vi-VN')}đ</div>`;
+        if (!thuongPhatHtml) thuongPhatHtml = '<span style="color: #cbd5e1;">-</span>';
+
+        // --- 6. Ghi chú ---
+        let ghiChuHtml = '';
+        if (item.GhiChu) ghiChuHtml += `<div style="font-size: 0.8rem; color: #64748b; font-style: italic;">Bạn: ${item.GhiChu}</div>`;
+        if (item.LyDoDieuChinh) ghiChuHtml += `<div style="font-size: 0.8rem; color: #ef4444; font-style: italic; margin-top: 4px;">QL: ${item.LyDoDieuChinh}</div>`;
+        if (!ghiChuHtml) ghiChuHtml = '<span style="color: #cbd5e1;">-</span>';
+
+        html += `
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td>
+                    <strong style="color: var(--text-dark);">${dayName}</strong><br>
+                    <span style="font-size: 0.85rem; color: var(--text-muted);">${dateStr}</span>
+                </td>
+                <td>
+                    <strong style="color: var(--primary);">${tenCa}</strong><br>
+                    <span style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-solid fa-user-tag"></i> Vị trí: ${role}</span>
+                </td>
+                <td style="text-align: center;">
+                    <span style="padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; ${bgDuyet}">${iconDuyet} ${txtDuyet}</span>
+                </td>
+                <td style="text-align: center;">
+                    ${displayDiemDanh}
+                </td>
+                <td style="text-align: right;">
+                    ${thuongPhatHtml}
+                </td>
+                <td style="text-align: right;">
+                    ${ghiChuHtml}
+                </td>
+            </tr>
+        `;
+    });
+    tbody.innerHTML = html;
+
+    // Vẽ phân trang
+    const div = document.getElementById('staff-history-pagination');
+    if (totalPages <= 1) return div.innerHTML = '';
+    
+    let pageHtml = `<button class="btn-outline-sm" ${staffHistoryPage === 1 ? 'disabled style="opacity:0.5;"' : ''} onclick="staffHistoryPage--; renderStaffHistoryPagination()"><i class="fa-solid fa-chevron-left"></i></button>`;
+    
+    const getPages = (current, total) => {
+        if (total <= 5) return Array.from({length: total}, (_, i) => i + 1);
+        if (current <= 3) return [1, 2, 3, '...', total];
+        if (current >= total - 2) return [1, '...', total - 2, total - 1, total];
+        return [1, '...', current, '...', total];
+    };
+
+    getPages(staffHistoryPage, totalPages).forEach(i => {
+        if (i === '...') {
+            pageHtml += `<span style="padding: 6px 10px; color: var(--text-muted); font-weight: bold;">...</span>`;
+        } else {
+            pageHtml += `<button class="${i === staffHistoryPage ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="staffHistoryPage=${i}; renderStaffHistoryPagination()">${i}</button>`;
+        }
+    });
+
+    pageHtml += `<button class="btn-outline-sm" ${staffHistoryPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="staffHistoryPage++; renderStaffHistoryPagination()"><i class="fa-solid fa-chevron-right"></i></button>`;
+    div.innerHTML = pageHtml;
 }

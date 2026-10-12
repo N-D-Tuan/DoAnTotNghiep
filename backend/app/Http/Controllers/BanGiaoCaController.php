@@ -278,6 +278,8 @@ class BanGiaoCaController extends Controller
     // 7. Chốt cưỡng chế (Admin)
     public function chotCuongChe(Request $request, $id)
     {
+        $user = $request->user();
+        
         $bgc = BanGiaoCa::find($id);
         if (!$bgc || $bgc->TrangThai !== 'DangTrongCa') {
             return response()->json(['success' => false, 'message' => 'Phiếu không hợp lệ hoặc đã chốt.']);
@@ -303,6 +305,7 @@ class BanGiaoCaController extends Controller
             $tienGiao = $tienHeThong;
         }
 
+        $bgc->ID_NhanVienGiao = $user->ID;
         $bgc->ThoiGianGiao = Carbon::now();
         $bgc->TienGiao = $tienGiao;
         $bgc->TienNopDoanhThu = $tienNop;
