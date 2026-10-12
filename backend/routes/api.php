@@ -23,6 +23,7 @@ use App\Http\Controllers\PosController;
 use App\Http\Controllers\CaLamViecController;
 use App\Http\Controllers\LichLamViecController;
 use App\Http\Controllers\BanGiaoCaController;
+use App\Http\Controllers\BangLuongController;
 use App\Services\ChromaDBService;
 
 Route::get('/seed-chromadb', function (ChromaDBService $chroma) {
@@ -169,4 +170,21 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/ban-giao-ca/{id}/phieu-chi', [BanGiaoCaController::class, 'layDanhSachPhieuChi']);
     Route::delete('/ban-giao-ca/phieu-chi/{id}', [\App\Http\Controllers\BanGiaoCaController::class, 'xoaPhieuChi']);
     Route::put('/admin/ban-giao-ca/{id}/chot-cuong-che', [\App\Http\Controllers\BanGiaoCaController::class, 'chotCuongChe']);
+
+    // ==========================================
+    // MODULE: BẢNG LƯƠNG VÀ THANH TOÁN
+    // ==========================================
+    
+    // API dành cho Quản lý
+    Route::get('/admin/bang-luong', [BangLuongController::class, 'layDanhSachLuongQuanLy']);
+    Route::post('/admin/bang-luong/chot', [BangLuongController::class, 'chotLuong']);
+    Route::put('/admin/bang-luong/{id}/thanh-toan', [BangLuongController::class, 'thanhToan']);
+    
+    // API dùng chung (Cả Nhân viên và Quản lý dùng để xem lưới lịch chi tiết của tháng đó)
+    Route::get('/bang-luong/chi-tiet', [BangLuongController::class, 'xemChiTietThang']);
+
+    // API dành cho Nhân viên
+    Route::get('/nhan-vien/bang-luong', [BangLuongController::class, 'lichSuLuongNhanVien']);
+    Route::put('/nhan-vien/bang-luong/{id}/xac-nhan', [BangLuongController::class, 'xacNhan']);
+    Route::put('/nhan-vien/bang-luong/{id}/khieu-nai', [BangLuongController::class, 'khieuNai']);
 });
