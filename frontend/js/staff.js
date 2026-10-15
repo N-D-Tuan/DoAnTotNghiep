@@ -1502,6 +1502,7 @@ function openStaffDSConfirmModal(id) {
                 <p style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5;">Vui lòng xác nhận trạng thái cho khách hàng này.</p>
                 <div style="display: flex; justify-content: center; gap: 12px;">
                     <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="closeStaffDSConfirmModal()">Hủy bỏ</button>
+                    <button class="btn-outline" style="padding: 10px 15px; color: #ef4444; border-color: #fecaca; background: #fef2f2;" onclick="openStaffCancelConfirmModal()"><i class="fa-solid fa-ban"></i> Hủy sân & Hoàn tiền</button>
                     <button class="btn-outline" style="width: auto; padding: 10px 24px; color: #64748b; border-color: #cbd5e1;" onclick="executeStaffCapNhatDatSan('KhongDen')"><i class="fa-solid fa-user-slash"></i> Không đến</button>
                     <button class="btn-primary" style="width: auto; padding: 10px 24px; background-color: #10b981; border-color: #10b981;" onclick="executeStaffCapNhatDatSan('HoanThanh')"><i class="fa-solid fa-check"></i> Hoàn thành</button>
                 </div>
@@ -1514,6 +1515,36 @@ function openStaffDSConfirmModal(id) {
 function closeStaffDSConfirmModal() { 
     const modal = document.getElementById('staff-ds-confirm-modal');
     if(modal) modal.style.display = 'none'; 
+}
+
+function openStaffCancelConfirmModal() {
+    closeStaffDSConfirmModal(); // Đóng modal hiện tại
+    
+    let modal = document.getElementById('staff-cancel-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'staff-cancel-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 10000;';
+        document.body.appendChild(modal);
+    }
+    
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 400px; text-align: center; padding: 30px 20px;">
+            <div style="font-size: 3.5rem; color: #ef4444; margin-bottom: 15px;"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <h3 style="margin-bottom: 10px; font-size: 1.4rem;">Xác nhận Hủy Sân</h3>
+            <p style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5;">Hệ thống sẽ <strong>HỦY LỊCH</strong> và tự động <strong>HOÀN TRẢ 100% TIỀN CỌC</strong> vào ví khách hàng. Bạn có chắc chắn?</p>
+            <div style="display: flex; justify-content: center; gap: 12px;">
+                <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="closeStaffCancelConfirmModal()">Hủy bỏ</button>
+                <button class="btn-primary" style="width: auto; padding: 10px 24px; background-color: #ef4444; border-color: #ef4444;" onclick="executeStaffCapNhatDatSan('DaHuy'); closeStaffCancelConfirmModal();"><i class="fa-solid fa-trash"></i> Đồng ý Hủy</button>
+            </div>
+        </div>`;
+    modal.style.display = 'flex';
+}
+
+function closeStaffCancelConfirmModal() {
+    const modal = document.getElementById('staff-cancel-modal');
+    if(modal) modal.style.display = 'none';
 }
 
 async function executeStaffCapNhatDatSan(trangThai) {
