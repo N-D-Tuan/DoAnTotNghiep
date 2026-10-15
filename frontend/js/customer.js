@@ -846,13 +846,24 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 newHtml = `<p style="text-align:center; color: var(--text-muted); margin-top: 40px;">Cụm sân này hiện chưa có sân con nào hoạt động.</p>`;
                             } else {
                                 for (const [loaiSanName, data] of Object.entries(grouped)) {
-                                    newHtml += `<div class="pitch-section"><div class="pitch-section-title">${loaiSanName.toUpperCase()}</div><div class="pitch-grid">`;
+                                    newHtml += `
+                                        <div class="pitch-section">
+                                            <div class="pitch-section-title">
+                                                <span>${loaiSanName.toUpperCase()}</span>
+                                                <span style="font-size: 0.82rem; font-weight: 500; color: var(--text-muted);">${data.pitches.length} sân</span>
+                                            </div>
+                                            <div class="pitch-grid">`;
                                     data.pitches.forEach(sb => {
                                         newHtml += `
                                             <div class="pitch-card" onclick="renderSchedule(${currentClusterId}, '${currentClusterName}', ${sb.ID}, '${sb.TenSan}', ${data.id}, '${loaiSanName}')">
-                                                <div class="pitch-name">${sb.TenSan}</div>
-                                                <div class="pitch-type">${loaiSanName}</div>
-                                                <button class="btn-outline" style="width: 100%; padding: 8px;">XEM LỊCH &rarr;</button>
+                                                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                                                    <div>
+                                                        <div class="pitch-name">${sb.TenSan}</div>
+                                                        <div class="pitch-type"><i class="fa-solid fa-layer-group"></i> ${loaiSanName}</div>
+                                                    </div>
+                                                    <span style="font-size: 0.75rem; color: var(--primary); background: var(--primary-light); padding: 2px 8px; border-radius: 4px; font-weight: 600;">Hoạt động</span>
+                                                </div>
+                                                <button class="btn-outline" style="width: 100%; padding: 8px;">Xem lịch trống &rarr;</button>
                                             </div>`;
                                     });
                                     newHtml += `</div></div>`;
@@ -1668,22 +1679,27 @@ async function renderClusters() {
             }
         });
 
-        // 3. Render Giao diện (Thêm Thanh tìm kiếm và Bộ lọc)
+        // 3. Render Giao diện (Giữ nguyên toàn bộ ID: search-cluster, filter-phuong, cluster-grid-container)
         let html = `
-            <div class="page-header">
-                <h1 class="page-title">Hệ thống sân bóng DN FOOTBALL</h1>
-                <p class="page-subtitle">Chọn cụm sân bạn muốn đặt lịch thi đấu</p>
+            <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px;">
+                <div>
+                    <div style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 4px;">
+                        <i class="fa-solid fa-location-dot" style="color: var(--primary);"></i> Khu vực Đà Nẵng &bull; Danh sách cơ sở
+                    </div>
+                    <h1 class="page-title">Chọn cụm sân thi đấu</h1>
+                    <p class="page-subtitle">Tìm kiếm theo khu vực và chọn cụm sân để xem các sân trống</p>
+                </div>
             </div>
 
             <!-- THANH CÔNG CỤ TÌM KIẾM VÀ LỌC -->
-            <div style="display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap;">
+            <div style="display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; background: #fff; padding: 14px; border-radius: 10px; border: 1px solid var(--border);">
                 <div style="flex: 1; min-width: 250px; position: relative;">
-                    <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
-                    <input type="text" id="search-cluster" class="form-control" placeholder="Tìm kiếm theo tên cụm hoặc địa chỉ..." style="padding-left: 40px;" oninput="filterClusters()">
+                    <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
+                    <input type="text" id="search-cluster" class="form-control" placeholder="Tìm theo tên cụm sân hoặc tên đường..." style="padding-left: 38px;" oninput="filterClusters()">
                 </div>
                 <div style="min-width: 220px;">
                     <select id="filter-phuong" class="form-control" onchange="filterClusters()">
-                        <option value="">-- Tất cả khu vực --</option>
+                        <option value="">Tất cả khu vực (${allActiveClusters.length} cụm sân)</option>
                         ${uniquePhuongs.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
                     </select>
                 </div>
@@ -1709,49 +1725,50 @@ function filterClusters() {
     const phuongSelect = document.getElementById('filter-phuong');
     const gridContainer = document.getElementById('cluster-grid-container');
 
-    // Chặn lỗi nếu các phần tử DOM chưa được render
     if (!searchInput || !phuongSelect || !gridContainer) return;
 
     const searchTerm = searchInput.value.toLowerCase().trim();
     const selectedPhuongId = phuongSelect.value;
 
-    // Tiến hành lọc dữ liệu từ mảng gốc
     const filtered = allActiveClusters.filter(cluster => {
-        // Lọc theo Text (Tên cụm hoặc Địa chỉ)
         const textMatch = cluster.TenCumSan.toLowerCase().includes(searchTerm) || 
                           cluster.DiaChi.toLowerCase().includes(searchTerm);
-        
-        // Lọc theo Phường
         const phuongMatch = selectedPhuongId === "" || String(cluster.ID_Phuong) === String(selectedPhuongId);
-        
         return textMatch && phuongMatch;
     });
 
-    // Cập nhật lại giao diện Grid
     if (filtered.length === 0) {
-        gridContainer.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding: 40px; color: var(--text-muted); background: #fff; border-radius: 12px; border: 1px dashed var(--border);">Không tìm thấy cụm sân nào phù hợp với yêu cầu tìm kiếm.</div>`;
+        gridContainer.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding: 40px; color: var(--text-muted); background: #fff; border-radius: 10px; border: 1px dashed var(--border);">Không tìm thấy cụm sân nào phù hợp với yêu cầu tìm kiếm.</div>`;
         return;
     }
 
     let gridHtml = '';
     filtered.forEach(cluster => {
         const imgUrl = cluster.HinhAnh ? `http://127.0.0.1:8000${cluster.HinhAnh}` : 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?q=80&w=600&auto=format&fit=crop';
+        const tenPhuong = cluster.phuong?.TenPhuong || 'Đà Nẵng';
         gridHtml += `
             <div class="cluster-card" onclick="renderPitches(${cluster.ID}, '${cluster.TenCumSan}', '${cluster.DiaChi}', '${cluster.GioMoCua}', '${cluster.GioDongCua}')">
                 <div class="cluster-img-box">
                     <img src="${imgUrl}" alt="${cluster.TenCumSan}" class="cluster-img">
+                    <span class="cluster-ward-tag"><i class="fa-solid fa-map-pin" style="margin-right: 4px;"></i>${tenPhuong}</span>
                 </div>
                 <div class="cluster-info">
                     <div class="cluster-name">${cluster.TenCumSan}</div>
-                    <div class="cluster-address"><i class="fa-solid fa-location-dot" style="color: var(--primary);"></i> ${cluster.DiaChi} (${cluster.phuong?.TenPhuong || ''})</div>
-                    <div class="cluster-meta"><i class="fa-solid fa-clock"></i> ${cluster.GioMoCua.substring(0,5)} - ${cluster.GioDongCua.substring(0,5)}</div>
-                    <button class="btn-outline">XEM DANH SÁCH SÂN &rarr;</button>
+                    <div class="cluster-address">
+                        <i class="fa-solid fa-location-dot"></i>
+                        <span>${cluster.DiaChi}${cluster.phuong ? ', ' + cluster.phuong.TenPhuong : ''}</span>
+                    </div>
+                    <div class="cluster-footer">
+                        <div class="cluster-meta">
+                            <i class="fa-regular fa-clock"></i> ${cluster.GioMoCua.substring(0,5)} - ${cluster.GioDongCua.substring(0,5)}
+                        </div>
+                        <span style="font-size: 0.85rem; font-weight: 600; color: var(--primary);">Chọn sân &rarr;</span>
+                    </div>
                 </div>
             </div>
         `;
     });
     
-    // ĐIỂM QUAN TRỌNG NHẤT: Bơm chuỗi HTML vừa tạo vào vùng chứa
     gridContainer.innerHTML = gridHtml;
 }
 
@@ -1759,13 +1776,11 @@ async function renderPitches(clusterId, clusterName, clusterAddress, gioMo, gioD
     await loadUserTournaments();
     if (currentBookingPurpose !== 'normal') {
         const tour = userActiveTournaments.find(t => t.ID == currentBookingPurpose);
-        // Kiểm tra xem giải đấu có thuộc về cụm sân vừa click không
         if (!tour || (tour.ID_CumSan != clusterId && tour.id_cum_san != clusterId)) {
-            // Trả về bình thường và xóa sạch giỏ hàng
             currentBookingPurpose = 'normal';
             sessionStorage.setItem('dn_football_booking_purpose', 'normal');
             selectedSlots = [];
-            saveToSession(); // Cập nhật lại UI giỏ hàng
+            saveToSession();
         }
     }
 
@@ -1786,10 +1801,8 @@ async function renderPitches(clusterId, clusterName, clusterAddress, gioMo, gioD
         const response = await fetch(`${API_BASE_URL}/san-bong?cum_san_id=${clusterId}`);
         const res = await response.json();
 
-        // 2. NGHIỆP VỤ: Chỉ hiển thị các sân con đang có trạng thái HOẠT ĐỘNG
         const activePitches = res.data.filter(sb => sb.TrangThai === 'HoatDong');
 
-        // Gom nhóm các sân con theo ID Loại Sân
         const grouped = {};
         activePitches.forEach(sb => {
             const loaiSanName = sb.loaiSan?.TenLoaiSan || sb.loai_san?.TenLoaiSan || 'Loại sân khác';
@@ -1799,16 +1812,29 @@ async function renderPitches(clusterId, clusterName, clusterAddress, gioMo, gioD
         });
 
         let html = `
-            <div class="back-btn" onclick="renderClusters()">
-                <i class="fa-solid fa-arrow-left"></i> Quay lại danh sách cụm sân
+            <div class="customer-breadcrumb">
+                <div class="back-btn" onclick="renderClusters()">
+                    <i class="fa-solid fa-arrow-left"></i> Quay lại danh sách cụm sân
+                </div>
+                <div class="breadcrumb-path">
+                    <span class="bc-link" onclick="renderClusters()">Cụm sân</span>
+                    <span>/</span>
+                    <span class="bc-current">${clusterName}</span>
+                </div>
             </div>
             
             <div class="cluster-detail-header">
-                <h1 class="cluster-detail-title">${clusterName}</h1>
-                <div class="cluster-detail-info">
-                    <span><i class="fa-solid fa-location-dot"></i> ${clusterAddress}</span>
-                    <!-- Cắt chuỗi để lấy định dạng HH:mm -->
-                    <span><i class="fa-solid fa-clock"></i> ${gioMo.substring(0,5)} - ${gioDong.substring(0,5)}</span>
+                <div>
+                    <div class="cluster-detail-label">Cơ sở đang xem</div>
+                    <h1 class="cluster-detail-title">${clusterName}</h1>
+                    <div class="cluster-detail-info">
+                        <span><i class="fa-solid fa-location-dot"></i> Địa chỉ: <strong style="color: var(--text-dark);">${clusterAddress}</strong></span>
+                        <span><i class="fa-regular fa-clock"></i> Giờ hoạt động: <strong style="color: var(--text-dark);">${gioMo.substring(0,5)} - ${gioDong.substring(0,5)}</strong></span>
+                    </div>
+                </div>
+                <div class="context-summary-box">
+                    <div style="font-size: 0.78rem; color: var(--text-muted);">Số sân hoạt động</div>
+                    <div style="font-size: 1.15rem; font-weight: 700; color: var(--primary);">${activePitches.length} sân</div>
                 </div>
             </div>
         `;
@@ -1818,13 +1844,24 @@ async function renderPitches(clusterId, clusterName, clusterAddress, gioMo, gioD
         }
 
         for (const [loaiSanName, data] of Object.entries(grouped)) {
-            html += `<div class="pitch-section"><div class="pitch-section-title">${loaiSanName.toUpperCase()}</div><div class="pitch-grid">`;
+            html += `
+                <div class="pitch-section">
+                    <div class="pitch-section-title">
+                        <span>${loaiSanName.toUpperCase()}</span>
+                        <span style="font-size: 0.82rem; font-weight: 500; color: var(--text-muted);">${data.pitches.length} sân</span>
+                    </div>
+                    <div class="pitch-grid">`;
             data.pitches.forEach(sb => {
                 html += `
                     <div class="pitch-card" onclick="renderSchedule(${clusterId}, '${clusterName}', ${sb.ID}, '${sb.TenSan}', ${data.id}, '${loaiSanName}')">
-                        <div class="pitch-name">${sb.TenSan}</div>
-                        <div class="pitch-type">${loaiSanName}</div>
-                        <button class="btn-outline" style="width: 100%; padding: 8px;">XEM LỊCH &rarr;</button>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div>
+                                <div class="pitch-name">${sb.TenSan}</div>
+                                <div class="pitch-type"><i class="fa-solid fa-layer-group"></i> ${loaiSanName}</div>
+                            </div>
+                            <span style="font-size: 0.75rem; color: var(--primary); background: var(--primary-light); padding: 2px 8px; border-radius: 4px; font-weight: 600;">Hoạt động</span>
+                        </div>
+                        <button class="btn-outline" style="width: 100%; padding: 8px;">Xem lịch trống &rarr;</button>
                     </div>`;
             });
             html += `</div></div>`;
@@ -1843,12 +1880,8 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
     appContent.innerHTML = `<div style="text-align:center; padding: 50px;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải lịch...</div>`;
 
     try {
-        // Tải giải đấu trước để xem khách đang ở chế độ Đặt thường hay Đá giải
         await loadUserTournaments();
 
-        // ====================================================
-        // KIỂM TRA LẠI ĐỂ BẢO VỆ GIAO DIỆN LỊCH SÂN
-        // ====================================================
         if (currentBookingPurpose !== 'normal') {
             const tour = userActiveTournaments.find(t => t.ID == currentBookingPurpose);
             if (!tour || (tour.ID_CumSan != clusterId && tour.id_cum_san != clusterId)) {
@@ -1870,22 +1903,20 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
         const bookedSlots = (await dsRes.json()).data || [];
 
         const validPrices = giaTienData.filter(gt => gt.ID_LoaiSan == loaiSanId);
-
         const availableTimeSlots = allKhungGio;
 
         if (availableTimeSlots.length === 0) {
             appContent.innerHTML = `
-                <div class="back-btn" onclick="renderPitches(${currentClusterId}, '${currentClusterName}', '${currentClusterAddress}', '${currentClusterGioMo}', '${currentClusterGioDong}')">
-                    <i class="fa-solid fa-arrow-left"></i> Quay lại ${clusterName}
+                <div class="customer-breadcrumb">
+                    <div class="back-btn" onclick="renderPitches(${currentClusterId}, '${currentClusterName}', '${currentClusterAddress}', '${currentClusterGioMo}', '${currentClusterGioDong}')">
+                        <i class="fa-solid fa-arrow-left"></i> Quay lại ${clusterName}
+                    </div>
                 </div>
                 <div style="text-align:center; padding: 50px; color: red;">Chưa có cấu hình giá tiền/khung giờ cho loại sân này!</div>
             `;
             return;
         }
 
-        // ====================================================
-        // THUẬT TOÁN TÍNH TOÁN NGÀY CỘT HIỂN THỊ
-        // ====================================================
         let dateArray = [];
         let isTournamentMode = false;
 
@@ -1893,14 +1924,11 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
             const selectedTournament = userActiveTournaments.find(t => t.ID == currentBookingPurpose);
             if (selectedTournament) {
                 isTournamentMode = true;
-                
-                // Đọc ngày YYYY-MM-DD từ DB
                 let dStart = new Date(selectedTournament.NgayBatDau);
                 let dEnd = new Date(selectedTournament.NgayKetThuc);
                 
-                // Thuật toán lặp từ ngày khai mạc đến bế mạc
                 for (let d = new Date(dStart); d <= dEnd; d.setDate(d.getDate() + 1)) {
-                    const pad = n => n < 10 ? '0' + n : n; // Hàm thêm số 0 cho chuẩn DD/MM
+                    const pad = n => n < 10 ? '0' + n : n;
                     dateArray.push({
                         short: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`,
                         full: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`
@@ -1909,7 +1937,6 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
             }
         }
 
-        // Nếu đá phong trào (hoặc giải lỗi), hiện 7 ngày như cũ
         if (!isTournamentMode) {
             const today = new Date();
             for(let i = 0; i < 7; i++) {
@@ -1923,56 +1950,75 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
             }
         }
 
+        const moCua = currentClusterGioMo ? currentClusterGioMo.substring(0, 5) : '06:00';
+        const dongCua = currentClusterGioDong ? currentClusterGioDong.substring(0, 5) : '22:00';
+
         let html = `
-            <div class="back-btn" onclick="renderPitches(${currentClusterId}, '${currentClusterName}', '${currentClusterAddress}', '${currentClusterGioMo}', '${currentClusterGioDong}')">
-                <i class="fa-solid fa-arrow-left"></i> Quay lại ${currentClusterName}
-            </div>
-            <div style="font-size: 0.875rem; color: var(--text-muted); margin: 12px 0;">
-                Sân bóng &gt; ${currentClusterName} &gt; <strong>${pitchName}</strong>
-            </div>
-            <div class="page-header" style="margin-top: 10px;">
-                <h1 class="page-title">${pitchName} ${isTournamentMode ? `<span class="badge badge-success" style="font-size: 0.9rem;">Chế độ đá giải</span>` : ''}</h1>
-                <p class="page-subtitle">Loại sân: ${pitchType} | Chọn các khung giờ bên dưới để đặt lịch</p>
+            <div class="customer-breadcrumb">
+                <div class="back-btn" onclick="renderPitches(${currentClusterId}, '${currentClusterName}', '${currentClusterAddress}', '${currentClusterGioMo}', '${currentClusterGioDong}')">
+                    <i class="fa-solid fa-arrow-left"></i> Chọn sân khác thuộc ${currentClusterName}
+                </div>
+                <div class="breadcrumb-path">
+                    <span class="bc-link" onclick="renderClusters()">Cụm sân</span>
+                    <span>/</span>
+                    <span class="bc-link" onclick="renderPitches(${currentClusterId}, '${currentClusterName}', '${currentClusterAddress}', '${currentClusterGioMo}', '${currentClusterGioDong}')">${currentClusterName}</span>
+                    <span>/</span>
+                    <span class="bc-current">${pitchName} (${pitchType})</span>
+                </div>
             </div>
 
-            <!-- Khung Quy định dạng Dropdown / Popover bấm vào mới mở -->
-            <div style="margin: 20px 0; position: relative; display: inline-block;">
-                <!-- Nút icon dấu chấm than -->
-                <button type="button" onclick="toggleRuleDropdown(event)" style="background-color: #fffbeb; color: #b45309; border: 1px solid #f59e0b; padding: 8px 16px; border-radius: 8px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                    <i class="fa-solid fa-circle-exclamation" style="font-size: 1.1rem;"></i> Quy định đặt sân
-                </button>
+            <!-- Khung thông tin Sân & Cụm sân đang xem -->
+            <div class="cluster-detail-header" style="margin-bottom: 16px;">
+                <div>
+                    <div class="cluster-detail-label">Bảng lịch đặt sân</div>
+                    <h1 class="cluster-detail-title">
+                        <span>${pitchName}</span>
+                        <span style="font-size: 0.85rem; font-weight: 600; padding: 3px 10px; border-radius: 6px; background: #f1f5f9; color: #334155;">${pitchType}</span>
+                        ${isTournamentMode ? `<span style="font-size: 0.8rem; font-weight: 600; padding: 3px 10px; border-radius: 6px; background: #e0e7ff; color: #4338ca;">Chế độ đá giải</span>` : ''}
+                    </h1>
+                    <div class="cluster-detail-info">
+                        <span><i class="fa-solid fa-building"></i> Cụm sân: <strong style="color: var(--text-dark);">${currentClusterName}</strong></span>
+                        ${currentClusterAddress ? `<span><i class="fa-solid fa-location-dot"></i> Địa chỉ: <strong style="color: var(--text-dark);">${currentClusterAddress}</strong></span>` : ''}
+                        <span><i class="fa-regular fa-clock"></i> Giờ mở cửa: <strong style="color: var(--text-dark);">${moCua} - ${dongCua}</strong></span>
+                    </div>
+                </div>
+            </div>
 
-                <!-- Hộp nội dung quy định (Mặc định ẩn: display: none) -->
-                <div id="rule-dropdown-box" style="display: none; position: absolute; top: 110%; left: 0; width: 800px; background-color: #fffbeb; border: 1px solid #f59e0b; border-radius: 8px; padding: 18px 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 99;">
-                    <h4 style="color: #b45309; margin-bottom: 12px; font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">
-                        <i class="fa-solid fa-circle-exclamation"></i> QUY ĐỊNH ĐẶT SÂN CHI TIẾT
-                    </h4>
-                    <ul style="color: #78350f; font-size: 0.9rem; margin-left: 20px; line-height: 1.7;">
-                        <li><strong>Đặt sân phong trào:</strong>
-                            <ul style="margin-top: 4px; margin-bottom: 6px; list-style-type: disc;">
-                                <li>Phạm vi lịch hiển thị: Xem và đặt trước trong vòng <strong>7 ngày tới</strong>.</li>
-                                <li>Mức tiền cọc: Thanh toán trước <strong>30%</strong> tổng giá trị sân.</li>
-                            </ul>
-                        </li>
-                        <li style="margin-top: 6px;"><strong>Đặt sân đá giải:</strong>
-                            <ul style="margin-top: 4px; margin-bottom: 6px; list-style-type: disc;">
-                                <li>Điều kiện: Giải đấu phải được Admin phê duyệt tại đúng cụm sân tương ứng. Khách hàng cần mở Giỏ hàng và chọn đúng mục đích "Giải đấu" để hệ thống mở khóa lịch theo giải.</li>
-                                <li>Phạm vi lịch hiển thị: Render toàn bộ khung giờ trải dài từ <strong>Ngày bắt đầu đến Ngày kết thúc</strong> của giải đấu.</li>
-                                <li>Thời hạn thực hiện: Phải hoàn tất việc đặt lịch trong vòng <strong>3 ngày</strong> kể từ ngày giải đấu được duyệt.</li>
-                                <li>Mức tiền cọc: Thanh toán trước <strong>50%</strong> tổng giá trị sân giải đấu.</li>
-                            </ul>
-                        </li>
-                        <li style="margin-top: 6px;"><strong>Quy định hủy lịch chung:</strong>
-                            <ul style="margin-top: 4px; list-style-type: disc;">
-                                <li>Hủy miễn phí: Tự hủy trực tiếp trên hệ thống nếu thời gian diễn ra trận đấu còn <strong>trên 10 tiếng</strong> đổi với đá phong trào và trước <strong>1 tuần</strong> với đá giải.</li>
-                                <li>Hủy gấp: Nếu qua thời gian hủy, bắt buộc phải tạo "Yêu cầu hủy gấp" trong mục Lịch sử đặt sân để chờ Admin phê duyệt hoàn cọc (tùy theo lý do).</li>
-                            </ul>
-                        </li>
-                    </ul>
+            <!-- Thanh công cụ: Quy định đặt sân & Chú thích trạng thái -->
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px;">
+                <div style="position: relative; display: inline-block;">
+                    <button type="button" onclick="toggleRuleDropdown(event)" style="background-color: #fff; color: var(--text-dark); border: 1px solid var(--border); padding: 7px 14px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                        <i class="fa-solid fa-circle-info" style="background-color: #f59e0b; color: #ffffff; border-radius: 50%; padding: 4px;"></i> Quy định đặt & hủy sân
+                    </button>
+
+                    <!-- Hộp nội dung quy định (Giữ nguyên id="rule-dropdown-box") -->
+                    <div id="rule-dropdown-box" style="display: none; position: absolute; top: 115%; left: 0; width: 760px; max-width: 90vw; background-color: #f59e0b; border: 1px solid var(--border); border-radius: 10px; padding: 18px 22px; box-shadow: var(--shadow-lg); z-index: 99;">
+                        <h4 style="color: var(--text-dark); margin-bottom: 10px; font-size: 0.98rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-circle-info" style="background-color: #f59e0b; color: #ffffff; border-radius: 50%; padding: 4px;"></i> Quy định đặt sân chi tiết
+                        </h4>
+                        <ul style="color: #475569; font-size: 0.88rem; margin-left: 18px; line-height: 1.65;">
+                            <li><strong>Đặt sân phong trào:</strong> Đặt trước trong vòng <strong>7 ngày tới</strong>, thanh toán cọc trước <strong>30%</strong>.</li>
+                            <li style="margin-top: 6px;"><strong>Đặt sân đá giải:</strong> Cần được Admin duyệt giải đấu tại đúng cụm sân. Chọn mục đích "Giải đấu" trong Giỏ hàng để mở lịch theo ngày giải. Hoàn tất đặt lịch trong <strong>3 ngày</strong> từ lúc duyệt, cọc trước <strong>50%</strong>.</li>
+                            <li style="margin-top: 6px;"><strong>Quy định hủy lịch:</strong> Tự hủy miễn phí trước trận <strong>10 tiếng</strong> (đá phong trào) hoặc trước <strong>7 ngày</strong> (đá giải). Nếu sát giờ, vui lòng gửi "Yêu cầu hủy gấp" tại mục Các yêu cầu.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Chú thích màu sắc ô lịch -->
+                <div style="display: flex; align-items: center; gap: 16px; font-size: 0.82rem; color: var(--text-muted);">
+                    <span style="display: inline-flex; align-items: center; gap: 6px;">
+                        <span style="width: 14px; height: 14px; border-radius: 4px; background: var(--primary-light); border: 1px solid #bbf7d0; display: inline-block;"></span> Còn trống
+                    </span>
+                    <span style="display: inline-flex; align-items: center; gap: 6px;">
+                        <span style="width: 14px; height: 14px; border-radius: 4px; background: var(--primary); display: inline-block;"></span> Đang chọn
+                    </span>
+                    <span style="display: inline-flex; align-items: center; gap: 6px;">
+                        <span style="width: 14px; height: 14px; border-radius: 4px; background: var(--booked-bg); border: 1px solid var(--border); display: inline-block;"></span> Đã đặt / Quá giờ
+                    </span>
                 </div>
             </div>
             
-            <div class="schedule-container" style="margin-bottom: 40px;">
+            <div class="schedule-container" style="margin-bottom: 40px; margin-top: 0;">
                 <div style="width: 100%; max-width: 100%; max-height: calc(100vh - 240px); overflow-y: auto; overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.03);"> 
                     <table class="schedule-table" style="width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0;">
                         <thead>
@@ -2000,16 +2046,12 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
 
         const now = new Date();
 
-        const moCua = currentClusterGioMo.substring(0, 5);
-        const dongCua = currentClusterGioDong.substring(0, 5);
-
         availableTimeSlots.forEach((kg) => {
             const priceInfo = validPrices.find(p => p.ID_KhungGio == kg.ID);
 
             const start = kg.GioBatDau.substring(0, 5);
             const end = kg.GioKetThuc.substring(0, 5);
 
-            // Khung giờ chỉ hợp lệ nếu CÓ BẢNG GIÁ và GIÁ > 0
             const isValid = priceInfo && priceInfo.SoTien > 0 && (start >= moCua && end <= dongCua);
             const priceValue = priceInfo ? priceInfo.SoTien : 0;
 
@@ -2031,18 +2073,14 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
             dateArray.forEach((date) => {
                 const slotId = `${clusterName}-${pitchName}-${date.full}-${timeStr}`;
 
-                // 1. Ép kiểu date.full (DD/MM/YYYY) về YYYY-MM-DD để so sánh với Database
                 const [day, month, year] = date.full.split('/');
                 const formatNgayDa = `${year}-${month}-${day}`;
                 
-                // 2. Kiểm tra xem (Ngày Đá + ID Khung Giờ) này đã tồn tại trong mảng bookedSlots chưa
                 const isBooked = bookedSlots.some(b => b.NgayDa === formatNgayDa && b.ID_KhungGio === kg.ID);
-
                 const isSelected = selectedSlots.some(s => s.id === slotId);
                 
                 const [startHour, startMinute] = kg.GioBatDau.split(':');
                 const slotDateTime = new Date(year, month - 1, day, startHour, startMinute);
-                
                 const isPast = slotDateTime <= now; 
                 
                 let statusClass = 'available', statusText = 'CÒN TRỐNG';
@@ -2064,7 +2102,7 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                 html += `
                     <td style="border-bottom: 1px solid #f1f5f9; padding: 6px;">
                         <div class="slot ${statusClass}" data-slot-id="${slotId}"
-                            ${(!isBooked && !isPast) ? `onclick="toggleSlot(this, ${clusterId}, '${clusterName}', ${pitchId}, '${pitchName}', '${date.full}', '${timeStr}', ${priceValue})"` : ''}>
+                            ${(!isBooked && !isPast) ? `onclick="toggleSlot(this, ${clusterId}, '${clusterName}',${pitchId}, '${pitchName}', '${date.full}', '${timeStr}',${priceValue})"` : ''}>
                             ${statusText}
                         </div>
                     </td>
