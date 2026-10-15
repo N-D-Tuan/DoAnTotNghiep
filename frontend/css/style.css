@@ -780,6 +780,20 @@ h1, h2, h3, h4 {
     cursor: not-allowed; 
 }
 
+.slot-btn.selected {
+    background-color: #ea580c !important;
+    color: white !important;
+    border-color: #ea580c !important;
+    box-shadow: 0 4px 6px rgba(234, 88, 12, 0.2);
+}
+
+.slot-btn.booked, .slot-btn.past {
+    background-color: #f1f5f9;
+    color: #94a3b8;
+    border-color: #e2e8f0;
+    cursor: not-allowed;
+}
+
 /* BREADCRUMB NÚT BACK */
 .breadcrumb-item { 
     color: var(--accent); 
@@ -921,4 +935,42 @@ h1, h2, h3, h4 {
 
 .btn-link-close:hover {
     color: var(--text-main);
+}
+
+/* FORM INPUT & ALERT TRONG MODAL KHÁCH VÃNG LAI */
+.modal-card .form-control {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-main);
+    color: var(--text-main);
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    outline: none;
+    transition: var(--transition);
+}
+
+.modal-card .form-control:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2);
+}
+
+.modal-alert {
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.modal-alert.error {
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    color: #fca5a5;
+}
+
+.modal-alert.success {
+    background: rgba(34, 197, 94, 0.15);
+    border: 1px solid rgba(34, 197, 94, 0.4);
+    color: var(--accent);
 }

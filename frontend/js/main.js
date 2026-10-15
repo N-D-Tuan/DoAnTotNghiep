@@ -272,9 +272,82 @@ const fieldsSection = document.getElementById('fields-section');
 let appState = { clusters: [], currentCluster: null, currentPitch: null };
 
 document.addEventListener('DOMContentLoaded', () => {
-    if(appContent) {
+    if (appContent) {
         loadClusters();
-        setupModals();
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const vnpayStatus = urlParams.get('vnpay_status');
+        if (vnpayStatus) {
+            showGuestPaymentResultModal(vnpayStatus);
+            // Xóa param trên URL để F5 không bị hiện lại thông báo
+            window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
+        }
+
+        // Khởi tạo giống hệt customer.js, admin.js, staff.js
+        const REVERB_APP_KEY = '32o5b6sskjqfuf7qnqtd'; 
+        window.Echo = new Echo({
+            broadcaster: 'reverb',
+            key: REVERB_APP_KEY,
+            wsHost: '127.0.0.1',
+            wsPort: 8080,
+            forceTLS: false,
+            disableStats: true
+        });
+
+        // Lắng nghe kênh system-updates theo đúng chuẩn data-slot-id của admin.js & staff.js
+        window.Echo.channel('system-updates')
+            .listen('SystemDataUpdated', async (e) => {
+                console.log('⚡ Hệ thống có người vừa đặt sân (Guest View)...');
+                
+                if (appState.currentPitch !== null && document.querySelector('.schedule-table')) {
+                    try {
+                        const currentPitchId = appState.currentPitch.ID;
+                        const dsRes = await fetch(`${API_BASE_URL}/dat-san/da-dat?id_san_bong=${currentPitchId}&_t=${new Date().getTime()}`);
+                        const bookedSlots = (await dsRes.json()).data || [];
+
+                        // 1. Nhả tất cả các ô đang xám (Đã đặt) thành màu xanh (TRỐNG)
+                        document.querySelectorAll('.schedule-table .slot-btn.booked').forEach(el => {
+                            if (el.innerText === 'Đã đặt') {
+                                el.classList.remove('booked');
+                                el.classList.add('available');
+                                el.innerText = 'TRỐNG';
+                                el.disabled = false;
+                                
+                                const slotData = el.getAttribute('data-slot-data');
+                                if (slotData) el.setAttribute('onclick', `triggerModal(this, ${slotData})`);
+                            }
+                        });
+
+                        // 2. Quét mảng bookedSlots từ CSDL để khóa những ô thực sự đã bị đặt
+                        bookedSlots.forEach(booked => {
+                            const targetSlotId = `${currentPitchId}-${booked.NgayDa}-${booked.ID_KhungGio}`;
+                            const slotEl = document.querySelector(`.schedule-table .slot-btn[data-slot-id="${targetSlotId}"]`);
+                            
+                            if (slotEl && !slotEl.classList.contains('booked')) {
+                                slotEl.classList.remove('available', 'selected');
+                                slotEl.classList.add('booked');
+                                slotEl.innerText = 'Đã đặt';
+                                slotEl.disabled = true;
+                                slotEl.removeAttribute('onclick');
+
+                                // 3. Nếu khách đang chọn đúng ô vừa bị người khác đặt -> Gỡ khỏi giỏ hàng
+                                const existingIndex = guestSelectedSlots.findIndex(s => s.id === targetSlotId);
+                                if (existingIndex > -1) {
+                                    guestSelectedSlots.splice(existingIndex, 1);
+                                    updateGuestFloatingCart();
+                                    
+                                    if (document.getElementById('guest-cart-modal').classList.contains('active')) {
+                                        if (guestSelectedSlots.length > 0) openGuestCartModal();
+                                        else closeGuestCartModal();
+                                    }
+                                }
+                            }
+                        });
+                    } catch (err) {
+                        console.error("Lỗi cập nhật ngầm lịch Khách vãng lai:", err);
+                    }
+                }
+            });
     }
 });
 
@@ -327,15 +400,34 @@ async function loadPitches(clusterId) {
     appState.currentCluster = appState.clusters.find(c => c.ID == clusterId);
     renderBreadcrumb('pitches');
     appContent.innerHTML = '<div style="text-align:center; padding: 40px;"><i class="fa-solid fa-spinner fa-spin fa-2x" style="color:#10B981"></i></div>';
-    //scrollToFields();
 
     try {
         const res = await fetch(`${API_BASE_URL}/san-bong?cum_san_id=${clusterId}`);
         const data = await res.json();
         const activePitches = (data.data || []).filter(sb => sb.TrangThai === 'HoatDong');
 
+        const c = appState.currentCluster;
+        // Khung thông tin Cụm sân đang xem
+        let headerHtml = `
+            <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-left: 4px solid var(--primary); border-radius: 12px; padding: 20px 24px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+                <div>
+                    <div style="font-size: 0.8rem; color: var(--accent); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
+                        Đang xem danh sách sân thuộc cụm
+                    </div>
+                    <h2 style="font-size: 1.5rem; color: var(--text-main); margin-bottom: 8px;">${c.TenCumSan}</h2>
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap; font-size: 0.9rem; color: var(--text-muted);">
+                        <span><i class="fa-solid fa-location-dot" style="color: var(--primary); margin-right: 6px;"></i>${c.DiaChi}</span>
+                        <span><i class="fa-solid fa-clock" style="color: var(--accent); margin-right: 6px;"></i>Giờ mở cửa: ${c.GioMoCua?.substring(0,5)} - ${c.GioDongCua?.substring(0,5)}</span>
+                    </div>
+                </div>
+                <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.25); padding: 8px 16px; border-radius: 8px; color: var(--accent); font-weight: 600; font-size: 0.9rem;">
+                    <i class="fa-solid fa-futbol" style="margin-right: 6px;"></i> ${activePitches.length} sân đang hoạt động
+                </div>
+            </div>
+        `;
+
         if (activePitches.length === 0) {
-            appContent.innerHTML = `
+            appContent.innerHTML = headerHtml + `
                 <div style="text-align: center; padding: 50px 20px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px;">
                     <i class="fa-solid fa-circle-exclamation fa-3x" style="color: var(--accent); margin-bottom: 16px;"></i>
                     <h3 style="color: var(--text-main); font-size: 1.25rem; margin-bottom: 8px;">Hiện không có sân bóng nào</h3>
@@ -345,15 +437,17 @@ async function loadPitches(clusterId) {
             return;
         }
 
-        let html = '<div class="pitch-grid">';
+        let html = headerHtml + '<div class="pitch-grid">';
         activePitches.forEach(sb => {
             const loaiName = sb.loaiSan?.TenLoaiSan || sb.loai_san?.TenLoaiSan || 'Khác';
-            // Bắt sự kiện onclick TRỰC TIẾP trên thẻ div.pitch-card
             html += `
                 <div class="pitch-card" onclick="loadSchedule(${clusterId}, ${sb.ID})">
-                    <div style="padding: 20px;">
-                        <div class="pitch-card-name">${sb.TenSan}</div>
-                        <div class="pitch-card-type"><i class="fa-solid fa-layer-group"></i> ${loaiName}</div>
+                    <div style="padding: 20px; display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div class="pitch-card-name">${sb.TenSan}</div>
+                            <div class="pitch-card-type"><i class="fa-solid fa-layer-group" style="color: var(--accent);"></i> ${loaiName}</div>
+                        </div>
+                        <span style="color: var(--accent); font-size: 0.85rem; font-weight: 600;">Xem lịch &rarr;</span>
                     </div>
                 </div>
             `;
@@ -365,9 +459,7 @@ async function loadPitches(clusterId) {
 }
 
 async function loadSchedule(clusterId, pitchId) {
-    renderBreadcrumb('schedule');
     appContent.innerHTML = '<div style="text-align:center; padding: 40px;"><i class="fa-solid fa-spinner fa-spin fa-2x" style="color:#10B981"></i></div>';
-    //scrollToFields();
 
     try {
         const [sbRes, gtRes, kgRes, dsRes] = await Promise.all([
@@ -384,6 +476,12 @@ async function loadSchedule(clusterId, pitchId) {
 
         const pitch = pitches.find(p => p.ID == pitchId);
         appState.currentPitch = pitch;
+        
+        // Gọi renderBreadcrumb sau khi đã gán appState.currentPitch để hiển thị đúng tên sân trên thanh điều hướng
+        renderBreadcrumb('schedule');
+
+        const c = appState.currentCluster;
+        const loaiName = pitch.loaiSan?.TenLoaiSan || pitch.loai_san?.TenLoaiSan || 'Sân bóng';
 
         const validPrices = prices.filter(gt => gt.ID_LoaiSan == pitch.ID_LoaiSan);
         const validKhungGioIds = validPrices.map(gt => gt.ID_KhungGio);
@@ -403,7 +501,29 @@ async function loadSchedule(clusterId, pitchId) {
             });
         }
 
+        // Khung thông tin Sân bóng & Cụm sân đang xem trên bảng lịch
         let html = `
+            <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-left: 4px solid var(--accent); border-radius: 12px; padding: 18px 24px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+                <div>
+                    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px;">
+                        <span style="background: rgba(57, 255, 136, 0.12); color: var(--accent); border: 1px solid rgba(57, 255, 136, 0.3); padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 700;">
+                            <i class="fa-solid fa-building-flag" style="margin-right: 4px;"></i> ${c.TenCumSan}
+                        </span>
+                        <i class="fa-solid fa-chevron-right" style="font-size: 0.75rem; color: var(--text-muted);"></i>
+                        <h2 style="font-size: 1.4rem; color: var(--text-main); margin: 0;">${pitch.TenSan}</h2>
+                        <span style="background: var(--bg-tertiary); color: var(--text-main); padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 600;">
+                            <i class="fa-solid fa-layer-group" style="color: var(--primary); margin-right: 4px;"></i> ${loaiName}
+                        </span>
+                    </div>
+                    <div style="font-size: 0.88rem; color: var(--text-muted);">
+                        <i class="fa-solid fa-location-dot" style="color: var(--primary); margin-right: 6px;"></i> ${c.DiaChi}
+                    </div>
+                </div>
+                <div style="font-size: 0.85rem; color: var(--text-muted); background: var(--bg-main); padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border-color);">
+                    <i class="fa-solid fa-hand-pointer" style="color: var(--accent); margin-right: 6px;"></i> Nhấn vào ô <strong style="color: var(--accent);">TRỐNG</strong> để chọn khung giờ đặt sân
+                </div>
+            </div>
+
             <div class="schedule-container" style="position: relative; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 14px; overflow: visible;">
                 <table class="schedule-table" style="width: 100%; border-collapse: separate; border-spacing: 0; min-width: 900px; table-layout: auto;">
                     <thead>
@@ -451,9 +571,19 @@ async function loadSchedule(clusterId, pitchId) {
                 const isBooked = booked.some(b => b.NgayDa === date.dbDate && b.ID_KhungGio === kg.ID);
                 const isPast = new Date(date.rawDate.getFullYear(), date.rawDate.getMonth(), date.rawDate.getDate(), kg.GioBatDau.split(':')[0], kg.GioBatDau.split(':')[1]) <= new Date();
 
-                if (isPast) html += `<td style="text-align:center; border-bottom: 1px solid var(--border-color);"><button class="slot-btn past" disabled>Quá giờ</button></td>`;
-                else if (isBooked) html += `<td style="text-align:center; border-bottom: 1px solid var(--border-color);"><button class="slot-btn booked" disabled>Đã đặt</button></td>`;
-                else html += `<td style="text-align:center; border-bottom: 1px solid var(--border-color);"><button class="slot-btn available" onclick="triggerModal('${timeStr}', '${priceVal}', '${date.short}')">TRỐNG</button></td>`;
+                const slotId = `${pitch.ID}-${date.dbDate}-${kg.ID}`;
+                const isSelected = guestSelectedSlots.some(s => s.id === slotId);
+                const slotDataStr = `'${timeStr}', '${priceVal}', '${date.short}', ${kg.ID}`;
+
+                if (isPast) {
+                    html += `<td style="text-align:center; border-bottom: 1px solid var(--border-color);"><button class="slot-btn past" data-slot-id="${slotId}" disabled>Quá giờ</button></td>`;
+                } else if (isBooked) {
+                    html += `<td style="text-align:center; border-bottom: 1px solid var(--border-color);"><button class="slot-btn booked" data-slot-id="${slotId}" data-slot-data="${slotDataStr}" disabled>Đã đặt</button></td>`;
+                } else if (isSelected) {
+                    html += `<td style="text-align:center; border-bottom: 1px solid var(--border-color);"><button class="slot-btn available selected" data-slot-id="${slotId}" data-slot-data="${slotDataStr}" onclick="triggerModal(this, ${slotDataStr})">ĐÃ CHỌN ✓</button></td>`;
+                } else {
+                    html += `<td style="text-align:center; border-bottom: 1px solid var(--border-color);"><button class="slot-btn available" data-slot-id="${slotId}" data-slot-data="${slotDataStr}" onclick="triggerModal(this, ${slotDataStr})">TRỐNG</button></td>`;
+                }
             });
             html += `</tr>`;
         });
@@ -466,25 +596,330 @@ async function loadSchedule(clusterId, pitchId) {
 
 function renderBreadcrumb(view) {
     breadcrumbEl.style.display = 'flex';
-    let html = `<span class="breadcrumb-item" onclick="renderClusters()"><i class="fa-solid fa-arrow-left"></i> Quay lại danh sách</span>`;
-    if (view === 'schedule') {
-        html = `<span class="breadcrumb-item" onclick="loadPitches(${appState.currentCluster.ID})"><i class="fa-solid fa-arrow-left"></i> Chọn sân khác thuộc ${appState.currentCluster.TenCumSan}</span>`;
+    breadcrumbEl.style.alignItems = 'center';
+    breadcrumbEl.style.justifyContent = 'space-between';
+    breadcrumbEl.style.flexWrap = 'wrap';
+    breadcrumbEl.style.gap = '12px';
+
+    if (view === 'pitches') {
+        breadcrumbEl.innerHTML = `
+            <span class="breadcrumb-item" onclick="renderClusters()">
+                <i class="fa-solid fa-arrow-left"></i> Quay lại danh sách cụm sân
+            </span>
+            <div style="font-size: 0.9rem; color: var(--text-muted);">
+                Cụm sân &gt; <strong style="color: var(--text-main);">${appState.currentCluster?.TenCumSan || ''}</strong>
+            </div>
+        `;
+    } else if (view === 'schedule') {
+        breadcrumbEl.innerHTML = `
+            <span class="breadcrumb-item" onclick="loadPitches(${appState.currentCluster.ID})">
+                <i class="fa-solid fa-arrow-left"></i> Chọn sân khác thuộc ${appState.currentCluster.TenCumSan}
+            </span>
+            <div style="font-size: 0.9rem; color: var(--text-muted);">
+                <span style="cursor: pointer; text-decoration: underline;" onclick="renderClusters()">Cụm sân</span> &gt; 
+                <span style="cursor: pointer; text-decoration: underline;" onclick="loadPitches(${appState.currentCluster.ID})">${appState.currentCluster?.TenCumSan || ''}</span> &gt; 
+                <strong style="color: var(--accent);">${appState.currentPitch?.TenSan || ''}</strong>
+            </div>
+        `;
     }
-    breadcrumbEl.innerHTML = html;
 }
 
-function triggerModal(time, price, date) {
-    document.getElementById('modal-slot-info').innerHTML = `
-        <div style="margin-bottom:8px">Sân: <strong>${appState.currentPitch.TenSan}</strong> (${appState.currentCluster.TenCumSan})</div>
-        <div style="margin-bottom:8px">Ngày: <strong>${date}</strong></div>
-        <div style="margin-bottom:8px">Giờ: <strong style="color:#10B981">${time}</strong></div>
-        <div>Giá: <strong style="color:#10B981">${price}</strong></div>
+function triggerModal(element, time, price, dateStr, kgId) {
+    const priceNum = parseInt(price.replace(/\D/g, ''));
+    
+    // Gán dữ liệu vào hàm toggle
+    toggleGuestSlot(element, appState.currentCluster.ID, appState.currentCluster.TenCumSan, appState.currentPitch.ID, appState.currentPitch.TenSan, dateStr, time, priceNum, kgId);
+}
+
+// ==========================================================================
+// MODULE: GIỎ HÀNG & ĐẶT SÂN CHO KHÁCH VÃNG LAI (GUEST BOOKING)
+// ==========================================================================
+let guestSelectedSlots = [];
+
+function toggleGuestSlot(element, clusterId, clusterName, pitchId, pitchName, dateDisplay, timeStr, price, kgId) {
+    if (element.classList.contains('booked') || element.classList.contains('past')) return;
+    
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const [day, month] = dateDisplay.split('/');
+    const dateDb = `${currentYear}-${month}-${day}`;
+
+    const slotId = `${pitchId}-${dateDb}-${kgId}`;
+    const existingIndex = guestSelectedSlots.findIndex(s => s.id === slotId);
+    
+    if (existingIndex > -1) {
+        guestSelectedSlots.splice(existingIndex, 1);
+        element.classList.remove('selected'); 
+        element.innerText = 'TRỐNG';
+    } else {
+        guestSelectedSlots.push({ 
+            id: slotId, 
+            pitchId, 
+            kgId, 
+            dateDb, 
+            dateDisplay, 
+            timeStr, 
+            price,
+            pitchName,
+            clusterName
+        });
+        element.classList.add('selected'); 
+        element.innerText = 'ĐÃ CHỌN ✓';
+    }
+    
+    updateGuestFloatingCart();
+}
+
+function updateGuestFloatingCart() {
+    const cartBar = document.getElementById('guest-floating-cart');
+    if (!cartBar) return;
+
+    if (guestSelectedSlots.length > 0) {
+        // LỖI 2: Đổi từ 'block' sang 'flex' để giỏ hàng không bị rớt dòng
+        cartBar.style.display = 'block'; 
+        document.getElementById('guest-cart-count').innerText = guestSelectedSlots.length;
+        const total = guestSelectedSlots.reduce((sum, s) => sum + Number(s.price), 0);
+        document.getElementById('guest-floating-deposit').innerText = Math.round(total * 0.3).toLocaleString('vi-VN') + 'đ';
+    } else {
+        cartBar.style.display = 'none';
+        closeGuestCartModal();
+    }
+}
+
+// Chuyển toàn bộ các hàm thành Window Scope để gỡ LỖI 4
+window.clearGuestCart = function() {
+    guestSelectedSlots = [];
+    
+    const allButtons = document.querySelectorAll('.slot-btn.available.selected');
+    allButtons.forEach(btn => {
+        btn.classList.remove('selected');
+        btn.innerText = 'TRỐNG';
+    });
+    
+    updateGuestFloatingCart();
+}
+
+window.openGuestCartModal = function() {
+    document.getElementById('guest-cart-alert').style.display = 'none';
+    const listContainer = document.getElementById('guest-cart-list');
+    
+    let html = '';
+    let totalAmount = 0;
+    
+    guestSelectedSlots.forEach((s, index) => {
+        totalAmount += Number(s.price);
+        html += `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 7px 10px; background: #ffffff; border-radius: 6px; margin-bottom: 6px;">
+                <div>
+                    <h4 style="font-size: 0.88rem; font-weight: 700; margin: 0 0 2px 0; color: #16a34a;">${s.clusterName} - ${s.pitchName}</h4>
+                    <p style="margin: 0; color: #64748b; font-size: 0.8rem;">Ngày: <strong style="color: #0f172a;">${s.dateDisplay}</strong> | Giờ: <strong style="color: #0f172a;">${s.timeStr}</strong></p>
+                </div>
+                <div style="text-align: right; display: flex; align-items: center; gap: 10px;">
+                    <span style="color: #ea580c; font-weight: 700; font-size: 0.88rem;">${Number(s.price).toLocaleString('vi-VN')}đ</span>
+                    <i class="fa-solid fa-trash-can" style="color: #ef4444; cursor: pointer; font-size: 0.9rem;" onclick="removeGuestSlotByIndex(${index})"></i>
+                </div>
+            </div>
+        `;
+    });
+    
+    listContainer.innerHTML = html;
+    document.getElementById('guest-cart-total-deposit').innerText = Math.round(totalAmount * 0.3).toLocaleString('vi-VN') + 'đ';
+    
+    const modal = document.getElementById('guest-cart-modal');
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+}
+
+window.removeGuestSlotByIndex = function(index) {
+    const slotToRemove = guestSelectedSlots[index];
+    if (!slotToRemove) return;
+    
+    guestSelectedSlots.splice(index, 1);
+    
+    const btn = document.querySelector(`.schedule-table .slot-btn[data-slot-id="${slotToRemove.id}"]`);
+    if (btn) {
+        btn.classList.remove('selected');
+        btn.innerText = 'TRỐNG';
+    }
+
+    updateGuestFloatingCart();
+    
+    if (guestSelectedSlots.length > 0) openGuestCartModal();
+    else closeGuestCartModal();
+}
+
+window.closeGuestCartModal = function() {
+    const modal = document.getElementById('guest-cart-modal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+window.showGuestAlert = function(message, isSuccess) {
+    const alertBox = document.getElementById('guest-cart-alert');
+    alertBox.textContent = message;
+    alertBox.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
+    alertBox.style.display = 'block';
+}
+
+window.checkoutGuestBooking = async function() {
+    const name = document.getElementById('guest-name').value.trim();
+    const phone = document.getElementById('guest-phone').value.trim();
+    const email = document.getElementById('guest-email').value.trim();
+    const alertBox = document.getElementById('guest-cart-alert');
+    
+    alertBox.style.display = 'none';
+
+    // 1. Kiểm tra không được để trống
+    if (!name || !phone || !email) {
+        return showGuestAlert('Vui lòng điền đầy đủ Họ tên, Số điện thoại và Email!', false);
+    }
+
+    // 2. Kiểm tra định dạng Họ và tên (Ít nhất 2 ký tự, chỉ chứa chữ cái và khoảng trắng)
+    const nameRegex = /^[a-zA-ZÀ-ỹ\s]{2,100}$/;
+    if (!nameRegex.test(name)) {
+        return showGuestAlert('Họ và tên không hợp lệ (chỉ gồm chữ cái, tối thiểu 2 ký tự)!', false);
+    }
+
+    // 3. Kiểm tra định dạng Số điện thoại Việt Nam (10 chữ số, bắt đầu bằng số 0)
+    const phoneRegex = /^0[0-9]{9}$/;
+    if (!phoneRegex.test(phone)) {
+        return showGuestAlert('Số điện thoại không hợp lệ (phải gồm 10 chữ số và bắt đầu bằng số 0)!', false);
+    }
+
+    // 4. Kiểm tra định dạng Email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+        return showGuestAlert('Địa chỉ Email không đúng định dạng (ví dụ: ten@gmail.com)!', false);
+    }
+
+    const btn = document.getElementById('btn-checkout-guest');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right: 5px;"></i> Đang tạo mã thanh toán...';
+    btn.disabled = true;
+
+    try {
+        const payload = {
+            ho_ten: name,
+            sdt_khach: phone,
+            email_khach: email,
+            slots: guestSelectedSlots
+        };
+
+        const response = await fetch(`${API_BASE_URL}/dat-san-guest/thanh-toan`, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success && data.vnpay_url) {
+            window.location.href = data.vnpay_url;
+        } else {
+            showGuestAlert(data.message || "Lỗi xử lý hệ thống!", false);
+            
+            if (data.failed_slot_ids) {
+                guestSelectedSlots = guestSelectedSlots.filter(s => !data.failed_slot_ids.includes(s.id));
+                updateGuestFloatingCart();
+                setTimeout(() => {
+                    if (guestSelectedSlots.length > 0) openGuestCartModal();
+                    else closeGuestCartModal();
+                }, 3000);
+            }
+        }
+    } catch (e) {
+        showGuestAlert("Mất kết nối tới máy chủ!", false);
+    } finally {
+        if (!data || !data.vnpay_url) {
+            btn.disabled = false;
+            btn.innerHTML = 'Thanh toán VNPay';
+        }
+    }
+}
+
+// ==========================================================================
+// MODAL THÔNG BÁO KẾT QUẢ THANH TOÁN VNPAY CHO GUEST (TỰ ĐÓNG SAU 5 GIÂY)
+// ==========================================================================
+let guestResultTimer = null;
+let guestResultCountdown = null;
+
+window.showGuestPaymentResultModal = function(status) {
+    let modal = document.getElementById('guest-payment-result-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'guest-payment-result-modal';
+        modal.className = 'modal-overlay';
+        document.body.appendChild(modal);
+    }
+
+    let iconHtml = '';
+    let title = '';
+    let message = '';
+    let btnColor = '';
+
+    if (status === 'success') {
+        iconHtml = '<i class="fa-solid fa-circle-check" style="font-size: 3.5rem; color: #22C55E;"></i>';
+        title = 'Đặt sân thành công!';
+        message = 'Thanh toán qua VNPay đã hoàn tất. Chúng tôi đã gửi mã vé điện tử và thông tin chi tiết về Email của bạn. Vui lòng kiểm tra hộp thư!';
+        btnColor = '#22C55E';
+        guestSelectedSlots = [];
+        updateGuestFloatingCart();
+    } else if (status === 'failed') {
+        iconHtml = '<i class="fa-solid fa-circle-xmark" style="font-size: 3.5rem; color: #ef4444;"></i>';
+        title = 'Thanh toán không thành công';
+        message = 'Giao dịch thanh toán VNPay đã bị hủy hoặc thất bại. Lịch đặt sân chưa được tạo và bạn chưa bị trừ tiền.';
+        btnColor = '#ef4444';
+    } else if (status === 'invalid_signature') {
+        iconHtml = '<i class="fa-solid fa-triangle-exclamation" style="font-size: 3.5rem; color: #f59e0b;"></i>';
+        title = 'Lỗi xác thực giao dịch';
+        message = 'Chữ ký bảo mật từ cổng thanh toán không hợp lệ. Vui lòng thử lại!';
+        btnColor = '#f59e0b';
+    } else {
+        iconHtml = '<i class="fa-solid fa-circle-exclamation" style="font-size: 3.5rem; color: #ef4444;"></i>';
+        title = 'Có lỗi xảy ra';
+        message = 'Phiên đặt sân đã hết hạn hoặc khung giờ vừa bị người khác đặt mất trong lúc chờ thanh toán. Vui lòng liên hệ Hotline nếu cần hỗ trợ!';
+        btnColor = '#ef4444';
+    }
+
+    let secondsLeft = 5;
+
+    modal.innerHTML = `
+        <div class="modal-card" style="max-width: 420px; text-align: center; padding: 28px 24px;">
+            <div style="margin-bottom: 16px;">${iconHtml}</div>
+            <h3 style="font-size: 1.35rem; color: var(--text-main); margin-bottom: 10px;">${title}</h3>
+            <p style="color: var(--text-muted); font-size: 0.92rem; line-height: 1.6; margin-bottom: 24px;">${message}</p>
+            <button type="button" class="btn" id="btn-close-guest-result" onclick="closeGuestPaymentResultModal()" style="width: 100%; background: ${btnColor}; color: #0F172A; font-weight: 700; padding: 12px;">
+                Đóng (${secondsLeft}s)
+            </button>
+        </div>
     `;
-    document.getElementById('login-required-modal').classList.add('active');
-}
 
-function setupModals() {
-    const modal = document.getElementById('login-required-modal');
-    document.getElementById('modal-close-x').onclick = () => modal.classList.remove('active');
-    document.getElementById('modal-cancel-btn').onclick = () => modal.classList.remove('active');
-}
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+
+    // Xóa bộ đếm cũ (nếu có) và kích hoạt đếm ngược 5 giây tự đóng
+    if (guestResultTimer) clearTimeout(guestResultTimer);
+    if (guestResultCountdown) clearInterval(guestResultCountdown);
+
+    guestResultCountdown = setInterval(() => {
+        secondsLeft--;
+        const btn = document.getElementById('btn-close-guest-result');
+        if (btn && secondsLeft > 0) {
+            btn.innerText = `Đóng (${secondsLeft}s)`;
+        }
+    }, 1000);
+
+    guestResultTimer = setTimeout(() => {
+        closeGuestPaymentResultModal();
+    }, 5000);
+};
+
+window.closeGuestPaymentResultModal = function() {
+    if (guestResultTimer) clearTimeout(guestResultTimer);
+    if (guestResultCountdown) clearInterval(guestResultCountdown);
+    
+    const modal = document.getElementById('guest-payment-result-modal');
+    if (modal) {
+        modal.classList.remove('active');
+        setTimeout(() => { modal.style.display = 'none'; }, 300);
+    }
+};
