@@ -16,9 +16,12 @@ class DatSan extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'ID_NguoiDung', 
-        'ID_SanBong', 
-        'ID_KhungGio', 
+        'ID_NguoiDung',
+        'TenKhachVangLai',
+        'SDTKhachVangLai',
+        'EmailKhachVangLai',
+        'ID_SanBong',
+        'ID_KhungGio',
         'ID_GiaiDau',
         'ID_GiaoDich',
         'ID_NhanVienXuLy', 

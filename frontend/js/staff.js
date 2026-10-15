@@ -179,6 +179,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     loadStaffCalendarData(1, 'grid-staff-next-week');
                 }
             }
+
+            // 5. CẬP NHẬT REALTIME QUẢN LÝ ĐẶT SÂN (CHỐT SÂN) CỦA NHÂN VIÊN
+            // Nếu Nhân viên đang đứng ở màn hình Quản lý đặt sân -> Tự động tải lại dữ liệu bảng ngầm mà không load lại trang
+            if (document.getElementById('staff-datsan-table-body')) {
+                loadStaffDanhSachDatSan();
+            }
         });
 
     // Lắng nghe kênh CÁ NHÂN của chính nhân viên này
@@ -1383,8 +1389,8 @@ function applyStaffDSFiltersAndRender() {
     filteredData = filteredData.filter(item => {
         const matchStatus = (staffDSFilter === 'All' || item.TrangThai === staffDSFilter);
         const maVeSearch = item.ID_GiaiDau ? `gd-${item.ID_GiaiDau}` : `pt-${item.ID}`;
-        const sdt = item.nguoi_dung ? item.nguoi_dung.SoDienThoai.toLowerCase() : '';
-        const tenKhach = item.nguoi_dung ? item.nguoi_dung.HoTen.toLowerCase() : '';
+        const sdt = item.ID_NguoiDung ? (item.nguoi_dung?.SoDienThoai?.toLowerCase() || '') : (item.SDTKhachVangLai?.toLowerCase() || '');
+        const tenKhach = item.ID_NguoiDung ? (item.nguoi_dung?.HoTen?.toLowerCase() || '') : (item.TenKhachVangLai?.toLowerCase() || '');
         const tenSan = item.san_bong ? item.san_bong.TenSan.toLowerCase() : '';
         const tenGiai = (item.ID_GiaiDau !== null && item.giai_dau) ? item.giai_dau.TenGiaiDau.toLowerCase() : '';
 
@@ -1444,9 +1450,12 @@ function renderStaffDSTable(data) {
             actionHtml = `<span style="color: var(--text-muted); font-size: 0.85rem;">Đã xử lý</span>`;
         }
 
+        const tenKhachHienThi = item.ID_NguoiDung ? (item.nguoi_dung?.HoTen || 'N/A') : (item.TenKhachVangLai || 'N/A');
+        const sdtKhachHienThi = item.ID_NguoiDung ? (item.nguoi_dung?.SoDienThoai || '') : (item.SDTKhachVangLai || '');
+
         return `<tr>
             <td style="text-align: center;"><span style="padding: 6px 12px; border-radius: 8px; font-weight: 700; font-family: monospace; font-size: 0.95rem; display: inline-block; white-space: nowrap; ${badgeClassVe}">${maVeDisplay}</span></td>
-            <td><strong>${item.nguoi_dung?.HoTen || 'N/A'}</strong><br><span style="font-size: 0.85rem; color: var(--text-muted);">${item.nguoi_dung?.SoDienThoai || ''}</span></td>
+            <td><strong>${tenKhachHienThi}</strong><br><span style="font-size: 0.85rem; color: var(--text-muted);">${sdtKhachHienThi}</span></td>
             <td><strong style="color: var(--text-dark);">${item.san_bong ? item.san_bong.TenSan : 'N/A'}</strong> ${tagLoai}</td>
             <td><span style="font-size: 0.9rem;">Ngày: ${dateStr}</span><br><strong style="color: var(--primary);">Giờ: ${timeStr}</strong></td>
             <td><strong style="color: #ea580c;">${tienThu.toLocaleString('vi-VN')}đ</strong></td>

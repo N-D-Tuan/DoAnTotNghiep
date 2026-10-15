@@ -5,12 +5,14 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Carbon\Carbon;
 use App\Models\DatSan;
 use App\Models\NguoiDung;
 use App\Models\GiaoDich;
 use App\Models\GiaiDau;
 use App\Models\KhungGio;
+use App\Models\SanBong;
 
 class DatSanController extends Controller
 {
@@ -359,7 +361,7 @@ class DatSanController extends Controller
                     'SoTien'       => $tienHoan,
                     'SoDuTruoc'    => $soDuTruoc,
                     'SoDuSau'      => $soDuSau,
-                    'NoiDung'      => "Quản lý hỗ trợ hủy lịch gấp và hoàn cọc: " . ($datSan->sanBong ? $datSan->sanBong->TenSan : 'Sân bóng')
+                    'NoiDung'      => "Hỗ trợ hủy lịch gấp và hoàn cọc: " . ($datSan->sanBong ? $datSan->sanBong->TenSan : 'Sân bóng')
                 ]);
             }
 
@@ -531,6 +533,289 @@ class DatSanController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['success' => false, 'message' => 'Lỗi hệ thống: ' . $e->getMessage()]);
+        }
+    }
+
+    public function thanhToanGuest(Request $request)
+    {
+        $request->validate([
+            'ho_ten'      => ['required', 'string', 'min:2', 'max:100', 'regex:/^[\p{L}\s]+$/u'],
+            'sdt_khach'   => ['required', 'regex:/^0[0-9]{9}$/'],
+            'email_khach' => ['required', 'email', 'max:100'],
+            'slots'       => ['required', 'array', 'min:1']
+        ], [
+            'ho_ten.required'      => 'Vui lòng nhập họ và tên!',
+            'ho_ten.min'           => 'Họ và tên phải có ít nhất 2 ký tự!',
+            'ho_ten.regex'         => 'Họ và tên chỉ được chứa chữ cái và khoảng trắng!',
+            'sdt_khach.required'   => 'Vui lòng nhập số điện thoại!',
+            'sdt_khach.regex'      => 'Số điện thoại không hợp lệ (phải gồm 10 chữ số, bắt đầu bằng số 0)!',
+            'email_khach.required' => 'Vui lòng nhập địa chỉ Email!',
+            'email_khach.email'    => 'Địa chỉ Email không đúng định dạng!',
+            'slots.required'       => 'Giỏ hàng đặt sân đang trống!'
+        ]);
+        
+        $slots = $request->slots;
+        $tongTienCoc = 0;
+        $failed_slots = [];
+        $failed_messages = [];
+
+        // Kiểm tra trước xem các khung giờ khách chọn có bị ai đặt mất chưa (Chưa INSERT vào DB)
+        foreach ($slots as $slot) {
+            $ngayDa = $slot['dateDb'];
+            $khungGio = KhungGio::find($slot['kgId']);
+            
+            if (!$khungGio) {
+                return response()->json(['success' => false, 'message' => 'Lỗi dữ liệu khung giờ!']);
+            }
+
+            $daDat = DatSan::where('ID_SanBong', $slot['pitchId'])
+                           ->where('NgayDa', $ngayDa)
+                           ->where('ID_KhungGio', $khungGio->ID)
+                           ->where('TrangThai', '!=', 'DaHuy')
+                           ->first();
+
+            if ($daDat) {
+                $failed_slots[] = $slot['id'];
+                $failed_messages[] = "[{$slot['timeStr']} ngày {$slot['dateDisplay']}]";
+            } else {
+                $tongTienCoc += ($slot['price'] * 0.3); // Cọc 30%
+            }
+        }
+
+        if (!empty($failed_slots)) {
+            $msg_gop = implode(', ', $failed_messages);
+            return response()->json([
+                'success' => false,
+                'message' => "Rất tiếc! Các khung giờ sau vừa bị đặt mất: {$msg_gop}.",
+                'failed_slot_ids' => $failed_slots
+            ]);
+        }
+
+        // Sinh mã giao dịch duy nhất và lưu thông tin đặt sân tạm vào Cache (15 phút)
+        $vnp_TxnRef = 'GUEST_' . time() . '_' . rand(1000, 9999);
+        \Illuminate\Support\Facades\Cache::put('guest_booking_' . $vnp_TxnRef, [
+            'ho_ten'      => $request->ho_ten,
+            'sdt_khach'   => $request->sdt_khach,
+            'email_khach' => $request->email_khach,
+            'slots'       => $slots,
+        ], now()->addMinutes(15));
+
+        // Tạo URL thanh toán VNPay
+        $vnp_TmnCode = config('vnpay.tmn_code');
+        $vnp_HashSecret = config('vnpay.hash_secret');
+        $vnp_Url = config('vnpay.url');
+        $vnp_Returnurl = url('/api/dat-san-guest/vnpay-return'); 
+        
+        $vnp_OrderInfo = "Thanh toan tien coc dat san khach vang lai";
+        $vnp_OrderType = 'billpayment';
+        $vnp_Amount = $tongTienCoc * 100;
+        $vnp_Locale = 'vn';
+        $vnp_IpAddr = $request->ip();
+
+        $inputData = array(
+            "vnp_Version"    => "2.1.0",
+            "vnp_TmnCode"    => $vnp_TmnCode,
+            "vnp_Amount"     => $vnp_Amount,
+            "vnp_Command"    => "pay",
+            "vnp_CreateDate" => date('YmdHis'),
+            "vnp_CurrCode"   => "VND",
+            "vnp_IpAddr"     => $vnp_IpAddr,
+            "vnp_Locale"     => $vnp_Locale,
+            "vnp_OrderInfo"  => $vnp_OrderInfo,
+            "vnp_OrderType"  => $vnp_OrderType,
+            "vnp_ReturnUrl"  => $vnp_Returnurl,
+            "vnp_TxnRef"     => $vnp_TxnRef,
+        );
+
+        ksort($inputData);
+        $query = "";
+        $i = 0;
+        $hashdata = "";
+        foreach ($inputData as $key => $value) {
+            if ($i == 1) {
+                $hashdata .= '&' . urlencode($key) . "=" . urlencode($value);
+            } else {
+                $hashdata .= urlencode($key) . "=" . urlencode($value);
+                $i = 1;
+            }
+            $query .= urlencode($key) . "=" . urlencode($value) . '&';
+        }
+
+        $vnp_Url = $vnp_Url . "?" . $query;
+        if (isset($vnp_HashSecret)) {
+            $vnpSecureHash = hash_hmac('sha512', $hashdata, $vnp_HashSecret);
+            $vnp_Url .= 'vnp_SecureHash=' . $vnpSecureHash;
+        }
+
+        return response()->json([
+            'success'   => true,
+            'message'   => 'Đang chuyển hướng đến cổng thanh toán VNPay...',
+            'vnpay_url' => $vnp_Url
+        ]);
+    }
+
+    // XỬ LÝ KẾT QUẢ VNPAY TRẢ VỀ: THÀNH CÔNG MỚI TẠO DATSAN
+    public function vnpayReturnGuest(Request $request)
+    {
+        $vnp_HashSecret = config('vnpay.hash_secret');
+        $inputData = array();
+        
+        foreach ($request->all() as $key => $value) {
+            if (substr($key, 0, 4) == "vnp_") {
+                $inputData[$key] = $value;
+            }
+        }
+        
+        $vnp_SecureHash = $inputData['vnp_SecureHash'] ?? '';
+        unset($inputData['vnp_SecureHash']);
+        ksort($inputData);
+        $i = 0;
+        $hashData = "";
+        
+        foreach ($inputData as $key => $value) {
+            if ($i == 1) {
+                $hashData = $hashData . '&' . urlencode($key) . "=" . urlencode($value);
+            } else {
+                $hashData = $hashData . urlencode($key) . "=" . urlencode($value);
+                $i = 1;
+            }
+        }
+
+        $secureHash = hash_hmac('sha512', $hashData, $vnp_HashSecret);
+        $frontendUrl = 'http://127.0.0.1:5500/html/index.html';
+
+        // Kiểm tra chữ ký bảo mật
+        if ($secureHash !== $vnp_SecureHash) {
+            return redirect($frontendUrl . '?vnpay_status=invalid_signature#fields-section');
+        }
+
+        // Nếu thanh toán thất bại hoặc người dùng bấm Hủy trên VNPay
+        if ($request->vnp_ResponseCode !== '00') {
+            \Illuminate\Support\Facades\Cache::forget('guest_booking_' . $request->vnp_TxnRef);
+            return redirect($frontendUrl . '?vnpay_status=failed#fields-section');
+        }
+
+        // Thanh toán thành công (ResponseCode == '00') -> Lấy dữ liệu từ Cache ra để tạo DatSan
+        $bookingData = \Illuminate\Support\Facades\Cache::pull('guest_booking_' . $request->vnp_TxnRef);
+        if (!$bookingData) {
+            return redirect($frontendUrl . '?vnpay_status=error#fields-section');
+        }
+
+        $slots = $bookingData['slots'];
+        $cacVeVuaTao = [];
+        $idCumSan = null;
+
+        DB::beginTransaction();
+        try {
+            foreach ($slots as $slot) {
+                $ngayDa = $slot['dateDb'];
+                $khungGio = KhungGio::find($slot['kgId']);
+                
+                $sanBong = SanBong::find($slot['pitchId']);
+                if ($sanBong && $idCumSan == null) {
+                    $idCumSan = $sanBong->ID_CumSan;
+                }
+
+                // Khóa dòng chống trùng lặp
+                $daDat = DatSan::where('ID_SanBong', $slot['pitchId'])
+                               ->where('NgayDa', $ngayDa)
+                               ->where('ID_KhungGio', $khungGio->ID)
+                               ->where('TrangThai', '!=', 'DaHuy')
+                               ->lockForUpdate()
+                               ->first();
+
+                if ($daDat) {
+                    throw new \Exception("Khung giờ đã bị đặt trong lúc chờ thanh toán");
+                }
+
+                $tienCoc = $slot['price'] * 0.3;
+
+                $veMoi = DatSan::create([
+                    'TenKhachVangLai'   => $bookingData['ho_ten'],
+                    'SDTKhachVangLai'   => $bookingData['sdt_khach'],
+                    'EmailKhachVangLai' => $bookingData['email_khach'],
+                    'ID_SanBong'        => $slot['pitchId'],
+                    'ID_KhungGio'       => $khungGio->ID,
+                    'NgayDa'            => $ngayDa,
+                    'TongTien'          => $slot['price'],
+                    'TienCoc'           => $tienCoc,
+                    'TrangThai'         => 'DaCoc'
+                ]);
+
+                $cacVeVuaTao[] = [
+                    'maVe'    => 'PT-' . $veMoi->ID,
+                    'tenSan'  => $slot['pitchName'],
+                    'cumSan'  => $slot['clusterName'],
+                    'ngay'    => $slot['dateDisplay'],
+                    'gio'     => $slot['timeStr'],
+                    'tienCoc' => number_format($tienCoc, 0, ',', '.') . 'đ',
+                    'conLai'  => number_format($slot['price'] - $tienCoc, 0, ',', '.') . 'đ'
+                ];
+            }
+
+            DB::commit();
+
+            // Tìm thông tin Admin và Quản lý cụm sân để gửi Email vé
+            $adminInfo = NguoiDung::where('VaiTro', 'Admin')->first();
+            $sdtAdmin = $adminInfo ? $adminInfo->SoDienThoai : '0899244124';
+
+            $sdtQuanLy = 'Đang cập nhật';
+            if ($idCumSan) {
+                $quanLy = NguoiDung::where('VaiTro', 'QuanLySan')->where('ID_CumSan', $idCumSan)->first();
+                if ($quanLy) {
+                    $sdtQuanLy = $quanLy->SoDienThoai;
+                }
+            }
+
+            try {
+                $htmlVe = '';
+                foreach ($cacVeVuaTao as $ve) {
+                    $htmlVe .= "
+                        <div style='border:1px solid #ccc; padding:15px; margin-bottom:15px; border-radius:8px;'>
+                            <h3 style='margin:0 0 10px 0; color:#10B981;'>Mã vé: {$ve['maVe']}</h3>
+                            <p><strong>Sân:</strong> {$ve['tenSan']} ({$ve['cumSan']})</p>
+                            <p><strong>Ngày:</strong> {$ve['ngay']}</p>
+                            <p><strong>Giờ:</strong> {$ve['gio']}</p>
+                            <hr style='border:0; border-top:1px dashed #ccc;'/>
+                            <p><strong>Đã cọc:</strong> {$ve['tienCoc']}</p>
+                            <p style='color:#e11d48;'><strong>Cần thanh toán tại sân:</strong> {$ve['conLai']}</p>
+                        </div>
+                    ";
+                }
+
+                $noiDungMail = "
+                    <h2>Xác nhận đặt sân thành công</h2>
+                    <p>Chào {$bookingData['ho_ten']},</p>
+                    <p>Cảm ơn bạn đã đặt sân tại DN Football. Dưới đây là thông tin vé của bạn:</p>
+                    {$htmlVe}
+                    <div style='background:#fef2f2; border:1px solid #fca5a5; padding:15px; border-radius:8px; margin-top:20px;'>
+                        <h4 style='margin:0 0 10px 0; color:#b91c1c;'>Lưu ý quan trọng:</h4>
+                        <ul style='margin:0; padding-left:20px; color:#991b1b;'>
+                            <li>Khách vãng lai không thể tự hủy sân trên hệ thống.</li>
+                            <li>Nếu cần hỗ trợ hoặc hủy sân, vui lòng liên hệ:</li>
+                            <li><strong>- Hotline Admin hệ thống:</strong> {$sdtAdmin}</li>
+                            <li><strong>- Hotline Quản lý cụm sân:</strong> {$sdtQuanLy}</li>
+                            <li>Bạn sẽ cần cung cấp Email này để nhận mã xác thực (OTP) nếu yêu cầu hủy sân để hoàn cọc.</li>
+                        </ul>
+                    </div>
+                ";
+
+                Mail::html($noiDungMail, function ($message) use ($bookingData) {
+                    $message->to($bookingData['email_khach'])
+                            ->subject('Vé Đặt Sân - DN Football');
+                });
+            } catch (\Exception $mailEx) {
+                \Illuminate\Support\Facades\Log::error('Lỗi gửi mail vé khách vãng lai: ' . $mailEx->getMessage());
+            }
+
+            broadcast(new \App\Events\AdminDataUpdated())->toOthers();
+            broadcast(new \App\Events\SystemDataUpdated())->toOthers();
+
+            return redirect($frontendUrl . '?vnpay_status=success#fields-section');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return redirect($frontendUrl . '?vnpay_status=error#fields-section');
         }
     }
 }

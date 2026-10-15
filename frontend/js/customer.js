@@ -3409,6 +3409,9 @@ async function loadTransactionHistory(filterDate = '') {
             if(tx.LoaiGiaoDich === 'HoanTienHuyGap') icon = 'fa-clock-rotate-left';
             if(tx.LoaiGiaoDich === 'HoanTienHuySan') icon = 'fa-clock-rotate-left';
 
+            const soDuTruoc = Number(tx.SoDuTruoc || 0).toLocaleString('vi-VN');
+            const soDuSau = Number(tx.SoDuSau || 0).toLocaleString('vi-VN');
+
             html += `
                 <div style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 16px; border-bottom: 1px dashed var(--border);">
                     <div style="display: flex; align-items: center; gap: 16px; max-width: 70%;">
@@ -3418,6 +3421,10 @@ async function loadTransactionHistory(filterDate = '') {
                         <div>
                             <div style="font-weight: 600; color: var(--text-dark); margin-bottom: 5px; line-height: 1.4;">${tx.NoiDung || tx.LoaiGiaoDich}</div>
                             <div style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-regular fa-clock" style="margin-right: 4px;"></i>${tx.displayDate}</div>
+                            <div style="font-size: 0.8rem; color: var(--text-muted);">
+                                <span style="opacity: 0.8;">Trước:</span> <span style="font-weight: 500;">${soDuTruoc}đ</span> &nbsp;|&nbsp; 
+                                <span style="opacity: 0.8;">Sau:</span> <strong style="color: var(--primary);">${soDuSau}đ</strong>
+                            </div>
                         </div>
                     </div>
                     <div style="font-weight: 700; font-size: 1.1rem; color: ${color}; flex-shrink: 0;">

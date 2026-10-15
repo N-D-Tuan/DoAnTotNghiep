@@ -49,6 +49,8 @@ Route::get('/dat-san/da-dat', [DatSanController::class, 'layDanhSachDaDat']);
 Route::get('/phuong', [PhuongController::class, 'index']);
 Route::get('/loai-san', [LoaiSanController::class, 'index']);
 Route::get('/vnpay-return', [VNPayController::class, 'vnpayReturn']);
+Route::post('/dat-san-guest/thanh-toan', [DatSanController::class, 'thanhToanGuest']);
+Route::get('/dat-san-guest/vnpay-return', [DatSanController::class, 'vnpayReturnGuest']);
 
 // ==========================================================
 // NHÓM 2: PROTECTED API (BẮT BUỘC TRUYỀN TOKEN TRONG HEADER)

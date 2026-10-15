@@ -103,6 +103,7 @@ document.addEventListener(
             if(document.getElementById('menu-giaidau')) document.getElementById('menu-giaidau').style.display = 'flex';
             if(document.getElementById('menu-huysan')) document.getElementById('menu-huysan').style.display = 'flex';
             if(document.getElementById('menu-kho')) document.getElementById('menu-kho').style.display = 'flex';
+            if(document.getElementById('menu-lichlamviec')) document.getElementById('menu-lichlamviec').style.display = 'flex';
             if(document.getElementById('menu-bangluong-admin')) document.getElementById('menu-bangluong-admin').style.display = 'flex';
 
             if(menuKhachHang) menuKhachHang.innerHTML = '<i class="fa-solid fa-users"></i> QUẢN LÝ TÀI KHOẢN';
@@ -114,6 +115,7 @@ document.addEventListener(
             if(document.getElementById('menu-giaidau')) document.getElementById('menu-giaidau').style.display = 'none';
             if(document.getElementById('menu-huysan')) document.getElementById('menu-huysan').style.display = 'none';
             if(document.getElementById('menu-kho')) document.getElementById('menu-kho').style.display = 'none';
+            if(document.getElementById('menu-lichlamviec')) document.getElementById('menu-lichlamviec').style.display = 'none';
             if(document.getElementById('menu-bangluong-admin')) document.getElementById('menu-bangluong-admin').style.display = 'none';
 
             // Đảm bảo hiển thị đầy đủ menu của Admin
@@ -2378,8 +2380,8 @@ function applyDSFiltersAndRender() {
     let filteredData = allDatSanData.filter(item => {
         const matchStatus = (currentDSFilter === 'All' || item.TrangThai === currentDSFilter);
         const maVeSearch = item.ID_GiaiDau ? `gd-${item.ID_GiaiDau}` : `pt-${item.ID}`;
-        const sdt = item.nguoi_dung ? item.nguoi_dung.SoDienThoai.toLowerCase() : '';
-        const tenKhach = item.nguoi_dung ? item.nguoi_dung.HoTen.toLowerCase() : '';
+        const sdt = item.ID_NguoiDung ? (item.nguoi_dung?.SoDienThoai?.toLowerCase() || '') : (item.SDTKhachVangLai?.toLowerCase() || '');
+        const tenKhach = item.ID_NguoiDung ? (item.nguoi_dung?.HoTen?.toLowerCase() || '') : (item.TenKhachVangLai?.toLowerCase() || '');
         const tenSan = item.san_bong ? item.san_bong.TenSan.toLowerCase() : '';
         const cumSan = (item.san_bong && item.san_bong.cum_san) ? item.san_bong.cum_san.TenCumSan.toLowerCase() : '';
         const tenGiai = (item.ID_GiaiDau !== null && item.giai_dau) ? item.giai_dau.TenGiaiDau.toLowerCase() : '';
@@ -2444,6 +2446,9 @@ function renderDSTable(data) {
             actionHtml = `<span style="color: var(--text-muted); font-size: 0.85rem;">Đã xử lý</span>`;
         }
 
+        const tenKhachHienThi = item.ID_NguoiDung ? (item.nguoi_dung?.HoTen || 'N/A') : (item.TenKhachVangLai || 'N/A');
+        const sdtKhachHienThi = item.ID_NguoiDung ? (item.nguoi_dung?.SoDienThoai || '') : (item.SDTKhachVangLai || '');
+
         return `<tr>
             <td style="text-align: center;">
                 <span style="padding: 6px 12px; border-radius: 8px; font-weight: 700; font-family: 'Courier New', Courier, monospace; font-size: 0.95rem; display: inline-block; white-space: nowrap; letter-spacing: 1px; ${badgeClassVe}">
@@ -2451,8 +2456,8 @@ function renderDSTable(data) {
                 </span>
             </td>
             <td>
-                <strong>${item.nguoi_dung?.HoTen || 'N/A'}</strong><br>
-                <span style="font-size: 0.85rem; color: var(--text-muted);">${item.nguoi_dung?.SoDienThoai || ''}</span>
+                <strong>${tenKhachHienThi}</strong><br>
+                <span style="font-size: 0.85rem; color: var(--text-muted);">${sdtKhachHienThi}</span>
             </td>
             <td>
                 <strong style="color: var(--text-dark);">${item.san_bong ? item.san_bong.TenSan : 'N/A'}</strong> ${tagLoai}<br>
