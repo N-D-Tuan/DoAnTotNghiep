@@ -107,6 +107,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // 6. Admin: Duyệt yêu cầu
     Route::get('/admin/dat-san', [DatSanController::class, 'layDanhSachAdmin']);
     Route::put('/admin/dat-san/{id}/chot', [DatSanController::class, 'chotTrangThaiAdmin']);
+    Route::post('/admin/dat-san/{id}/gui-otp-huy-guest', [DatSanController::class, 'guiOtpHuySanGuest']);
     Route::get('/admin/yeu-cau-huy-gap', [YeuCauHuyGapController::class, 'layDanhSachAdmin']);
     Route::put('/admin/yeu-cau-huy-gap/{id}/xu-ly', [YeuCauHuyGapController::class, 'xuLyYeuCau']);
     Route::get('/admin/giai-dau', [GiaiDauController::class, 'layDanhSachAdmin']);

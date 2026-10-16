@@ -13,6 +13,7 @@ use App\Models\GiaoDich;
 use App\Models\GiaiDau;
 use App\Models\KhungGio;
 use App\Models\SanBong;
+use App\Models\ThongBao;
 
 class DatSanController extends Controller
 {
@@ -309,7 +310,7 @@ class DatSanController extends Controller
     {
         $userDangNhap = auth()->user();
 
-        $query = DatSan::with(['nguoiDung', 'sanBong.cumSan', 'khungGio', 'giaiDau']);
+        $query = DatSan::with(['nguoiDung', 'nhanVienXuLy', 'sanBong.cumSan', 'khungGio', 'giaiDau']);
 
         // CHÈN LOGIC CÁCH LY
         if ($userDangNhap->VaiTro === 'QuanLySan') {
@@ -325,6 +326,63 @@ class DatSanController extends Controller
         return response()->json(['success' => true, 'data' => $danhSach]);
     }
 
+    public function guiOtpHuySanGuest(Request $request, $id)
+    {
+        $datSan = DatSan::with(['sanBong.cumSan', 'khungGio'])->find($id);
+        if (!$datSan) {
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy dữ liệu đặt sân!']);
+        }
+
+        if ($datSan->ID_NguoiDung !== null) {
+            return response()->json(['success' => false, 'message' => 'Đây là lịch của khách có tài khoản, không cần dùng OTP!']);
+        }
+
+        if ($datSan->TrangThai !== 'DaCoc') {
+            return response()->json(['success' => false, 'message' => 'Chỉ có thể hủy sân đang ở trạng thái Đã cọc!']);
+        }
+
+        if (!$datSan->EmailKhachVangLai) {
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy địa chỉ Email của khách vãng lai này!']);
+        }
+
+        // Sinh mã OTP 6 chữ số và lưu vào Cache trong 5 phút
+        $otp = (string) rand(100000, 999999);
+        \Illuminate\Support\Facades\Cache::put('guest_cancel_otp_' . $datSan->ID, $otp, now()->addMinutes(5));
+
+        $tenSan = $datSan->sanBong ? $datSan->sanBong->TenSan : 'Sân bóng';
+        $cumSan = ($datSan->sanBong && $datSan->sanBong->cumSan) ? $datSan->sanBong->cumSan->TenCumSan : '';
+        $ngayDa = date('d/m/Y', strtotime($datSan->NgayDa));
+        $gioDa = $datSan->khungGio ? substr($datSan->khungGio->GioBatDau, 0, 5) . ' - ' . substr($datSan->khungGio->GioKetThuc, 0, 5) : '';
+        $tienCoc = number_format($datSan->TienCoc, 0, ',', '.') . 'đ';
+
+        try {
+            $noiDungMail = "
+                <h2>Mã xác thực (OTP) hủy lịch đặt sân</h2>
+                <p>Chào <strong>{$datSan->TenKhachVangLai}</strong>,</p>
+                <p>Hệ thống DN Football vừa nhận được yêu cầu hủy lịch đặt sân và hoàn tiền cọc cho vé <strong>#PT-{$datSan->ID}</strong>:</p>
+                <ul>
+                    <li><strong>Sân:</strong> {$tenSan} ({$cumSan})</li>
+                    <li><strong>Thời gian:</strong> {$gioDa} ngày {$ngayDa}</li>
+                    <li><strong>Số tiền cọc hoàn trả:</strong> {$tienCoc}</li>
+                </ul>
+                <p>Mã OTP xác nhận hủy sân của bạn là: <strong style='font-size: 20px; color: #e11d48; letter-spacing: 2px;'>{$otp}</strong></p>
+                <p><em>Lưu ý: Mã này có hiệu lực trong vòng 5 phút. Vui lòng đọc mã này cho nhân viên/quản lý sân để hoàn tất thủ tục hủy sân.</em></p>
+            ";
+
+            Mail::html($noiDungMail, function ($message) use ($datSan) {
+                $message->to($datSan->EmailKhachVangLai)
+                        ->subject('Mã OTP Xác Nhận Hủy Sân - DN Football');
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Đã gửi mã OTP (hiệu lực 5 phút) tới email: ' . $datSan->EmailKhachVangLai
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Lỗi gửi email OTP: ' . $e->getMessage()]);
+        }
+    }
+
     public function chotTrangThaiAdmin(Request $request, $id)
     {
         $userDangNhap = auth()->user();
@@ -333,89 +391,130 @@ class DatSanController extends Controller
 
         DB::beginTransaction();
         try {
-            // Load kèm sanBong và khungGio để lấy thông tin đưa vào nội dung thông báo
-            $datSan = DatSan::with(['sanBong', 'khungGio'])->find($id);
+            $datSan = DatSan::with(['sanBong.cumSan', 'khungGio'])->find($id);
             if (!$datSan) return response()->json(['success' => false, 'message' => 'Không tìm thấy dữ liệu đặt sân!']);
 
             if ($datSan->TrangThai !== 'DaCoc') {
                 return response()->json(['success' => false, 'message' => 'Chỉ có thể chốt trạng thái đối với sân Đã cọc!']);
             }
 
-            // 1. Cập nhật trận đấu lẻ
-            $datSan->update(['TrangThai' => $request->trang_thai]);
+            $tenSan = $datSan->sanBong ? $datSan->sanBong->TenSan : 'Sân bóng';
+            $cumSan = ($datSan->sanBong && $datSan->sanBong->cumSan) ? $datSan->sanBong->cumSan->TenCumSan : '';
+            $ngayDa = date('d/m/Y', strtotime($datSan->NgayDa));
+            $gioDa = $datSan->khungGio ? substr($datSan->khungGio->GioBatDau, 0, 5) . ' - ' . substr($datSan->khungGio->GioKetThuc, 0, 5) : '';
 
+            // NẾU LÀ HỦY SÂN: TÁCH 2 LUỒNG (KHÁCH TÀI KHOẢN vs KHÁCH VÃNG LAI)
             if ($request->trang_thai === 'DaHuy') {
-                $user = NguoiDung::find($datSan->ID_NguoiDung);
-                
-                $soDuTruoc = $user->SoDuVi;
-                $tienHoan = $datSan->TienCoc;
-                $soDuSau = $soDuTruoc + $tienHoan;
-                
-                $user->update(['SoDuVi' => $soDuSau]);
+                if ($datSan->ID_NguoiDung !== null) {
+                    // --- LUỒNG 1: KHÁCH HÀNG CÓ TÀI KHOẢN ---
+                    $user = NguoiDung::find($datSan->ID_NguoiDung);
+                    if ($user) {
+                        $soDuTruoc = $user->SoDuVi;
+                        $tienHoan = $datSan->TienCoc;
+                        $soDuSau = $soDuTruoc + $tienHoan;
+                        
+                        $user->update(['SoDuVi' => $soDuSau]);
 
-                GiaoDich::create([
-                    'ID_NguoiDung' => $user->ID,
-                    'ID_NhanVienXuLy' => $userDangNhap->ID,
-                    'LoaiGiaoDich' => 'HoanTienHuySan',
-                    'DongTien'     => 'Cong',
-                    'SoTien'       => $tienHoan,
-                    'SoDuTruoc'    => $soDuTruoc,
-                    'SoDuSau'      => $soDuSau,
-                    'NoiDung'      => "Hỗ trợ hủy lịch gấp và hoàn cọc: " . ($datSan->sanBong ? $datSan->sanBong->TenSan : 'Sân bóng')
-                ]);
+                        GiaoDich::create([
+                            'ID_NguoiDung'    => $user->ID,
+                            'ID_NhanVienXuLy' => $userDangNhap->ID,
+                            'LoaiGiaoDich'    => 'HoanTienHuySan',
+                            'DongTien'        => 'Cong',
+                            'SoTien'          => $tienHoan,
+                            'SoDuTruoc'       => $soDuTruoc,
+                            'SoDuSau'         => $soDuSau,
+                            'NoiDung'         => "Hỗ trợ hủy lịch gấp và hoàn cọc: " . $tenSan
+                        ]);
+                    }
+                } else {
+                    // --- LUỒNG 2: KHÁCH VÃNG LAI ---
+                    // Kiểm tra mã OTP xác thực
+                    $otpInput = trim($request->input('otp', ''));
+                    $cachedOtp = \Illuminate\Support\Facades\Cache::get('guest_cancel_otp_' . $datSan->ID);
+
+                    if (!$otpInput || !$cachedOtp || $otpInput !== (string) $cachedOtp) {
+                   DB::rollBack();
+                   return response()->json([
+                       'success' => false,
+                       'message' => 'Mã OTP không chính xác hoặc đã bị hết hạn!<br>Vui lòng kiểm tra lại.'
+                   ]);
+               }
+
+                    // Xóa OTP sau khi xác thực thành công
+                    \Illuminate\Support\Facades\Cache::forget('guest_cancel_otp_' . $datSan->ID);
+                }
             }
 
-            // 2. KÍCH HOẠT AUTO-CHỐT GIẢI ĐẤU
+            // 1. Cập nhật trạng thái trận đấu và lưu người xử lý
+            $datSan->update([
+                'TrangThai'       => $request->trang_thai,
+                'ID_NhanVienXuLy' => $userDangNhap->ID
+            ]);
+
+            // 2. KÍCH HOẠT AUTO-CHỐT GIẢI ĐẤU (Nếu có)
             if ($datSan->ID_GiaiDau != null) {
                 $giaiDau = GiaiDau::find($datSan->ID_GiaiDau);
                 if ($giaiDau) {
-                    // Kiểm tra xem giải đấu này CÒN trận nào chưa đá (Trạng thái DaCoc) không?
                     $conTranDaCoc = DatSan::where('ID_GiaiDau', $giaiDau->ID)
                                           ->where('TrangThai', 'DaCoc')
                                           ->exists();
-                    
-                    // Nếu KHÔNG CÒN trận nào, tự động đóng sổ Giải đấu
                     if (!$conTranDaCoc) {
                         $giaiDau->update(['TrangThai' => 'HoanThanh']);
                     }
                 }
             }
 
-            // 3. TẠO THÔNG BÁO CHO KHÁCH HÀNG
-            $tenSan = $datSan->sanBong ? $datSan->sanBong->TenSan : 'Sân bóng';
-            $ngayDa = date('d/m/Y', strtotime($datSan->NgayDa));
-            $gioDa = $datSan->khungGio ? substr($datSan->khungGio->GioBatDau, 0, 5) . ' - ' . substr($datSan->khungGio->GioKetThuc, 0, 5) : '';
+            // 3. TẠO THÔNG BÁO (CHỈ DÀNH CHO KHÁCH CÓ TÀI KHOẢN) HOẶC GỬI MAIL (CHO KHÁCH VÃNG LAI)
+            if ($datSan->ID_NguoiDung !== null) {
+                $tieuDe = '';
+                $noiDung = '';
 
-            $tieuDe = '';
-            $noiDung = '';
+                if ($request->trang_thai === 'HoanThanh') {
+                    $tieuDe = 'Trận đấu đã hoàn thành';
+                    $noiDung = "Trận đấu tại {$tenSan} lúc {$gioDa} ngày {$ngayDa} đã hoàn tất. Cảm ơn bạn đã sử dụng dịch vụ!";
+                } else if ($request->trang_thai === 'KhongDen') {
+                    $tieuDe = 'Vắng mặt và mất cọc';
+                    $noiDung = "Hệ thống ghi nhận bạn đã không đến nhận sân tại {$tenSan} lúc {$gioDa} ngày {$ngayDa}. Tiền cọc của lịch đặt này sẽ không được hoàn lại theo quy định.";
+                } else if ($request->trang_thai === 'DaHuy') {
+                    $tieuDe = 'Lịch đặt sân đã bị hủy';
+                    $noiDung = "Ban quản lý đã hỗ trợ hủy lịch đặt sân tại {$tenSan} lúc {$gioDa} ngày {$ngayDa}. Số tiền cọc " . number_format($datSan->TienCoc, 0, ',', '.') . "đ đã được hoàn lại vào ví của bạn.";
+                }
 
-            if ($request->trang_thai === 'HoanThanh') {
-                $tieuDe = 'Trận đấu đã hoàn thành';
-                $noiDung = "Trận đấu tại {$tenSan} lúc {$gioDa} ngày {$ngayDa} đã hoàn tất. Cảm ơn bạn đã sử dụng dịch vụ!";
-            } else if ($request->trang_thai === 'KhongDen') {
-                $tieuDe = 'Vắng mặt và mất cọc';
-                $noiDung = "Hệ thống ghi nhận bạn đã không đến nhận sân tại {$tenSan} lúc {$gioDa} ngày {$ngayDa}. Tiền cọc của lịch đặt này sẽ không được hoàn lại theo quy định.";
-            } else if ($request->trang_thai === 'DaHuy') {
-                $tieuDe = 'Lịch đặt sân đã bị hủy';
-                $noiDung = "Ban quản lý đã hỗ trợ hủy lịch đặt sân tại {$tenSan} lúc {$gioDa} ngày {$ngayDa}. Số tiền cọc " . number_format($datSan->TienCoc, 0, ',', '.') . "đ đã được hoàn lại vào ví của bạn.";
+                ThongBao::create([
+                    'ID_NguoiDung' => $datSan->ID_NguoiDung,
+                    'TieuDe'       => $tieuDe,
+                    'NoiDung'      => $noiDung,
+                    'LoaiThongBao' => 'DatSan'
+                ]);
+            } else if ($request->trang_thai === 'DaHuy' && $datSan->EmailKhachVangLai) {
+                // Gửi Email xác nhận đã hủy vé cho khách vãng lai
+                try {
+                    $tienCocStr = number_format($datSan->TienCoc, 0, ',', '.') . 'đ';
+                    $mailHuy = "
+                        <h2>Xác nhận hủy lịch đặt sân thành công</h2>
+                        <p>Chào <strong>{$datSan->TenKhachVangLai}</strong>,</p>
+                        <p>Lịch đặt sân <strong>#PT-{$datSan->ID}</strong> tại <strong>{$tenSan} ({$cumSan})</strong> lúc <strong>{$gioDa} ngày {$ngayDa}</strong> đã được hủy thành công theo yêu cầu của bạn.</p>
+                        <p><strong>Số tiền cọc hoàn lại:</strong> <span style='color:#10b981; font-weight:bold;'>{$tienCocStr}</span></p>
+                        <p>Cảm ơn bạn đã sử dụng dịch vụ của DN Football!</p>
+                    ";
+                    Mail::html($mailHuy, function ($message) use ($datSan) {
+                        $message->to($datSan->EmailKhachVangLai)
+                                ->subject('Xác nhận hủy vé đặt sân #PT-' . $datSan->ID . ' - DN Football');
+                    });
+                } catch (\Exception $mailEx) {
+                    \Illuminate\Support\Facades\Log::error('Lỗi gửi mail hủy sân khách vãng lai: ' . $mailEx->getMessage());
+                }
             }
-
-            // Lưu thông báo vào CSDL
-            \App\Models\ThongBao::create([
-                'ID_NguoiDung' => $datSan->ID_NguoiDung,
-                'TieuDe'       => $tieuDe,
-                'NoiDung'      => $noiDung,
-                'LoaiThongBao' => 'DatSan'
-            ]);
 
             DB::commit();
 
-            // Phát tín hiệu Realtime cho khách hàng
-            broadcast(new \App\Events\UserDataUpdated($datSan->ID_NguoiDung))->toOthers();
+            if ($datSan->ID_NguoiDung !== null) {
+                broadcast(new \App\Events\UserDataUpdated($datSan->ID_NguoiDung))->toOthers();
+            }
             broadcast(new \App\Events\AdminDataUpdated())->toOthers();
             broadcast(new \App\Events\SystemDataUpdated())->toOthers();
             
-            return response()->json(['success' => true, 'message' => 'Đã chốt trạng thái sân thành công!']);
+            return response()->json(['success' => true, 'message' => 'Đã cập nhật trạng thái sân thành công!']);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['success' => false, 'message' => 'Lỗi hệ thống: ' . $e->getMessage()]);
