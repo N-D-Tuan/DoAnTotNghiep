@@ -12,7 +12,6 @@ use App\Http\Controllers\KhungGioController;
 use App\Http\Controllers\GiaiDauController;
 use App\Http\Controllers\VNPayController;
 use App\Http\Controllers\GiaoDichController;
-use App\Http\Controllers\YeuCauRutTienController;
 use App\Http\Controllers\ThongBaoController;
 use App\Http\Controllers\DatSanController;
 use App\Http\Controllers\YeuCauHuyGapController;
@@ -83,8 +82,7 @@ Route::middleware('auth:sanctum')->group(function () {
     
     Route::post('/vnpay/nap-tien', [VNPayController::class, 'createPayment']);
     Route::get('/giao-dich/cua-toi', [GiaoDichController::class, 'layGiaoDichCuaToi']);
-    Route::post('/yeu-cau-rut-tien', [YeuCauRutTienController::class, 'taoYeuCau']);
-    Route::get('/yeu-cau-rut-tien/cua-toi', [YeuCauRutTienController::class, 'layDanhSachCuaToi']);
+    Route::post('/giao-dich/rut-tien', [GiaoDichController::class, 'rutTien']);
 
     // 4. Chatbot
     Route::post('/chatbot/chat', [ChatbotController::class, 'nhanTinNhan']);
@@ -113,8 +111,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/admin/giai-dau', [GiaiDauController::class, 'layDanhSachAdmin']);
     Route::put('/admin/giai-dau/{id}/xu-ly', [GiaiDauController::class, 'xuLyYeuCau']);
     Route::get('/admin/giai-dau/{id}/ma-tran', [GiaiDauController::class, 'layMaTranLich']);
-    Route::get('/admin/yeu-cau-rut-tien', [YeuCauRutTienController::class, 'layDanhSachAdmin']);
-    Route::put('/admin/yeu-cau-rut-tien/{id}/xu-ly', [YeuCauRutTienController::class, 'xuLyYeuCau']);
     
     // 7. Admin: Quản lý hạ tầng (Thêm, sửa, xóa sân)
     Route::post('/cum-san', [CumSanController::class, 'store']);

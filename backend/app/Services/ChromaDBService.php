@@ -71,7 +71,7 @@ class ChromaDBService
         // TẠO CÁC YÊU CẦU
         [
             'id' => 'rut_tien',
-            'noi_dung' => 'Hướng dẫn rút tiền: Để rút tiền từ số dư ví DN FOOTBALL, khách hàng vui lòng truy cập vào mục "Ví của tôi" trên website, chọn nút "Rút tiền". Sau đó nhập số tiền cần rút và điền thông tin tài khoản ngân hàng chính chủ. Yêu cầu rút tiền sẽ được bộ phận kế toán duyệt trong vòng 24h làm việc. Lưu ý: Số dư tối thiểu để rút là 50.000 VNĐ.'
+            'noi_dung' => 'Hướng dẫn rút tiền: Để rút tiền từ số dư ví DN FOOTBALL, khách hàng bấm vào mục Ví tiền trên thanh menu (Quản lý Tài chính), chọn nút "Rút tiền". Sau đó nhập số tiền cần rút (tối thiểu 50.000 VNĐ), điền đầy đủ Tên ngân hàng thụ hưởng, Số tài khoản, Tên chủ tài khoản và bấm "Xác nhận rút tiền". Hệ thống sẽ xử lý chuyển khoản tự động, trừ trực tiếp số dư ví và ghi nhận vào lịch sử giao dịch ngay lập tức mà không cần chờ phê duyệt.'
         ],
         [
             'id' => 'huy_san_gap',
@@ -89,7 +89,7 @@ class ChromaDBService
         ],
         [
             'id' => 'chinh_sach_hoan_tien',
-            'noi_dung' => 'Chính sách hoàn tiền cọc: Khi khách hàng thao tác hủy sân hợp lệ (trước 10 tiếng so với giờ bóng lăn, trước 1 tuần đổi với ngày bắt đầu của giải đấu), hệ thống sẽ tự động hoàn lại 100% số tiền đã cọc vào "Số dư ví" của khách hàng trên hệ thống DN FOOTBALL chứ không hoàn trực tiếp về thẻ ngân hàng. Đối với trường hợp tạo yêu cầu hủy gấp, nếu Admin duyệt thì hệ thống cũng sẽ hoàn lại 100%, ngược lại thì bạn sẽ mất tiền cọc đó (sân bạn đặt chưa được hủy). Khách hàng có thể dùng số dư này để đặt sân lần sau hoặc tạo yêu cầu Rút tiền.'
+            'noi_dung' => 'Chính sách hoàn tiền cọc: Khi khách hàng thao tác hủy sân hợp lệ (trước 10 tiếng so với giờ bóng lăn, trước 1 tuần đối với ngày bắt đầu của giải đấu), hệ thống sẽ tự động hoàn lại 100% số tiền đã cọc vào "Số dư ví" của khách hàng trên hệ thống DN FOOTBALL chứ không hoàn trực tiếp về thẻ ngân hàng. Đối với trường hợp tạo yêu cầu hủy gấp, nếu Quản lý sân duyệt thì hệ thống cũng sẽ hoàn lại 100%, ngược lại thì bạn sẽ mất tiền cọc đó (sân bạn đặt chưa được hủy). Khách hàng có thể dùng số dư này để đặt sân lần sau hoặc rút tiền trực tiếp về tài khoản ngân hàng bất kỳ lúc nào.'
         ],
 
         // NHÓM BỔ SUNG 2: ĐẶT SÂN & TÀI KHOẢN

@@ -53,11 +53,6 @@ class NguoiDung extends Authenticatable
         return $this->hasMany(YeuCauHuyGap::class, 'ID_NguoiDung', 'ID');
     }
 
-    public function yeuCauRutTiens()
-    {
-        return $this->hasMany(YeuCauRutTien::class, 'ID_NguoiDung', 'ID');
-    }
-
     public function thongBaos()
     {
         return $this->hasMany(ThongBao::class, 'ID_NguoiDung', 'ID');

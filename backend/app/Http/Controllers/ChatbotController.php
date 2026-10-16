@@ -20,7 +20,6 @@ use App\Models\DatSan;
 use App\Models\GiaiDau;
 use App\Models\GiaoDich;
 use App\Models\YeuCauHuyGap;
-use App\Models\YeuCauRutTien;
 
 class ChatbotController extends Controller
 {
@@ -1052,7 +1051,7 @@ class ChatbotController extends Controller
         }
 
         // Xử lý mô tả động cho Tool (Quản lý sân không được kiểm tra yêu cầu rút tiền)
-        $mieuTaKiemTraYeuCau = 'Kiểm tra xem hệ thống đang có bao nhiêu yêu cầu đang ở trạng thái "Chờ duyệt" (bao gồm: Giải đấu, Hủy sân gấp' . ($user->VaiTro === 'Admin' ? ', Rút tiền).' : ').');
+        $mieuTaKiemTraYeuCau = 'Kiểm tra xem hệ thống đang có bao nhiêu yêu cầu đang ở trạng thái "Chờ duyệt" (bao gồm: Giải đấu, Hủy sân gấp).';
 
         // 4. Khai báo danh sách Tools
         $tools = [
@@ -1118,7 +1117,7 @@ class ChatbotController extends Controller
             $cumSan = CumSan::find($idCumSan);
             $tenCumSan = $cumSan ? $cumSan->TenCumSan : 'cơ sở của bạn';
             $danhXung = "Quản lý";
-            $cauLệnhBaoMat = "BẢO MẬT NGHIÊM NGẶT: Bạn là AI Trợ lý dành riêng cho Quản lý của cụm sân {$tenCumSan}. Bạn CHỈ ĐƯỢC PHÉP báo cáo số liệu thuộc cụm sân này. TUYỆT ĐỐI TỪ CHỐI KHÉO LÉO nếu bị hỏi về cụm sân khác. ĐẶC BIỆT LƯU Ý VỀ RÚT TIỀN: Chức năng phê duyệt Rút tiền là do Admin Tổng quản lý, Quản lý sân không có quyền xử lý. Nếu Quản lý sân hỏi về rút tiền, BẮT BUỘC phải từ chối và giải thích rõ quy định này (không được trả lời là 0 đơn).";
+            $cauLệnhBaoMat = "BẢO MẬT NGHIÊM NGẶT: Bạn là AI Trợ lý dành riêng cho Quản lý của cụm sân {$tenCumSan}. Bạn CHỈ ĐƯỢC PHÉP báo cáo số liệu thuộc cụm sân này. TUYỆT ĐỐI TỪ CHỐI KHÉO LÉO nếu bị hỏi về cụm sân khác.";
         }
 
         // 5. System Prompt
@@ -1268,11 +1267,8 @@ class ChatbotController extends Controller
                 ->where('YeuCauHuyGap.TrangThai', 'ChoDuyet');
             if ($idCumSan) $qHuySan->where('SanBong.ID_CumSan',$idCumSan);
             $huySanChoDuyet =$qHuySan->count();
-            
-            // Rút tiền chỉ hiển thị cho Admin, Quản lý sân = 0
-            $rutTienChoDuyet = ($idCumSan === null) ? YeuCauRutTien::where('TrangThai', 'ChoDuyet')->count() : 0;
 
-            $tongChoDuyet =$giaiDauChoDuyet + $huySanChoDuyet +$rutTienChoDuyet;
+            $tongChoDuyet =$giaiDauChoDuyet + $huySanChoDuyet;
 
             return [
                 'trang_thai' => 'thanh_cong',
@@ -1280,8 +1276,7 @@ class ChatbotController extends Controller
                     'tong_yeu_cau_cho_duyet' => $tongChoDuyet . ' đơn',
                     'chi_tiet' => [
                         'giai_dau_cho_duyet' => $giaiDauChoDuyet . ' đơn',
-                        'huy_san_gap_cho_duyet' => $huySanChoDuyet . ' đơn',
-                        'rut_tien_cho_duyet' => $rutTienChoDuyet . ' đơn'
+                        'huy_san_gap_cho_duyet' => $huySanChoDuyet . ' đơn'
                     ]
                 ]
             ];
