@@ -523,6 +523,27 @@ async function loadSchedule(clusterId, pitchId) {
                     <i class="fa-solid fa-hand-pointer" style="color: var(--accent); margin-right: 6px;"></i> Nhấn vào ô <strong style="color: var(--accent);">TRỐNG</strong> để chọn khung giờ đặt sân
                 </div>
             </div>
+            
+            <!-- Thanh công cụ: Quy định đặt sân phong trào cho Khách vãng lai -->
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px;">
+                <div style="position: relative; display: inline-block;">
+                    <button type="button" onclick="toggleGuestRuleDropdown(event)" style="background-color: var(--bg-secondary); color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 14px; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                        <i class="fa-solid fa-circle-info" style="background-color: #f59e0b; color: #ffffff; border-radius: 50%; padding: 4px; font-size: 0.75rem;"></i> Quy định đặt & hủy sân
+                    </button>
+
+                    <!-- Hộp nội dung quy định dành riêng cho đặt sân phong trào -->
+                    <div id="guest-rule-dropdown-box" style="display: none; position: absolute; top: 115%; left: 0; width: 680px; max-width: 90vw; background-color: #1e293b; border: 1px solid #f59e0b; border-radius: 10px; padding: 18px 22px; box-shadow: 0 10px 25px rgba(0,0,0,0.4); z-index: 99;">
+                        <h4 style="color: #fbbf24; margin: 0 0 10px 0; font-size: 0.98rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-circle-info"></i> Quy định đặt sân phong trào
+                        </h4>
+                        <ul style="color: #e2e8f0; font-size: 0.88rem; margin: 0 0 0 18px; padding: 0; line-height: 1.7; list-style-type: disc;">
+                            <li><strong>Đặt sân phong trào:</strong> Xem lịch và đặt trước trong vòng <strong>7 ngày tới</strong>, thanh toán tiền cọc trước <strong>30%</strong> qua cổng VNPay.</li>
+                            <li style="margin-top: 6px;"><strong>Nhận vé điện tử:</strong> Sau khi thanh toán thành công, hệ thống sẽ gửi thông tin vé đặt sân và số điện thoại Hotline hỗ trợ trực tiếp về <strong>Email</strong> bạn đã đăng ký.</li>
+                            <li style="margin-top: 6px;"><strong>Quy định hủy lịch & hoàn cọc:</strong> Khách vãng lai không tự hủy lịch trên hệ thống. Khi cần hỗ trợ hủy sân và hoàn cọc, vui lòng liên hệ Hotline của cụm sân/Admin trong vé Email và cung cấp <strong>mã xác thực OTP</strong> được gửi về Email đặt sân.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
 
             <div class="schedule-container" style="position: relative; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 14px; overflow: visible;">
                 <table class="schedule-table" style="width: 100%; border-collapse: separate; border-spacing: 0; min-width: 900px; table-layout: auto;">
@@ -923,3 +944,20 @@ window.closeGuestPaymentResultModal = function() {
         setTimeout(() => { modal.style.display = 'none'; }, 300);
     }
 };
+
+window.toggleGuestRuleDropdown = function(event) {
+    event.stopPropagation();
+    const box = document.getElementById('guest-rule-dropdown-box');
+    if (box) {
+        box.style.display = (box.style.display === 'block') ? 'none' : 'block';
+    }
+};
+
+window.addEventListener('click', function(e) {
+    const box = document.getElementById('guest-rule-dropdown-box');
+    if (box && box.style.display === 'block') {
+        if (!box.contains(e.target)) {
+            box.style.display = 'none';
+        }
+    }
+});

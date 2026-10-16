@@ -37,4 +37,8 @@ class DatSan extends Model
     public function giaiDau() { return $this->belongsTo(GiaiDau::class, 'ID_GiaiDau', 'ID'); }
     public function yeuCauHuyGaps() { return $this->hasMany(YeuCauHuyGap::class, 'ID_DatSan', 'ID'); }
     public function giaoDich() { return $this->belongsTo(GiaoDich::class, 'ID_GiaoDich', 'ID'); }
+    public function nhanVienXuLy()
+    {
+        return $this->belongsTo(NguoiDung::class, 'ID_NhanVienXuLy', 'ID');
+    }
 }

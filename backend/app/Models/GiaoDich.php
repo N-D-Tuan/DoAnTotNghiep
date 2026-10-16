@@ -45,4 +45,9 @@ class GiaoDich extends Model
     {
         return $this->hasOne(YeuCauRutTien::class, 'ID_GiaoDich', 'ID');
     }
+
+    public function nhanVienXuLy()
+    {
+        return $this->belongsTo(NguoiDung::class, 'ID_NhanVienXuLy', 'ID');
+    }
 }
