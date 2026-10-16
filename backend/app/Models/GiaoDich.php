@@ -40,12 +40,6 @@ class GiaoDich extends Model
         return $this->hasMany(DatSan::class, 'ID_GiaoDich', 'ID');
     }
 
-    // Liên kết 1-1 với YeuCauRutTien
-    public function yeuCauRutTien()
-    {
-        return $this->hasOne(YeuCauRutTien::class, 'ID_GiaoDich', 'ID');
-    }
-
     public function nhanVienXuLy()
     {
         return $this->belongsTo(NguoiDung::class, 'ID_NhanVienXuLy', 'ID');

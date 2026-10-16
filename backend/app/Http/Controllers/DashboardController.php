@@ -9,7 +9,6 @@ use App\Models\DatSan;
 use App\Models\GiaiDau;
 use App\Models\NguoiDung;
 use App\Models\YeuCauHuyGap;
-use App\Models\YeuCauRutTien;
 use App\Models\GiaoDich;
 use App\Models\HoaDonBanHang;
 use App\Models\PhieuNhapHang;
@@ -76,18 +75,15 @@ class DashboardController extends Controller
         // =========================================================
         $queryGiaiDau = GiaiDau::where('TrangThai', 'ChoDuyet');
         $queryHuyGap = YeuCauHuyGap::where('TrangThai', 'ChoDuyet');
-        $choDuyetRut = 0;
 
         if ($isQuanLy) {
             $queryGiaiDau->where('ID_CumSan', $idCumSan);
             $queryHuyGap->whereHas('datSan.sanBong', function($q) use ($idCumSan) {
                 $q->where('ID_CumSan', $idCumSan);
             });
-        } else {
-            $choDuyetRut = YeuCauRutTien::where('TrangThai', 'ChoDuyet')->count();
         }
 
-        $tongChoDuyet = $queryGiaiDau->count() + $queryHuyGap->count() + $choDuyetRut;
+        $tongChoDuyet = $queryGiaiDau->count() + $queryHuyGap->count();
 
         // =========================================================
         // 5. SỐ SÂN QUÊN CHỐT

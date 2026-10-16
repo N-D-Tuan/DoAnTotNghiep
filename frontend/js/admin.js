@@ -94,7 +94,6 @@ document.addEventListener(
         if (currentUser.VaiTro === 'QuanLySan') {
             // Quản lý sân: TUYỆT ĐỐI ẨN menu của Admin
             if(document.getElementById('menu-cumsan')) document.getElementById('menu-cumsan').style.display = 'none';
-            if(document.getElementById('menu-ruttien')) document.getElementById('menu-ruttien').style.display = 'none';
             if(document.getElementById('menu-xuatnhap-admin')) document.getElementById('menu-xuatnhap-admin').style.display = 'none';
 
             // HIỆN menu đặc quyền của Quản lý sân
@@ -120,7 +119,6 @@ document.addEventListener(
 
             // Đảm bảo hiển thị đầy đủ menu của Admin
             if(document.getElementById('menu-cumsan')) document.getElementById('menu-cumsan').style.display = 'flex';
-            if(document.getElementById('menu-ruttien')) document.getElementById('menu-ruttien').style.display = 'flex';
             if(document.getElementById('menu-captaikhoan')) document.getElementById('menu-captaikhoan').style.display = 'flex';
             if(document.getElementById('menu-xuatnhap-admin')) document.getElementById('menu-xuatnhap-admin').style.display = 'flex';
 
@@ -225,10 +223,6 @@ document.addEventListener(
                 // Nếu Admin đang mở tab Yêu cầu Hủy sân -> tự refresh bảng
                 else if (document.getElementById('uc-pending-count')) {
                     loadDanhSachHuySanAdmin();
-                }
-                // Nếu Admin đang mở tab Yêu cầu Rút tiền -> tự refresh bảng
-                else if (document.getElementById('rt-pending-count')) {
-                    loadDanhSachRutTienAdmin();
                 }
             });
         

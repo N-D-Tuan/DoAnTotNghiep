@@ -342,72 +342,6 @@ async function syncUserUrgentCancels() {
     }
 }
 
-// ======================================================
-// ĐỒNG BỘ YÊU CẦU RÚT TIỀN NGẦM (REAL-TIME KHÔNG CHỚP TRANG)
-// ======================================================
-async function syncUserWithdrawals() {
-    // 1. Chỉ chạy ngầm nếu đang mở giao diện Các yêu cầu
-    const container = document.getElementById('requests-content-body');
-    if (!container) return;
-
-    // 2. Dò xem khách có đang đứng ở đúng Tab "Rút tiền" hay không
-    let isRutTienTab = false;
-    document.querySelectorAll('button[onclick^="renderRequests"]').forEach(btn => {
-        if (btn.style.borderBottom && btn.style.borderBottom.includes('solid') && btn.getAttribute('onclick').includes('rut_tien')) {
-            isRutTienTab = true;
-        }
-    });
-
-    if (!isRutTienTab) return;
-
-    try {
-        const response = await fetch(`${API_BASE_URL}/yeu-cau-rut-tien/cua-toi`);
-        if (!response.ok) return;
-        
-        const res = await response.json();
-        const list = res.data || [];
-
-        // 3. Vẽ lại HTML ngầm phần lõi bên trong
-        if (list.length === 0) {
-            container.innerHTML = `<div style="padding: 40px;"><i class="fa-solid fa-money-bill-transfer" style="font-size: 3rem; color: var(--border); margin-bottom: 16px;"></i><p style="color: var(--text-muted); font-size: 1.05rem;">Bạn chưa có lịch sử rút tiền nào.</p></div>`;
-        } else {
-            let html = `<div style="display: flex; flex-direction: column; gap: 12px; max-height: 480px; overflow-y: auto; padding-right: 8px; text-align: left;">`;
-            list.forEach(item => {
-                let badgeColor = '#b45309', badgeBg = '#fef3c7', statusText = 'Chờ duyệt';
-                if(item.TrangThai === 'DaDuyet') { badgeColor = '#047857'; badgeBg = '#d1fae5'; statusText = 'Đã duyệt'; }
-                if(item.TrangThai === 'TuChoi') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; statusText = 'Từ chối'; }
-
-                const dateStr = item.NgayTao ? item.NgayTao.substring(0, 10) : '';
-
-                let rejectReasonHtml = '';
-                if (item.TrangThai === 'TuChoi' && item.LyDoHuy) {
-                    rejectReasonHtml = `
-                        <div style="margin-top: 8px; padding: 8px 12px; font-size: 0.85rem; color: #b91c1c; background: #fef2f2; border-radius: 6px; border: 1px dashed #fca5a5;">
-                            <i class="fa-solid fa-circle-exclamation"></i> Lý do từ chối: <strong>${item.LyDoHuy}</strong>
-                        </div>
-                    `;
-                }
-
-                html += `
-                    <div style="border: 1px solid var(--border); border-radius: 8px; padding: 16px; background: #fff; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                        <div>
-                            <h4 style="margin: 0 0 8px 0; color: var(--text-dark); font-size: 1.1rem;">Rút ${Number(item.SoTien).toLocaleString('vi-VN')}đ</h4>
-                            <p style="margin: 0 0 4px 0; font-size: 0.9rem; color: var(--text-muted); white-space: pre-line;">${item.NoiDung}</p>
-                            <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> Ngày tạo: ${dateStr}</p>
-                            ${rejectReasonHtml}
-                        </div>
-                        <span style="padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${statusText}</span>
-                    </div>
-                `;
-            });
-            html += `</div>`;
-            container.innerHTML = html;
-        }
-    } catch (error) {
-        console.error("Lỗi đồng bộ rút tiền ngầm:", error);
-    }
-}
-
 function showToast(message) {
     let toast = document.getElementById('system-toast');
     
@@ -712,7 +646,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 syncUserTournaments();
                 syncUserUrgentCancels();
-                syncUserWithdrawals();
                 
                 // Hàm render thông báo mới
                 loadNotifications();
@@ -2927,7 +2860,6 @@ async function renderRequests(activeTab = 'giai_dau') {
         <div style="display: flex; gap: 16px; margin-bottom: 20px; border-bottom: 1px solid var(--border);">
             <button style="${activeTab === 'giai_dau' ? activeStyle : inactiveStyle}" onclick="renderRequests('giai_dau')">Giải đấu</button>
             <button style="${activeTab === 'huy_san' ? activeStyle : inactiveStyle}" onclick="renderRequests('huy_san')">Hủy sân gấp</button>
-            <button style="${activeTab === 'rut_tien' ? activeStyle : inactiveStyle}" onclick="renderRequests('rut_tien')">Rút tiền</button>
         </div>
 
         <div id="requests-content-body" class="schedule-container" style="padding: 20px; text-align: center; background: var(--bg-white); border-radius: 12px; box-shadow: var(--shadow-sm);">
@@ -3097,50 +3029,6 @@ async function renderRequests(activeTab = 'giai_dau') {
                 container.innerHTML = html;
             }
         } catch (e) { container.innerHTML = `<div style="padding: 40px; color: var(--danger);">Lỗi tải dữ liệu.</div>`; }
-    } else if (activeTab === 'rut_tien') {
-        try {
-            const response = await fetch(`${API_BASE_URL}/yeu-cau-rut-tien/cua-toi`);
-            const res = await response.json();
-            const list = res.data || [];
-
-            if (list.length === 0) {
-                container.innerHTML = `<div style="padding: 40px;"><i class="fa-solid fa-money-bill-transfer" style="font-size: 3rem; color: var(--border); margin-bottom: 16px;"></i><p style="color: var(--text-muted); font-size: 1.05rem;">Bạn chưa có lịch sử rút tiền nào.</p></div>`;
-            } else {
-                let html = `<div style="display: flex; flex-direction: column; gap: 12px; max-height: 480px; overflow-y: auto; padding-right: 8px; text-align: left;">`;
-                list.forEach(item => {
-                    let badgeColor = '#b45309', badgeBg = '#fef3c7', statusText = 'Chờ duyệt';
-                    if(item.TrangThai === 'DaDuyet') { badgeColor = '#047857'; badgeBg = '#d1fae5'; statusText = 'Đã duyệt'; }
-                    if(item.TrangThai === 'TuChoi') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; statusText = 'Từ chối'; }
-
-                    const dateStr = item.NgayTao ? item.NgayTao.substring(0, 10) : '';
-
-                    let rejectReasonHtml = '';
-                    if (item.TrangThai === 'TuChoi' && item.LyDoHuy) {
-                        rejectReasonHtml = `
-                            <div style="margin-top: 8px; padding: 8px 12px; font-size: 0.85rem; color: #b91c1c; background: #fef2f2; border-radius: 6px; border: 1px dashed #fca5a5;">
-                                <i class="fa-solid fa-circle-exclamation"></i> Lý do từ chối: <strong>${item.LyDoHuy}</strong>
-                            </div>
-                        `;
-                    }
-
-                    html += `
-                        <div style="border: 1px solid var(--border); border-radius: 8px; padding: 16px; background: #fff; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                            <div>
-                                <h4 style="margin: 0 0 8px 0; color: var(--text-dark); font-size: 1.1rem;">Rút ${Number(item.SoTien).toLocaleString('vi-VN')}đ</h4>
-                                <p style="margin: 0 0 4px 0; font-size: 0.9rem; color: var(--text-muted); white-space: pre-line;">${item.NoiDung}</p>
-                                <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> Ngày tạo: ${dateStr}</p>
-                                ${rejectReasonHtml}
-                            </div>
-                            <span style="padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${statusText}</span>
-                        </div>
-                    `;
-                });
-                html += `</div>`;
-                container.innerHTML = html;
-            }
-        } catch (e) {
-            container.innerHTML = `<div style="padding: 40px; color: var(--danger);">Lỗi tải dữ liệu.</div>`;
-        }
     }
 }
 
@@ -3539,7 +3427,7 @@ async function processDeposit() {
 }
 
 // ======================================================
-// MODULE: TẠO YÊU CẦU RÚT TIỀN
+// MODULE: RÚT TIỀN TRỰC TIẾP TỪ VÍ
 // ======================================================
 function showWithdrawAlert(message, isSuccess) {
     const alertBox = document.getElementById('withdraw-alert');
@@ -3552,7 +3440,9 @@ function showWithdrawAlert(message, isSuccess) {
 function openWithdrawModal() {
     document.getElementById('withdraw-alert').style.display = 'none';
     document.getElementById('withdraw-amount').value = '';
-    document.getElementById('withdraw-note').value = '';
+    document.getElementById('withdraw-bank').value = '';
+    document.getElementById('withdraw-stk').value = '';
+    document.getElementById('withdraw-owner').value = '';
     document.getElementById('withdraw-modal').style.display = 'flex';
 }
 
@@ -3562,42 +3452,61 @@ function closeWithdrawModal() {
 
 async function submitWithdrawRequest() {
     const user = JSON.parse(sessionStorage.getItem('dn_football_user'));
-    const amount = Number(document.getElementById('withdraw-amount').value);
-    const note = document.getElementById('withdraw-note').value.trim();
+    const amountInput = document.getElementById('withdraw-amount').value.trim();
+    const amount = Number(amountInput);
+    const bank = document.getElementById('withdraw-bank').value.trim();
+    const stk = document.getElementById('withdraw-stk').value.trim();
+    const owner = document.getElementById('withdraw-owner').value.trim();
 
-    if (!amount || amount < 50000) return showWithdrawAlert('Số tiền rút tối thiểu là 50,000đ!', false);
-    if (!note) return showWithdrawAlert('Vui lòng nhập thông tin ngân hàng!', false);
-    if (amount > Number(user.SoDuVi)) return showWithdrawAlert('Số dư ví không đủ!', false);
+    // Kiểm tra không được để trống bất kỳ trường nào
+    if (!amountInput || !bank || !stk || !owner) {
+        return showWithdrawAlert('Vui lòng điền đầy đủ Số tiền, Tên ngân hàng, Số tài khoản và Tên chủ tài khoản!', false);
+    }
+    if (isNaN(amount) || amount < 50000) {
+        return showWithdrawAlert('Số tiền rút tối thiểu là 50,000đ!', false);
+    }
+    if (amount > Number(user.SoDuVi)) {
+        return showWithdrawAlert('Số dư ví không đủ để thực hiện giao dịch!', false);
+    }
 
     const btn = document.getElementById('btn-submit-withdraw');
-    btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
 
     try {
-        const response = await fetch(`${API_BASE_URL}/yeu-cau-rut-tien`, {
+        const response = await fetch(`${API_BASE_URL}/giao-dich/rut-tien`, {
             method: 'POST',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-            body: JSON.stringify({ SoTien: amount, NoiDung: note })
+            body: JSON.stringify({
+                so_tien: amount,
+                ngan_hang: bank,
+                so_tai_khoan: stk,
+                chu_tai_khoan: owner.toUpperCase()
+            })
         });
         const data = await response.json();
 
         if (response.ok && data.success) {
-            showWithdrawAlert('Tạo yêu cầu thành công! Vui lòng chờ duyệt.', true);
+            showWithdrawAlert(data.message || 'Rút tiền thành công!', true);
 
-            // --- GỌI HÀM ĐỒNG BỘ NGAY SAU KHI RÚT TIỀN THÀNH CÔNG ---
-            syncUserWallet();
-            // --------------------------------------------------------
+            // Đồng bộ lại số dư ví trên Header, Thẻ Ví và Lịch sử giao dịch ngay lập tức
+            await syncUserWallet();
+            loadNotifications();
 
             setTimeout(() => {
                 closeWithdrawModal();
-                btn.disabled = false; btn.innerHTML = 'Gửi yêu cầu';               
-            }, 2000);
+                btn.disabled = false;
+                btn.innerHTML = 'Xác nhận rút tiền';
+            }, 1500);
         } else {
             showWithdrawAlert(data.message || 'Lỗi hệ thống.', false);
-            btn.disabled = false; btn.innerHTML = 'Gửi yêu cầu';
+            btn.disabled = false;
+            btn.innerHTML = 'Xác nhận rút tiền';
         }
     } catch (e) {
         showWithdrawAlert('Lỗi kết nối máy chủ.', false);
-        btn.disabled = false; btn.innerHTML = 'Gửi yêu cầu';
+        btn.disabled = false;
+        btn.innerHTML = 'Xác nhận rút tiền';
     }
 }
 
