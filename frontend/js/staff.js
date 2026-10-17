@@ -187,7 +187,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // 6. CẬP NHẬT REALTIME BẢNG LƯƠNG CỦA NHÂN VIÊN
-            if (document.getElementById('staff-bangluong-table-body')) {
+            if (document.getElementById('staff-bang-luong-tbody')) {
                 loadBangLuongStaffData();
             }
         });
