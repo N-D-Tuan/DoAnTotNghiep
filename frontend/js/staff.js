@@ -185,6 +185,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (document.getElementById('staff-datsan-table-body')) {
                 loadStaffDanhSachDatSan();
             }
+
+            // 6. CẬP NHẬT REALTIME BẢNG LƯƠNG CỦA NHÂN VIÊN
+            if (document.getElementById('staff-bangluong-table-body')) {
+                loadBangLuongStaffData();
+            }
         });
 
     // Lắng nghe kênh CÁ NHÂN của chính nhân viên này

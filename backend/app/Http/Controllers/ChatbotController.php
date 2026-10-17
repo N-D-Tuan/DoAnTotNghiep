@@ -1326,7 +1326,7 @@ class ChatbotController extends Controller
             $query = DatSan::whereDate('DatSan.NgayDa', '>=',$tuNgay)
                 ->whereDate('DatSan.NgayDa', '<=', $denNgay)
                 ->whereIn('DatSan.TrangThai', ['DaCoc', 'HoanThanh', 'KhongDen'])
-                ->join('NguoiDung', 'DatSan.ID_NguoiDung', '=', 'NguoiDung.ID')
+                ->leftJoin('NguoiDung', 'DatSan.ID_NguoiDung', '=', 'NguoiDung.ID')
                 ->join('SanBong', 'DatSan.ID_SanBong', '=', 'SanBong.ID')
                 ->join('CumSan', 'SanBong.ID_CumSan', '=', 'CumSan.ID')
                 ->join('KhungGio', 'DatSan.ID_KhungGio', '=', 'KhungGio.ID')
