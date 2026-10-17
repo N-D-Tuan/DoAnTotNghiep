@@ -336,6 +336,11 @@ document.addEventListener(
                 if (document.getElementById('admin-bang-luong-tbody') && typeof loadBangLuongAdminData === 'function') {
                     loadBangLuongAdminData();
                 }
+
+                // 5. Cập nhật biểu đồ Dashboard nếu Admin/Quản lý đang đứng ở trang Tổng quan
+                if (document.getElementById('revenueChart') && typeof updateDashboardStats === 'function') {
+                    updateDashboardStats();
+                }
             });
 
         if (currentUser && currentUser.ID) {
@@ -3957,7 +3962,7 @@ async function renderTongQuan() {
                             <div style="display: flex; align-items: baseline; gap: 8px;">
                                 <span id="chart-total-amount" style="font-size: 1.8rem; font-weight: 800; color: #16A34A; letter-spacing: -0.5px;">...đ</span>
                                 <span style="font-size: 0.85rem; color: #64748b; background: #f8fafc; padding: 4px 10px; border-radius: 12px; border: 1px solid #e2e8f0;">
-                                    <i class="fa-solid fa-circle-info" style="margin-right: 4px; color: #3b82f6;"></i>Đã gồm bán nước
+                                    <i class="fa-solid fa-circle-info" style="margin-right: 4px; color: #3b82f6;"></i>Đã gồm bán nước, nhập kho & lương NV
                                 </span>
                             </div>
                         </div>
@@ -5883,6 +5888,7 @@ async function renderAdminXuatNhap() {
                     </select>
                     <input type="date" class="form-control" style="width: 150px;" onchange="handleAdminPNDate(this.value)">
                     <button class="btn-outline-sm" onclick="document.querySelector('input[type=date]').value=''; handleAdminPNDate('')">Xóa lọc ngày</button>
+                    <button class="btn-primary" onclick="exportAdminPhieuNhapExcel()" style="background: #059669; border-color: #059669; padding: 8px 14px;"><i class="fa-solid fa-file-excel"></i> Xuất Excel</button>
                 </div>
                 
                 <div class="table-responsive">
@@ -5916,6 +5922,7 @@ async function renderAdminXuatNhap() {
                     </select>
                     <input type="date" class="form-control" style="width: 150px;" onchange="handleAdminHDDate(this.value)">
                     <button class="btn-outline-sm" onclick="document.querySelectorAll('input[type=date]')[1].value=''; handleAdminHDDate('')">Xóa lọc ngày</button>
+                    <button class="btn-primary" onclick="exportAdminHoaDonExcel()" style="background: #059669; border-color: #059669; padding: 8px 14px;"><i class="fa-solid fa-file-excel"></i> Xuất Excel</button>
                 </div>
                 
                 <div class="table-responsive">
@@ -7752,10 +7759,12 @@ async function renderQuanLyBangLuongAdmin() {
         : 'Kiểm tra bảng công, chốt lương hàng tháng và xác nhận chuyển khoản cho nhân viên thuộc cơ sở của bạn.';
 
     const filterCumSanHtml = isAdmin ? `
-        <select id="bl-cumsan-filter" class="form-control" style="width: 210px;" onchange="handleBLCumSanFilter(this.value)">
-            <option value="All">Tất cả Cơ sở</option>
-            ${blCumSanOptionsCache}
-        </select>
+        <div style="min-width: 200px;">
+            <select id="bl-cumsan-filter" class="form-control" style="height: 42px; width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 0 12px; font-size: 0.9rem; color: #334155; background-color: #fff; cursor: pointer;" onchange="handleBLCumSanFilter(this.value)">
+                <option value="All">Tất cả Cơ sở</option>
+                ${blCumSanOptionsCache}
+            </select>
+        </div>
     ` : '';
 
     const contentArea = document.querySelector('.admin-content');
@@ -7786,31 +7795,46 @@ async function renderQuanLyBangLuongAdmin() {
         </div>
 
         <div class="panel">
-            <!-- Thanh công cụ: Tìm kiếm + Lọc Cụm sân + Lọc Trạng thái + Chọn Kỳ lương -->
-            <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; align-items: center;">
-                <div style="position: relative; flex: 1; min-width: 220px;">
-                    <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
-                    <input type="text" id="bl-search-input" class="form-control" style="padding-left: 35px;" placeholder="Tìm tên nhân viên, số điện thoại..." oninput="handleBLSearch(this.value)">
+            <!-- Thanh công cụ chuẩn hóa chiều cao 42px, căn lề trái/phải gọn đẹp -->
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; padding: 14px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; flex-wrap: wrap;">
+                
+                <!-- Nhóm bên trái: Tìm kiếm & Các bộ lọc -->
+                <div style="display: flex; align-items: center; gap: 12px; flex: 1; flex-wrap: wrap; min-width: 280px;">
+                    <div style="position: relative; flex: 1; min-width: 230px;">
+                        <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #64748b; font-size: 0.9rem; pointer-events: none;"></i>
+                        <input type="text" id="bl-search-input" class="form-control" style="height: 42px; width: 100%; padding: 0 14px 0 38px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 0.9rem; background-color: #fff;" placeholder="Tìm tên nhân viên, SĐT..." oninput="handleBLSearch(this.value)">
+                    </div>
+
+                    ${filterCumSanHtml}
+
+                    <div style="min-width: 185px;">
+                        <select id="bl-status-filter" class="form-control" style="height: 42px; width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 0 12px; font-size: 0.9rem; color: #334155; background-color: #fff; cursor: pointer;" onchange="handleBLStatusFilter(this.value)">
+                            <option value="All">Tất cả trạng thái</option>
+                            <option value="ChuaChot">Chưa chốt (Tạm tính)</option>
+                            <option value="ChoXacNhan">Chờ NV xác nhận</option>
+                            <option value="KhieuNai">Đang khiếu nại</option>
+                            <option value="ChoThanhToan">Chờ chuyển khoản</option>
+                            <option value="DaThanhToan">Đã thanh toán</option>
+                        </select>
+                    </div>
+
+                    <div style="min-width: 155px;">
+                        <select id="admin-bl-thangnam" class="form-control" style="height: 42px; width: 100%; border-radius: 8px; border: 1.5px solid var(--primary); padding: 0 12px; font-size: 0.9rem; font-weight: 700; color: var(--primary); background-color: #f0fdf4; cursor: pointer;" onchange="handleBLThangNamChange(this.value)">
+                            ${thangOptions}
+                        </select>
+                    </div>
                 </div>
 
-                ${filterCumSanHtml}
+                <!-- Nhóm bên phải: Nút Làm mới & Xuất Excel -->
+                <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+                    <button type="button" class="btn-outline-sm" onclick="loadBangLuongAdminData()" title="Làm mới dữ liệu" style="height: 42px; padding: 0 14px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; color: #475569; font-weight: 600; font-size: 0.88rem; display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f1f5f9'; this.style.borderColor='#94a3b8'; this.style.color='#0f172a';" onmouseout="this.style.background='#fff'; this.style.borderColor='#cbd5e1'; this.style.color='#475569';">
+                        <i class="fa-solid fa-rotate-right"></i> Làm mới
+                    </button>
 
-                <select id="bl-status-filter" class="form-control" style="width: 190px;" onchange="handleBLStatusFilter(this.value)">
-                    <option value="All">Tất cả trạng thái</option>
-                    <option value="ChuaChot">Chưa chốt (Tạm tính)</option>
-                    <option value="ChoXacNhan">Chờ NV xác nhận</option>
-                    <option value="KhieuNai">Đang khiếu nại</option>
-                    <option value="ChoThanhToan">Chờ chuyển khoản</option>
-                    <option value="DaThanhToan">Đã thanh toán</option>
-                </select>
-
-                <select id="admin-bl-thangnam" class="form-control" style="width: 170px; font-weight: 700; color: var(--primary); border-color: var(--primary);" onchange="handleBLThangNamChange(this.value)">
-                    ${thangOptions}
-                </select>
-
-                <button class="btn-outline-sm" onclick="loadBangLuongAdminData()" title="Làm mới dữ liệu" style="padding: 9px 14px;">
-                    <i class="fa-solid fa-rotate-right"></i>
-                </button>
+                    <button type="button" class="btn-primary" onclick="exportBangLuongExcel()" style="height: 42px; padding: 0 18px; border-radius: 8px; background: #059669; border: 1px solid #059669; color: #fff; font-weight: 600; font-size: 0.9rem; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; cursor: pointer; box-shadow: 0 2px 4px rgba(5, 150, 105, 0.2); transition: all 0.2s ease;" onmouseover="this.style.background='#047857'; this.style.borderColor='#047857'; this.style.transform='translateY(-1px)';" onmouseout="this.style.background='#059669'; this.style.borderColor='#059669'; this.style.transform='translateY(0)';">
+                        <i class="fa-solid fa-file-excel" style="font-size: 1rem;"></i> Xuất Excel
+                    </button>
+                </div>
             </div>
 
             <!-- Bảng dữ liệu -->
@@ -8327,4 +8351,450 @@ async function openLuoiLichLuongModal(idNhanVien, thangNam, tenNhanVien = '') {
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger">Lỗi kết nối máy chủ!</td></tr>`;
     }
+}
+
+// ======================================================
+// MODULE TIỆN ÍCH: XUẤT BÁO CÁO EXCEL (AUTOFIT + MÀU SẮC) & IN PHIẾU LƯƠNG
+// ======================================================
+
+/**
+ * Hàm lõi xuất file Excel (.xls) có hỗ trợ:
+ * 1. AutoFit Column Width (Tự động tính độ rộng cột theo nội dung dài nhất + bộ đệm pixel)
+ * 2. Bôi màu tiêu đề, màu xen kẽ từng dòng (Zebra striping), màu trạng thái và màu tiền tệ
+ * 3. Kẻ khung (Border) toàn bộ bảng và định dạng chuẩn tiếng Việt UTF-8
+ */
+function exportStyledExcelFile(filename, reportTitle, subtitle, headers, rowsData, totalRowData = null) {
+    const colCount = headers.length;
+
+    // 1. THUẬT TOÁN AUTOFIT COLUMN WIDTH: Đo chiều dài chuỗi lớn nhất ở mỗi cột
+    const colWidthsPx = headers.map((h, colIdx) => {
+        let maxLen = String(h.label || h).length;
+
+        rowsData.forEach(row => {
+            const cell = row[colIdx];
+            const valStr = (cell && typeof cell === 'object') ? String(cell.value ?? '') : String(cell ?? '');
+            if (valStr.length > maxLen) maxLen = valStr.length;
+        });
+
+        if (totalRowData && totalRowData[colIdx] !== undefined) {
+            const totalCell = totalRowData[colIdx];
+            const totalStr = (totalCell && typeof totalCell === 'object') ? String(totalCell.value ?? '') : String(totalCell ?? '');
+            if (totalStr.length > maxLen) maxLen = totalStr.length;
+        }
+
+        // Quy đổi số ký tự sang Pixel (mỗi ký tự ~ 8.5px + 26px padding hai bên, tối thiểu 65px, tối đa 420px)
+        return Math.min(Math.max(Math.round(maxLen * 8.5) + 26, 65), 420);
+    });
+
+    const colGroupHtml = colWidthsPx.map(w => `<col width="${w}" style="width: ${w}px; mso-width-source: userset;">`).join('');
+
+    // 2. Render Header Bảng
+    const theadHtml = headers.map(h => {
+        const label = (h && typeof h === 'object') ? h.label : h;
+        return `<th style="background-color: #0b5d3b; color: #ffffff; font-weight: bold; text-align: center; vertical-align: middle; border: 1px solid #064e3b; padding: 10px 8px; height: 34px; white-space: nowrap;">${label}</th>`;
+    }).join('');
+
+    // 3. Render Các Dòng Dữ Liệu (Có bôi màu xen kẽ trắng / xanh nhạt và màu riêng của từng ô)
+    const tbodyHtml = rowsData.map((row, rowIdx) => {
+        const defaultRowBg = (rowIdx % 2 === 0) ? '#ffffff' : '#f8fafc';
+
+        const cellsHtml = row.map(cell => {
+            const isObj = (cell !== null && typeof cell === 'object');
+            const val = isObj ? (cell.value ?? '') : (cell ?? '');
+            const align = (isObj && cell.align) ? cell.align : 'left';
+            const color = (isObj && cell.color) ? cell.color : '#0f172a';
+            const bg = (isObj && cell.bg) ? cell.bg : defaultRowBg;
+            const bold = (isObj && cell.bold) ? 'font-weight: bold;' : '';
+            const numFormat = (isObj && cell.type === 'currency')
+                ? 'mso-number-format:"\\#\\,\\#\\#0\\" đ\\"";'
+                : ((isObj && cell.type === 'text') ? 'mso-number-format:"\\@";' : '');
+
+            return `<td style="background-color: ${bg}; color: ${color}; text-align: ${align}; vertical-align: middle; border: 1px solid #cbd5e1; padding: 7px 8px; height: 26px; white-space: nowrap; ${bold} ${numFormat}">${val}</td>`;
+        }).join('');
+
+        return `<tr>${cellsHtml}</tr>`;
+    }).join('');
+
+    // 4. Render Dòng Tổng Cộng Cuối Bảng (Bôi nền vàng nhạt nổi bật)
+    let tfootHtml = '';
+    if (totalRowData) {
+        const totalCells = totalRowData.map(cell => {
+            const isObj = (cell !== null && typeof cell === 'object');
+            const val = isObj ? (cell.value ?? '') : (cell ?? '');
+            const align = (isObj && cell.align) ? cell.align : 'center';
+            const color = (isObj && cell.color) ? cell.color : '#0f172a';
+            const bg = (isObj && cell.bg) ? cell.bg : '#fef3c7';
+            const numFormat = (isObj && cell.type === 'currency') ? 'mso-number-format:"\\#\\,\\#\\#0\\" đ\\"";' : '';
+
+            return `<td style="background-color: ${bg}; color: ${color}; font-weight: bold; text-align: ${align}; vertical-align: middle; border: 1px solid #94a3b8; padding: 9px 8px; height: 32px; white-space: nowrap; font-size: 11pt; ${numFormat}">${val}</td>`;
+        }).join('');
+        tfootHtml = `<tfoot><tr>${totalCells}</tr></tfoot>`;
+    }
+
+    const now = new Date();
+    const exportTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} - ${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+
+    const excelTemplate = `
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+            <meta charset="UTF-8">
+            <!--[if gte mso 9]>
+            <xml>
+                <x:ExcelWorkbook>
+                    <x:ExcelWorksheets>
+                        <x:ExcelWorksheet>
+                            <x:Name>BaoCao_DNFootball</x:Name>
+                            <x:WorksheetOptions>
+                                <x:DisplayGridlines/>
+                            </x:WorksheetOptions>
+                        </x:ExcelWorksheet>
+                    </x:ExcelWorksheets>
+                </x:ExcelWorkbook>
+            </xml>
+            <![endif]-->
+            <style>
+                body, table { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; font-size: 10.5pt; }
+                table { border-collapse: collapse; }
+            </style>
+        </head>
+        <body>
+            <table>
+                ${colGroupHtml}
+                <thead>
+                    <tr>
+                        <th colspan="${colCount}" style="background-color: #ecfdf5; color: #0b5d3b; font-size: 15pt; font-weight: bold; text-align: center; vertical-align: middle; height: 42px; border: 1px solid #0b5d3b;">
+                            HỆ THỐNG SÂN BÓNG ĐÁ DN FOOTBALL - ${reportTitle.toUpperCase()}
+                        </th>
+                    </tr>
+                    <tr>
+                        <th colspan="${colCount}" style="background-color: #f8fafc; color: #475569; font-size: 10pt; font-style: italic; text-align: center; vertical-align: middle; height: 26px; border: 1px solid #cbd5e1;">
+                            ${subtitle} | Thời gian xuất: ${exportTimeStr}
+                        </th>
+                    </tr>
+                    <tr><td colspan="${colCount}" style="height: 10px;"></td></tr>
+                    <tr>${theadHtml}</tr>
+                </thead>
+                <tbody>
+                    ${tbodyHtml}
+                </tbody>
+                ${tfootHtml}
+            </table>
+        </body>
+        </html>
+    `;
+
+    const cleanFilename = filename.replace(/\.(csv|xlsx|xls)$/i, '') + '.xls';
+    const blob = new Blob(['\uFEFF' + excelTemplate], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', cleanFilename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+// 1. Xuất Excel Bảng Lương (Có AutoFit + Bôi màu Trạng thái & Tiền tệ)
+function exportBangLuongExcel() {
+    if (!allAdminBangLuongData || allAdminBangLuongData.length === 0) {
+        return showSystemModal('Thông báo', 'Không có dữ liệu bảng lương để xuất!', 'error');
+    }
+
+    const filtered = allAdminBangLuongData.filter(item => {
+        const matchCumSan = (currentBLCumSanFilter === 'All') || (String(item.id_cum_san) === String(currentBLCumSanFilter));
+        const matchStatus = (currentBLStatusFilter === 'All') || (item.trang_thai === currentBLStatusFilter);
+        const tenNV = (item.ten_nhan_vien || '').toLowerCase();
+        const sdtNV = (item.so_dien_thoai || '').toLowerCase();
+        const tenCS = (item.ten_cum_san || '').toLowerCase();
+        const matchSearch = !currentBLSearch || tenNV.includes(currentBLSearch) || sdtNV.includes(currentBLSearch) || tenCS.includes(currentBLSearch);
+        return matchCumSan && matchStatus && matchSearch;
+    });
+
+    if (filtered.length === 0) {
+        return showSystemModal('Thông báo', 'Danh sách lọc hiện tại đang trống!', 'error');
+    }
+
+    // Bảng màu riêng cho từng trạng thái lương
+    const statusStyleMap = {
+        'ChuaChot':     { text: 'Chưa chốt (Tạm tính)', bg: '#f1f5f9', color: '#475569' },
+        'ChoXacNhan':   { text: 'Chờ NV xác nhận',      bg: '#fef3c7', color: '#b45309' },
+        'KhieuNai':     { text: 'Đang khiếu nại',       bg: '#fee2e2', color: '#b91c1c' },
+        'ChoThanhToan': { text: 'Chờ chuyển khoản',     bg: '#e0e7ff', color: '#4338ca' },
+        'DaThanhToan':  { text: 'Đã thanh toán',        bg: '#d1fae5', color: '#047857' }
+    };
+
+    const headers = [
+        'STT', 'Kỳ Lương', 'Họ và Tên Nhân Viên', 'Số Điện Thoại', 'Cơ Sở Trực Thuộc',
+        'Số Ca Làm', 'Lương Cơ Bản', 'Tổng Thưởng (+)', 'Tổng Phạt (-)',
+        'Thực Lãnh', 'Thông Tin Ngân Hàng', 'Trạng Thái', 'Ngày Thanh Toán'
+    ];
+
+    let sumCa = 0, sumLuong = 0, sumThuong = 0, sumPhat = 0, sumThucLanh = 0;
+
+    const rowsData = filtered.map((item, idx) => {
+        const ca = Number(item.tong_ca_lam || 0);
+        const luong = Number(item.tong_luong || 0);
+        const thuong = Number(item.tong_thuong || 0);
+        const phat = Number(item.tong_phat || 0);
+        const thucLanh = Number(item.thuc_lanh || 0);
+
+        sumCa += ca;
+        sumLuong += luong;
+        sumThuong += thuong;
+        sumPhat += phat;
+        sumThucLanh += thucLanh;
+
+        const st = statusStyleMap[item.trang_thai] || { text: item.trang_thai, bg: '#f1f5f9', color: '#334155' };
+
+        return [
+            { value: idx + 1, align: 'center' },
+            { value: currentBLThangNam, align: 'center', type: 'text', bold: true },
+            { value: item.ten_nhan_vien || '', bold: true },
+            { value: item.so_dien_thoai || 'N/A', align: 'center', type: 'text' },
+            { value: item.ten_cum_san || '', color: '#0b5d3b', bold: true },
+            { value: `${ca} ca`, align: 'center', bold: true },
+            { value: luong, align: 'right', type: 'currency' },
+            { value: thuong, align: 'right', type: 'currency', color: thuong > 0 ? '#059669' : '#64748b', bg: thuong > 0 ? '#ecfdf5' : undefined, bold: thuong > 0 },
+            { value: phat, align: 'right', type: 'currency', color: phat > 0 ? '#dc2626' : '#64748b', bg: phat > 0 ? '#fef2f2' : undefined, bold: phat > 0 },
+            { value: thucLanh, align: 'right', type: 'currency', color: '#1d4ed8', bg: '#eff6ff', bold: true },
+            { value: item.thong_tin_ngan_hang || 'Chưa cung cấp', color: item.thong_tin_ngan_hang ? '#0f172a' : '#94a3b8' },
+            { value: st.text, align: 'center', bg: st.bg, color: st.color, bold: true },
+            { value: item.ngay_thanh_toan ? item.ngay_thanh_toan.substring(0, 16) : '-', align: 'center', type: 'text' }
+        ];
+    });
+
+    const totalRow = [
+        '',
+        { value: 'TỔNG CỘNG', align: 'center' },
+        { value: `${filtered.length} nhân sự`, align: 'left' },
+        '',
+        '',
+        { value: `${sumCa} ca`, align: 'center' },
+        { value: sumLuong, align: 'right', type: 'currency' },
+        { value: sumThuong, align: 'right', type: 'currency', color: '#059669' },
+        { value: sumPhat, align: 'right', type: 'currency', color: '#dc2626' },
+        { value: sumThucLanh, align: 'right', type: 'currency', color: '#1d4ed8', bg: '#dbeafe' },
+        '', '', ''
+    ];
+
+    exportStyledExcelFile(
+        `Bang_Luong_DN_Football_${currentBLThangNam}`,
+        `BẢNG LƯƠNG NHÂN VIÊN KỲ ${currentBLThangNam}`,
+        `Tổng số nhân sự: ${filtered.length} | Tổng quỹ lương thực lãnh: ${sumThucLanh.toLocaleString('vi-VN')} đ`,
+        headers,
+        rowsData,
+        totalRow
+    );
+}
+
+// 2. Xuất Excel Lịch sử Nhập hàng (Có AutoFit + Bôi màu Chi phí)
+function exportAdminPhieuNhapExcel() {
+    if (!adminPhieuNhapData || adminPhieuNhapData.length === 0) {
+        return showSystemModal('Thông báo', 'Không có dữ liệu phiếu nhập để xuất!', 'error');
+    }
+
+    const filtered = adminPhieuNhapData.filter(pn => {
+        const matchCumSan = (adminPhieuNhapCumSan === 'All' || String(pn.ID_CumSan) === String(adminPhieuNhapCumSan));
+        const dateOnly = pn.NgayNhap ? pn.NgayNhap.substring(0, 10) : '';
+        const matchDate = (adminPhieuNhapDate === '' || dateOnly === adminPhieuNhapDate);
+        const maPhieu = `pn${pn.ID}`.toLowerCase();
+        const tenNhanVien = pn.nhan_vien ? pn.nhan_vien.HoTen.toLowerCase() : '';
+        const tenMonStr = pn.ChiTietNhap ? pn.ChiTietNhap.map(i => i.ten_san_pham).join(' ').toLowerCase() : '';
+        const matchSearch = maPhieu.includes(adminPhieuNhapSearch) || tenNhanVien.includes(adminPhieuNhapSearch) || tenMonStr.includes(adminPhieuNhapSearch);
+        return matchCumSan && matchDate && matchSearch;
+    });
+
+    if (filtered.length === 0) {
+        return showSystemModal('Thông báo', 'Không có phiếu nhập nào khớp với bộ lọc hiện tại!', 'error');
+    }
+
+    const headers = ['STT', 'Mã Phiếu Nhập', 'Cơ Sở Nhập Kho', 'Người Lập Phiếu', 'Chi Tiết Hàng Hóa Nhập', 'Tổng Thanh Toán', 'Thời Gian Nhập'];
+    let totalCost = 0;
+
+    const rowsData = filtered.map((pn, idx) => {
+        const cost = Number(pn.TongTienThanhToan || 0);
+        totalCost += cost;
+        const chiTietStr = pn.ChiTietNhap ? pn.ChiTietNhap.map(i => `${i.ten_san_pham} (SL: ${i.so_luong})`).join(' | ') : '';
+
+        return [
+            { value: idx + 1, align: 'center' },
+            { value: `#PN${pn.ID}`, align: 'center', bold: true, color: '#334155', bg: '#f1f5f9' },
+            { value: pn.cum_san ? pn.cum_san.TenCumSan : 'N/A', bold: true, color: '#0b5d3b' },
+            { value: pn.nhan_vien ? pn.nhan_vien.HoTen : 'N/A' },
+            { value: chiTietStr },
+            { value: cost, align: 'right', type: 'currency', bold: true, color: '#b91c1c', bg: '#fef2f2' },
+            { value: pn.NgayNhap ? pn.NgayNhap.replace('T', ' ').substring(0, 16) : '', align: 'center', type: 'text' }
+        ];
+    });
+
+    const totalRow = [
+        '',
+        { value: 'TỔNG CHI NHẬP KHO', align: 'center' },
+        { value: `${filtered.length} phiếu nhập`, align: 'left' },
+        '',
+        '',
+        { value: totalCost, align: 'right', type: 'currency', color: '#b91c1c', bg: '#fee2e2' },
+        ''
+    ];
+
+    exportStyledExcelFile(
+        `Bao_Cao_Nhap_Kho_DN_Football`,
+        `BÁO CÁO LỊCH SỬ NHẬP KHO HÀNG HÓA`,
+        `Tổng số phiếu nhập: ${filtered.length} | Tổng chi thanh toán: ${totalCost.toLocaleString('vi-VN')} đ`,
+        headers,
+        rowsData,
+        totalRow
+    );
+}
+
+// 3. Xuất Excel Hóa đơn Bán hàng (Có AutoFit + Bôi màu Doanh thu)
+function exportAdminHoaDonExcel() {
+    if (!adminHoaDonData || adminHoaDonData.length === 0) {
+        return showSystemModal('Thông báo', 'Không có dữ liệu hóa đơn để xuất!', 'error');
+    }
+
+    const filtered = adminHoaDonData.filter(hd => {
+        const matchCumSan = (adminHoaDonCumSan === 'All' || String(hd.ID_CumSan) === String(adminHoaDonCumSan));
+        const dateOnly = hd.NgayTao ? hd.NgayTao.substring(0, 10) : '';
+        const matchDate = (adminHoaDonDate === '' || dateOnly === adminHoaDonDate);
+        const maHD = `hd${hd.ID}`.toLowerCase();
+        const thuNgan = hd.nhan_vien ? hd.nhan_vien.HoTen.toLowerCase() : '';
+        const tenMonStr = (hd.chi_tiet_hoa_dons && hd.chi_tiet_hoa_dons.length > 0)
+            ? hd.chi_tiet_hoa_dons.map(i => i.san_pham ? i.san_pham.TenSanPham : '').join(' ').toLowerCase() : '';
+        const matchSearch = maHD.includes(adminHoaDonSearch) || thuNgan.includes(adminHoaDonSearch) || tenMonStr.includes(adminHoaDonSearch);
+        return matchCumSan && matchDate && matchSearch;
+    });
+
+    if (filtered.length === 0) {
+        return showSystemModal('Thông báo', 'Không có hóa đơn nào khớp với bộ lọc hiện tại!', 'error');
+    }
+
+    const headers = ['STT', 'Mã Hóa Đơn', 'Cơ Sở Bán Hàng', 'Thu Ngân Lập Đơn', 'Chi Tiết Mặt Hàng Đã Bán', 'Tổng Doanh Thu', 'Thời Gian Giao Dịch'];
+    let totalRev = 0;
+
+    const rowsData = filtered.map((hd, idx) => {
+        const rev = Number(hd.TongTien || 0);
+        totalRev += rev;
+        const chiTietStr = (hd.chi_tiet_hoa_dons && hd.chi_tiet_hoa_dons.length > 0)
+            ? hd.chi_tiet_hoa_dons.map(ct => `${ct.san_pham ? ct.san_pham.TenSanPham : 'Món'} (SL: ${ct.SoLuong})`).join(' | ')
+            : 'Trống';
+
+        return [
+            { value: idx + 1, align: 'center' },
+            { value: `#HD${hd.ID}`, align: 'center', bold: true, color: '#1e40af', bg: '#eff6ff' },
+            { value: hd.cum_san ? hd.cum_san.TenCumSan : 'N/A', bold: true, color: '#0b5d3b' },
+            { value: hd.nhan_vien ? hd.nhan_vien.HoTen : 'N/A', color: '#2563eb', bold: true },
+            { value: chiTietStr },
+            { value: rev, align: 'right', type: 'currency', bold: true, color: '#047857', bg: '#ecfdf5' },
+            { value: hd.NgayTao ? hd.NgayTao.replace('T', ' ').substring(0, 16) : '', align: 'center', type: 'text' }
+        ];
+    });
+
+    const totalRow = [
+        '',
+        { value: 'TỔNG DOANH THU', align: 'center' },
+        { value: `${filtered.length} hóa đơn`, align: 'left' },
+        '',
+        '',
+        { value: totalRev, align: 'right', type: 'currency', color: '#047857', bg: '#d1fae5' },
+        ''
+    ];
+
+    exportStyledExcelFile(
+        `Bao_Cao_Hoa_Don_Ban_Hang_DN_Football`,
+        `BÁO CÁO DOANH THU HÓA ĐƠN BÁN HÀNG`,
+        `Tổng số hóa đơn: ${filtered.length} | Tổng doanh thu: ${totalRev.toLocaleString('vi-VN')} đ`,
+        headers,
+        rowsData,
+        totalRow
+    );
+}
+
+function printBangCongModal() {
+    const title = document.getElementById('luoi-lich-title')?.innerText || 'Phiếu Lương Nhân Viên';
+    const summaryHtml = document.getElementById('luoi-lich-tong-quan')?.innerHTML || '';
+    const tableBodyHtml = document.getElementById('luoi-lich-tbody')?.innerHTML || '';
+
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    if (!printWindow) {
+        return showSystemModal('Cảnh báo', 'Trình duyệt đang chặn cửa sổ bật lên (Pop-up). Vui lòng cho phép Pop-up để in phiếu lương!', 'error');
+    }
+
+    const now = new Date();
+    const dateStr = `Ngày ${String(now.getDate()).padStart(2, '0')} tháng ${String(now.getMonth() + 1).padStart(2, '0')} năm ${now.getFullYear()}`;
+
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html lang="vi">
+        <head>
+            <meta charset="UTF-8">
+            <title>${title} - DN FOOTBALL</title>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+            <style>
+                body { font-family: 'Times New Roman', Times, serif; color: #0f172a; margin: 30px; line-height: 1.5; }
+                .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0b5d3b; padding-bottom: 15px; margin-bottom: 20px; }
+                .brand { font-size: 20px; font-weight: bold; color: #0b5d3b; }
+                .national { text-align: center; font-weight: bold; font-size: 14px; }
+                h2 { text-align: center; text-transform: uppercase; color: #0f172a; margin: 20px 0 15px 0; font-size: 22px; }
+                .summary-box { display: flex; justify-content: space-around; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 15px; margin-bottom: 20px; font-family: Arial, sans-serif; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 30px; font-family: Arial, sans-serif; font-size: 13px; }
+                th, td { border: 1px solid #cbd5e1; padding: 10px 12px; }
+                th { background: #f1f5f9; font-weight: bold; text-align: left; }
+                .signatures { display: flex; justify-content: space-around; text-align: center; margin-top: 40px; page-break-inside: avoid; }
+                @media print {
+                    body { margin: 15px; }
+                    .no-print { display: none; }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <div>
+                    <div class="brand">HỆ THỐNG SÂN BÓNG ĐÁ DN FOOTBALL</div>
+                    <div style="font-size: 13px; color: #475569;">Đà Nẵng, Việt Nam | Hotline: 0899244124</div>
+                </div>
+                <div class="national">
+                    CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM<br>
+                    Độc lập - Tự do - Hạnh phúc
+                </div>
+            </div>
+
+            <h2>PHIẾU TỔNG HỢP CÔNG & LƯƠNG NHÂN VIÊN<br><span style="font-size: 16px; font-weight: normal; text-transform: none;">(${title})</span></h2>
+
+            <div class="summary-box">${summaryHtml}</div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 15%;">Ngày</th>
+                        <th style="width: 30%;">Ca làm việc & Vị trí</th>
+                        <th style="width: 20%; text-align: center;">Trạng thái</th>
+                        <th style="width: 35%; text-align: right;">Chi tiết Lương / Thưởng / Phạt</th>
+                    </tr>
+                </thead>
+                <tbody>${tableBodyHtml}</tbody>
+            </table>
+
+            <div style="text-align: right; font-style: italic; margin-bottom: 10px;">Đà Nẵng, ${dateStr}</div>
+            <div class="signatures">
+                <div>
+                    <strong>NGƯỜI LẬP BIỂU / QUẢN LÝ</strong><br>
+                    <span style="font-size: 13px; font-style: italic;">(Ký và ghi rõ họ tên)</span>
+                </div>
+                <div>
+                    <strong>NHÂN VIÊN XÁC NHẬN</strong><br>
+                    <span style="font-size: 13px; font-style: italic;">(Ký và ghi rõ họ tên)</span>
+                </div>
+            </div>
+
+            <script>
+                window.onload = function() {
+                    setTimeout(() => { window.print(); }, 400);
+                };
+            </script>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
 }
