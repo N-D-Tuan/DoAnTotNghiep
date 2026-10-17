@@ -1638,7 +1638,7 @@ async function renderClusters() {
     updateActiveNav('renderClusters');
 
     currentClusterId = null; currentPitchName = null; currentPitchId = null;
-    appContent.innerHTML = `<div style="text-align:center; padding: 50px;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải danh sách sân...</div>`;
+    appContent.innerHTML = `<div style="text-align:center; padding: 60px;"><i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem; color: var(--primary);"></i><p style="margin-top: 12px; color: var(--text-muted); font-weight: 500;">Đang tải danh sách cụm sân...</p></div>`;
 
     try {
         const response = await fetch(`${API_BASE_URL}/cum-san`);
@@ -1659,25 +1659,35 @@ async function renderClusters() {
 
         // 3. Render Giao diện (Giữ nguyên toàn bộ ID: search-cluster, filter-phuong, cluster-grid-container)
         let html = `
-            <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px;">
+            <div class="page-header" style="background: linear-gradient(135deg, #0b5d3b 0%, #15803d 100%); padding: 28px 32px; border-radius: 18px; color: white; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; box-shadow: 0 10px 25px rgba(11, 93, 59, 0.18); margin-bottom: 24px;">
                 <div>
-                    <div style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 4px;">
-                        <i class="fa-solid fa-location-dot" style="color: var(--primary);"></i> Khu vực Đà Nẵng &bull; Danh sách cơ sở
+                    <div style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; background: rgba(255,255,255,0.15); padding: 5px 12px; border-radius: 999px; margin-bottom: 10px; backdrop-filter: blur(4px);">
+                        <i class="fa-solid fa-location-dot" style="color: #fde047;"></i> Khu vực Đà Nẵng &bull; Hệ thống sân trực tuyến
                     </div>
-                    <h1 class="page-title">Chọn cụm sân thi đấu</h1>
-                    <p class="page-subtitle">Tìm kiếm theo khu vực và chọn cụm sân để xem các sân trống</p>
+                    <h1 class="page-title" style="color: #ffffff; font-size: 1.85rem; margin-bottom: 6px;">Chọn cụm sân thi đấu</h1>
+                    <p class="page-subtitle" style="color: rgba(255,255,255,0.88); font-size: 0.95rem;">Tra cứu lịch trống theo thời gian thực, đặt giữ sân nhanh chóng và nhận vé điện tử ngay.</p>
+                </div>
+                <div style="display: flex; gap: 14px; background: rgba(0,0,0,0.18); padding: 14px 20px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.12);">
+                    <div style="text-align: center; padding-right: 14px; border-right: 1px solid rgba(255,255,255,0.15);">
+                        <div style="font-size: 1.4rem; font-weight: 800; color: #fde047;">${allActiveClusters.length}</div>
+                        <div style="font-size: 0.76rem; color: rgba(255,255,255,0.85);">Cơ sở hoạt động</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-size: 1.4rem; font-weight: 800; color: #4ade80;">24/7</div>
+                        <div style="font-size: 0.76rem; color: rgba(255,255,255,0.85);">Đặt lịch tự động</div>
+                    </div>
                 </div>
             </div>
 
             <!-- THANH CÔNG CỤ TÌM KIẾM VÀ LỌC -->
-            <div style="display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; background: #fff; padding: 14px; border-radius: 10px; border: 1px solid var(--border);">
-                <div style="flex: 1; min-width: 250px; position: relative;">
-                    <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
-                    <input type="text" id="search-cluster" class="form-control" placeholder="Tìm theo tên cụm sân hoặc tên đường..." style="padding-left: 38px;" oninput="filterClusters()">
+            <div style="display: flex; gap: 14px; margin-bottom: 26px; flex-wrap: wrap; background: #fff; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); align-items: center;">
+                <div style="flex: 1; min-width: 260px; position: relative;">
+                    <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: #64748b;"></i>
+                    <input type="text" id="search-cluster" class="form-control" placeholder="Tìm theo tên cụm sân hoặc tên đường..." style="padding-left: 42px; height: 44px; background: #f8fafc; border-color: #e2e8f0;" oninput="filterClusters()">
                 </div>
-                <div style="min-width: 220px;">
-                    <select id="filter-phuong" class="form-control" onchange="filterClusters()">
-                        <option value="">Tất cả khu vực</option>
+                <div style="min-width: 230px; position: relative;">
+                    <select id="filter-phuong" class="form-control" style="height: 44px; background: #f8fafc; border-color: #e2e8f0; font-weight: 600; color: #334155; cursor: pointer;" onchange="filterClusters()">
+                        <option value="">Tất cả khu vực (Phường/Xã)</option>
                         ${uniquePhuongs.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
                     </select>
                 </div>
@@ -1693,7 +1703,7 @@ async function renderClusters() {
         filterClusters();
 
     } catch (error) {
-        appContent.innerHTML = `<div style="text-align:center; color:red;">Lỗi tải dữ liệu máy chủ!</div>`;
+        appContent.innerHTML = `<div style="text-align:center; color:red; padding: 40px;">Lỗi tải dữ liệu máy chủ!</div>`;
     }
 }
 
@@ -1716,7 +1726,12 @@ function filterClusters() {
     });
 
     if (filtered.length === 0) {
-        gridContainer.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding: 40px; color: var(--text-muted); background: #fff; border-radius: 10px; border: 1px dashed var(--border);">Không tìm thấy cụm sân nào phù hợp với yêu cầu tìm kiếm.</div>`;
+        gridContainer.innerHTML = `
+            <div style="grid-column: 1/-1; text-align:center; padding: 50px 20px; color: var(--text-muted); background: #fff; border-radius: 16px; border: 1px dashed #cbd5e1;">
+                <i class="fa-solid fa-magnifying-glass-location" style="font-size: 2.5rem; color: #cbd5e1; margin-bottom: 12px; display: block;"></i>
+                <div style="font-weight: 600; color: #334155; margin-bottom: 4px;">Không tìm thấy cụm sân phù hợp</div>
+                <div style="font-size: 0.88rem;">Vui lòng thử lại với từ khóa hoặc khu vực khác.</div>
+            </div>`;
         return;
     }
 
@@ -1728,19 +1743,21 @@ function filterClusters() {
             <div class="cluster-card" onclick="renderPitches(${cluster.ID}, '${cluster.TenCumSan}', '${cluster.DiaChi}', '${cluster.GioMoCua}', '${cluster.GioDongCua}')">
                 <div class="cluster-img-box">
                     <img src="${imgUrl}" alt="${cluster.TenCumSan}" class="cluster-img">
-                    <span class="cluster-ward-tag"><i class="fa-solid fa-map-pin" style="margin-right: 4px;"></i>${tenPhuong}</span>
+                    <span class="cluster-ward-tag"><i class="fa-solid fa-location-dot" style="margin-right: 5px; color: #4ade80;"></i>${tenPhuong}</span>
                 </div>
                 <div class="cluster-info">
                     <div class="cluster-name">${cluster.TenCumSan}</div>
                     <div class="cluster-address">
-                        <i class="fa-solid fa-location-dot"></i>
+                        <i class="fa-solid fa-map-pin" style="color: #16a34a;"></i>
                         <span>${cluster.DiaChi}${cluster.phuong ? ', ' + cluster.phuong.TenPhuong : ''}</span>
                     </div>
                     <div class="cluster-footer">
                         <div class="cluster-meta">
-                            <i class="fa-regular fa-clock"></i> ${cluster.GioMoCua.substring(0,5)} - ${cluster.GioDongCua.substring(0,5)}
+                            <i class="fa-regular fa-clock" style="color: var(--primary);"></i> ${cluster.GioMoCua.substring(0,5)} - ${cluster.GioDongCua.substring(0,5)}
                         </div>
-                        <span style="font-size: 0.85rem; font-weight: 600; color: var(--primary);">Chọn sân &rarr;</span>
+                        <span style="font-size: 0.88rem; font-weight: 700; color: var(--primary); display: inline-flex; align-items: center; gap: 5px;">
+                            Chọn sân <i class="fa-solid fa-arrow-right" style="font-size: 0.8rem;"></i>
+                        </span>
                     </div>
                 </div>
             </div>
@@ -1773,7 +1790,7 @@ async function renderPitches(clusterId, clusterName, clusterAddress, gioMo, gioD
     currentLoaiSanId = null;
     currentPitchType = null;
 
-    appContent.innerHTML = `<div style="text-align:center; padding: 50px;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải danh sách sân con...</div>`;
+    appContent.innerHTML = `<div style="text-align:center; padding: 60px;"><i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem; color: var(--primary);"></i><p style="margin-top: 12px; color: var(--text-muted);">Đang tải danh sách sân con...</p></div>`;
 
     try {
         const response = await fetch(`${API_BASE_URL}/san-bong?cum_san_id=${clusterId}`);
@@ -1792,7 +1809,7 @@ async function renderPitches(clusterId, clusterName, clusterAddress, gioMo, gioD
         let html = `
             <div class="customer-breadcrumb">
                 <div class="back-btn" onclick="renderClusters()">
-                    <i class="fa-solid fa-arrow-left"></i> Quay lại danh sách cụm sân
+                    <i class="fa-solid fa-arrow-left"></i> Danh sách cụm sân
                 </div>
                 <div class="breadcrumb-path">
                     <span class="bc-link" onclick="renderClusters()">Cụm sân</span>
@@ -1803,43 +1820,47 @@ async function renderPitches(clusterId, clusterName, clusterAddress, gioMo, gioD
             
             <div class="cluster-detail-header">
                 <div>
-                    <div class="cluster-detail-label">Cơ sở đang xem</div>
+                    <div class="cluster-detail-label"><i class="fa-solid fa-circle-check"></i> Cơ sở đang chọn</div>
                     <h1 class="cluster-detail-title">${clusterName}</h1>
                     <div class="cluster-detail-info">
                         <span><i class="fa-solid fa-location-dot"></i> Địa chỉ: <strong style="color: var(--text-dark);">${clusterAddress}</strong></span>
-                        <span><i class="fa-regular fa-clock"></i> Giờ hoạt động: <strong style="color: var(--text-dark);">${gioMo.substring(0,5)} - ${gioDong.substring(0,5)}</strong></span>
+                        <span><i class="fa-regular fa-clock"></i> Giờ mở cửa: <strong style="color: var(--text-dark);">${gioMo.substring(0,5)} - ${gioDong.substring(0,5)}</strong></span>
                     </div>
                 </div>
                 <div class="context-summary-box">
-                    <div style="font-size: 0.78rem; color: var(--text-muted);">Số sân hoạt động</div>
-                    <div style="font-size: 1.15rem; font-weight: 700; color: var(--primary);">${activePitches.length} sân</div>
+                    <div style="font-size: 0.76rem; font-weight: 600; color: #15803d; text-transform: uppercase;">Sân sẵn sàng</div>
+                    <div style="font-size: 1.35rem; font-weight: 800; color: var(--primary);">${activePitches.length} sân</div>
                 </div>
             </div>
         `;
 
         if (activePitches.length === 0) {
-            html += `<p style="text-align:center; color: var(--text-muted); margin-top: 40px;">Cụm sân này hiện chưa có sân con nào hoạt động.</p>`;
+            html += `<div style="text-align:center; color: var(--text-muted); margin-top: 30px; padding: 45px; background: #fff; border-radius: 14px; border: 1px dashed #cbd5e1;">Cụm sân này hiện chưa có sân con nào hoạt động.</div>`;
         }
 
         for (const [loaiSanName, data] of Object.entries(grouped)) {
             html += `
                 <div class="pitch-section">
                     <div class="pitch-section-title">
-                        <span>${loaiSanName.toUpperCase()}</span>
-                        <span style="font-size: 0.82rem; font-weight: 500; color: var(--text-muted);">${data.pitches.length} sân</span>
+                        <span style="display: inline-flex; align-items: center; gap: 8px;">
+                            <i class="fa-regular fa-futbol" style="color: var(--primary);"></i> ${loaiSanName.toUpperCase()}
+                        </span>
+                        <span style="font-size: 0.8rem; font-weight: 600; color: #475569; background: #e2e8f0; padding: 3px 10px; border-radius: 999px;">${data.pitches.length} sân</span>
                     </div>
                     <div class="pitch-grid">`;
             data.pitches.forEach(sb => {
                 html += `
                     <div class="pitch-card" onclick="renderSchedule(${clusterId}, '${clusterName}', ${sb.ID}, '${sb.TenSan}', ${data.id}, '${loaiSanName}')">
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
                             <div>
                                 <div class="pitch-name">${sb.TenSan}</div>
-                                <div class="pitch-type"><i class="fa-solid fa-layer-group"></i> ${loaiSanName}</div>
+                                <div class="pitch-type"><i class="fa-solid fa-layer-group" style="color: #94a3b8;"></i> ${loaiSanName}</div>
                             </div>
-                            <span style="font-size: 0.75rem; color: var(--primary); background: var(--primary-light); padding: 2px 8px; border-radius: 4px; font-weight: 600;">Hoạt động</span>
+                            <span style="font-size: 0.74rem; color: #15803d; background: #dcfce7; border: 1px solid #bbf7d0; padding: 3px 9px; border-radius: 999px; font-weight: 700;">Hoạt động</span>
                         </div>
-                        <button class="btn-outline" style="width: 100%; padding: 8px;">Xem lịch trống &rarr;</button>
+                        <button class="btn-outline" style="width: 100%; padding: 9px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                            <span>Xem lịch trống</span> <i class="fa-solid fa-calendar-Alt" style="font-size: 0.82rem;"></i>
+                        </button>
                     </div>`;
             });
             html += `</div></div>`;
@@ -1855,7 +1876,7 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
     currentPitchId = pitchId; currentPitchName = pitchName;
     currentLoaiSanId = loaiSanId; currentPitchType = pitchType;
     
-    appContent.innerHTML = `<div style="text-align:center; padding: 50px;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải lịch...</div>`;
+    appContent.innerHTML = `<div style="text-align:center; padding: 60px;"><i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem; color: var(--primary);"></i><p style="margin-top: 12px; color: var(--text-muted);">Đang tải bảng lịch đặt sân...</p></div>`;
 
     try {
         await loadUserTournaments();
@@ -1948,11 +1969,11 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
             <!-- Khung thông tin Sân & Cụm sân đang xem -->
             <div class="cluster-detail-header" style="margin-bottom: 16px;">
                 <div>
-                    <div class="cluster-detail-label">Bảng lịch đặt sân</div>
+                    <div class="cluster-detail-label">Bảng lịch đặt sân trực tuyến</div>
                     <h1 class="cluster-detail-title">
                         <span>${pitchName}</span>
-                        <span style="font-size: 0.85rem; font-weight: 600; padding: 3px 10px; border-radius: 6px; background: #f1f5f9; color: #334155;">${pitchType}</span>
-                        ${isTournamentMode ? `<span style="font-size: 0.8rem; font-weight: 600; padding: 3px 10px; border-radius: 6px; background: #e0e7ff; color: #4338ca;">Chế độ đá giải</span>` : ''}
+                        <span style="font-size: 0.82rem; font-weight: 700; padding: 4px 12px; border-radius: 999px; background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;">${pitchType}</span>
+                        ${isTournamentMode ? `<span style="font-size: 0.8rem; font-weight: 700; padding: 4px 12px; border-radius: 999px; background: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe;"><i class="fa-solid fa-trophy" style="margin-right: 4px;"></i>Chế độ đá giải</span>` : ''}
                     </h1>
                     <div class="cluster-detail-info">
                         <span><i class="fa-solid fa-building"></i> Cụm sân: <strong style="color: var(--text-dark);">${currentClusterName}</strong></span>
@@ -1963,19 +1984,19 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
             </div>
 
             <!-- Thanh công cụ: Quy định đặt sân & Chú thích trạng thái -->
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; background: #ffffff; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow-sm);">
                 <div style="position: relative; display: inline-block;">
-                    <button type="button" onclick="toggleRuleDropdown(event)" style="background-color: #fff; color: var(--text-dark); border: 1px solid var(--border); padding: 7px 14px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                        <i class="fa-solid fa-circle-info" style="background-color: #f59e0b; color: #ffffff; border-radius: 50%; padding: 4px;"></i> Quy định đặt & hủy sân
+                    <button type="button" onclick="toggleRuleDropdown(event)" style="background-color: #fffbeb; color: #b45309; border: 1px solid #fde68a; padding: 8px 14px; border-radius: 8px; font-size: 0.85rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s;">
+                        <i class="fa-solid fa-circle-info" style="color: #d97706;"></i> Xem quy định đặt & hủy sân
                     </button>
 
                     <!-- Hộp nội dung quy định (Giữ nguyên id="rule-dropdown-box") -->
-                    <div id="rule-dropdown-box" style="display: none; position: absolute; top: 115%; left: 0; width: 760px; max-width: 90vw; background-color: #f59e0b; border: 1px solid var(--border); border-radius: 10px; padding: 18px 22px; box-shadow: var(--shadow-lg); z-index: 99;">
-                        <h4 style="color: var(--text-dark); margin-bottom: 10px; font-size: 0.98rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">
-                            <i class="fa-solid fa-circle-info" style="background-color: #f59e0b; color: #ffffff; border-radius: 50%; padding: 4px;"></i> Quy định đặt sân chi tiết
+                    <div id="rule-dropdown-box" style="display: none; position: absolute; top: 120%; left: 0; width: 720px; max-width: 90vw; background-color: #ffffff; border: 1px solid #fde68a; border-top: 4px solid #f59e0b; border-radius: 14px; padding: 20px 24px; box-shadow: var(--shadow-lg); z-index: 99;">
+                        <h4 style="color: #92400e; margin-bottom: 12px; font-size: 1rem; font-weight: 800; display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-shield-halved" style="color: #f59e0b;"></i> Quy định đặt & hủy sân chi tiết
                         </h4>
-                        <ul style="color: #475569; font-size: 0.88rem; margin-left: 18px; line-height: 1.65;">
-                            <li><strong>Đặt sân phong trào:</strong> Đặt trước trong vòng <strong>7 ngày tới</strong>, thanh toán cọc trước <strong>30%</strong>.</li>
+                        <ul style="color: #334155; font-size: 0.88rem; margin-left: 18px; line-height: 1.7; list-style: disc;">
+                            <li><strong>Đặt sân phong trào:</strong> Đặt trước trong vòng <strong>7 ngày tới</strong>, thanh toán tiền cọc trước <strong>30%</strong>.</li>
                             <li style="margin-top: 6px;"><strong>Đặt sân đá giải:</strong> Cần được Admin duyệt giải đấu tại đúng cụm sân. Chọn mục đích "Giải đấu" trong Giỏ hàng để mở lịch theo ngày giải. Hoàn tất đặt lịch trong <strong>3 ngày</strong> từ lúc duyệt, cọc trước <strong>50%</strong>.</li>
                             <li style="margin-top: 6px;"><strong>Quy định hủy lịch:</strong> Tự hủy miễn phí trước trận <strong>10 tiếng</strong> (đá phong trào) hoặc trước <strong>7 ngày</strong> (đá giải). Nếu sát giờ, vui lòng gửi "Yêu cầu hủy gấp" tại mục Các yêu cầu.</li>
                         </ul>
@@ -1983,37 +2004,32 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                 </div>
 
                 <!-- Chú thích màu sắc ô lịch -->
-                <div style="display: flex; align-items: center; gap: 16px; font-size: 0.82rem; color: var(--text-muted);">
-                    <span style="display: inline-flex; align-items: center; gap: 6px;">
-                        <span style="width: 14px; height: 14px; border-radius: 4px; background: var(--primary-light); border: 1px solid #bbf7d0; display: inline-block;"></span> Còn trống
+                <div style="display: flex; align-items: center; gap: 18px; font-size: 0.84rem; font-weight: 600; color: #475569;">
+                    <span style="display: inline-flex; align-items: center; gap: 7px;">
+                        <span style="width: 15px; height: 15px; border-radius: 4px; background: #F0FDF4; border: 1.5px solid #86EFAC; display: inline-block;"></span> Còn trống
                     </span>
-                    <span style="display: inline-flex; align-items: center; gap: 6px;">
-                        <span style="width: 14px; height: 14px; border-radius: 4px; background: var(--primary); display: inline-block;"></span> Đang chọn
+                    <span style="display: inline-flex; align-items: center; gap: 7px;">
+                        <span style="width: 15px; height: 15px; border-radius: 4px; background: var(--primary); display: inline-block;"></span> Đang chọn
                     </span>
-                    <span style="display: inline-flex; align-items: center; gap: 6px;">
-                        <span style="width: 14px; height: 14px; border-radius: 4px; background: var(--booked-bg); border: 1px solid var(--border); display: inline-block;"></span> Đã đặt / Quá giờ
+                    <span style="display: inline-flex; align-items: center; gap: 7px;">
+                        <span style="width: 15px; height: 15px; border-radius: 4px; background: #E2E8F0; border: 1px solid #CBD5E1; display: inline-block;"></span> Đã đặt / Quá giờ
                     </span>
                 </div>
             </div>
             
             <div class="schedule-container" style="margin-bottom: 40px; margin-top: 0;">
-                <div style="width: 100%; max-width: 100%; max-height: calc(100vh - 240px); overflow-y: auto; overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.03);"> 
+                <div style="width: 100%; max-width: 100%; max-height: calc(100vh - 240px); overflow-y: auto; overflow-x: auto; border-radius: 14px;"> 
                     <table class="schedule-table" style="width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0;">
                         <thead>
                             <tr>
-                                <!-- 1. KHUNG GIỜ-->
-                                <th style="box-sizing: border-box; width: 140px; min-width: 140px; max-width: 140px; padding: 14px 10px; text-align: center; border-bottom: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; background: #F8FAFC; position: sticky; top: 0; left: 0; z-index: 60; box-shadow: 2px 2px 5px rgba(0,0,0,0.05);">
+                                <th style="box-sizing: border-box; width: 140px; min-width: 140px; max-width: 140px; padding: 14px 10px; text-align: center; border-bottom: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; background: #F8FAFC; position: sticky; top: 0; left: 0; z-index: 60;">
                                     Khung giờ
                                 </th>
-
-                                <!-- 2. GIÁ TIỀN-->
-                                <th style="box-sizing: border-box; width: 110px; min-width: 110px; max-width: 110px; padding: 14px 10px; text-align: center; border-bottom: 1px solid #cbd5e1; border-right: 2px solid #cbd5e1; background: #F8FAFC; position: sticky; top: 0; left: 140px; z-index: 59; box-shadow: 4px 2px 5px rgba(0,0,0,0.05);">
-                                    Giá tiền
+                                <th style="box-sizing: border-box; width: 110px; min-width: 110px; max-width: 110px; padding: 14px 10px; text-align: center; border-bottom: 1px solid #cbd5e1; border-right: 2px solid #cbd5e1; background: #F8FAFC; position: sticky; top: 0; left: 140px; z-index: 59;">
+                                    Giá sân
                                 </th>
-
-                                <!-- 3. CÁC NGÀY-->
                                 ${dateArray.map(d => `
-                                    <th style="min-width: 110px; padding: 14px 10px; text-align: center; border-bottom: 1px solid #cbd5e1; background: #F8FAFC; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                                    <th style="min-width: 115px; padding: 14px 10px; text-align: center; border-bottom: 1px solid #cbd5e1; background: #F8FAFC; position: sticky; top: 0; z-index: 50;">
                                         ${d.short}
                                     </th>
                                 `).join('')}
@@ -2040,10 +2056,10 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
 
             html += `
                 <tr style="${displayStyle}">
-                    <td style="box-sizing: border-box; width: 140px; min-width: 140px; max-width: 140px; text-align: center; background: #fff; position: sticky; left: 0; z-index: 20; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #f1f5f9; box-shadow: 2px 0 5px rgba(0,0,0,0.02);">
-                        <strong>${timeStr}</strong>
+                    <td style="box-sizing: border-box; width: 140px; min-width: 140px; max-width: 140px; text-align: center; background: #fff; position: sticky; left: 0; z-index: 20; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #f1f5f9;">
+                        <strong style="color: #0f172a; font-size: 0.88rem;">${timeStr}</strong>
                     </td>
-                    <td style="box-sizing: border-box; width: 110px; min-width: 110px; max-width: 110px; text-align: center; background: #fff; position: sticky; left: 140px; z-index: 19; color: var(--primary); font-weight: 600; border-right: 2px solid #e2e8f0; border-bottom: 1px solid #f1f5f9; box-shadow: 4px 0 5px rgba(0,0,0,0.02);">
+                    <td style="box-sizing: border-box; width: 110px; min-width: 110px; max-width: 110px; text-align: center; background: #fff; position: sticky; left: 140px; z-index: 19; color: var(--primary); font-weight: 700; font-size: 0.88rem; border-right: 2px solid #e2e8f0; border-bottom: 1px solid #f1f5f9;">
                         ${displayPrice}
                     </td>
             `;
@@ -2195,33 +2211,39 @@ async function renderMyBookings() {
     currentBookingTab = 'phong_trao';
 
     appContent.innerHTML = `
-        <div class="page-header" style="margin-bottom: 24px;">
-            <h1 class="page-title">Lịch sử đặt sân</h1>
-            <p class="page-subtitle">Theo dõi trạng thái các sân bạn đã đặt</p>
+        <div class="page-header" style="margin-bottom: 24px; padding: 22px 28px; border-radius: 18px; background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%); border: 1px solid #bbf7d0; border-left: 5px solid var(--primary); box-shadow: var(--shadow-sm); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div>
+                <div style="font-size: 0.76rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 4px;">
+                    <i class="fa-solid fa-futbol"></i> Nhật ký thi đấu & Vé điện tử
+                </div>
+                <h1 class="page-title" style="margin-bottom: 4px;">Lịch sử đặt sân</h1>
+                <p class="page-subtitle">Quản lý lịch thi đấu, tải vé điện tử (E-Ticket) hoặc hủy lịch trong thời hạn quy định</p>
+            </div>
         </div>
 
-        <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+        <div style="display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start;">
             <!-- SIDEBAR TRÁI: MENU TAB -->
-            <div style="width: 220px; flex-shrink: 0;">
-                <div style="background: white; border-radius: 12px; padding: 12px; box-shadow: var(--shadow-sm); border: 1px solid var(--border);">
-                    <button onclick="switchBookingTab('phong_trao')" id="tab-phong-trao" style="width: 100%; text-align: left; padding: 12px 16px; margin-bottom: 8px; border-radius: 8px; border: none; background: var(--primary-light); color: var(--primary); font-weight: 600; cursor: pointer; transition: 0.2s;">
-                        <i class="fa-solid fa-user-ninja" style="width: 20px;"></i> Phong trào
+            <div style="width: 240px; flex-shrink: 0;">
+                <div style="background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(8px); border-radius: 16px; padding: 14px; box-shadow: var(--shadow-sm); border: 1px solid var(--border);">
+                    <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; padding: 4px 10px 10px;">Loại hình đặt sân</div>
+                    <button onclick="switchBookingTab('phong_trao')" id="tab-phong-trao" style="width: 100%; text-align: left; padding: 12px 16px; margin-bottom: 8px; border-radius: 10px; border: 1px solid #bbf7d0; background: var(--primary-light); color: var(--primary); font-weight: 700; cursor: pointer; transition: 0.2s; display: flex; align-items: center; gap: 10px;">
+                        <i class="fa-solid fa-futbol" style="width: 18px; text-align: center;"></i> Đá phong trào
                     </button>
-                    <button onclick="switchBookingTab('giai_dau')" id="tab-giai-dau" style="width: 100%; text-align: left; padding: 12px 16px; border-radius: 8px; border: none; background: transparent; color: var(--text-muted); font-weight: 500; cursor: pointer; transition: 0.2s;">
-                        <i class="fa-solid fa-trophy" style="width: 20px;"></i> Giải đấu
+                    <button onclick="switchBookingTab('giai_dau')" id="tab-giai-dau" style="width: 100%; text-align: left; padding: 12px 16px; border-radius: 10px; border: 1px solid transparent; background: transparent; color: var(--text-muted); font-weight: 600; cursor: pointer; transition: 0.2s; display: flex; align-items: center; gap: 10px;">
+                        <i class="fa-solid fa-trophy" style="width: 18px; text-align: center;"></i> Giải đấu
                     </button>
                 </div>
             </div>
 
             <!-- CỘT PHẢI: BỘ LỌC & DANH SÁCH -->
             <div style="flex: 1; min-width: 0;">
-                <div style="display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap;">
-                    <div style="flex: 1; min-width: 200px; position: relative;">
-                        <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
-                        <input type="text" id="search-booking" class="form-control" placeholder="Tìm tên sân, cụm sân, giải đấu..." style="padding-left: 40px;" oninput="handleBookingSearch(this.value)" value="${currentBookingSearch}">
+                <div style="display: flex; gap: 12px; margin-bottom: 22px; flex-wrap: wrap; background: #ffffff; padding: 14px; border-radius: 14px; border: 1px solid var(--border); box-shadow: var(--shadow-sm);">
+                    <div style="flex: 1; min-width: 220px; position: relative;">
+                        <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
+                        <input type="text" id="search-booking" class="form-control" placeholder="Tìm tên sân, cụm sân, giải đấu..." style="padding-left: 40px; height: 42px; background: #f8fafc;" oninput="handleBookingSearch(this.value)" value="${currentBookingSearch}">
                     </div>
-                    <input type="date" id="filter-booking-date" class="form-control" style="width: 150px;" onchange="handleBookingDate(this.value)" value="${currentBookingDate}">
-                    <select id="filter-booking-status" class="form-control" style="width: 170px;" onchange="handleBookingStatus(this.value)">
+                    <input type="date" id="filter-booking-date" class="form-control" style="width: 165px; height: 42px; background: #f8fafc; cursor: pointer;" onchange="handleBookingDate(this.value)" value="${currentBookingDate}">
+                    <select id="filter-booking-status" class="form-control" style="width: 185px; height: 42px; background: #f8fafc; font-weight: 600; color: #334155; cursor: pointer;" onchange="handleBookingStatus(this.value)">
                         <option value="All" ${currentBookingStatus === 'All' ? 'selected' : ''}>Tất cả trạng thái</option>
                         <option value="DaCoc" ${currentBookingStatus === 'DaCoc' ? 'selected' : ''}>Đã cọc</option>
                         <option value="HoanThanh" ${currentBookingStatus === 'HoanThanh' ? 'selected' : ''}>Hoàn thành</option>
@@ -2231,7 +2253,7 @@ async function renderMyBookings() {
                 </div>
 
                 <div id="my-bookings-container" style="min-height: 300px; position: relative;">
-                    <div style="text-align:center; padding: 50px;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải dữ liệu...</div>
+                    <div style="text-align:center; padding: 50px;"><i class="fa-solid fa-spinner fa-spin" style="font-size: 1.8rem; color: var(--primary);"></i><p style="margin-top: 10px; color: var(--text-muted);">Đang tải dữ liệu...</p></div>
                 </div>
             </div>
         </div>
@@ -2245,8 +2267,8 @@ function switchBookingTab(tab) {
     const btnPhongTrao = document.getElementById('tab-phong-trao');
     const btnGiaiDau = document.getElementById('tab-giai-dau');
 
-    const activeStyle = "width: 100%; text-align: left; padding: 12px 16px; border-radius: 8px; border: none; background: var(--primary-light); color: var(--primary); font-weight: 600; cursor: pointer; transition: 0.2s;";
-    const inactiveStyle = "width: 100%; text-align: left; padding: 12px 16px; border-radius: 8px; border: none; background: transparent; color: var(--text-muted); font-weight: 500; cursor: pointer; transition: 0.2s;";
+    const activeStyle = "width: 100%; text-align: left; padding: 12px 16px; border-radius: 10px; border: 1px solid #bbf7d0; background: var(--primary-light); color: var(--primary); font-weight: 700; cursor: pointer; transition: 0.2s; display: flex; align-items: center; gap: 10px;";
+    const inactiveStyle = "width: 100%; text-align: left; padding: 12px 16px; border-radius: 10px; border: 1px solid transparent; background: transparent; color: var(--text-muted); font-weight: 600; cursor: pointer; transition: 0.2s; display: flex; align-items: center; gap: 10px;";
 
     if (tab === 'phong_trao') {
         btnPhongTrao.style.cssText = activeStyle + " margin-bottom: 8px;";
@@ -2256,7 +2278,6 @@ function switchBookingTab(tab) {
         btnPhongTrao.style.cssText = inactiveStyle + " margin-bottom: 8px;";
     }
     
-    // Xóa chữ tìm kiếm cũ khi đổi Tab
     document.getElementById('search-booking').value = '';
     currentBookingSearch = '';
     
@@ -2271,14 +2292,13 @@ function applyBookingFiltersAndRender() {
     const container = document.getElementById('my-bookings-container');
     if (!container) return;
 
-    // Các hàm tiện ích Format
     const renderBadge = (trangThai) => {
-        let badgeColor = '#6b7280', badgeBg = '#f3f4f6', viStatus = trangThai;
-        if(trangThai === 'DaCoc') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; viStatus = 'Đã cọc'; }
-        else if(trangThai === 'DaHuy') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; viStatus = 'Đã hủy'; }
-        else if(trangThai === 'HoanThanh') { badgeColor = '#047857'; badgeBg = '#d1fae5'; viStatus = 'Hoàn thành'; }
-        else if(trangThai === 'KhongDen') { badgeColor = '#6b7280'; badgeBg = '#f3f4f6'; viStatus = 'Không đến'; }
-        return `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${viStatus}</span>`;
+        let badgeColor = '#475569', badgeBg = '#f1f5f9', borderColor = '#cbd5e1', viStatus = trangThai;
+        if(trangThai === 'DaCoc') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; borderColor = '#fde68a'; viStatus = 'Đã cọc'; }
+        else if(trangThai === 'DaHuy') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; borderColor = '#fecaca'; viStatus = 'Đã hủy'; }
+        else if(trangThai === 'HoanThanh') { badgeColor = '#047857'; badgeBg = '#d1fae5'; borderColor = '#a7f3d0'; viStatus = 'Hoàn thành'; }
+        else if(trangThai === 'KhongDen') { badgeColor = '#475569'; badgeBg = '#e2e8f0'; borderColor = '#cbd5e1'; viStatus = 'Không đến'; }
+        return `<span style="padding: 4px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; background: ${badgeBg}; color: ${badgeColor}; border: 1px solid ${borderColor}; white-space: nowrap;">${viStatus}</span>`;
     };
 
     const formatDate = (dateString) => {
@@ -2290,24 +2310,22 @@ function applyBookingFiltersAndRender() {
 
     let html = '';
 
-    // ==========================================
     // LUỒNG 1: TAB PHONG TRÀO
-    // ==========================================
     if (currentBookingTab === 'phong_trao') {
         const filteredList = allMyBookingsData.filter(item => {
-            if (item.ID_GiaiDau !== null) return false; // Lọc bỏ dữ liệu giải đấu
+            if (item.ID_GiaiDau !== null) return false;
 
             const matchStatus = currentBookingStatus === 'All' || item.TrangThai === currentBookingStatus;
             const sanBong = item.san_bong ? item.san_bong.TenSan.toLowerCase() : '';
             const cumSan = (item.san_bong && item.san_bong.cum_san) ? item.san_bong.cum_san.TenCumSan.toLowerCase() : '';
             const matchSearch = sanBong.includes(currentBookingSearch) || cumSan.includes(currentBookingSearch);
-            const matchDate = currentBookingDate ? (item.NgayDa === currentBookingDate) : true; // Lọc chính xác 1 ngày
+            const matchDate = currentBookingDate ? (item.NgayDa === currentBookingDate) : true;
 
             return matchStatus && matchSearch && matchDate;
         });
 
         if (filteredList.length === 0) {
-            container.innerHTML = `<div class="schedule-container" style="padding: 40px; text-align: center; background: white; border-radius: 12px;"><i class="fa-regular fa-calendar-xmark" style="font-size: 3rem; color: var(--border); margin-bottom: 16px;"></i><p style="color: var(--text-muted); font-size: 1.05rem;">Không có lịch đặt phong trào nào.</p></div>`;
+            container.innerHTML = `<div class="schedule-container" style="padding: 50px 20px; text-align: center; background: white; border-radius: 16px; border: 1px dashed #cbd5e1;"><i class="fa-regular fa-calendar-xmark" style="font-size: 3rem; color: #cbd5e1; margin-bottom: 14px;"></i><p style="color: var(--text-muted); font-size: 1rem; font-weight: 500;">Không có lịch đặt sân phong trào nào phù hợp.</p></div>`;
             return;
         }
 
@@ -2318,54 +2336,56 @@ function applyBookingFiltersAndRender() {
             const khungGio = item.khung_gio ? `${item.khung_gio.GioBatDau.substring(0,5)} - ${item.khung_gio.GioKetThuc.substring(0,5)}` : 'N/A';
             
             let actionHtml = '';
-            let cardClick = ''; // Sự kiện mở vé
-            let cursorStyle = 'default'; // Con trỏ chuột
+            let cardClick = '';
+            let cursorStyle = 'default';
+            let ticketHint = '';
 
             if (item.TrangThai === 'DaCoc') {
-                // Thêm event.stopPropagation() để bấm nút Hủy không bị mở vé
-                actionHtml = `<button class="btn-outline-sm cancel-booking-btn" onclick="event.stopPropagation(); openCancelModal(${item.ID})"><i class="fa-solid fa-ban"></i><span>Hủy sân</span></button>`;
+                actionHtml = `<button class="btn-outline-sm cancel-booking-btn" onclick="event.stopPropagation(); openCancelModal(${item.ID})"><i class="fa-solid fa-ban"></i><span>Hủy lịch đặt sân</span></button>`;
                 cardClick = `onclick="openTicketModal('phong_trao', ${item.ID})" title="Nhấn vào để xem Vé điện tử"`;
                 cursorStyle = 'pointer';
+                ticketHint = `<div style="margin-top: 10px; text-align: center; font-size: 0.78rem; color: var(--primary); font-weight: 600;"><i class="fa-solid fa-qrcode"></i> Bấm vào thẻ để xem Vé Điện Tử (#PT-${item.ID})</div>`;
             }
 
             html += `
-                <div ${cardClick} style="cursor: ${cursorStyle}; background: white; border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: var(--shadow-sm); transition: 0.2s;">
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                <div class="booking-item-card" ${cardClick} style="cursor: ${cursorStyle};">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px;">
                         <div>
-                            <h3 style="margin: 0 0 4px 0; font-size: 1.15rem; color: var(--text-dark);">${sanBong}</h3>
-                            <div style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-solid fa-location-dot"></i> ${cumSan}</div>
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                                <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: var(--text-dark);">${sanBong}</h3>
+                                <span style="font-family: monospace; font-size: 0.78rem; font-weight: 700; background: #f1f5f9; color: #475569; padding: 2px 7px; border-radius: 6px;">#PT-${item.ID}</span>
+                            </div>
+                            <div style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500;"><i class="fa-solid fa-location-dot" style="color: var(--primary); margin-right: 4px;"></i>${cumSan}</div>
                         </div>
                         ${renderBadge(item.TrangThai)}
                     </div>
-                    <div style="background: #f8fafc; border-radius: 8px; padding: 12px;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                            <span style="color: var(--text-muted); font-size: 0.9rem;">Ngày đá:</span>
-                            <strong style="color: var(--text-dark);">${formatDate(item.NgayDa)}</strong>
+                    <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 12px; padding: 14px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="color: var(--text-muted); font-size: 0.86rem;"><i class="fa-regular fa-calendar" style="width: 18px;"></i>Ngày thi đấu:</span>
+                            <strong style="color: var(--text-dark); font-size: 0.92rem;">${formatDate(item.NgayDa)}</strong>
                         </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                            <span style="color: var(--text-muted); font-size: 0.9rem;">Giờ đá:</span>
-                            <strong style="color: var(--primary);">${khungGio}</strong>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="color: var(--text-muted); font-size: 0.86rem;"><i class="fa-regular fa-clock" style="width: 18px;"></i>Khung giờ:</span>
+                            <strong style="color: var(--primary); font-size: 0.92rem;">${khungGio}</strong>
                         </div>
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="color: var(--text-muted); font-size: 0.9rem;">Đã cọc:</span>
-                            <strong style="color: #ea580c;">${Number(item.TienCoc).toLocaleString('vi-VN')}đ</strong>
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 8px; border-top: 1px dashed #e2e8f0;">
+                            <span style="color: var(--text-muted); font-size: 0.86rem;"><i class="fa-solid fa-coins" style="width: 18px;"></i>Tiền đã cọc:</span>
+                            <strong style="color: #ea580c; font-size: 0.98rem;">${Number(item.TienCoc).toLocaleString('vi-VN')}đ</strong>
                         </div>
                     </div>
+                    ${ticketHint}
                     ${actionHtml}
                 </div>
             `;
         });
         html += '</div>';
     } 
-    // ==========================================
     // LUỒNG 2: TAB GIẢI ĐẤU
-    // ==========================================
     else {
         const giaiDauMap = {};
 
-        // 1. Gom nhóm dữ liệu giải đấu
         allMyBookingsData.forEach(item => {
-            if (item.ID_GiaiDau === null) return; // Lọc bỏ phong trào
+            if (item.ID_GiaiDau === null) return;
 
             const sanBong = item.san_bong ? item.san_bong.TenSan.toLowerCase() : '';
             const cumSan = (item.san_bong && item.san_bong.cum_san) ? item.san_bong.cum_san.TenCumSan.toLowerCase() : '';
@@ -2373,15 +2393,15 @@ function applyBookingFiltersAndRender() {
             const matchSearch = sanBong.includes(currentBookingSearch) || cumSan.includes(currentBookingSearch) || tenGiai.includes(currentBookingSearch);
             const matchStatus = currentBookingStatus === 'All' || item.TrangThai === currentBookingStatus;
 
-            if (!matchSearch || !matchStatus) return; // Loại khung giờ không đạt tiêu chí Text/Status
+            if (!matchSearch || !matchStatus) return;
 
             if (!giaiDauMap[item.ID_GiaiDau]) {
                 giaiDauMap[item.ID_GiaiDau] = {
                     idGiaiDau: item.ID_GiaiDau,
                     tenGiaiDau: item.giai_dau ? item.giai_dau.TenGiaiDau : 'Giải đấu không xác định',
                     cumSan: (item.san_bong && item.san_bong.cum_san) ? item.san_bong.cum_san.TenCumSan : 'Cụm sân chưa xác định',
-                    ngayBatDau: item.giai_dau ? item.giai_dau.NgayBatDau : null, // Mốc Start Date của Toàn Giải
-                    ngayKetThuc: item.giai_dau ? item.giai_dau.NgayKetThuc : null, // Mốc End Date của Toàn Giải
+                    ngayBatDau: item.giai_dau ? item.giai_dau.NgayBatDau : null,
+                    ngayKetThuc: item.giai_dau ? item.giai_dau.NgayKetThuc : null,
                     matches: [],
                     totalCoc: 0,
                     canCancel: true 
@@ -2392,28 +2412,23 @@ function applyBookingFiltersAndRender() {
             if(item.TrangThai !== 'DaCoc') giaiDauMap[item.ID_GiaiDau].canCancel = false;
         });
 
-        // 2. Lọc mốc Ngày ở Cấp độ Thẻ Giải Đấu (Between Start and End Date)
         const validTournaments = Object.values(giaiDauMap).filter(gd => {
-            if (!currentBookingDate) return true; // Không chọn ngày -> Cho qua hết
+            if (!currentBookingDate) return true;
             if (!gd.ngayBatDau || !gd.ngayKetThuc) return false;
-            
-            // So sánh ngày chuỗi chuẩn YYYY-MM-DD
             return currentBookingDate >= gd.ngayBatDau && currentBookingDate <= gd.ngayKetThuc;
         });
 
         if (validTournaments.length === 0) {
-            container.innerHTML = `<div class="schedule-container" style="padding: 40px; text-align: center; background: white; border-radius: 12px;"><i class="fa-regular fa-calendar-xmark" style="font-size: 3rem; color: var(--border); margin-bottom: 16px;"></i><p style="color: var(--text-muted); font-size: 1.05rem;">Không tìm thấy giải đấu nào.</p></div>`;
+            container.innerHTML = `<div class="schedule-container" style="padding: 50px 20px; text-align: center; background: white; border-radius: 16px; border: 1px dashed #cbd5e1;"><i class="fa-regular fa-calendar-xmark" style="font-size: 3rem; color: #cbd5e1; margin-bottom: 14px;"></i><p style="color: var(--text-muted); font-size: 1rem; font-weight: 500;">Không tìm thấy lịch đặt giải đấu nào.</p></div>`;
             return;
         }
 
-        // 3. Render HTML Giải đấu
         validTournaments.forEach(gd => {
             let actionTourHtml = '';
             let cardClick = '';
             let cursorStyle = 'default';
 
             if (gd.canCancel) {
-                // Thêm event.stopPropagation()
                 actionTourHtml = `<button class="btn-cancel-tour" onclick="event.stopPropagation(); openCancelTourModal(${gd.idGiaiDau})"><i class="fa-solid fa-ban"></i><span>Hủy toàn bộ giải</span></button>`;
                 cardClick = `onclick="openTicketModal('giai_dau', ${gd.idGiaiDau})" title="Nhấn vào để xem Vé Tổng Giải Đấu"`;
                 cursorStyle = 'pointer';
@@ -2422,39 +2437,36 @@ function applyBookingFiltersAndRender() {
             }
 
             const thoiGianGiaiDau = (gd.ngayBatDau && gd.ngayKetThuc) 
-                ? `Thời gian diễn ra: <strong>${formatDate(gd.ngayBatDau)} - ${formatDate(gd.ngayKetThuc)}</strong>`
+                ? `Thời gian diễn ra: <strong style="color: #0f172a;">${formatDate(gd.ngayBatDau)} - ${formatDate(gd.ngayKetThuc)}</strong>`
                 : 'Thời gian: Đang cập nhật';
 
             const firstMatch = gd.matches[0];
             const trangThaiGiaiDauGoc = firstMatch && firstMatch.giai_dau ? firstMatch.giai_dau.TrangThai : '';
             
             let statusBadgeHtml = '';
-
             if (trangThaiGiaiDauGoc === 'HetHan') {
                 if (gd.ngayBatDau && gd.ngayKetThuc) {
                     const today = new Date();
-                    today.setHours(0, 0, 0, 0); // Đưa về mốc 0h để so sánh ngày
-                    
+                    today.setHours(0, 0, 0, 0);
                     const startDate = new Date(gd.ngayBatDau);
                     startDate.setHours(0, 0, 0, 0);
-                    
                     const endDate = new Date(gd.ngayKetThuc);
-                    endDate.setHours(23, 59, 59, 999); // Đưa về cuối ngày
+                    endDate.setHours(23, 59, 59, 999);
 
                     if (today >= startDate && today <= endDate) {
-                        statusBadgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: #d1fae5; color: #047857; margin-left: 10px;">Đang diễn ra</span>`;
+                        statusBadgeHtml = `<span style="padding: 4px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; background: #d1fae5; color: #047857; margin-left: 10px;">Đang diễn ra</span>`;
                     } else if (today < startDate) {
-                        statusBadgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: #fef3c7; color: #b45309; margin-left: 10px;">Sắp diễn ra</span>`;
+                        statusBadgeHtml = `<span style="padding: 4px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; background: #fef3c7; color: #b45309; margin-left: 10px;">Sắp diễn ra</span>`;
                     } else {
-                        statusBadgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: #e2e8f0; color: #475569; margin-left: 10px;">Đã kết thúc</span>`;
+                        statusBadgeHtml = `<span style="padding: 4px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; background: #e2e8f0; color: #475569; margin-left: 10px;">Đã kết thúc</span>`;
                     }
                 }
             } else if (trangThaiGiaiDauGoc === 'HoanThanh') {
-                statusBadgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: #dbeafe; color: #1d4ed8; margin-left: 10px;">Đã hoàn thành</span>`;
+                statusBadgeHtml = `<span style="padding: 4px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; background: #dbeafe; color: #1d4ed8; margin-left: 10px;">Đã hoàn thành</span>`;
             } else if (trangThaiGiaiDauGoc === 'DaHuy' || trangThaiGiaiDauGoc === 'TuChoi') {
-                statusBadgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: #fee2e2; color: #b91c1c; margin-left: 10px;">Đã hủy</span>`;
+                statusBadgeHtml = `<span style="padding: 4px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; background: #fee2e2; color: #b91c1c; margin-left: 10px;">Đã hủy</span>`;
             } else {
-                 statusBadgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: #f3f4f6; color: #6b7280; margin-left: 10px;">Đang chờ</span>`;
+                statusBadgeHtml = `<span style="padding: 4px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; background: #f3f4f6; color: #6b7280; margin-left: 10px;">Đang chờ</span>`;
             }
 
             gd.matches.sort((a, b) => {
@@ -2463,7 +2475,6 @@ function applyBookingFiltersAndRender() {
                 return timeA - timeB;
             });
 
-            // Xây dựng danh sách hàng (Chỉ hiện 4 dòng đầu)
             let rowsHtml = '';
             gd.matches.forEach((m, index) => {
                 const timeStr = m.khung_gio ? `${m.khung_gio.GioBatDau.substring(0,5)} - ${m.khung_gio.GioKetThuc.substring(0,5)}` : '';
@@ -2474,14 +2485,13 @@ function applyBookingFiltersAndRender() {
                 rowsHtml += `
                 <tr class="${rowClass}" style="${displayStyle}">
                     <td style="text-align: center;"><strong>${m.san_bong ? m.san_bong.TenSan : ''}</strong><br><span style="font-size: 0.8rem; color: var(--text-muted);">${m.san_bong && m.san_bong.cum_san ? m.san_bong.cum_san.TenCumSan : ''}</span></td>
-                    <td style="text-align: center;">${formatDate(m.NgayDa)}</td>
+                    <td style="text-align: center; font-weight: 500;">${formatDate(m.NgayDa)}</td>
                     <td style="text-align: center;"><strong style="color: var(--primary);">${timeStr}</strong></td>
-                    <td style="text-align: center;">${Number(m.TienCoc).toLocaleString('vi-VN')}đ</td>
+                    <td style="text-align: center; font-weight: 700; color: #ea580c;">${Number(m.TienCoc).toLocaleString('vi-VN')}đ</td>
                 </tr>
                 `;
             });
 
-            // Xây dựng nút chức năng mở rộng nếu có > 4 trận
             let toggleBtnHtml = '';
             if (gd.matches.length > 4) {
                 toggleBtnHtml = `
@@ -2494,18 +2504,22 @@ function applyBookingFiltersAndRender() {
             }
 
             html += `
-                <div ${cardClick} style="cursor: ${cursorStyle}; background: white; border: 1px solid var(--border); border-left: 4px solid #4338ca; border-radius: 12px; padding: 20px; margin-bottom: 24px; box-shadow: var(--shadow-sm);">
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; border-bottom: 1px dashed var(--border); padding-bottom: 16px;">
+                <div class="booking-item-card" ${cardClick} style="cursor: ${cursorStyle}; border-left: 5px solid #4338ca; padding: 22px; margin-bottom: 24px;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; border-bottom: 1px dashed var(--border); padding-bottom: 16px; flex-wrap: wrap; gap: 14px;">
                         <div>
-                            <h3 style="margin: 0 0 6px 0; font-size: 1.25rem; color: #4338ca; display: flex; align-items: center;"><i class="fa-solid fa-trophy" style="margin-right: 8px;"></i> Giải đấu: ${gd.tenGiaiDau} ${statusBadgeHtml}</h3>
-                            <div style="font-size: 0.95rem; color: var(--text-dark); margin-bottom: 4px; font-weight: 500;"><i class="fa-solid fa-location-dot" style="color: var(--primary);"></i> ${gd.cumSan}</div>
-                            <div style="font-size: 0.95rem; color: var(--text-muted); margin-bottom: 4px;">${thoiGianGiaiDau}</div>
-                            <div style="font-size: 0.95rem; color: var(--text-muted);">Tổng số trận: <strong>${gd.matches.length}</strong> | Tổng cọc: <strong style="color: #ea580c;">${gd.totalCoc.toLocaleString('vi-VN')}đ</strong></div>
+                            <h3 style="margin: 0 0 8px 0; font-size: 1.25rem; font-weight: 800; color: #312e81; display: flex; align-items: center; flex-wrap: wrap;">
+                                <i class="fa-solid fa-trophy" style="margin-right: 8px; color: #4338ca;"></i> Giải đấu: ${gd.tenGiaiDau} ${statusBadgeHtml}
+                            </h3>
+                            <div style="display: flex; flex-wrap: wrap; gap: 18px; font-size: 0.9rem; color: var(--text-muted); margin-top: 6px;">
+                                <span><i class="fa-solid fa-location-dot" style="color: var(--primary);"></i> <strong style="color: var(--text-dark);">${gd.cumSan}</strong></span>
+                                <span><i class="fa-regular fa-calendar"></i> ${thoiGianGiaiDau}</span>
+                                <span><i class="fa-solid fa-futbol"></i> Số trận: <strong style="color: #0f172a;">${gd.matches.length}</strong> | Tổng cọc: <strong style="color: #ea580c;">${gd.totalCoc.toLocaleString('vi-VN')}đ</strong></span>
+                            </div>
                         </div>
                         ${actionTourHtml}
                     </div>
                     
-                    <div class="table-responsive" style="border: 1px solid var(--border); border-radius: 8px; overflow: hidden;">
+                    <div class="table-responsive" style="border: 1px solid var(--border); border-radius: 12px; overflow: hidden;">
                         <table class="admin-table" style="font-size: 0.9rem; margin: 0; min-width: 100%; border: none;">
                             <thead style="background: #f8fafc;">
                                 <tr>
@@ -2886,28 +2900,31 @@ async function renderRequests(activeTab = 'giai_dau') {
     updateActiveNav('renderRequests');
     currentClusterId = null;
 
-    const activeStyle = "padding: 10px 16px; border-bottom: 2px solid var(--primary); color: var(--primary); font-weight: 600; background: none; border-top: none; border-left: none; border-right: none; cursor: pointer;";
-    const inactiveStyle = "padding: 10px 16px; color: var(--text-muted); background: none; font-weight: 500; border: none; cursor: pointer;";
+    const activeStyle = "padding: 10px 20px; border-radius: 10px; background: var(--primary); color: #ffffff; font-weight: 700; font-size: 0.9rem; border: none; cursor: pointer; box-shadow: 0 2px 6px rgba(22, 163, 74, 0.25); transition: all 0.2s;";
+    const inactiveStyle = "padding: 10px 20px; border-radius: 10px; color: #475569; background: transparent; font-weight: 600; font-size: 0.9rem; border: none; cursor: pointer; transition: all 0.2s;";
 
     appContent.innerHTML = `
-        <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 16px;">
+        <div class="page-header" style="padding: 22px 28px; border-radius: 18px; background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%); border: 1px solid #bbf7d0; border-left: 5px solid var(--primary); box-shadow: var(--shadow-sm); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 22px;">
             <div>
-                <h1 class="page-title">Quản lý Yêu cầu</h1>
-                <p class="page-subtitle">Theo dõi các đơn xin tổ chức giải đấu, hủy sân gấp và rút tiền</p>
+                <div style="font-size: 0.76rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 4px;">
+                    <i class="fa-solid fa-file-signature"></i> Hỗ trợ & Tổ chức sự kiện
+                </div>
+                <h1 class="page-title" style="margin-bottom: 4px;">Quản lý Yêu cầu</h1>
+                <p class="page-subtitle">Theo dõi tiến độ phê duyệt các đơn đăng ký tổ chức giải đấu và yêu cầu hủy sân gấp</p>
             </div>
             
             <div>
-                ${activeTab === 'giai_dau' ? `<button class="btn-primary" onclick="openCreateTournamentModal()" style="display: flex; align-items: center; gap: 8px;"><i class="fa-solid fa-plus"></i> Tạo Yêu cầu Giải đấu</button>` : ''}
-                ${activeTab === 'huy_san' ? `<button class="btn-primary" onclick="openUrgentCancelModal()" style="display: flex; align-items: center; gap: 8px;"><i class="fa-solid fa-plus"></i> Tạo Yêu cầu Hủy Gấp</button>` : ''}
+                ${activeTab === 'giai_dau' ? `<button class="btn-primary" onclick="openCreateTournamentModal()" style="display: flex; align-items: center; gap: 8px; padding: 11px 20px;"><i class="fa-solid fa-plus"></i> Tạo Yêu cầu Giải đấu</button>` : ''}
+                ${activeTab === 'huy_san' ? `<button class="btn-primary" onclick="openUrgentCancelModal()" style="display: flex; align-items: center; gap: 8px; padding: 11px 20px;"><i class="fa-solid fa-plus"></i> Tạo Yêu cầu Hủy Gấp</button>` : ''}
             </div>
         </div>
 
-        <div style="display: flex; gap: 16px; margin-bottom: 20px; border-bottom: 1px solid var(--border);">
-            <button style="${activeTab === 'giai_dau' ? activeStyle : inactiveStyle}" onclick="renderRequests('giai_dau')">Giải đấu</button>
-            <button style="${activeTab === 'huy_san' ? activeStyle : inactiveStyle}" onclick="renderRequests('huy_san')">Hủy sân gấp</button>
+        <div style="display: inline-flex; gap: 8px; margin-bottom: 20px; background: #dceee3; padding: 5px; border-radius: 12px; border: 1px solid #c3dfd0;">
+            <button style="${activeTab === 'giai_dau' ? activeStyle : inactiveStyle}" onclick="renderRequests('giai_dau')"><i class="fa-solid fa-trophy" style="margin-right: 6px;"></i>Yêu cầu Giải đấu</button>
+            <button style="${activeTab === 'huy_san' ? activeStyle : inactiveStyle}" onclick="renderRequests('huy_san')"><i class="fa-solid fa-calendar-xmark" style="margin-right: 6px;"></i>Yêu cầu Hủy sân gấp</button>
         </div>
 
-        <div id="requests-content-body" class="schedule-container" style="padding: 20px; text-align: center; background: var(--bg-white); border-radius: 12px; box-shadow: var(--shadow-sm);">
+        <div id="requests-content-body" class="schedule-container" style="padding: 24px; text-align: center; background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(8px); border-radius: 16px; box-shadow: var(--shadow-sm); border: 1px solid var(--border); margin-top: 0;">
             <i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem; color: var(--primary);"></i>
         </div>
     `;
@@ -2916,7 +2933,6 @@ async function renderRequests(activeTab = 'giai_dau') {
 
     if (activeTab === 'giai_dau') {
         try {
-            // Cần tạo API Backend cho route này sau
             const response = await fetch(`${API_BASE_URL}/giai-dau/cua-toi`);
             if (!response.ok) throw new Error('API chưa sẵn sàng');
             
@@ -2925,85 +2941,69 @@ async function renderRequests(activeTab = 'giai_dau') {
 
             if (list.length === 0) {
                 container.innerHTML = `
-                    <div style="padding: 40px;">
-                        <i class="fa-regular fa-folder-open" style="font-size: 3rem; color: var(--border); margin-bottom: 16px;"></i>
-                        <p style="color: var(--text-muted); font-size: 1.05rem;">Bạn chưa có yêu cầu tổ chức giải đấu nào.</p>
+                    <div style="padding: 50px 20px;">
+                        <i class="fa-regular fa-folder-open" style="font-size: 3.2rem; color: #cbd5e1; margin-bottom: 14px;"></i>
+                        <p style="color: var(--text-muted); font-size: 1rem; font-weight: 500;">Bạn chưa gửi yêu cầu tổ chức giải đấu nào.</p>
                     </div>`;
             } else {
-                // Thiết lập max-height tạo Scroll dọc chứa khoảng 4-5 item
-                let html = `<div style="display: flex; flex-direction: column; gap: 12px; max-height: 480px; overflow-y: auto; padding-right: 8px; text-align: left;">`;
+                let html = `<div style="display: flex; flex-direction: column; gap: 14px; max-height: 520px; overflow-y: auto; padding-right: 6px; text-align: left;">`;
                 
                 list.forEach(item => {
-                    // 1. Tạo từ điển dịch trạng thái
                     const statusTextMap = {
                         'ChoDuyet': 'Chờ duyệt',
                         'DaDuyet': 'Đã duyệt',
                         'TuChoi': 'Từ chối',
-                        'HetHan': 'Hết hạn',
+                        'HetHan': 'Đã chốt lịch / Hết hạn',
                         'HoanThanh': 'Hoàn thành',
                         'DaHuy': 'Đã hủy'
                     };
-                    
-                    // Lấy trạng thái tiếng Việt (nếu mã không khớp sẽ giữ nguyên gốc)
                     const viStatus = statusTextMap[item.TrangThai] || item.TrangThai;
 
-                    let badgeColor = '#6b7280', badgeBg = '#f3f4f6'; 
-                    if(item.TrangThai === 'DaDuyet') { badgeColor = '#047857'; badgeBg = '#d1fae5'; }
-                    else if(item.TrangThai === 'TuChoi' || item.TrangThai === 'DaHuy') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; }
-                    else if(item.TrangThai === 'ChoDuyet') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; }
-                    else if(item.TrangThai === 'HetHan') { badgeColor = '#9ca3af'; badgeBg = '#f3f4f6'; }
-                    else if(item.TrangThai === 'HoanThanh') { badgeColor = '#2563eb'; badgeBg = '#dbeafe'; }
+                    let badgeColor = '#475569', badgeBg = '#f1f5f9', borderLeftColor = '#cbd5e1'; 
+                    if(item.TrangThai === 'DaDuyet') { badgeColor = '#047857'; badgeBg = '#d1fae5'; borderLeftColor = '#10b981'; }
+                    else if(item.TrangThai === 'TuChoi' || item.TrangThai === 'DaHuy') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; borderLeftColor = '#ef4444'; }
+                    else if(item.TrangThai === 'ChoDuyet') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; borderLeftColor = '#f59e0b'; }
+                    else if(item.TrangThai === 'HetHan') { badgeColor = '#475569'; badgeBg = '#f1f5f9'; borderLeftColor = '#94a3b8'; }
+                    else if(item.TrangThai === 'HoanThanh') { badgeColor = '#1d4ed8'; badgeBg = '#dbeafe'; borderLeftColor = '#3b82f6'; }
 
-                    // 1. Xử lý logic tính ngày duyệt và ngày hết hạn (duyệt + 3 ngày)
                     let approvalInfoHtml = '';
-                    
                     if (item.TrangThai === 'DaDuyet' && item.NgayDuyet) {
                         const d = new Date(item.NgayDuyet);
-                        
-                        // Tạo biến dExp và cộng thêm 3 ngày
                         const dExp = new Date(d);
                         dExp.setDate(d.getDate() + 3);
-                        
-                        // Hàm format ngày định dạng YYYY-MM-DD an toàn theo giờ Local
                         const pad = n => n < 10 ? '0' + n : n;
                         const fApprove = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
                         const fExp = `${dExp.getFullYear()}-${pad(dExp.getMonth() + 1)}-${pad(dExp.getDate())}`;
 
-                        // Tạo khối HTML hiển thị riêng
                         approvalInfoHtml = `
-                            <p style="margin: 6px 0 0 0; font-size: 0.9rem; color: #047857;">
-                                <i class="fa-solid fa-calendar-check"></i> Ngày duyệt: <strong>${fApprove}</strong> 
-                                <span style="margin-left: 15px; color: #b91c1c;">
-                                    <i class="fa-solid fa-hourglass-half"></i> Ngày hết hạn: <strong>${fExp}</strong>
-                                </span>
-                            </p>
+                            <div style="margin-top: 10px; padding: 8px 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; font-size: 0.86rem; color: #047857; display: inline-flex; flex-wrap: wrap; gap: 16px;">
+                                <span><i class="fa-solid fa-calendar-check"></i> Ngày duyệt: <strong>${fApprove}</strong></span>
+                                <span style="color: #b91c1c;"><i class="fa-solid fa-hourglass-half"></i> Hạn đặt sân: <strong>${fExp}</strong></span>
+                            </div>
                         `;
                     } else if (item.TrangThai === 'TuChoi' && item.LyDoHuy) {
-                        // Bổ sung khối hiển thị Lý do hủy
                         approvalInfoHtml = `
-                            <div style="margin-top: 8px; padding: 8px 12px; font-size: 0.85rem; color: #b91c1c; background: #fef2f2; border-radius: 6px; border: 1px dashed #fca5a5;">
+                            <div style="margin-top: 10px; padding: 9px 14px; font-size: 0.86rem; color: #b91c1c; background: #fef2f2; border-radius: 8px; border: 1px dashed #fca5a5;">
                                 <i class="fa-solid fa-circle-exclamation"></i> Lý do từ chối: <strong>${item.LyDoHuy}</strong>
                             </div>
                         `;
                     }
 
-                    // 2. Chèn biến approvalInfoHtml vào cấu trúc HTML
                     html += `
-                        <div style="border: 1px solid var(--border); border-radius: 8px; padding: 16px; background: #fff; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                            <div>
-                                <h4 style="margin: 0 0 8px 0; color: var(--text-dark); font-size: 1.1rem;">${item.TenGiaiDau}</h4>
-                                <p style="margin: 0 0 6px 0; font-size: 0.9rem; color: var(--text-muted);">
-                                    <i class="fa-regular fa-calendar"></i> Lịch đá: ${item.NgayBatDau} đến ${item.NgayKetThuc}
-                                </p>
-                                <p style="margin: 0; font-size: 0.9rem; color: var(--text-muted);">
-                                    <i class="fa-solid fa-location-dot"></i> Cụm sân: <strong style="color:var(--text-dark);">${item.cum_san ? item.cum_san.TenCumSan : 'Không xác định'}</strong>
-                                    <span style="margin-left: 10px; font-size: 0.8rem;">(Ngày nộp: ${item.NgayTao ? item.NgayTao.substring(0,10) : 'N/A'})</span>
-                                </p>
-                                <!-- Dòng thông tin phê duyệt sẽ chỉ hiện ra nếu được duyệt -->
+                        <div class="request-item-card" style="border-left: 4px solid ${borderLeftColor};">
+                            <div style="flex: 1;">
+                                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                                    <h4 style="margin: 0; color: var(--text-dark); font-size: 1.12rem; font-weight: 800;">${item.TenGiaiDau}</h4>
+                                    <span style="font-size: 0.78rem; color: #64748b; background: #f8fafc; border: 1px solid #e2e8f0; padding: 2px 8px; border-radius: 6px;">Ngày nộp: ${item.NgayTao ? item.NgayTao.substring(0,10) : 'N/A'}</span>
+                                </div>
+                                <div style="display: flex; flex-wrap: wrap; gap: 18px; font-size: 0.9rem; color: var(--text-muted);">
+                                    <span><i class="fa-solid fa-location-dot" style="color: var(--primary);"></i> Cụm sân: <strong style="color:var(--text-dark);">${item.cum_san ? item.cum_san.TenCumSan : 'Không xác định'}</strong></span>
+                                    <span><i class="fa-regular fa-calendar" style="color: #3b82f6;"></i> Lịch giải: <strong style="color: var(--text-dark);">${item.NgayBatDau}</strong> đến <strong style="color: var(--text-dark);">${item.NgayKetThuc}</strong></span>
+                                </div>
                                 ${approvalInfoHtml}
                             </div>
                             <div>
-                                <span style="padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${viStatus}</span>
+                                <span style="padding: 6px 14px; border-radius: 999px; font-size: 0.82rem; font-weight: 700; background: ${badgeBg}; color: ${badgeColor}; white-space: nowrap; display: inline-block;">${viStatus}</span>
                             </div>
                         </div>
                     `;
@@ -3021,51 +3021,54 @@ async function renderRequests(activeTab = 'giai_dau') {
             const list = res.data || [];
 
             if (list.length === 0) {
-                container.innerHTML = `<div style="padding: 40px;"><i class="fa-regular fa-calendar-xmark" style="font-size: 3rem; color: var(--border); margin-bottom: 16px;"></i><p style="color: var(--text-muted); font-size: 1.05rem;">Bạn chưa có yêu cầu hủy sân gấp nào.</p></div>`;
+                container.innerHTML = `<div style="padding: 50px 20px;"><i class="fa-regular fa-calendar-xmark" style="font-size: 3.2rem; color: #cbd5e1; margin-bottom: 14px;"></i><p style="color: var(--text-muted); font-size: 1rem; font-weight: 500;">Bạn chưa có yêu cầu hủy sân gấp nào.</p></div>`;
             } else {
-                let html = `<div style="display: flex; flex-direction: column; gap: 12px; max-height: 480px; overflow-y: auto; padding-right: 8px; text-align: left;">`;
+                let html = `<div style="display: flex; flex-direction: column; gap: 14px; max-height: 520px; overflow-y: auto; padding-right: 6px; text-align: left;">`;
                 list.forEach(item => {
-                    let badgeColor = '#b45309', badgeBg = '#fef3c7', statusText = 'Chờ duyệt';
-                    if(item.TrangThai === 'DaDuyet') { badgeColor = '#047857'; badgeBg = '#d1fae5'; statusText = 'Đã duyệt'; }
-                    if(item.TrangThai === 'TuChoi') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; statusText = 'Từ chối'; }
+                    let badgeColor = '#b45309', badgeBg = '#fef3c7', borderLeftColor = '#f59e0b', statusText = 'Chờ duyệt';
+                    if(item.TrangThai === 'DaDuyet') { badgeColor = '#047857'; badgeBg = '#d1fae5'; borderLeftColor = '#10b981'; statusText = 'Đã duyệt'; }
+                    if(item.TrangThai === 'TuChoi') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; borderLeftColor = '#ef4444'; statusText = 'Từ chối'; }
 
                     const sanBong = item.dat_san && item.dat_san.san_bong ? item.dat_san.san_bong.TenSan : 'Sân không xác định';
                     const cumSan = item.dat_san && item.dat_san.san_bong && item.dat_san.san_bong.cum_san ? item.dat_san.san_bong.cum_san.TenCumSan : '';
                     const khungGio = item.dat_san && item.dat_san.khung_gio ? `${item.dat_san.khung_gio.GioBatDau.substring(0,5)} - ${item.dat_san.khung_gio.GioKetThuc.substring(0,5)}` : '';
                     
-                    // Format ngày an toàn
                     let dateStr = '';
                     if (item.dat_san && item.dat_san.NgayDa) {
-                        const d = new Date(item.NgayTao); // Đưa chuỗi vào Date để nhận diện múi giờ
-                        const pad = n => n < 10 ? '0' + n : n;
-                        // Format lại thành: YYYY-MM-DD HH:mm
-                        dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                        const parts = item.dat_san.NgayDa.split('-');
+                        dateStr = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : item.dat_san.NgayDa;
                     }
                     
                     const isGiaiDau = item.dat_san && item.dat_san.ID_GiaiDau != null;
-                    const loaiTag = isGiaiDau ? `<span style="font-size: 0.7rem; background: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: 4px; margin-left: 8px;"><i class="fa-solid fa-trophy"></i> Giải đấu</span>` : `<span style="font-size: 0.7rem; background: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">Phong trào</span>`;
+                    const loaiTag = isGiaiDau 
+                        ? `<span style="font-size: 0.74rem; font-weight: 700; background: #e0e7ff; color: #4338ca; padding: 3px 9px; border-radius: 999px; margin-left: 8px;"><i class="fa-solid fa-trophy"></i> Giải đấu</span>` 
+                        : `<span style="font-size: 0.74rem; font-weight: 700; background: #f1f5f9; color: #475569; padding: 3px 9px; border-radius: 999px; margin-left: 8px;">Phong trào</span>`;
 
                     let rejectReasonHtml = '';
                     if (item.TrangThai === 'TuChoi' && item.LyDoHuy) {
                         rejectReasonHtml = `
-                            <div style="margin-top: 8px; padding: 8px 12px; font-size: 0.85rem; color: #b91c1c; background: #fef2f2; border-radius: 6px; border: 1px dashed #fca5a5;">
+                            <div style="margin-top: 10px; padding: 9px 14px; font-size: 0.86rem; color: #b91c1c; background: #fef2f2; border-radius: 8px; border: 1px dashed #fca5a5;">
                                 <i class="fa-solid fa-circle-exclamation"></i> Lý do từ chối: <strong>${item.LyDoHuy}</strong>
                             </div>
                         `;
                     }
 
                     html += `
-                        <div style="border: 1px solid var(--border); border-radius: 8px; padding: 16px; background: #fff; display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
-                            <div>
-                                <h4 style="margin: 0 0 8px 0; color: var(--text-dark); font-size: 1.1rem;">${sanBong} ${loaiTag}</h4>
-                                <p style="margin: 0 0 6px 0; font-size: 0.9rem; color: var(--text-muted);"><i class="fa-solid fa-location-dot"></i> Cụm sân: ${cumSan}</p>
-                                <p style="margin: 0 0 6px 0; font-size: 0.9rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> Lịch đá: <strong style="color: var(--primary);">${khungGio}</strong> ngày <strong>${dateStr}</strong></p>
-                                <p style="margin: 0 0 6px 0; font-size: 0.9rem; color: var(--text-muted);">Lý do: <span style="font-style: italic;">"${item.NoiDung}"</span></p>
-                                <p style="margin: 0; font-size: 0.8rem; color: #94a3b8;">Ngày gửi: ${item.NgayTao ? item.NgayTao.substring(0, 16).replace('T', ' ') : ''}</p>
+                        <div class="request-item-card" style="border-left: 4px solid ${borderLeftColor};">
+                            <div style="flex: 1;">
+                                <h4 style="margin: 0 0 8px 0; color: var(--text-dark); font-size: 1.1rem; font-weight: 800; display: flex; align-items: center;">${sanBong} ${loaiTag}</h4>
+                                <div style="display: flex; flex-wrap: wrap; gap: 16px; font-size: 0.9rem; color: var(--text-muted); margin-bottom: 8px;">
+                                    <span><i class="fa-solid fa-location-dot" style="color: var(--primary);"></i> Cụm sân: <strong style="color: var(--text-dark);">${cumSan}</strong></span>
+                                    <span><i class="fa-regular fa-clock" style="color: var(--primary);"></i> Ca đá: <strong style="color: var(--primary);">${khungGio}</strong> (${dateStr})</span>
+                                </div>
+                                <div style="background: #f8fafc; padding: 8px 12px; border-radius: 8px; border: 1px solid #f1f5f9; font-size: 0.88rem; color: #334155; margin-bottom: 6px;">
+                                    <span style="color: #64748b;">Lý do xin hủy:</span> <span style="font-style: italic; font-weight: 500;">"${item.NoiDung}"</span>
+                                </div>
+                                <p style="margin: 0; font-size: 0.78rem; color: #94a3b8;"><i class="fa-regular fa-paper-plane"></i> Thời gian gửi: ${item.NgayTao ? item.NgayTao.substring(0, 16).replace('T', ' ') : ''}</p>
                                 ${rejectReasonHtml}
                             </div>
                             <div>
-                                <span style="padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${statusText}</span>
+                                <span style="padding: 6px 14px; border-radius: 999px; font-size: 0.82rem; font-weight: 700; background: ${badgeBg}; color: ${badgeColor}; white-space: nowrap; display: inline-block;">${statusText}</span>
                             </div>
                         </div>
                     `;
@@ -3228,7 +3231,7 @@ window.addEventListener('click', function(e) {
 // MODULE: QUẢN LÝ VÍ & VNPAY
 // ======================================================
 
-// 1. Render Giao diện Ví
+// 1. Render Giao diện Ví (Giữ nguyên 100% Thẻ Số dư khả dụng của bạn)
 async function renderWallet(statusMessage = null, isSuccess = true) {
     updateActiveNav('renderWallet'); 
     currentClusterId = null;
@@ -3238,24 +3241,26 @@ async function renderWallet(statusMessage = null, isSuccess = true) {
     const user = JSON.parse(sessionStorage.getItem('dn_football_user'));
     const balance = Number(user?.SoDuVi || 0).toLocaleString('vi-VN') + 'đ';
 
-    // Tạo HTML thông báo nếu có redirect từ VNPay về
     let alertHtml = '';
     if (statusMessage) {
         const alertClass = isSuccess ? 'success' : 'error';
-        alertHtml = `<div id="wallet-page-alert" class="modal-alert ${alertClass}" style="display: block; margin-bottom: 20px; font-weight: 500;">${statusMessage}</div>`;
+        alertHtml = `<div id="wallet-page-alert" class="modal-alert ${alertClass}" style="display: block; margin: 0 0 20px 0; font-weight: 600;">${statusMessage}</div>`;
     }
 
     appContent.innerHTML = `
-        <div class="page-header" style="margin-bottom: 30px;">
-            <h1 class="page-title">Quản lý Tài chính</h1>
-            <p class="page-subtitle">Ví điện tử và lịch sử giao dịch cá nhân</p>
+        <div class="page-header" style="margin-bottom: 26px; padding: 22px 28px; border-radius: 18px; background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%); border: 1px solid #bbf7d0; border-left: 5px solid var(--primary); box-shadow: var(--shadow-sm);">
+            <div style="font-size: 0.76rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 4px;">
+                <i class="fa-solid fa-wallet"></i> Ví điện tử DN Football
+            </div>
+            <h1 class="page-title" style="margin-bottom: 4px;">Quản lý Tài chính</h1>
+            <p class="page-subtitle">Ví điện tử cá nhân và sao kê chi tiết lịch sử biến động số dư</p>
         </div>
 
         ${alertHtml}
 
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 30px;">
-            <!-- Cột trái: Thẻ Ví dạng Fintech -->
-            <div>
+        <div style="display: grid; grid-template-columns: 380px 1fr; gap: 28px; align-items: start;">
+            <!-- Cột trái: Giữ nguyên 100% Thẻ Số dư khả dụng -->
+            <div style="display: flex; flex-direction: column; gap: 18px;">
                 <div style="background: linear-gradient(135deg, var(--primary) 0%, #047857 100%); border-radius: 20px; padding: 30px; color: white; box-shadow: 0 15px 30px rgba(16, 185, 129, 0.25); position: relative; overflow: hidden;">
                     <!-- Decor vòng tròn -->
                     <div style="position: absolute; top: -30px; right: -30px; width: 150px; height: 150px; background: rgba(255,255,255,0.1); border-radius: 50%;"></div>
@@ -3278,21 +3283,40 @@ async function renderWallet(statusMessage = null, isSuccess = true) {
                         </button>
                     </div>
                 </div>
+
+                <!-- Khung tiện ích thông tin bổ trợ bên dưới thẻ Ví -->
+                <div style="background: #ffffff; border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px; box-shadow: var(--shadow-sm);">
+                    <div style="font-size: 0.85rem; font-weight: 700; color: #0f172a; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                        <i class="fa-solid fa-shield-check" style="color: var(--primary);"></i> Thông tin giao dịch an toàn
+                    </div>
+                    <div style="font-size: 0.83rem; color: #64748b; line-height: 1.6;">
+                        <div style="margin-bottom: 6px;">&bull; <strong>Nạp tiền:</strong> Cộng số dư tức thì qua cổng VNPay (tối thiểu 10.000đ).</div>
+                        <div>&bull; <strong>Hoàn cọc tự động:</strong> Tiền cọc hủy sân hợp lệ được cộng trả trực tiếp vào ví 100%.</div>
+                    </div>
+                </div>
             </div>
 
-            <!-- Cột phải: Lịch sử giao dịch (Có bộ lọc) -->
-            <div style="background: white; border-radius: 20px; padding: 24px; box-shadow: var(--shadow-sm); border: 1px solid var(--border); display: flex; flex-direction: column;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                    <h3 style="margin: 0; font-size: 1.25rem; color: var(--text-dark); display: flex; align-items: center; gap: 8px;">
-                        Lịch sử giao dịch
-                        <i class="fa-solid fa-clock-rotate-left" style="color: #000000; font-size: 1.1rem;"></i>
-                    </h3>
-                    <!-- Input chọn ngày để lọc -->
-                    <input type="date" id="tx-date-filter" class="form-control" style="width: auto; padding: 6px 12px; font-size: 0.9rem; border-radius: 8px;" onchange="loadTransactionHistory(this.value)">
+            <!-- Cột phải: Lịch sử giao dịch nâng cấp -->
+            <div style="background: white; border-radius: 20px; padding: 24px 26px; box-shadow: var(--shadow-sm); border: 1px solid var(--border); display: flex; flex-direction: column;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; padding-bottom: 18px; margin-bottom: 18px; border-bottom: 1px solid #f1f5f9;">
+                    <div>
+                        <h3 style="margin: 0; font-size: 1.2rem; font-weight: 800; color: var(--text-dark); display: flex; align-items: center; gap: 10px;">
+                            <span style="width: 34px; height: 34px; border-radius: 10px; background: #f0fdf4; color: var(--primary); display: inline-flex; align-items: center; justify-content: center; font-size: 0.95rem;">
+                                <i class="fa-solid fa-clock-rotate-left"></i>
+                            </span>
+                            Lịch sử biến động số dư
+                        </h3>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <input type="date" id="tx-date-filter" class="form-control" style="width: auto; height: 38px; padding: 0 12px; font-size: 0.88rem; border-radius: 9px; background: #f8fafc; cursor: pointer;" onchange="loadTransactionHistory(this.value)">
+                        <button type="button" class="btn-outline-sm" style="height: 38px; padding: 0 12px; border-radius: 9px;" onclick="document.getElementById('tx-date-filter').value=''; loadTransactionHistory('')" title="Xem tất cả ngày">
+                            Tất cả
+                        </button>
+                    </div>
                 </div>
                 
                 <div id="transaction-list" style="flex: 1;">
-                    <div style="text-align:center; padding: 20px;"><i class="fa-solid fa-spinner fa-spin text-primary"></i> Đang tải dữ liệu...</div>
+                    <div style="text-align:center; padding: 30px;"><i class="fa-solid fa-spinner fa-spin" style="color: var(--primary); font-size: 1.5rem;"></i></div>
                 </div>
             </div>
         </div>
@@ -3311,42 +3335,28 @@ async function renderWallet(statusMessage = null, isSuccess = true) {
     }
 }
 
-// Hàm hỗ trợ render thông báo tại thẻ ví mà không cần load lại trang
-function showWalletAlert(message, isSuccess) {
-    renderWallet(message, isSuccess);
-}
-
-// 2. Load API Lịch sử giao dịch (Có tham số bộ lọc ngày)
+// 2. Load API Lịch sử giao dịch
 async function loadTransactionHistory(filterDate = '') {
     const listContainer = document.getElementById('transaction-list');
     try {
-        // GỌI API THẬT TỪ BACKEND
         const response = await fetch(`${API_BASE_URL}/giao-dich/cua-toi`);
         const data = await response.json();
         
-        // Kiểm tra nếu API trả về không thành công
         if (!data.success) throw new Error('API Error');
 
         let transactions = data.data || [];
 
-        // 1. Xử lý đồng bộ Múi giờ và Format dữ liệu hiển thị
         transactions = transactions.map(tx => {
             let localDateStr = '';
             let filterMatchStr = '';
             
             if (tx.NgayTao) {
-                // Đưa chuỗi UTC vào đối tượng Date -> JS tự động cộng bù 7 tiếng theo giờ Việt Nam
                 const d = new Date(tx.NgayTao); 
                 const pad = n => n < 10 ? '0' + n : n;
-                
-                // Format để render ra màn hình: HH:mm:ss DD/MM/YYYY
-                localDateStr = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())} ${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
-                
-                // Format chuẩn YYYY-MM-DD ẩn bên dưới để đối chiếu với thanh công cụ Lọc ngày
+                localDateStr = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())} - ${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
                 filterMatchStr = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
             }
             
-            // Nạp 2 trường vừa xử lý vào lại object để tái sử dụng
             return { 
                 ...tx, 
                 displayDate: localDateStr, 
@@ -3354,51 +3364,54 @@ async function loadTransactionHistory(filterDate = '') {
             };
         });
 
-        // 2. Xử lý Lọc theo ngày (Sử dụng trường filterDateStr mới)
         if (filterDate) {
             transactions = transactions.filter(tx => tx.filterDateStr === filterDate);
         }
 
         if (transactions.length === 0) {
-            listContainer.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 40px 0;"><i class="fa-solid fa-receipt" style="font-size: 3rem; color: #e5e7eb; margin-bottom: 15px; display: block;"></i>Không có giao dịch nào${filterDate ? ' trong ngày này' : ''}.</div>`;
+            listContainer.innerHTML = `
+                <div style="text-align: center; color: var(--text-muted); padding: 50px 20px; border: 1px dashed #e2e8f0; border-radius: 14px;">
+                    <i class="fa-solid fa-receipt" style="font-size: 2.8rem; color: #cbd5e1; margin-bottom: 12px; display: block;"></i>
+                    <div style="font-weight: 600; color: #475569;">Chưa có giao dịch nào${filterDate ? ' trong ngày này' : ''}</div>
+                </div>`;
             return;
         }
 
-        // Thêm CSS scrollbar-width cho thanh cuộn thanh mảnh, đẹp mắt
-        let html = '<div style="display: flex; flex-direction: column; gap: 16px; max-height: 380px; overflow-y: auto; padding-right: 12px; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent;">';
+        let html = '<div style="display: flex; flex-direction: column; gap: 10px; max-height: 430px; overflow-y: auto; padding-right: 6px; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent;">';
         
         transactions.forEach(tx => {
             const isCong = tx.DongTien === 'Cong';
             const sign = isCong ? '+' : '-';
-            const color = isCong ? '#047857' : '#b91c1c'; // Xanh lá / Đỏ
+            const color = isCong ? '#047857' : '#dc2626';
+            const amountBg = isCong ? '#ecfdf5' : '#fef2f2';
             const bgIcon = isCong ? '#d1fae5' : '#fee2e2';
             
             let icon = 'fa-money-bill-wave';
             if(tx.LoaiGiaoDich === 'NapTien') icon = 'fa-arrow-down';
             if(tx.LoaiGiaoDich === 'DatSan') icon = 'fa-calendar-check';
             if(tx.LoaiGiaoDich === 'RutTien') icon = 'fa-arrow-up';
-            if(tx.LoaiGiaoDich === 'HoanTienHuyGap') icon = 'fa-clock-rotate-left';
-            if(tx.LoaiGiaoDich === 'HoanTienHuySan') icon = 'fa-clock-rotate-left';
+            if(tx.LoaiGiaoDich === 'HoanTienHuyGap' || tx.LoaiGiaoDich === 'HoanTienHuySan') icon = 'fa-rotate-left';
 
             const soDuTruoc = Number(tx.SoDuTruoc || 0).toLocaleString('vi-VN');
             const soDuSau = Number(tx.SoDuSau || 0).toLocaleString('vi-VN');
 
             html += `
-                <div style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 16px; border-bottom: 1px dashed var(--border);">
-                    <div style="display: flex; align-items: center; gap: 16px; max-width: 70%;">
-                        <div style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px; background: ${bgIcon}; color: ${color}; display: flex; align-items: center; justify-content: center; font-size: 1.15rem;">
+                <div class="tx-item-card">
+                    <div style="display: flex; align-items: center; gap: 14px; max-width: 72%;">
+                        <div style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px; background: ${bgIcon}; color: ${color}; display: flex; align-items: center; justify-content: center; font-size: 1.1rem;">
                             <i class="fa-solid ${icon}"></i>
                         </div>
                         <div>
-                            <div style="font-weight: 600; color: var(--text-dark); margin-bottom: 5px; line-height: 1.4;">${tx.NoiDung || tx.LoaiGiaoDich}</div>
-                            <div style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-regular fa-clock" style="margin-right: 4px;"></i>${tx.displayDate}</div>
-                            <div style="font-size: 0.8rem; color: var(--text-muted);">
-                                <span style="opacity: 0.8;">Trước:</span> <span style="font-weight: 500;">${soDuTruoc}đ</span> &nbsp;|&nbsp; 
-                                <span style="opacity: 0.8;">Sau:</span> <strong style="color: var(--primary);">${soDuSau}đ</strong>
+                            <div style="font-weight: 700; color: #0f172a; margin-bottom: 4px; font-size: 0.94rem; line-height: 1.35;">${tx.NoiDung || tx.LoaiGiaoDich}</div>
+                            <div style="font-size: 0.8rem; color: #64748b; display: flex; align-items: center; flex-wrap: wrap; gap: 10px;">
+                                <span><i class="fa-regular fa-clock" style="margin-right: 4px;"></i>${tx.displayDate}</span>
+                                <span style="background: #f1f5f9; padding: 2px 8px; border-radius: 6px; font-size: 0.76rem;">
+                                    Số dư: ${soDuTruoc}đ &rarr; <strong style="color: #0f172a;">${soDuSau}đ</strong>
+                                </span>
                             </div>
                         </div>
                     </div>
-                    <div style="font-weight: 700; font-size: 1.1rem; color: ${color}; flex-shrink: 0;">
+                    <div style="font-weight: 800; font-size: 1.02rem; color: ${color}; background: ${amountBg}; padding: 6px 12px; border-radius: 8px; flex-shrink: 0;">
                         ${sign}${Number(tx.SoTien).toLocaleString('vi-VN')}đ
                     </div>
                 </div>
@@ -3408,8 +3421,13 @@ async function loadTransactionHistory(filterDate = '') {
         listContainer.innerHTML = html;
 
     } catch (e) {
-        listContainer.innerHTML = `<div style="color: var(--danger); text-align: center;">Lỗi tải dữ liệu.</div>`;
+        listContainer.innerHTML = `<div style="color: var(--danger); text-align: center; padding: 20px;">Lỗi tải dữ liệu giao dịch.</div>`;
     }
+}
+
+// Hàm hỗ trợ render thông báo tại thẻ ví mà không cần load lại trang
+function showWalletAlert(message, isSuccess) {
+    renderWallet(message, isSuccess);
 }
 
 // 3. Logic điều khiển Modal Nạp tiền bằng Custom Alert
