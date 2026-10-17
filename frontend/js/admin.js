@@ -115,10 +115,14 @@ document.addEventListener(
             if(document.getElementById('menu-huysan')) document.getElementById('menu-huysan').style.display = 'none';
             if(document.getElementById('menu-kho')) document.getElementById('menu-kho').style.display = 'none';
             if(document.getElementById('menu-lichlamviec')) document.getElementById('menu-lichlamviec').style.display = 'none';
-            if(document.getElementById('menu-bangluong-admin')) document.getElementById('menu-bangluong-admin').style.display = 'none';
 
             // Đảm bảo hiển thị đầy đủ menu của Admin
             if(document.getElementById('menu-cumsan')) document.getElementById('menu-cumsan').style.display = 'flex';
+            if(document.getElementById('menu-bangluong-admin')) {
+                const menuBL = document.getElementById('menu-bangluong-admin');
+                menuBL.style.display = 'flex';
+                menuBL.innerHTML = '<i class="fa-solid fa-money-check-dollar"></i> XEM BẢNG LƯƠNG';
+            }
             if(document.getElementById('menu-captaikhoan')) document.getElementById('menu-captaikhoan').style.display = 'flex';
             if(document.getElementById('menu-xuatnhap-admin')) document.getElementById('menu-xuatnhap-admin').style.display = 'flex';
 
@@ -326,6 +330,11 @@ document.addEventListener(
                     if (typeof loadAdminLichSuGiaoCa === 'function') {
                         loadAdminLichSuGiaoCa();
                     }
+                }
+
+                // 4. CẬP NHẬT REALTIME BẢNG LƯƠNG (DÀNH CHO CẢ ADMIN VÀ QUẢN LÝ SÂN)
+                if (document.getElementById('admin-bang-luong-tbody') && typeof loadBangLuongAdminData === 'function') {
+                    loadBangLuongAdminData();
                 }
             });
 
@@ -7682,315 +7691,456 @@ function formatMinutesToHours(minutes) {
 }
 
 // ======================================================
-// MODULE: ADMIN - CHỐT BẢNG LƯƠNG NHÂN VIÊN
+// MODULE: QUẢN LÝ & THEO DÕI BẢNG LƯƠNG (QUẢN LÝ SÂN & ADMIN)
 // ======================================================
+let allAdminBangLuongData = [];
+let currentBLPage = 1;
+const itemsPerBLPage = 5;
+let currentBLSearch = '';
+let currentBLCumSanFilter = 'All';
+let currentBLStatusFilter = 'All';
+let currentBLThangNam = '';
+let blCumSanOptionsCache = '';
 
-let adminBangLuongData = [];
-let adminFilterThangNam = '';
-
-function renderQuanLyBangLuongAdmin() {
+async function renderQuanLyBangLuongAdmin() {
     const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
-    if (!currentUser || currentUser.VaiTro !== 'QuanLySan') return;
+    const isAdmin = currentUser && currentUser.VaiTro === 'Admin';
 
+    currentBLPage = 1;
+    currentBLSearch = '';
+    currentBLCumSanFilter = 'All';
+    currentBLStatusFilter = 'All';
+
+    // Active menu
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
     const menuLink = document.getElementById('menu-bangluong-admin');
     if (menuLink) menuLink.classList.add('active');
 
-    // Thiết lập tháng mặc định là tháng hiện tại
-    if (!adminFilterThangNam) {
-        const today = new Date();
-        const mm = String(today.getMonth() + 1).padStart(2, '0');
-        const yyyy = today.getFullYear();
-        adminFilterThangNam = `${mm}-${yyyy}`;
+    // Khởi tạo danh sách Tháng/Năm (từ năm hiện tại về 2024)
+    const today = new Date();
+    const curMonth = String(today.getMonth() + 1).padStart(2, '0');
+    const curYear = today.getFullYear();
+    if (!currentBLThangNam) {
+        currentBLThangNam = `${curMonth}-${curYear}`;
     }
 
-    // Tạo HTML cho Dropdown chọn tháng
     let thangOptions = '';
-    const startYear = 2024;
-    const currentYear = new Date().getFullYear();
-    for (let y = currentYear; y >= startYear; y--) {
+    for (let y = curYear; y >= 2024; y--) {
         for (let m = 12; m >= 1; m--) {
+            if (y === curYear && m > (today.getMonth() + 1)) continue;
             const mm = String(m).padStart(2, '0');
             const val = `${mm}-${y}`;
-            const selected = val === adminFilterThangNam ? 'selected' : '';
+            const selected = (val === currentBLThangNam) ? 'selected' : '';
             thangOptions += `<option value="${val}" ${selected}>Tháng ${mm}/${y}</option>`;
         }
     }
 
+    // Nếu là Admin -> Tải danh sách Cụm sân cho bộ lọc
+    if (isAdmin && !blCumSanOptionsCache) {
+        try {
+            const csRes = await fetch(`${API_BASE_URL}/cum-san`);
+            const csData = await csRes.json();
+            if (csData.success) {
+                blCumSanOptionsCache = csData.data.map(cs => `<option value="${cs.ID}">${cs.TenCumSan}</option>`).join('');
+            }
+        } catch (e) { console.error(e); }
+    }
+
+    const pageTitle = isAdmin ? 'Theo dõi Bảng Lương Toàn Hệ Thống' : 'Quản lý & Chốt Bảng Lương';
+    const pageDesc = isAdmin 
+        ? 'Giám sát bảng công, thưởng/phạt và trạng thái thanh toán lương nhân viên tại tất cả các cụm sân.' 
+        : 'Kiểm tra bảng công, chốt lương hàng tháng và xác nhận chuyển khoản cho nhân viên thuộc cơ sở của bạn.';
+
+    const filterCumSanHtml = isAdmin ? `
+        <select id="bl-cumsan-filter" class="form-control" style="width: 210px;" onchange="handleBLCumSanFilter(this.value)">
+            <option value="All">Tất cả Cơ sở</option>
+            ${blCumSanOptionsCache}
+        </select>
+    ` : '';
+
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
         <div class="page-header" style="margin-bottom: 24px;">
-            <h1 class="page-title">Quản lý Bảng Lương</h1>
-            <p class="text-muted">Tính toán, chốt lương và thanh toán cho nhân sự cơ sở</p>
+            <h1 class="page-title">${pageTitle}</h1>
+            <p class="text-muted">${pageDesc}</p>
+        </div>
+
+        <!-- Thẻ thống kê nhanh kỳ lương đang xem -->
+        <div class="stat-grid" style="margin-bottom: 24px;">
+            <div class="stat-card" style="border-left: 4px solid #3b82f6;">
+                <div class="stat-title">Tổng nhân sự</div>
+                <div id="bl-stat-tong-nv" class="stat-value" style="color: #1e293b;">0</div>
+            </div>
+            <div class="stat-card" style="border-left: 4px solid #2563eb;">
+                <div class="stat-title">Tổng quỹ lương thực lãnh</div>
+                <div id="bl-stat-tong-tien" class="stat-value" style="color: #2563eb;">0đ</div>
+            </div>
+            <div class="stat-card" style="border-left: 4px solid #f59e0b;">
+                <div class="stat-title">Chờ xác nhận / Khiếu nại</div>
+                <div id="bl-stat-cho-xuly" class="stat-value" style="color: #d97706;">0</div>
+            </div>
+            <div class="stat-card" style="border-left: 4px solid #10b981;">
+                <div class="stat-title">Đã thanh toán</div>
+                <div id="bl-stat-da-tt" class="stat-value" style="color: #047857;">0</div>
+            </div>
         </div>
 
         <div class="panel">
-            <div style="display: flex; gap: 15px; margin-bottom: 20px; margin-top: 20px; margin-left: 20px; align-items: center;">
-                <div style="font-weight: 600; color: var(--text-dark);">Chọn kỳ lương:</div>
-                <select class="form-control" style="width: 200px; font-weight: bold; color: var(--primary);" id="admin-bl-thangnam" onchange="handleAdminChangeKyluong()">
+            <!-- Thanh công cụ: Tìm kiếm + Lọc Cụm sân + Lọc Trạng thái + Chọn Kỳ lương -->
+            <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; align-items: center;">
+                <div style="position: relative; flex: 1; min-width: 220px;">
+                    <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
+                    <input type="text" id="bl-search-input" class="form-control" style="padding-left: 35px;" placeholder="Tìm tên nhân viên, số điện thoại..." oninput="handleBLSearch(this.value)">
+                </div>
+
+                ${filterCumSanHtml}
+
+                <select id="bl-status-filter" class="form-control" style="width: 190px;" onchange="handleBLStatusFilter(this.value)">
+                    <option value="All">Tất cả trạng thái</option>
+                    <option value="ChuaChot">Chưa chốt (Tạm tính)</option>
+                    <option value="ChoXacNhan">Chờ NV xác nhận</option>
+                    <option value="KhieuNai">Đang khiếu nại</option>
+                    <option value="ChoThanhToan">Chờ chuyển khoản</option>
+                    <option value="DaThanhToan">Đã thanh toán</option>
+                </select>
+
+                <select id="admin-bl-thangnam" class="form-control" style="width: 170px; font-weight: 700; color: var(--primary); border-color: var(--primary);" onchange="handleBLThangNamChange(this.value)">
                     ${thangOptions}
                 </select>
-                <button class="btn-outline-sm" onclick="loadBangLuongAdminData()"><i class="fa-solid fa-rotate-right"></i> Làm mới</button>
+
+                <button class="btn-outline-sm" onclick="loadBangLuongAdminData()" title="Làm mới dữ liệu" style="padding: 9px 14px;">
+                    <i class="fa-solid fa-rotate-right"></i>
+                </button>
             </div>
 
-            <div class="table-responsive">
+            <!-- Bảng dữ liệu -->
+            <div class="table-responsive" style="min-height: 340px;">
                 <table class="admin-table">
                     <thead style="background: #F8FAFC;">
                         <tr>
-                            <th>Nhân sự</th>
-                            <th style="text-align: center;">Tổng ca</th>
+                            <th>Nhân Viên</th>
+                            ${isAdmin ? '<th>Cơ Sở</th>' : ''}
+                            <th style="text-align: center;">Số Ca Làm</th>
                             <th style="text-align: right;">Lương CB</th>
-                            <th style="text-align: right;">Thưởng</th>
-                            <th style="text-align: right;">Phạt</th>
-                            <th style="text-align: right;">THỰC LÃNH</th>
-                            <th style="text-align: center;">Trạng thái</th>
-                            <th style="text-align: center;">Hành động</th>
+                            <th style="text-align: right;">Thưởng / Phạt</th>
+                            <th style="text-align: right;">Thực Lãnh</th>
+                            <th>Thông Tin Nhận Lương</th>
+                            <th style="text-align: center;">Trạng Thái</th>
+                            <th style="text-align: center;">Hành Động</th>
                         </tr>
                     </thead>
                     <tbody id="admin-bang-luong-tbody">
-                        <tr><td colspan="8" class="text-center" style="padding: 40px; text-align: center;"><i class="fa-solid fa-spinner fa-spin text-primary"></i> Đang tải dữ liệu...</td></tr>
+                        <tr><td colspan="${isAdmin ? 9 : 8}" class="text-center" style="padding: 40px; text-align: center;"><i class="fa-solid fa-spinner fa-spin text-primary"></i> Đang tải dữ liệu bảng lương...</td></tr>
                     </tbody>
                 </table>
             </div>
+
+            <!-- Phân trang -->
+            <div id="admin-bl-pagination" style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 15px; margin-bottom: 15px; padding-top: 15px; border-top: 1px solid var(--border);"></div>
         </div>
     `;
 
     loadBangLuongAdminData();
 }
 
-function handleAdminChangeKyluong() {
-    adminFilterThangNam = document.getElementById('admin-bl-thangnam').value;
+function handleBLSearch(val) {
+    currentBLSearch = val.toLowerCase().trim();
+    currentBLPage = 1;
+    applyBLFiltersAndRender();
+}
+
+function handleBLCumSanFilter(val) {
+    currentBLCumSanFilter = val;
+    currentBLPage = 1;
+    applyBLFiltersAndRender();
+}
+
+function handleBLStatusFilter(val) {
+    currentBLStatusFilter = val;
+    currentBLPage = 1;
+    applyBLFiltersAndRender();
+}
+
+function handleBLThangNamChange(val) {
+    currentBLThangNam = val;
+    currentBLPage = 1;
     loadBangLuongAdminData();
 }
 
 async function loadBangLuongAdminData() {
     const tbody = document.getElementById('admin-bang-luong-tbody');
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center" style="padding: 40px; text-align: center;"><i class="fa-solid fa-spinner fa-spin text-primary"></i> Đang tải dữ liệu...</td></tr>`;
+    if (!tbody) return;
+
+    const selectEl = document.getElementById('admin-bl-thangnam');
+    const thangNam = selectEl ? selectEl.value : currentBLThangNam;
+    currentBLThangNam = thangNam;
 
     try {
-        const response = await fetch(`${API_BASE_URL}/admin/bang-luong?thang_nam=${adminFilterThangNam}`, {
-            headers: { 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` }
-        });
+        const response = await fetch(`${API_BASE_URL}/admin/bang-luong?thang_nam=${thangNam}`);
         const res = await response.json();
 
         if (res.success) {
-            adminBangLuongData = res.data;
-            renderBangLuongAdminTable();
+            allAdminBangLuongData = res.data || [];
+            applyBLFiltersAndRender();
         } else {
-            tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger">${res.message}</td></tr>`;
+            showSystemModal('Lỗi', res.message || 'Không tải được bảng lương', 'error');
         }
     } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger">Lỗi kết nối máy chủ!</td></tr>`;
+        console.error('Lỗi tải bảng lương:', e);
     }
 }
 
-function renderBangLuongAdminTable() {
+function applyBLFiltersAndRender() {
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+    const isAdmin = currentUser && currentUser.VaiTro === 'Admin';
+    const colSpan = isAdmin ? 9 : 8;
+
+    // 1. Lọc theo Cụm sân, Trạng thái và Từ khóa (Tên / SĐT)
+    const filtered = allAdminBangLuongData.filter(item => {
+        const matchCumSan = (currentBLCumSanFilter === 'All') || (String(item.id_cum_san) === String(currentBLCumSanFilter));
+        const matchStatus = (currentBLStatusFilter === 'All') || (item.trang_thai === currentBLStatusFilter);
+
+        const tenNV = (item.ten_nhan_vien || '').toLowerCase();
+        const sdtNV = (item.so_dien_thoai || '').toLowerCase();
+        const tenCS = (item.ten_cum_san || '').toLowerCase();
+        const matchSearch = !currentBLSearch || tenNV.includes(currentBLSearch) || sdtNV.includes(currentBLSearch) || tenCS.includes(currentBLSearch);
+
+        return matchCumSan && matchStatus && matchSearch;
+    });
+
+    // 2. Cập nhật 4 thẻ thống kê nhanh theo danh sách đang lọc
+    const tongNV = filtered.length;
+    const tongQuyLuong = filtered.reduce((sum, i) => sum + Number(i.thuc_lanh || 0), 0);
+    const choXuLy = filtered.filter(i => i.trang_thai === 'ChoXacNhan' || i.trang_thai === 'KhieuNai' || i.trang_thai === 'ChoThanhToan').length;
+    const daThanhToan = filtered.filter(i => i.trang_thai === 'DaThanhToan').length;
+
+    const elTongNV = document.getElementById('bl-stat-tong-nv');
+    const elTongTien = document.getElementById('bl-stat-tong-tien');
+    const elChoXuLy = document.getElementById('bl-stat-cho-xuly');
+    const elDaTT = document.getElementById('bl-stat-da-tt');
+
+    if (elTongNV) elTongNV.innerHTML = `${tongNV} <span style="font-size: 0.95rem; font-weight: 500; color: #64748b;">nhân viên</span>`;
+    if (elTongTien) elTongTien.innerText = `${tongQuyLuong.toLocaleString('vi-VN')}đ`;
+    if (elChoXuLy) elChoXuLy.innerHTML = `${choXuLy} <span style="font-size: 0.95rem; font-weight: 500; color: #64748b;">bảng lương</span>`;
+    if (elDaTT) elDaTT.innerHTML = `${daThanhToan}/${tongNV} <span style="font-size: 0.95rem; font-weight: 500; color: #64748b;">hoàn tất</span>`;
+
+    // 3. Phân trang
+    const totalPages = Math.ceil(filtered.length / itemsPerBLPage) || 1;
+    if (currentBLPage > totalPages) currentBLPage = totalPages;
+    const startIdx = (currentBLPage - 1) * itemsPerBLPage;
+    const pageData = filtered.slice(startIdx, startIdx + itemsPerBLPage);
+
     const tbody = document.getElementById('admin-bang-luong-tbody');
-    
-    if (adminBangLuongData.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted" style="padding: 40px; text-align: center;">Cơ sở chưa có nhân sự nào.</td></tr>`;
+    if (!tbody) return;
+
+    if (pageData.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center text-muted" style="padding: 40px; text-align: center;">Không tìm thấy dữ liệu bảng lương phù hợp.</td></tr>`;
+        document.getElementById('admin-bl-pagination').innerHTML = '';
         return;
     }
 
-    let html = '';
-    adminBangLuongData.forEach(nv => {
-        // Render Badge Trạng Thái
-        let badgeHtml = '';
-        let actionBtn = '';
-        const idNv = nv.id_nhan_vien;
-        const tenNv = nv.ten_nhan_vien.replace(/'/g, "\\'");
-        
-        // Nút Xem chi tiết lịch lưới (Dùng chung cho tất cả trạng thái)
-        const btnDetail = `<button class="btn-outline-sm" style="padding: 4px 8px; margin-bottom: 5px;" onclick="openLuoiLichLuongModal(${idNv}, '${adminFilterThangNam}', '${tenNv}')"><i class="fa-solid fa-calendar-days"></i> Lịch</button><br>`;
+    tbody.innerHTML = pageData.map(item => {
+        // Thưởng / Phạt
+        const thuong = Number(item.tong_thuong || 0);
+        const phat = Number(item.tong_phat || 0);
+        let thuongPhatHtml = `<span style="color: #10b981; font-weight: 600;">+${thuong.toLocaleString('vi-VN')}đ</span><br><span style="color: #ef4444; font-weight: 600;">-${phat.toLocaleString('vi-VN')}đ</span>`;
 
-        if (nv.trang_thai === 'ChuaChot') {
-            badgeHtml = `<span style="background: #f1f5f9; color: #64748b; padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">Đang tính (Chưa chốt)</span>`;
-            actionBtn = btnDetail + `<button class="btn-primary" style="padding: 6px 12px; font-size: 0.85rem;" onclick="xacNhanChotLuongAdmin(${idNv}, '${tenNv}')"><i class="fa-solid fa-lock"></i> Chốt Lương</button>`;
-        } 
-        else if (nv.trang_thai === 'ChoXacNhan') {
-            badgeHtml = `<span style="background: #fef3c7; color: #b45309; padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;"><i class="fa-regular fa-clock"></i> Chờ NV xác nhận</span>`;
-            actionBtn = btnDetail + `<span style="color: var(--text-muted); font-size: 0.85rem; font-style: italic;">Đang chờ...</span>`;
-        } 
-        else if (nv.trang_thai === 'KhieuNai') {
-            badgeHtml = `<span style="background: #fee2e2; color: #b91c1c; padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;"><i class="fa-solid fa-triangle-exclamation"></i> Có khiếu nại</span>`;
-            actionBtn = btnDetail + `<button class="btn-primary" style="background: #ef4444; border-color: #ef4444; padding: 6px 12px; font-size: 0.85rem;" onclick="adminXemKhieuNai(${nv.bang_luong_id}, ${idNv})">Giải quyết</button>`;
-        } 
-        else if (nv.trang_thai === 'ChoThanhToan') {
-            badgeHtml = `<span style="background: #e0e7ff; color: #4338ca; padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;"><i class="fa-solid fa-money-check-dollar"></i> Chờ thanh toán</span>`;
-            actionBtn = btnDetail + `<button class="btn-primary" style="background: #10b981; border-color: #10b981; padding: 6px 12px; font-size: 0.85rem;" onclick="xacNhanThanhToanAdmin(${nv.bang_luong_id}, '${tenNv}')"><i class="fa-solid fa-check-double"></i> Chuyển tiền</button>`;
-        } 
-        else if (nv.trang_thai === 'DaThanhToan') {
-            badgeHtml = `<span style="background: #d1fae5; color: #047857; padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;"><i class="fa-solid fa-check"></i> Đã thanh toán</span>`;
-            actionBtn = btnDetail + `<span style="color: #10b981; font-weight: bold; font-size: 0.85rem;"><i class="fa-solid fa-check"></i> Hoàn tất</span>`;
+        // Thông tin ngân hàng hoặc khiếu nại
+        let bankHtml = `<span style="color: #94a3b8; font-size: 0.82rem; font-style: italic;">Chưa cung cấp</span>`;
+        if (item.thong_tin_ngan_hang) {
+            bankHtml = `<div style="font-size: 0.85rem; font-weight: 600; color: #0f172a; max-width: 210px; line-height: 1.4;">${item.thong_tin_ngan_hang}</div>`;
+        }
+        if (item.trang_thai === 'KhieuNai' && item.ly_do_khieu_nai) {
+            bankHtml += `<div style="margin-top: 4px; font-size: 0.78rem; color: #b91c1c; background: #fef2f2; padding: 3px 6px; border-radius: 4px; border: 1px dashed #fca5a5;">Khiếu nại: "${item.ly_do_khieu_nai}"</div>`;
         }
 
-        html += `
+        // Badge Trạng thái
+        let badgeHtml = '';
+        if (item.trang_thai === 'ChuaChot') {
+            badgeHtml = `<span style="background: #f1f5f9; color: #475569; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; white-space: nowrap;">Chưa chốt (Tạm tính)</span>`;
+        } else if (item.trang_thai === 'ChoXacNhan') {
+            badgeHtml = `<span style="background: #fef3c7; color: #b45309; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; white-space: nowrap;"><i class="fa-regular fa-clock"></i> Chờ NV xác nhận</span>`;
+        } else if (item.trang_thai === 'KhieuNai') {
+            badgeHtml = `<span style="background: #fee2e2; color: #b91c1c; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; white-space: nowrap;"><i class="fa-solid fa-triangle-exclamation"></i> Bị khiếu nại</span>`;
+        } else if (item.trang_thai === 'ChoThanhToan') {
+            badgeHtml = `<span style="background: #e0e7ff; color: #4338ca; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; white-space: nowrap;"><i class="fa-solid fa-money-check-dollar"></i> Chờ chuyển khoản</span>`;
+        } else if (item.trang_thai === 'DaThanhToan') {
+            badgeHtml = `<span style="background: #d1fae5; color: #047857; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; white-space: nowrap;"><i class="fa-solid fa-check-double"></i> Đã thanh toán</span>`;
+        }
+
+        // Cột Hành động:
+        // - Nút Xem bảng công luôn hiển thị cho cả Admin và Quản lý sân
+        const safeTenNV = (item.ten_nhan_vien || '').replace(/'/g, "\\'");
+        const safeLyDo = (item.ly_do_khieu_nai || '').replace(/'/g, "\\'").replace(/\n/g, ' ');
+        let actionHtml = `
+            <button class="btn-outline-sm" style="padding: 5px 10px; font-size: 0.82rem; border-color: #cbd5e1; color: #334155;" onclick="openLuoiLichLuongModal(${item.id_nhan_vien}, '${currentBLThangNam}', '${safeTenNV}')">
+                <i class="fa-solid fa-calendar-days"></i> Bảng công
+            </button>
+        `;
+
+        // - Nếu là Quản lý sân: Hiển thị thêm các nút nghiệp vụ (Chốt lương / Xử lý khiếu nại / Thanh toán)
+        if (!isAdmin) {
+            if (item.trang_thai === 'ChuaChot') {
+                actionHtml += `
+                    <button class="btn-primary" style="padding: 5px 10px; font-size: 0.82rem; margin-left: 5px;" onclick="openConfirmChotLuongModal(${item.id_nhan_vien}, '${safeTenNV}', ${item.thuc_lanh})">
+                        <i class="fa-solid fa-lock"></i> Chốt lương
+                    </button>
+                `;
+            } else if (item.trang_thai === 'KhieuNai') {
+                actionHtml += `
+                    <button class="btn-primary" style="padding: 5px 10px; font-size: 0.82rem; margin-left: 5px; background: #ef4444; border-color: #ef4444;" onclick="openXuLyKhieuNaiModal(${item.id_nhan_vien}, '${currentBLThangNam}', '${safeLyDo}')">
+                        <i class="fa-solid fa-wrench"></i> Xử lý
+                    </button>
+                `;
+            } else if (item.trang_thai === 'ChoThanhToan') {
+                actionHtml += `
+                    <button class="btn-primary" style="padding: 5px 10px; font-size: 0.82rem; margin-left: 5px; background: #10b981; border-color: #10b981;" onclick="executeThanhToanLuong(${item.bang_luong_id})">
+                        <i class="fa-solid fa-check"></i> Đã chuyển khoản
+                    </button>
+                `;
+            }
+        }
+
+        return `
             <tr>
-                <td><strong style="color: var(--text-dark);">${nv.ten_nhan_vien}</strong></td>
-                <td style="text-align: center; font-weight: 500;">${nv.tong_ca_lam} ca</td>
-                <td style="text-align: right; color: var(--text-dark);">${Number(nv.tong_luong).toLocaleString('vi-VN')}đ</td>
-                <td style="text-align: right; color: #10b981;">+ ${Number(nv.tong_thuong).toLocaleString('vi-VN')}đ</td>
-                <td style="text-align: right; color: #ef4444;">- ${Number(nv.tong_phat).toLocaleString('vi-VN')}đ</td>
-                <td style="text-align: right;"><strong style="color: #2563eb; font-size: 1.1rem;">${Number(nv.thuc_lanh).toLocaleString('vi-VN')}đ</strong></td>
-                <td style="text-align: center; white-space: nowrap;">${badgeHtml}</td>
-                <td style="text-align: center;">${actionBtn}</td>
+                <td>
+                    <strong style="color: var(--text-dark);">${item.ten_nhan_vien}</strong><br>
+                    <span style="font-size: 0.8rem; color: var(--text-muted);"><i class="fa-solid fa-phone" style="font-size: 0.72rem;"></i> ${item.so_dien_thoai || 'N/A'}</span>
+                </td>
+                ${isAdmin ? `<td><span style="color: var(--primary); font-weight: 600; font-size: 0.88rem;"><i class="fa-solid fa-location-dot"></i> ${item.ten_cum_san}</span></td>` : ''}
+                <td style="text-align: center; font-weight: 600;">${item.tong_ca_lam} ca</td>
+                <td style="text-align: right; font-weight: 500;">${Number(item.tong_luong || 0).toLocaleString('vi-VN')}đ</td>
+                <td style="text-align: right; font-size: 0.85rem;">${thuongPhatHtml}</td>
+                <td style="text-align: right;"><strong style="color: #2563eb; font-size: 1.05rem;">${Number(item.thuc_lanh || 0).toLocaleString('vi-VN')}đ</strong></td>
+                <td>${bankHtml}</td>
+                <td style="text-align: center;">${badgeHtml}</td>
+                <td style="text-align: center; white-space: nowrap;">${actionHtml}</td>
             </tr>
         `;
-    });
+    }).join('');
 
-    tbody.innerHTML = html;
+    renderBLPagination(totalPages);
 }
 
-// ---- LOGIC CHỐT LƯƠNG ----
+function renderBLPagination(totalPages) {
+    const div = document.getElementById('admin-bl-pagination');
+    if (!div) return;
+    if (totalPages <= 1) {
+        div.innerHTML = '';
+        return;
+    }
 
-function xacNhanChotLuongAdmin(idNv, tenNv) {
-    // Lưu lại ID vào input ẩn của modal
-    document.getElementById('confirm-chot-luong-nv-id').value = idNv;
-    
-    // Ghi thông báo
-    document.getElementById('confirm-chot-luong-msg').innerHTML = `Bạn có muốn chốt lương tháng ${adminFilterThangNam} cho <strong>${tenNv}</strong>?<br><br>Hệ thống sẽ khóa số liệu và gửi thông báo xác nhận tới nhân viên.`;
-    
-    // Mở Modal (Modal tự tạo sẽ không bao giờ tự động tắt)
+    let html = `<button class="btn-outline-sm" ${currentBLPage === 1 ? 'disabled style="opacity:0.5;"' : ''} onclick="currentBLPage--; applyBLFiltersAndRender()"><i class="fa-solid fa-chevron-left"></i></button>`;
+
+    const getPages = (current, total) => {
+        if (total <= 6) return Array.from({ length: total }, (_, i) => i + 1);
+        if (current <= 3) return [1, 2, 3, 4, '...', total];
+        if (current >= total - 2) return [1, '...', total - 3, total - 2, total - 1, total];
+        return [1, '...', current - 1, current, current + 1, '...', total];
+    };
+
+    getPages(currentBLPage, totalPages).forEach(i => {
+        if (i === '...') {
+            html += `<span style="padding: 6px 10px; color: var(--text-muted); font-weight: bold;">...</span>`;
+        } else {
+            html += `<button class="${i === currentBLPage ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="currentBLPage=${i}; applyBLFiltersAndRender()">${i}</button>`;
+        }
+    });
+
+    html += `<button class="btn-outline-sm" ${currentBLPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="currentBLPage++; applyBLFiltersAndRender()"><i class="fa-solid fa-chevron-right"></i></button>`;
+    div.innerHTML = html;
+}
+
+function openConfirmChotLuongModal(idNhanVien, tenNhanVien, thucLanh) {
+    document.getElementById('confirm-chot-luong-nv-id').value = idNhanVien;
+    document.getElementById('confirm-chot-luong-msg').innerHTML = `
+        Xác nhận chốt bảng lương kỳ <strong>${currentBLThangNam}</strong> cho nhân viên <strong>${tenNhanVien}</strong> với số tiền thực lãnh là <strong style="color: #10b981;">${Number(thucLanh).toLocaleString('vi-VN')}đ</strong>?
+    `;
     document.getElementById('confirm-chot-luong-modal').style.display = 'flex';
 }
 
 async function executeChotLuong() {
-    const idNv = document.getElementById('confirm-chot-luong-nv-id').value;
+    const idNhanVien = document.getElementById('confirm-chot-luong-nv-id').value;
     const btn = document.getElementById('btn-agree-chot-luong');
-    
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang chốt...';
     btn.disabled = true;
 
     try {
         const response = await fetch(`${API_BASE_URL}/admin/bang-luong/chot`, {
             method: 'POST',
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` },
-            body: JSON.stringify({ id_nhan_vien: idNv, thang_nam: adminFilterThangNam })
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id_nhan_vien: idNhanVien, thang_nam: currentBLThangNam })
         });
         const data = await response.json();
-        
+        document.getElementById('confirm-chot-luong-modal').style.display = 'none';
+
         if (response.ok && data.success) {
-            document.getElementById('confirm-chot-luong-modal').style.display = 'none';
-            showSystemModal("Thành công", data.message, "success");
-            loadBangLuongAdminData(); // Tải lại bảng
+            showSystemModal('Thành công', data.message, 'success');
+            loadBangLuongAdminData();
         } else {
-            showSystemModal("Lỗi", data.message, "error");
+            showSystemModal('Lỗi', data.message || 'Không thể chốt lương', 'error');
         }
-    } catch(e) {
-        showSystemModal("Lỗi mạng", "Vui lòng thử lại", "error");
+    } catch (e) {
+        showSystemModal('Lỗi mạng', 'Không thể kết nối máy chủ', 'error');
     } finally {
         btn.innerHTML = 'Đồng ý Chốt';
         btn.disabled = false;
     }
 }
 
-// ---- LOGIC XEM KHIẾU NẠI VÀ CHỐT LẠI ----
-async function adminXemKhieuNai(bangLuongId, nvId) {
-    // 1. Gọi API Lấy chi tiết lịch để lấy luôn lý do khiếu nại
-    try {
-        const response = await fetch(`${API_BASE_URL}/bang-luong/chi-tiet?bang_luong_id=${bangLuongId}`, {
-            headers: { 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` }
-        });
-        const res = await response.json();
-        
-        if (res.success && res.tong_quan) {
-            document.getElementById('admin-khieu-nai-msg').innerText = `"${res.tong_quan.LyDoKhieuNai || 'Không có ghi chú'}"`;
-            document.getElementById('admin-khieu-nai-nv-id').value = nvId;
-            document.getElementById('admin-khieu-nai-modal').style.display = 'flex';
-        }
-    } catch (e) {
-        showSystemModal("Lỗi mạng", "Không tải được dữ liệu khiếu nại.", "error");
-    }
+function openXuLyKhieuNaiModal(idNhanVien, thangNam, lyDo) {
+    document.getElementById('admin-khieu-nai-nv-id').value = idNhanVien;
+    document.getElementById('admin-khieu-nai-thang-nam').value = thangNam;
+    document.getElementById('admin-khieu-nai-msg').innerText = lyDo || 'Nhân viên không ghi lý do chi tiết.';
+    document.getElementById('admin-khieu-nai-modal').style.display = 'flex';
 }
 
 async function executeReChotLuong() {
-    const nvId = document.getElementById('admin-khieu-nai-nv-id').value;
+    const idNhanVien = document.getElementById('admin-khieu-nai-nv-id').value;
+    const thangNam = document.getElementById('admin-khieu-nai-thang-nam').value;
     const btn = document.getElementById('btn-re-chot-luong');
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang chốt lại...';
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang cập nhật...';
     btn.disabled = true;
 
     try {
         const response = await fetch(`${API_BASE_URL}/admin/bang-luong/chot`, {
             method: 'POST',
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` },
-            body: JSON.stringify({ id_nhan_vien: nvId, thang_nam: adminFilterThangNam })
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id_nhan_vien: idNhanVien, thang_nam: thangNam })
         });
         const data = await response.json();
-        
+        document.getElementById('admin-khieu-nai-modal').style.display = 'none';
+
         if (response.ok && data.success) {
-            document.getElementById('admin-khieu-nai-modal').style.display = 'none';
-            showSystemModal("Đã cập nhật", "Đã chốt lại lương và gửi cho nhân viên.", "success");
+            showSystemModal('Thành công', 'Đã tính lại và gửi bảng lương mới cho nhân viên!', 'success');
             loadBangLuongAdminData();
         } else {
-            showSystemModal("Lỗi", data.message, "error");
+            showSystemModal('Lỗi', data.message || 'Lỗi cập nhật', 'error');
         }
-    } catch(e) {
-        showSystemModal("Lỗi mạng", "Vui lòng thử lại", "error");
+    } catch (e) {
+        showSystemModal('Lỗi mạng', 'Không thể kết nối máy chủ', 'error');
     } finally {
         btn.innerHTML = 'Đã sửa lỗi - Tính lại lương';
         btn.disabled = false;
     }
 }
 
-// ---- LOGIC XÁC NHẬN THANH TOÁN ----
-let pendingThanhToanId = null;
-
-function xacNhanThanhToanAdmin(id, tenNv) {
-    pendingThanhToanId = id;
-    
-    // Tạo Modal xác nhận ngay trong Javascript nếu chưa có
-    let modal = document.getElementById('thanh-toan-luong-modal');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'thanh-toan-luong-modal';
-        modal.className = 'modal-overlay';
-        modal.style.cssText = 'display: none; z-index: 9999;';
-        document.body.appendChild(modal);
-    }
-    
-    // Nạp nội dung HTML cho Modal
-    modal.innerHTML = `
-        <div class="modal-content" style="max-width: 450px; text-align: center; padding: 30px 20px;">
-            <div style="font-size: 3.5rem; color: #10b981; margin-bottom: 15px;"><i class="fa-solid fa-money-bill-transfer"></i></div>
-            <h3 style="margin-bottom: 10px; font-size: 1.4rem;">Xác nhận Chuyển Khoản</h3>
-            <p style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5;">Bạn xác nhận ĐÃ CHUYỂN KHOẢN đủ tiền lương tháng này cho <strong style="color: var(--text-dark);">${tenNv}</strong>?</p>
-            <div style="display: flex; justify-content: center; gap: 12px;">
-                <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="document.getElementById('thanh-toan-luong-modal').style.display='none'">Hủy bỏ</button>
-                <button class="btn-primary" style="width: auto; padding: 10px 24px; background-color: #10b981; border-color: #10b981;" id="btn-confirm-thanh-toan" onclick="executeThanhToanLuong()">Đồng ý</button>
-            </div>
-        </div>
-    `;
-    
-    modal.style.display = 'flex';
-}
-
-async function executeThanhToanLuong() {
-    if (!pendingThanhToanId) return;
-    
-    const btn = document.getElementById('btn-confirm-thanh-toan');
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
-    btn.disabled = true;
-
+async function executeThanhToanLuong(bangLuongId) {
     try {
-        const response = await fetch(`${API_BASE_URL}/admin/bang-luong/${pendingThanhToanId}/thanh-toan`, {
+        const response = await fetch(`${API_BASE_URL}/admin/bang-luong/${bangLuongId}/thanh-toan`, {
             method: 'PUT',
-            headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` }
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
         });
         const data = await response.json();
-        
+
         if (response.ok && data.success) {
-            document.getElementById('thanh-toan-luong-modal').style.display = 'none';
-            showSystemModal("Hoàn tất", data.message, "success");
+            showSystemModal('Thành công', data.message, 'success');
             loadBangLuongAdminData();
         } else {
-            showSystemModal("Lỗi", data.message, "error");
-            document.getElementById('thanh-toan-luong-modal').style.display = 'none';
+            showSystemModal('Lỗi', data.message || 'Không thể xác nhận thanh toán', 'error');
         }
-    } catch(e) {
-        showSystemModal("Lỗi mạng", "Vui lòng kiểm tra kết nối.", "error");
-        document.getElementById('thanh-toan-luong-modal').style.display = 'none';
-    } finally {
-        pendingThanhToanId = null;
+    } catch (e) {
+        showSystemModal('Lỗi mạng', 'Không thể kết nối máy chủ', 'error');
     }
 }
 
