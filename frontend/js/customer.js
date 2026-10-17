@@ -1327,25 +1327,88 @@ function clearAllSlots() {
     }
 }
 
-function showCartAlert(message, isSuccess) {
-    let alertBox = document.getElementById('cart-alert');
-    if (!alertBox) {
-        // Tự động tạo thẻ div alert nếu chưa có
-        alertBox = document.createElement('div');
-        alertBox.id = 'cart-alert';
-        alertBox.style.margin = '16px 24px 0px'; // Căn lề cho khớp giao diện
-        
-        // Chèn vào ngay dưới Header của Giỏ hàng
-        const modalBody = document.querySelector('#cart-modal .modal-body');
-        modalBody.parentNode.insertBefore(alertBox, modalBody);
+// ======================================================
+// MODAL THÔNG BÁO KẾT QUẢ ĐẶT SÂN (THÀNH CÔNG / THẤT BẠI)
+// ======================================================
+function showCustomerBookingModal(title, message, isSuccess = true, actionType = null) {
+    let modal = document.getElementById('customer-booking-result-modal');
+    if (!modal) {
+        modal = document.getElementById('customer-booking-result-modal') || document.createElement('div');
+        modal.id = 'customer-booking-result-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 100000; align-items: center; justify-content: center;';
+        modal.onclick = function(e) {
+            if (e.target === modal) closeCustomerBookingModal();
+        };
+        document.body.appendChild(modal);
     }
-    
-    alertBox.textContent = message;
-    alertBox.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
-    alertBox.style.display = 'block';
-    
-    // Đảm bảo Modal Giỏ hàng đang mở để khách hàng nhìn thấy thông báo
-    document.getElementById('cart-modal').style.display = 'flex';
+
+    // Cấu hình bảng màu riêng cho Thành công (Xanh dịu) và Thất bại (Đỏ pastel dịu mắt)
+    const modalBg = isSuccess
+        ? 'linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%)'
+        : 'linear-gradient(180deg, #fff1f2 0%, #ffe4e6 100%)';
+    const modalBorder = isSuccess ? '1.5px solid #bbf7d0' : '1.5px solid #fda4af';
+    const titleColor = isSuccess ? '#065f46' : '#9f1239';
+    const msgBg = isSuccess ? '#ecfdf5' : 'rgba(255, 255, 255, 0.75)';
+    const msgBorder = isSuccess ? '1px solid #a7f3d0' : '1px dashed #fda4af';
+    const msgColor = isSuccess ? '#047857' : '#881337';
+
+    const iconHtml = isSuccess
+        ? '<div style="width: 72px; height: 72px; border-radius: 50%; background: #d1fae5; color: #059669; border: 3px solid #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 2.3rem; margin-bottom: 14px; box-shadow: 0 6px 16px rgba(16, 185, 129, 0.22);"><i class="fa-solid fa-check"></i></div>'
+        : '<div style="width: 72px; height: 72px; border-radius: 50%; background: #fecdd3; color: #e11d48; border: 3px solid #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 2.3rem; margin-bottom: 14px; box-shadow: 0 6px 16px rgba(225, 29, 72, 0.2);"><i class="fa-solid fa-xmark"></i></div>';
+
+    let actionButtonsHtml = '';
+    if (isSuccess) {
+        actionButtonsHtml = `
+            <button type="button" class="btn-outline" style="flex: 1; padding: 11px 16px; border-radius: 10px; font-weight: 600; background: #fff; border-color: #cbd5e1; color: #475569;" onclick="closeCustomerBookingModal()">Đóng</button>
+            <button type="button" class="btn-primary" style="flex: 1; padding: 11px 16px; border-radius: 10px; font-weight: 600; background: #10b981; border-color: #10b981;" onclick="closeCustomerBookingModal(); renderMyBookings();">
+                <i class="fa-solid fa-ticket" style="margin-right: 6px;"></i> Xem vé đã đặt
+            </button>
+        `;
+    } else if (actionType === 'topup') {
+        actionButtonsHtml = `
+            <button type="button" class="btn-outline" style="flex: 1; padding: 11px 16px; border-radius: 10px; font-weight: 600; background: #ffffff; border: 1px solid #fda4af; color: #be123c;" onmouseover="this.style.background='#fff1f2'" onmouseout="this.style.background='#ffffff'" onclick="closeCustomerBookingModal()">Đóng</button>
+            <button type="button" class="btn-primary" style="flex: 1; padding: 11px 16px; border-radius: 10px; font-weight: 600; background: #2563eb; border-color: #2563eb; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25);" onclick="closeCustomerBookingModal(); closeCartModal(); openDepositModal();">
+                <i class="fa-solid fa-wallet" style="margin-right: 6px;"></i> Nạp tiền ngay
+            </button>
+        `;
+    } else {
+        actionButtonsHtml = `
+            <button type="button" class="btn-primary" style="width: 100%; padding: 11px 24px; border-radius: 10px; font-weight: 600; background: #e11d48; border-color: #e11d48; box-shadow: 0 4px 10px rgba(225, 29, 72, 0.25);" onclick="closeCustomerBookingModal()">Đã hiểu</button>
+        `;
+    }
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 430px; width: 92%; text-align: center; padding: 28px 24px; border-radius: 18px; background: ${modalBg}; border: ${modalBorder}; box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25); animation: modalPopIn 0.25s ease forwards;">
+            ${iconHtml}
+            <h3 style="margin: 0 0 12px 0; font-size: 1.4rem; font-weight: 800; color: ${titleColor};">${title}</h3>
+            <div style="background: ${msgBg}; border: ${msgBorder}; color: ${msgColor}; padding: 12px 16px; border-radius: 12px; margin: 0 0 22px 0; line-height: 1.6; font-size: 0.94rem; font-weight: 500;">
+                ${message}
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: center;">
+                ${actionButtonsHtml}
+            </div>
+        </div>
+        <style>@keyframes modalPopIn { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }</style>
+    `;
+
+    modal.style.display = 'flex';
+}
+
+function closeCustomerBookingModal() {
+    const modal = document.getElementById('customer-booking-result-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+function showCartAlert(message, isSuccess) {
+    // Chuyển hướng mọi thông báo giỏ hàng sang hiển thị bằng Modal
+    const isLowBalance = message && (message.toLowerCase().includes('số dư') || message.toLowerCase().includes('không đủ'));
+    showCustomerBookingModal(
+        isSuccess ? 'Đặt sân thành công!' : 'Đặt sân không thành công',
+        message,
+        isSuccess,
+        (!isSuccess && isLowBalance) ? 'topup' : null
+    );
 }
 
 // Hàm tiến hành đặt sân
@@ -1372,30 +1435,28 @@ async function checkoutBooking() {
             
             if (!clusterData.success || clusterData.data.deleted_at !== null) {
                 const clusterName = selectedSlots.find(s => s.clusterId === cId).clusterName;
-                showCartAlert(`Cụm sân "${clusterName}" đang bảo trì hoặc ngừng hoạt động. Đã tự động gỡ khỏi giỏ!`, false);
                 
-                setTimeout(() => {
-                    // Lọc bỏ toàn bộ các sân con thuộc cụm bị lỗi ra khỏi giỏ hàng
-                    selectedSlots = selectedSlots.filter(s => s.clusterId !== cId);
-                    saveToSession();
-                    
-                    // Kiểm tra giỏ hàng để mở/đóng Modal
-                    if (selectedSlots.length > 0) {
-                        openCartModal(); // Nếu còn sân của cụm khác thì giữ Modal
-                    } else {
-                        closeCartModal(); // Đóng nếu giỏ trống
+                // Lọc bỏ toàn bộ các sân con thuộc cụm bị lỗi ra khỏi giỏ hàng
+                selectedSlots = selectedSlots.filter(s => s.clusterId !== cId);
+                saveToSession();
+                
+                if (selectedSlots.length > 0) openCartModal();
+                else closeCartModal();
+                
+                // Đồng bộ nhả màu xanh trên giao diện lịch
+                document.querySelectorAll('.schedule-table .slot.selected').forEach(el => {
+                    const slotId = el.getAttribute('data-slot-id');
+                    if (!selectedSlots.some(s => s.id === slotId)) {
+                        el.classList.remove('selected');
+                        el.innerText = 'CÒN TRỐNG';
                     }
-                    
-                    // Đồng bộ nhả màu xanh trên giao diện lịch
-                    const allSelectedElements = document.querySelectorAll('.schedule-table .slot.selected');
-                    allSelectedElements.forEach(el => {
-                        const slotId = el.getAttribute('data-slot-id');
-                        if (!selectedSlots.some(s => s.id === slotId)) {
-                            el.classList.remove('selected');
-                            el.innerText = 'CÒN TRỐNG';
-                        }
-                    });
-                }, 3000); 
+                });
+
+                showCustomerBookingModal(
+                    'Cụm sân tạm ngưng',
+                    `Cụm sân <strong>"${clusterName}"</strong> hiện đang bảo trì hoặc ngừng hoạt động. Hệ thống đã tự động gỡ khỏi giỏ hàng của bạn!`,
+                    false
+                );
                 return;
             }
 
@@ -1409,29 +1470,26 @@ async function checkoutBooking() {
                 
                 if (!pitchInfo || pitchInfo.TrangThai === 'BaoTri') {
                     const pitchName = pitchInfo ? pitchInfo.TenSan : 'không xác định';
-                    showCartAlert(`Sân "${pitchName}" đang bảo trì đột xuất. Đã tự động gỡ khỏi giỏ!`, false);
                     
-                    setTimeout(() => {
-                        // Lọc bỏ sân bị lỗi ra khỏi giỏ
-                        selectedSlots = selectedSlots.filter(s => s.pitchId !== pId);
-                        saveToSession();
-                        
-                        if (selectedSlots.length > 0) {
-                            openCartModal(); // Nếu còn sân khác thì render lại giỏ
-                        } else {
-                            closeCartModal(); // Đóng nếu giỏ trống
+                    selectedSlots = selectedSlots.filter(s => s.pitchId !== pId);
+                    saveToSession();
+                    
+                    if (selectedSlots.length > 0) openCartModal();
+                    else closeCartModal();
+                    
+                    document.querySelectorAll('.schedule-table .slot.selected').forEach(el => {
+                        const slotId = el.getAttribute('data-slot-id');
+                        if (!selectedSlots.some(s => s.id === slotId)) {
+                            el.classList.remove('selected');
+                            el.innerText = 'CÒN TRỐNG';
                         }
-                        
-                        // Đồng bộ nhả màu xanh trên giao diện lịch
-                        const allSelectedElements = document.querySelectorAll('.schedule-table .slot.selected');
-                        allSelectedElements.forEach(el => {
-                            const slotId = el.getAttribute('data-slot-id');
-                            if (!selectedSlots.some(s => s.id === slotId)) {
-                                el.classList.remove('selected');
-                                el.innerText = 'CÒN TRỐNG';
-                            }
-                        });
-                    }, 3000);
+                    });
+
+                    showCustomerBookingModal(
+                        'Sân đang bảo trì',
+                        `Sân <strong>"${pitchName}"</strong> vừa chuyển sang trạng thái bảo trì đột xuất. Hệ thống đã tự động gỡ khỏi giỏ hàng!`,
+                        false
+                    );
                     return;
                 }
             }
@@ -1456,7 +1514,6 @@ async function checkoutBooking() {
                     let isSlotValid = false;
                     if (kgMatch) {
                         const priceExists = prices.find(p => p.ID_LoaiSan == pitchInfo.ID_LoaiSan && p.ID_KhungGio == kgMatch.ID);
-                        // Chỉ hợp lệ nếu có giá > 0 VÀ nằm trong giờ hoạt động
                         if (priceExists && priceExists.SoTien > 0) {
                             const moCua = clusterData.data.GioMoCua.substring(0, 5);
                             const dongCua = clusterData.data.GioDongCua.substring(0, 5);
@@ -1470,23 +1527,17 @@ async function checkoutBooking() {
                     }
 
                     if (!isSlotValid) {
-                        showCartAlert(`Khung giờ ${slot.time} của sân "${pitchInfo.TenSan}" hiện đang đóng hoặc ngừng kinh doanh. Hệ thống tự động gỡ khỏi giỏ!`, false);
+                        selectedSlots = selectedSlots.filter(s => s.id !== slot.id);
+                        saveToSession();
                         
-                        setTimeout(() => {
-                            selectedSlots = selectedSlots.filter(s => s.id !== slot.id);
-                            saveToSession();
-                            
-                            if (selectedSlots.length > 0) openCartModal(); 
-                            else closeCartModal();
-                            
-                            // if (currentClusterId !== null && currentPitchId !== null) {
-                            //     renderSchedule(currentClusterId, currentClusterName, currentPitchId, currentPitchName, currentLoaiSanId, currentPitchType);
-                            // } else if (currentClusterId !== null && document.querySelector('.pitch-section')) {
-                            //     renderPitches(cId, clusterData.data.TenCumSan, clusterData.data.DiaChi, clusterData.data.GioMoCua, clusterData.data.GioDongCua);
-                            // } else {
-                            //     renderClusters();
-                            // }
-                        }, 3000);
+                        if (selectedSlots.length > 0) openCartModal(); 
+                        else closeCartModal();
+
+                        showCustomerBookingModal(
+                            'Khung giờ ngừng hoạt động',
+                            `Khung giờ <strong>${slot.time}</strong> của sân <strong>"${pitchInfo.TenSan}"</strong> hiện đang đóng hoặc ngừng kinh doanh. Hệ thống đã tự động gỡ khỏi giỏ!`,
+                            false
+                        );
                         return;
                     }
                 }
@@ -1511,9 +1562,9 @@ async function checkoutBooking() {
         const data = await response.json();
 
         if (data.success) {
-
             // 1. LƯU NGAY DANH SÁCH SLOT VỪA THANH TOÁN
             const bookedSlots = [...selectedSlots];
+            const totalSlotsCount = bookedSlots.length;
 
             // 2. ĐỒNG BỘ SỐ DƯ VÍ
             syncUserWallet();
@@ -1521,71 +1572,65 @@ async function checkoutBooking() {
             // 3. RESET MỤC ĐÍCH ĐẶT SÂN
             if (currentBookingPurpose !== 'normal') {
                 currentBookingPurpose = 'normal';
-                sessionStorage.setItem('dn_football_booking_purpose','normal');
+                sessionStorage.setItem('dn_football_booking_purpose', 'normal');
             }
 
             // 4. CHUYỂN TỪ "ĐÃ CHỌN" -> "ĐÃ ĐẶT"
             bookedSlots.forEach(slot => markSlotAsBooked(slot));
 
-            // 5. XÓA SLOT KHỎI GIỎ HÀNG
+            // 5. XÓA SLOT KHỎI GIỎ HÀNG & LƯU SESSION
             selectedSlots = [];
-
-            // 6. LƯU SESSION
             saveToSession();
 
-            // 7. ĐÓNG MODAL NGAY LẬP TỨC
+            // 6. ĐÓNG MODAL GIỎ HÀNG NGAY LẬP TỨC
             const cartModal = document.getElementById('cart-modal');
             if (cartModal) cartModal.style.display = 'none';
 
-            // 8. HIỂN THỊ THÔNG BÁO TOAST NỔI (Không chặn UI)
-            showToast("Đặt sân thành công! Số dư đã được trừ.");
+            // 7. HIỂN THỊ MODAL THÔNG BÁO ĐẶT SÂN THÀNH CÔNG
+            showCustomerBookingModal(
+                'Đặt sân thành công!',
+                data.message || `Bạn đã đặt thành công <strong>${totalSlotsCount} khung giờ</strong>. Tiền cọc đã được trừ trực tiếp từ ví của bạn.`,
+                true
+            );
         } else {
-            // Thông báo màu đỏ (Lỗi hết tiền, lỗi sân bị người khác đặt...)
-            showCartAlert(data.message, false);
-
+            // TRƯỜNG HỢP ĐẶT SÂN THẤT BẠI (Hết tiền, trùng lịch vừa bị người khác đặt...)
             if (data.failed_slot_ids && data.failed_slot_ids.length > 0) {
-                
-                // 1. Dùng hàm includes() để xóa TẤT CẢ các ô nằm trong mảng lỗi khỏi giỏ hàng
+                // Xóa các ô bị trùng khỏi giỏ hàng
                 selectedSlots = selectedSlots.filter(s => !data.failed_slot_ids.includes(s.id));
-                saveToSession(); // Lưu lại vào Session Storage
+                saveToSession();
 
-                // 2. Đợi 3 giây cho khách đọc chữ đỏ rồi mới tự động gỡ UI
-                setTimeout(() => {
-                    // Nếu giỏ hàng vẫn còn ô hợp lệ -> Giữ Modal mở và vẽ lại danh sách
-                    if (selectedSlots.length > 0) {
-                        openCartModal(); 
-                    } else {
-                        // Nếu giỏ hàng đã trống -> Tự động đóng Modal
-                        closeCartModal();
-                    }
-
-                    // Quét lại lưới lịch để cập nhật các ô vừa mất thành màu xám "Đã đặt"
-                    // if (currentClusterId !== null && currentPitchId !== null) {
-                    //     renderSchedule(currentClusterId, currentClusterName, currentPitchId, currentPitchName, currentLoaiSanId, currentPitchType);
-                    // }
-                }, 3000);
-            }
-            else {
-                setTimeout(() => {
-                    const alertBox = document.getElementById('cart-alert');
-                    if (alertBox) {
-                        alertBox.style.display = 'none'; // Chỉ ẩn dòng chữ đỏ, giữ nguyên giỏ hàng
-                    }
+                if (selectedSlots.length > 0) {
+                    openCartModal();
+                } else {
                     closeCartModal();
-                }, 3000);
+                }
+            } else {
+                closeCartModal();
             }
+
+            // Kiểm tra xem có phải lỗi thiếu số dư ví không để hiện nút "Nạp tiền ngay"
+            const errMsg = data.message || 'Không thể hoàn tất đặt sân. Vui lòng kiểm tra lại!';
+            const isLowBalance = errMsg.toLowerCase().includes('số dư') || errMsg.toLowerCase().includes('không đủ');
+
+            showCustomerBookingModal(
+                'Đặt sân thất bại!',
+                errMsg,
+                false,
+                isLowBalance ? 'topup' : null
+            );
         }
         
     } catch (error) {
         console.error('Lỗi xác thực:', error);
-        showCartAlert('Lỗi kết nối máy chủ!', false);
+        closeCartModal();
+        showCustomerBookingModal(
+            'Lỗi kết nối',
+            'Không thể kết nối đến máy chủ. Vui lòng kiểm tra mạng và thử lại!',
+            false
+        );
     } finally {
-        let isWaitingForRefresh = (typeof data !== 'undefined' && data !== null && data.success === false && data.failed_slot_ids && data.failed_slot_ids.length > 0);
-        
-        if (!isWaitingForRefresh) {
-            if (btnFloating) { btnFloating.disabled = false; btnFloating.innerHTML = 'Tiến hành đặt sân'; }
-            if (btnModal) { btnModal.disabled = false; btnModal.innerHTML = 'Thanh toán ngay'; }
-        }
+        if (btnFloating) { btnFloating.disabled = false; btnFloating.innerHTML = 'Tiến hành đặt sân'; }
+        if (btnModal) { btnModal.disabled = false; btnModal.innerHTML = 'Thanh toán ngay'; }
     }
 }
 
@@ -1632,7 +1677,7 @@ async function renderClusters() {
                 </div>
                 <div style="min-width: 220px;">
                     <select id="filter-phuong" class="form-control" onchange="filterClusters()">
-                        <option value="">Tất cả khu vực (${allActiveClusters.length} cụm sân)</option>
+                        <option value="">Tất cả khu vực</option>
                         ${uniquePhuongs.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
                     </select>
                 </div>
