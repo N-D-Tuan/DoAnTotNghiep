@@ -7993,8 +7993,9 @@ function applyBLFiltersAndRender() {
                     </button>
                 `;
             } else if (item.trang_thai === 'ChoThanhToan') {
+                const safeBank = (item.thong_tin_ngan_hang || 'Chưa cung cấp').replace(/'/g, "\\'");
                 actionHtml += `
-                    <button class="btn-primary" style="padding: 5px 10px; font-size: 0.82rem; margin-left: 5px; background: #10b981; border-color: #10b981;" onclick="executeThanhToanLuong(${item.bang_luong_id})">
+                    <button class="btn-primary" style="padding: 5px 10px; font-size: 0.82rem; margin-left: 5px; background: #10b981; border-color: #10b981;" onclick="openConfirmThanhToanLuongModal(${item.bang_luong_id}, '${safeTenNV}', ${item.thuc_lanh}, '${safeBank}')">
                         <i class="fa-solid fa-check"></i> Đã chuyển khoản
                     </button>
                 `;
@@ -8125,13 +8126,79 @@ async function executeReChotLuong() {
     }
 }
 
-async function executeThanhToanLuong(bangLuongId) {
+let pendingThanhToanBangLuongId = null;
+
+function openConfirmThanhToanLuongModal(bangLuongId, tenNhanVien, thucLanh, thongTinNganHang) {
+    pendingThanhToanBangLuongId = bangLuongId;
+
+    let modal = document.getElementById('confirm-thanh-toan-luong-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'confirm-thanh-toan-luong-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 10000; align-items: center; justify-content: center;';
+        modal.onclick = function(e) {
+            if (e.target === modal) closeConfirmThanhToanLuongModal();
+        };
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 420px; text-align: center; padding: 30px 24px; border-radius: 14px;">
+            <div style="font-size: 3.2rem; color: #10b981; margin-bottom: 12px;">
+                <i class="fa-solid fa-money-check-dollar"></i>
+            </div>
+            <h3 style="margin-bottom: 10px; font-size: 1.35rem; color: var(--text-dark);">Xác nhận Đã Chuyển Khoản?</h3>
+            <p style="color: var(--text-muted); margin-bottom: 16px; line-height: 1.5; font-size: 0.92rem;">
+                Bạn xác nhận đã chuyển khoản tiền lương kỳ <strong>${currentBLThangNam}</strong> cho nhân viên <strong>${tenNhanVien}</strong>?
+            </p>
+
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; margin-bottom: 24px; text-align: left; font-size: 0.88rem; line-height: 1.6;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span style="color: #64748b;">Số tiền thực lãnh:</span>
+                    <strong style="color: #2563eb; font-size: 1rem;">${Number(thucLanh || 0).toLocaleString('vi-VN')}đ</strong>
+                </div>
+                <div style="border-top: 1px dashed #cbd5e1; padding-top: 6px; margin-top: 6px;">
+                    <span style="color: #64748b; display: block; font-size: 0.8rem;">Tài khoản thụ hưởng:</span>
+                    <strong style="color: #0f172a;">${thongTinNganHang}</strong>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: center; gap: 12px;">
+                <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="closeConfirmThanhToanLuongModal()">Hủy bỏ</button>
+                <button id="btn-agree-thanh-toan-luong" class="btn-primary" style="width: auto; padding: 10px 24px; background-color: #10b981; border-color: #10b981;" onclick="executeThanhToanLuong()">
+                    <i class="fa-solid fa-check"></i> Xác nhận Đã Chuyển
+                </button>
+            </div>
+        </div>
+    `;
+
+    modal.style.display = 'flex';
+}
+
+function closeConfirmThanhToanLuongModal() {
+    const modal = document.getElementById('confirm-thanh-toan-luong-modal');
+    if (modal) modal.style.display = 'none';
+    pendingThanhToanBangLuongId = null;
+}
+
+async function executeThanhToanLuong() {
+    if (!pendingThanhToanBangLuongId) return;
+
+    const btn = document.getElementById('btn-agree-thanh-toan-luong');
+    if (btn) {
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+        btn.disabled = true;
+    }
+
     try {
-        const response = await fetch(`${API_BASE_URL}/admin/bang-luong/${bangLuongId}/thanh-toan`, {
+        const response = await fetch(`${API_BASE_URL}/admin/bang-luong/${pendingThanhToanBangLuongId}/thanh-toan`, {
             method: 'PUT',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
         });
         const data = await response.json();
+
+        closeConfirmThanhToanLuongModal();
 
         if (response.ok && data.success) {
             showSystemModal('Thành công', data.message, 'success');
@@ -8140,6 +8207,7 @@ async function executeThanhToanLuong(bangLuongId) {
             showSystemModal('Lỗi', data.message || 'Không thể xác nhận thanh toán', 'error');
         }
     } catch (e) {
+        closeConfirmThanhToanLuongModal();
         showSystemModal('Lỗi mạng', 'Không thể kết nối máy chủ', 'error');
     }
 }
