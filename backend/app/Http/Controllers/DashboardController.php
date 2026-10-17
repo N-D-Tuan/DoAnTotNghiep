@@ -264,25 +264,103 @@ class DashboardController extends Controller
         }
 
         // =========================================================
-        // 7. LẤY 5 BOOKING MỚI NHẤT
+        // 7. THỐNG KÊ HIỆU SUẤT NHÂN VIÊN CHỐT SÂN THEO NGÀY TRONG THÁNG
+        // (Chỉ tính VaiTro = 'NhanVien', có ID_NhanVienXuLy, TrangThai in ['HoanThanh', 'KhongDen'])
         // =========================================================
-        $queryRecent = DatSan::with(['nguoiDung', 'sanBong.cumSan', 'khungGio']);
-        if ($idCumSan !== 'all') { 
-            $queryRecent->whereHas('sanBong', function($q) use ($idCumSan) { $q->where('ID_CumSan', $idCumSan); });
+        $staffMonthYear = $request->staff_month ?? $today->format('m-Y'); // Định dạng MM-YYYY
+        $parts = explode('-', $staffMonthYear);
+        $filterMonth = isset($parts[0]) ? (int) $parts[0] : $today->month;
+        $filterYear  = isset($parts[1]) ? (int) $parts[1] : $today->year;
+
+        // Cụm sân lọc riêng cho bảng nhân viên (Quản lý luôn cố định theo cụm sân của mình)
+        $staffCumSan = $isQuanLy ? $userDangNhap->ID_CumSan : ($request->staff_cum_san ?? $idCumSan);
+
+        $daysInMonth = Carbon::createFromDate($filterYear, $filterMonth, 1)->daysInMonth;
+
+        // 7.1. Lấy danh sách Nhân viên thuộc diện thống kê
+        $queryStaffs = NguoiDung::with('cumSan')
+            ->where('VaiTro', 'NhanVien');
+
+        if ($staffCumSan !== 'all') {
+            $queryStaffs->where('ID_CumSan', $staffCumSan);
         }
-        $bookingMoiNhat = $queryRecent->orderBy('ID', 'desc')->take(5)->get();
+        $staffList = $queryStaffs->orderBy('ID_CumSan', 'asc')->orderBy('HoTen', 'asc')->get();
+
+        // 7.2. Lấy toàn bộ lượt đặt sân đã chốt (HoanThanh, KhongDen) trong tháng đó bởi Nhân viên
+        $queryChotSan = DatSan::whereYear('NgayDa', $filterYear)
+            ->whereMonth('NgayDa', $filterMonth)
+            ->whereIn('TrangThai', ['HoanThanh', 'KhongDen'])
+            ->whereNotNull('ID_NhanVienXuLy')
+            ->whereHas('nhanVienXuLy', function ($q) {
+                $q->where('VaiTro', 'NhanVien');
+            });
+
+        if ($staffCumSan !== 'all') {
+            $queryChotSan->whereHas('sanBong', function ($q) use ($staffCumSan) {
+                $q->where('ID_CumSan', $staffCumSan);
+            });
+        }
+
+        $chotSanRecords = $queryChotSan->get(['ID', 'ID_NhanVienXuLy', 'NgayDa', 'TrangThai']);
+
+        // 7.3. Gom nhóm dữ liệu theo từng nhân viên và từng ngày trong tháng
+        $thongKeNhanVien = [];
+        foreach ($staffList as $nv) {
+            $chiTietNgay = [];
+            for ($d = 1; $d <= $daysInMonth; $d++) {
+                $chiTietNgay[$d] = [
+                    'tong'       => 0,
+                    'hoan_thanh' => 0,
+                    'khong_den'  => 0
+                ];
+            }
+
+            $thongKeNhanVien[$nv->ID] = [
+                'id_nhan_vien'    => $nv->ID,
+                'ho_ten'          => $nv->HoTen,
+                'so_dien_thoai'   => $nv->SoDienThoai,
+                'ten_cum_san'     => $nv->cumSan ? $nv->cumSan->TenCumSan : 'Chưa phân bổ',
+                'tong_chot_thang' => 0,
+                'tong_hoan_thanh' => 0,
+                'tong_khong_den'  => 0,
+                'ngay'            => $chiTietNgay
+            ];
+        }
+
+        foreach ($chotSanRecords as $rec) {
+            $nvId = $rec->ID_NhanVienXuLy;
+            if (!isset($thongKeNhanVien[$nvId])) continue;
+
+            $dayNum = (int) Carbon::parse($rec->NgayDa)->format('j');
+            if (isset($thongKeNhanVien[$nvId]['ngay'][$dayNum])) {
+                $thongKeNhanVien[$nvId]['ngay'][$dayNum]['tong']++;
+                $thongKeNhanVien[$nvId]['tong_chot_thang']++;
+
+                if ($rec->TrangThai === 'HoanThanh') {
+                    $thongKeNhanVien[$nvId]['ngay'][$dayNum]['hoan_thanh']++;
+                    $thongKeNhanVien[$nvId]['tong_hoan_thanh']++;
+                } elseif ($rec->TrangThai === 'KhongDen') {
+                    $thongKeNhanVien[$nvId]['ngay'][$dayNum]['khong_den']++;
+                    $thongKeNhanVien[$nvId]['tong_khong_den']++;
+                }
+            }
+        }
 
         return response()->json([
             'success' => true,
             'data' => [
-                'doanh_thu_hom_nay' => $doanhThuHomNay,
-                'booking_hom_nay' => $bookingHomNay,
-                'booking_hoan_thanh_hom_nay' => $bookingHoanThanhHomNay,
-                'tong_khach_hang' => $tongKhachHang,
-                'cho_duyet' => $tongChoDuyet,
-                'so_san_quen_chot' => $soSanQuenChot,
-                'chart' => $doanhThuChart,
-                'recent_bookings' => $bookingMoiNhat
+                'doanh_thu_hom_nay'         => $doanhThuHomNay,
+                'booking_hom_nay'           => $bookingHomNay,
+                'booking_hoan_thanh_hom_nay'=> $bookingHoanThanhHomNay,
+                'tong_khach_hang'           => $tongKhachHang,
+                'cho_duyet'                 => $tongChoDuyet,
+                'so_san_quen_chot'          => $soSanQuenChot,
+                'chart'                     => $doanhThuChart,
+                'staff_performance'         => [
+                    'thang_nam'     => sprintf('%02d-%04d', $filterMonth, $filterYear),
+                    'days_in_month' => $daysInMonth,
+                    'list'          => array_values($thongKeNhanVien)
+                ]
             ]
         ]);
     }
