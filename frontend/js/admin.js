@@ -3889,6 +3889,8 @@ async function executeToggleKhoaKhachHang() {
 let dashboardChartInstance = null;
 let dashboardFilterCumSan = 'all';
 let dashboardFilterTime = 'hom_nay';
+let dashboardStaffMonth = '';
+let dashboardStaffCumSan = 'all';
 
 async function renderTongQuan() {
     const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
@@ -3896,36 +3898,59 @@ async function renderTongQuan() {
 
     dashboardFilterCumSan = 'all';
     dashboardFilterTime = 'hom_nay';
+    dashboardStaffCumSan = 'all';
 
-    // Chỉ Active Menu khi vừa load trang
+    // Mặc định lấy tháng-năm hiện tại (MM-YYYY)
+    const today = new Date();
+    const curMonth = String(today.getMonth() + 1).padStart(2, '0');
+    const curYear = today.getFullYear();
+    dashboardStaffMonth = `${curMonth}-${curYear}`;
+
+    // Tạo danh sách Tháng/Năm cho bộ lọc hiệu suất nhân viên
+    let staffMonthOptions = '';
+    for (let y = curYear; y >= 2024; y--) {
+        for (let m = 12; m >= 1; m--) {
+            if (y === curYear && m > (today.getMonth() + 1)) continue;
+            const mm = String(m).padStart(2, '0');
+            const val = `${mm}-${y}`;
+            const selected = (val === dashboardStaffMonth) ? 'selected' : '';
+            staffMonthOptions += `<option value="${val}" ${selected}>Tháng ${mm}/${y}</option>`;
+        }
+    }
+
+    // Active Menu Tổng quan
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
     const menuLink = Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('TỔNG QUAN'));
     if (menuLink) menuLink.classList.add('active');
 
     const contentArea = document.querySelector('.admin-content');
     
-    // Giao diện tĩnh Ban đầu (Khung sườn, không chứa dữ liệu thô)
     let selectCumSanHtml = '';
+    let selectStaffCumSanHtml = '';
     
-    // CHỈ RENDER DROPDOWN NẾU LÀ ADMIN
+    // CHỈ RENDER DROPDOWN CỤM SÂN NẾU LÀ ADMIN
     if (currentUser.VaiTro === 'Admin') {
         try {
             const csRes = await fetch(`${API_BASE_URL}/cum-san`);
             const csData = await csRes.json();
             const optHtml = csData.data.map(cs => `<option value="${cs.ID}">${cs.TenCumSan}</option>`).join('');
-            selectCumSanHtml = `<select class="form-control" style="width: 200px;" onchange="dashboardFilterCumSan=this.value; updateDashboardStats()">
-                                    <option value="all">Tất cả Cụm Sân</option>
-                                    ${optHtml}
-                                </select>`;
+            
+            // Đổi lọc cụm sân ở Biểu đồ -> truyền 'chart'
+            selectCumSanHtml = `
+                <select class="form-control" style="width: 200px;" onchange="dashboardFilterCumSan=this.value; updateDashboardStats('chart')">
+                    <option value="all">Tất cả Cụm Sân</option>
+                    ${optHtml}
+                </select>`;
+
+            // Đổi lọc cụm sân ở Bảng nhân viên -> truyền 'staff'
+            selectStaffCumSanHtml = `
+                <select class="form-control" style="width: 200px;" onchange="dashboardStaffCumSan=this.value; updateDashboardStats('staff')">
+                    <option value="all">Tất cả Cụm Sân</option>
+                    ${optHtml}
+                </select>`;
         } catch(e) {}
     }
 
-    // Nút "Xem tất cả" chỉ hiện cho Quản lý sân
-    const btnXemTatCa = currentUser.VaiTro === 'QuanLySan' 
-        ? `<button class="btn-outline-sm" onclick="renderQuanLyDatSan('All', null)">Xem tất cả</button>` 
-        : '';
-
-    // Ghi đè HTML, thay vì số ảo "2.500.000đ", để "..."
     contentArea.innerHTML = `
         <div class="page-header" style="margin-bottom: 24px;">
             <h1 class="page-title">Tổng quan hệ thống</h1>
@@ -3958,17 +3983,18 @@ async function renderTongQuan() {
             <div class="panel">
                 <div class="panel-header" style="display:flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                     <div>
-                            <div style="font-size: 1.1rem; color: var(--text-dark); margin-bottom: 6px;">Biểu đồ doanh thu</div>
-                            <div style="display: flex; align-items: baseline; gap: 8px;">
-                                <span id="chart-total-amount" style="font-size: 1.8rem; font-weight: 800; color: #16A34A; letter-spacing: -0.5px;">...đ</span>
-                                <span style="font-size: 0.85rem; color: #64748b; background: #f8fafc; padding: 4px 10px; border-radius: 12px; border: 1px solid #e2e8f0;">
-                                    <i class="fa-solid fa-circle-info" style="margin-right: 4px; color: #3b82f6;"></i>Đã gồm bán nước, nhập kho & lương NV
-                                </span>
-                            </div>
+                        <div style="font-size: 1.1rem; color: var(--text-dark); margin-bottom: 6px;">Biểu đồ doanh thu</div>
+                        <div style="display: flex; align-items: baseline; gap: 8px;">
+                            <span id="chart-total-amount" style="font-size: 1.8rem; font-weight: 800; color: #16A34A; letter-spacing: -0.5px;">...đ</span>
+                            <span style="font-size: 0.85rem; color: #64748b; background: #f8fafc; padding: 4px 10px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                                <i class="fa-solid fa-circle-info" style="margin-right: 4px; color: #3b82f6;"></i>Đã gồm bán nước, nhập kho & lương NV
+                            </span>
                         </div>
+                    </div>
                     <div style="display: flex; gap: 10px;">
                         ${selectCumSanHtml}
-                        <select class="form-control" style="width: 170px;" onchange="dashboardFilterTime=this.value; updateDashboardStats()">
+                        <!-- Đổi thời gian ở Biểu đồ -> truyền 'chart' -->
+                        <select class="form-control" style="width: 170px;" onchange="dashboardFilterTime=this.value; updateDashboardStats('chart')">
                             <option value="hom_nay" selected>Hôm nay</option>
                             <option value="hom_truoc">Hôm qua</option>
                             <option value="7_ngay">7 ngày gần đây</option>
@@ -3983,31 +4009,40 @@ async function renderTongQuan() {
             </div>
         </div>
 
+        <!-- BẢNG THỐNG KÊ HIỆU SUẤT CHỐT SÂN CỦA NHÂN VIÊN THEO TỪNG NGÀY TRONG THÁNG -->
         <div class="panel">
-            <div class="panel-header" style="display:flex; justify-content: space-between; align-items: center;">
-                <span>Booking mới nhất</span>
-                ${btnXemTatCa}
+            <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid #e2e8f0;">
+                <div>
+                    <div style="font-size: 1.08rem; font-weight: 700; color: var(--text-dark);">
+                        <i class="fa-solid fa-user-check" style="color: var(--primary); margin-right: 6px;"></i>
+                        Thống kê lượt chốt đặt sân của Nhân viên theo ngày
+                    </div>
+                    <div style="font-size: 0.83rem; color: var(--text-muted); font-weight: normal; margin-top: 3px;">
+                        Chỉ tính các vé đặt sân ở trạng thái <strong style="color: #047857;">Hoàn thành</strong> hoặc <strong style="color: #b45309;">Không đến</strong> do tài khoản <strong>Nhân viên</strong> trực tiếp xử lý.
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    ${selectStaffCumSanHtml}
+                    <!-- Đổi tháng ở Bảng nhân viên -> truyền 'staff' -->
+                    <select class="form-control" style="width: 165px; height: 38px; border-radius: 8px; font-weight: 600; color: var(--primary); border-color: var(--primary); background: #f0fdf4;" onchange="dashboardStaffMonth=this.value; updateDashboardStats('staff')">
+                        ${staffMonthOptions}
+                    </select>
+                </div>
             </div>
-            <div class="table-responsive">
-                <table class="admin-table">
-                    <thead style="background: #F8FAFC;">
-                        <tr>
-                            <th>Mã Đặt</th>
-                            <th>Khách hàng</th>
-                            <th>Thông tin Sân</th>
-                            <th>Ngày & Giờ</th>
-                            <th>Trạng thái</th>
-                        </tr>
+
+            <div class="table-responsive" style="max-height: 440px; overflow-x: auto; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; margin-top: 12px;">
+                <table class="admin-table" style="min-width: max-content; margin: 0; border-collapse: separate; border-spacing: 0;">
+                    <thead id="staff-perf-thead" style="background: #F8FAFC; position: sticky; top: 0; z-index: 20;">
                     </thead>
-                    <tbody id="recent-bookings-tbody">
-                        <tr><td colspan="5" class="text-center" style="padding: 20px; text-align: center;">Đang tải dữ liệu...</td></tr>
+                    <tbody id="staff-perf-tbody">
+                        <tr><td colspan="10" class="text-center" style="padding: 30px; text-align: center;">Đang tải dữ liệu...</td></tr>
                     </tbody>
                 </table>
             </div>
         </div>
     `;
 
-    // Khởi tạo Chart mặc định rỗng (Tránh lỗi destroy)
+    // Khởi tạo Chart mặc định rỗng
     const ctx = document.getElementById('revenueChart').getContext('2d');
     dashboardChartInstance = new Chart(ctx, {
         type: 'bar',
@@ -4015,163 +4050,203 @@ async function renderTongQuan() {
         options: { responsive: true }
     });
 
-    // Gọi API nạp dữ liệu thống kê
-    updateDashboardStats();
+    // Lần đầu tiên mở trang -> Cập nhật toàn bộ ('all')
+    updateDashboardStats('all');
 }
 
-async function updateDashboardStats() {
+/**
+ * Cập nhật dữ liệu thống kê theo từng vùng độc lập:
+ * @param {string} scope - 'all' (tất cả), 'chart' (chỉ biểu đồ & 4 thẻ trên), 'staff' (chỉ bảng hiệu suất nhân viên)
+ */
+async function updateDashboardStats(scope = 'all') {
     const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
-    
-    // Ngăn lỗi nếu Admin chuyển qua tab khác mà JS vẫn ráng render lại biểu đồ
     if (!document.getElementById('revenueChart') || !document.getElementById('stat-doanh-thu')) return;
 
+    // Nếu chỉ lọc bảng nhân viên, hiển thị hiệu ứng mờ nhẹ ở bảng nhân viên trong lúc tải
+    const staffTbody = document.getElementById('staff-perf-tbody');
+    if (scope === 'staff' && staffTbody) {
+        staffTbody.style.opacity = '0.4';
+        staffTbody.style.transition = 'opacity 0.15s ease';
+    }
+
     try {
-        const response = await fetch(`${API_BASE_URL}/admin/thong-ke?id_cum_san=${dashboardFilterCumSan}&time_filter=${dashboardFilterTime}`);
+        const url = `${API_BASE_URL}/admin/thong-ke?id_cum_san=${dashboardFilterCumSan}&time_filter=${dashboardFilterTime}&staff_month=${dashboardStaffMonth}&staff_cum_san=${dashboardStaffCumSan}`;
+        const response = await fetch(url);
         const res = await response.json();
 
         if (!res.success) return;
         const data = res.data;
 
-        // Cập nhật Cảnh báo quên chốt sân (Chỉ quản lý mới bị nhắc)
-        const alertContainer = document.getElementById('dashboard-alert-container');
-        if (currentUser.VaiTro === 'QuanLySan' && data.so_san_quen_chot > 0) {
-            const d = new Date(); d.setDate(d.getDate() - 1);
-            const pad = n => n < 10 ? '0' + n : n;
-            const yesterday = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        // =========================================================
+        // VÙNG 1: CẬP NHẬT 4 THẺ TRÊN CÙNG & BIỂU ĐỒ (Chỉ chạy khi scope === 'all' hoặc 'chart')
+        // =========================================================
+        if (scope === 'all' || scope === 'chart') {
+            // Cập nhật Cảnh báo quên chốt sân (Chỉ quản lý mới bị nhắc)
+            const alertContainer = document.getElementById('dashboard-alert-container');
+            if (currentUser.VaiTro === 'QuanLySan' && data.so_san_quen_chot > 0) {
+                const d = new Date(); d.setDate(d.getDate() - 1);
+                const pad = n => n < 10 ? '0' + n : n;
+                const yesterday = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-            alertContainer.innerHTML = `
-                <div style="background: #fef2f2; border: 1px solid #f87171; border-left: 4px solid #ef4444; color: #b91c1c; padding: 16px 20px; border-radius: 8px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px rgba(239, 68, 68, 0.1);">
-                    <div>
-                        <h4 style="margin: 0 0 4px 0; font-size: 1.05rem;"><i class="fa-solid fa-triangle-exclamation"></i> CẢNH BÁO: CHƯA CHỐT SÂN NGÀY HÔM TRƯỚC</h4>
-                        <p style="margin: 0; font-size: 0.9rem;">Hệ thống phát hiện có <strong>${data.so_san_quen_chot}</strong> lịch đặt sân của ngày hôm trước vẫn đang ở trạng thái "Đã cọc". Vui lòng kiểm tra và chốt sân ngay!</p>
-                    </div>
-                    <button onclick="renderQuanLyDatSan('DaCoc', '${yesterday}')" style="background: #ef4444; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s;">Xử lý ngay</button>
-                </div>`;
-        } else {
-            alertContainer.innerHTML = '';
-        }
+                alertContainer.innerHTML = `
+                    <div style="background: #fef2f2; border: 1px solid #f87171; border-left: 4px solid #ef4444; color: #b91c1c; padding: 16px 20px; border-radius: 8px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px rgba(239, 68, 68, 0.1);">
+                        <div>
+                            <h4 style="margin: 0 0 4px 0; font-size: 1.05rem;"><i class="fa-solid fa-triangle-exclamation"></i> CẢNH BÁO: CHƯA CHỐT SÂN NGÀY HÔM TRƯỚC</h4>
+                            <p style="margin: 0; font-size: 0.9rem;">Hệ thống phát hiện có <strong>${data.so_san_quen_chot}</strong> lịch đặt sân của ngày hôm trước vẫn đang ở trạng thái "Đã cọc". Vui lòng kiểm tra và chốt sân ngay!</p>
+                        </div>
+                        <button onclick="renderQuanLyDatSan('DaCoc', '${yesterday}')" style="background: #ef4444; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s;">Xử lý ngay</button>
+                    </div>`;
+            } else {
+                alertContainer.innerHTML = '';
+            }
 
-        // Cập nhật 4 chỉ số trên cùng
-        document.getElementById('stat-doanh-thu').innerText = `${Number(data.doanh_thu_hom_nay).toLocaleString('vi-VN')}đ`;
-        document.getElementById('stat-so-tran').innerText = `${data.booking_hoan_thanh_hom_nay}/${data.booking_hom_nay} trận`;
-        document.getElementById('stat-khach-hang').innerText = `${data.tong_khach_hang} người`;
-        document.getElementById('stat-cho-duyet').innerText = `${data.cho_duyet} đơn`;
+            // Cập nhật 4 chỉ số trên cùng
+            document.getElementById('stat-doanh-thu').innerText = `${Number(data.doanh_thu_hom_nay).toLocaleString('vi-VN')}đ`;
+            document.getElementById('stat-so-tran').innerText = `${data.booking_hoan_thanh_hom_nay}/${data.booking_hom_nay} trận`;
+            document.getElementById('stat-khach-hang').innerText = `${data.tong_khach_hang} người`;
+            document.getElementById('stat-cho-duyet').innerText = `${data.cho_duyet} đơn`;
 
-        // ==========================================
-        // CẬP NHẬT TỔNG TIỀN VÀ BIỂU ĐỒ DOANH THU/CHI PHÍ
-        // ==========================================
-        const labels = data.chart.map(c => c.ngay);
-        const revenueData = data.chart.map(c => c.doanh_thu);
-        const expenseData = data.chart.map(c => c.chi_phi); // Nạp data chi phí
+            // Cập nhật tổng tiền và Biểu đồ Doanh thu / Chi phí
+            const labels = data.chart.map(c => c.ngay);
+            const revenueData = data.chart.map(c => c.doanh_thu);
+            const expenseData = data.chart.map(c => c.chi_phi);
 
-        // Tính Toán Thu - Chi - Lợi Nhuận
-        const totalRevenue = revenueData.reduce((sum, amount) => sum + Number(amount), 0);
-        const totalExpense = expenseData.reduce((sum, amount) => sum + Number(amount), 0);
-        const netProfit = totalRevenue - totalExpense;
-        const profitColor = netProfit >= 0 ? '#10b981' : '#ef4444';
+            const totalRevenue = revenueData.reduce((sum, amount) => sum + Number(amount), 0);
+            const totalExpense = expenseData.reduce((sum, amount) => sum + Number(amount), 0);
+            const netProfit = totalRevenue - totalExpense;
+            const profitColor = netProfit >= 0 ? '#10b981' : '#ef4444';
 
-        // Ghi ra giao diện
-        document.getElementById('chart-total-amount').innerHTML = `
-            Thu: ${totalRevenue.toLocaleString('vi-VN')}đ 
-            <span style="font-size: 1rem; font-weight: 600; color: #ef4444; margin-left: 10px;">(Chi: ${totalExpense.toLocaleString('vi-VN')}đ)</span>
-            <span style="font-size: 1rem; font-weight: 600; color: ${profitColor}; margin-left: 10px;">(Lãi: ${netProfit.toLocaleString('vi-VN')}đ)</span>
-        `;
+            document.getElementById('chart-total-amount').innerHTML = `
+                Thu: ${totalRevenue.toLocaleString('vi-VN')}đ 
+                <span style="font-size: 1rem; font-weight: 600; color: #ef4444; margin-left: 10px;">(Chi: ${totalExpense.toLocaleString('vi-VN')}đ)</span>
+                <span style="font-size: 1rem; font-weight: 600; color: ${profitColor}; margin-left: 10px;">(Lãi: ${netProfit.toLocaleString('vi-VN')}đ)</span>
+            `;
 
-        // Vẽ biểu đồ
-        const ctx = document.getElementById('revenueChart').getContext('2d');
-        if (dashboardChartInstance) {
-            dashboardChartInstance.destroy();
-        }
+            const ctx = document.getElementById('revenueChart').getContext('2d');
+            if (dashboardChartInstance) {
+                dashboardChartInstance.destroy();
+            }
 
-        const chartType = (dashboardFilterTime === 'hom_nay' || dashboardFilterTime === 'hom_truoc') ? 'bar' : 'line';
+            const chartType = (dashboardFilterTime === 'hom_nay' || dashboardFilterTime === 'hom_truoc') ? 'bar' : 'line';
 
-        dashboardChartInstance = new Chart(ctx, {
-            type: chartType,
-            data: {
-                labels: labels,
-                datasets: [
-                    {
-                        label: 'Tổng thu (VNĐ)',
-                        data: revenueData,
-                        borderColor: '#16A34A',
-                        backgroundColor: 'rgba(22, 163, 74, 0.4)',
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.3,
-                        borderRadius: 4
-                    },
-                    {
-                        label: 'Tổng chi (VNĐ)',
-                        data: expenseData,
-                        borderColor: '#ef4444',
-                        backgroundColor: 'rgba(239, 68, 68, 0.4)',
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.3,
-                        borderRadius: 4
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                plugins: { legend: { display: true, position: 'bottom' } },
-                scales: {
-                    x: { grid: { display: false } },
-                    y: { 
-                        beginAtZero: true, 
-                        border: { display: false },
-                        ticks: { callback: value => value.toLocaleString('vi-VN') + 'đ' } 
+            dashboardChartInstance = new Chart(ctx, {
+                type: chartType,
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Tổng thu (VNĐ)',
+                            data: revenueData,
+                            borderColor: '#16A34A',
+                            backgroundColor: 'rgba(22, 163, 74, 0.4)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.3,
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'Tổng chi (VNĐ)',
+                            data: expenseData,
+                            borderColor: '#ef4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.4)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.3,
+                            borderRadius: 4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: true, position: 'bottom' } },
+                    scales: {
+                        x: { grid: { display: false } },
+                        y: { 
+                            beginAtZero: true, 
+                            border: { display: false },
+                            ticks: { callback: value => value.toLocaleString('vi-VN') + 'đ' } 
+                        }
                     }
                 }
-            }
-        });
-
-        // Đổ bảng Booking gần nhất (Đã sửa định dạng ngày giờ)
-        const tbody = document.getElementById('recent-bookings-tbody');
-        if (data.recent_bookings.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="5" class="text-center" style="padding: 20px; color: var(--text-muted); text-align: center;">Chưa có dữ liệu.</td></tr>`;
-        } else {
-            tbody.innerHTML = data.recent_bookings.map(bk => {
-                let badgeColor = '#6b7280', badgeBg = '#f3f4f6', viStatus = bk.TrangThai;
-                if(bk.TrangThai === 'DaCoc') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; viStatus = 'Đã cọc'; }
-                else if(bk.TrangThai === 'DaHuy') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; viStatus = 'Đã hủy'; }
-                else if(bk.TrangThai === 'HoanThanh') { badgeColor = '#047857'; badgeBg = '#d1fae5'; viStatus = 'Hoàn thành'; }
-                else if(bk.TrangThai === 'KhongDen') { badgeColor = '#6b7280'; badgeBg = '#f3f4f6'; viStatus = 'Không đến'; }
-
-                const badgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${viStatus}</span>`;
-                
-                // THIẾT KẾ LẠI CỘT NGÀY GIỜ: Tách dòng và thêm icon
-                const dateParts = bk.NgayDa.split('-');
-                const dateStr = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`; // Định dạng DD/MM/YYYY
-                const timeStr = bk.khung_gio ? `${bk.khung_gio.GioBatDau.substring(0,5)} - ${bk.khung_gio.GioKetThuc.substring(0,5)}` : 'N/A';
-                
-                const dateTimeHtml = `
-                    <div style="display: flex; flex-direction: column; gap: 5px;">
-                        <div style="font-weight: 600; color: var(--text-dark); font-size: 0.9rem;">
-                            <i class="fa-regular fa-clock" style="color: var(--primary); width: 16px;"></i> ${timeStr}
-                        </div>
-                        <div style="font-size: 0.8rem; color: var(--text-muted);">
-                            <i class="fa-regular fa-calendar" style="width: 16px;"></i> ${dateStr}
-                        </div>
-                    </div>
-                `;
-                
-                return `<tr>
-                    <td><strong style="font-family: monospace; color: var(--text-dark);">#${bk.ID_GiaiDau ? 'GD-'+bk.ID_GiaiDau : 'PT-'+bk.ID}</strong></td>
-                    <td>${bk.nguoi_dung ? bk.nguoi_dung.HoTen : 'N/A'}</td>
-                    <td>
-                        <strong style="color: var(--primary);">${bk.san_bong ? bk.san_bong.TenSan : 'N/A'}</strong><br>
-                        <span style="font-size:0.8rem; color:var(--text-muted);">
-                            <i class="fa-solid fa-location-dot"></i> ${bk.san_bong && bk.san_bong.cum_san ? bk.san_bong.cum_san.TenCumSan : ''}
-                        </span>
-                    </td>
-                    <td>${dateTimeHtml}</td>
-                    <td>${badgeHtml}</td>
-                </tr>`;
-            }).join('');
+            });
         }
 
-    } catch (e) { console.error('Lỗi load thống kê', e); }
+        // =========================================================
+        // VÙNG 2: CẬP NHẬT BẢNG HIỆU SUẤT NHÂN VIÊN (Chỉ chạy khi scope === 'all' hoặc 'staff')
+        // =========================================================
+        if (scope === 'all' || scope === 'staff') {
+            const perf = data.staff_performance;
+            const thead = document.getElementById('staff-perf-thead');
+            const tbody = document.getElementById('staff-perf-tbody');
+
+            if (perf && thead && tbody) {
+                const daysCount = perf.days_in_month || 30;
+                const staffList = perf.list || [];
+                const isAdmin = currentUser.VaiTro === 'Admin';
+
+                // 1. Vẽ Header: Cột Nhân viên (Sticky) + Cột Tổng tháng (Sticky) + Các ngày 01 -> 30/31
+                let headHtml = `<tr>
+                    <th style="position: sticky; left: 0; z-index: 25; background: #f1f5f9; min-width: 210px; border-right: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1;">Nhân viên${isAdmin ? ' / Cơ sở' : ''}</th>
+                    <th style="position: sticky; left: 210px; z-index: 25; background: #eff6ff; color: #1d4ed8; min-width: 120px; text-align: center; border-right: 2px solid #cbd5e1; border-bottom: 1px solid #cbd5e1;">Tổng chốt tháng</th>
+                `;
+                for (let d = 1; d <= daysCount; d++) {
+                    const dayLabel = String(d).padStart(2, '0');
+                    headHtml += `<th style="min-width: 48px; text-align: center; padding: 10px 6px; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #cbd5e1; font-size: 0.82rem; color: #475569;">Ngày<br>${dayLabel}</th>`;
+                }
+                headHtml += `</tr>`;
+                thead.innerHTML = headHtml;
+
+                // 2. Vẽ Body từng nhân viên
+                if (staffList.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="${daysCount + 2}" style="padding: 35px; text-align: center; color: var(--text-muted);">Không có nhân viên nào thuộc phạm vi lọc hiện tại.</td></tr>`;
+                } else {
+                    tbody.innerHTML = staffList.map(nv => {
+                        let dayCells = '';
+                        for (let d = 1; d <= daysCount; d++) {
+                            const cellObj = nv.ngay && nv.ngay[d] ? nv.ngay[d] : { tong: 0, hoan_thanh: 0, khong_den: 0 };
+                            if (cellObj.tong > 0) {
+                                const tooltip = `Ngày ${String(d).padStart(2, '0')}: Chốt ${cellObj.tong} sân (Hoàn thành: ${cellObj.hoan_thanh}, Không đến: ${cellObj.khong_den})`;
+                                dayCells += `
+                                    <td style="text-align: center; vertical-align: middle; padding: 8px 4px; border-right: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; background: #f0fdf4;" title="${tooltip}">
+                                        <span style="display: inline-block; min-width: 26px; padding: 2px 6px; border-radius: 12px; background: #10b981; color: #fff; font-weight: 700; font-size: 0.82rem;">${cellObj.tong}</span>
+                                    </td>`;
+                            } else {
+                                dayCells += `<td style="text-align: center; vertical-align: middle; padding: 8px 4px; border-right: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; color: #cbd5e1; font-size: 0.8rem;">-</td>`;
+                            }
+                        }
+
+                        const subInfo = isAdmin
+                            ? `<div style="font-size: 0.78rem; color: var(--primary); font-weight: 600; margin-top: 2px;"><i class="fa-solid fa-location-dot"></i> ${nv.ten_cum_san}</div>`
+                            : `<div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;"><i class="fa-solid fa-phone" style="font-size: 0.7rem;"></i> ${nv.so_dien_thoai || 'N/A'}</div>`;
+
+                        return `
+                            <tr>
+                                <td style="position: sticky; left: 0; z-index: 10; background: #fff; min-width: 210px; border-right: 1px solid #cbd5e1; border-bottom: 1px solid #f1f5f9;">
+                                    <strong style="color: var(--text-dark); font-size: 0.92rem;">${nv.ho_ten}</strong>
+                                    ${subInfo}
+                                </td>
+                                <td style="position: sticky; left: 210px; z-index: 10; background: #f8fafc; min-width: 120px; text-align: center; border-right: 2px solid #cbd5e1; border-bottom: 1px solid #f1f5f9;">
+                                    <strong style="color: #1d4ed8; font-size: 1.05rem;">${nv.tong_chot_thang}</strong> <span style="font-size: 0.8rem; color: #64748b;">lượt</span>
+                                    <div style="font-size: 0.72rem; color: #64748b; margin-top: 2px;">
+                                        <span style="color: #047857; font-weight: 600;" title="Hoàn thành">${nv.tong_hoan_thanh} HT</span> / 
+                                        <span style="color: #b45309; font-weight: 600;" title="Khách không đến">${nv.tong_khong_den} KĐ</span>
+                                    </div>
+                                </td>
+                                ${dayCells}
+                            </tr>
+                        `;
+                    }).join('');
+                }
+            }
+        }
+
+    } catch (e) { 
+        console.error('Lỗi load thống kê', e); 
+    } finally {
+        if (staffTbody) {
+            staffTbody.style.opacity = '1';
+        }
+    }
 }
 
 // ======================================================
