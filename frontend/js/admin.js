@@ -6417,7 +6417,7 @@ async function loadAdminCalendarData(weekOffset, containerId) {
 
     try {
         const [caRes, lichRes] = await Promise.all([
-            fetch(`${API_BASE_URL}/ca-lam-viec`),
+            fetch(`${API_BASE_URL}/ca-lam-viec?tu_ngay=${tuNgay}&den_ngay=${denNgay}`),
             fetch(`${API_BASE_URL}/lich-lam-viec?tu_ngay=${tuNgay}&den_ngay=${denNgay}`)
         ]);
 
@@ -6445,7 +6445,7 @@ async function loadAdminCalendarData(weekOffset, containerId) {
         });
 
         if (caData.length === 0) {
-            container.innerHTML = `<div class="modal-alert error" style="display:block;">Vui lòng cài đặt Ca Mẫu (Ca Sáng/Tối) trước khi xếp lịch.</div>`;
+            container.innerHTML = `<div class="modal-alert error" style="display:block;">Vui lòng cài đặt Ca Mẫu trước khi xếp lịch.</div>`;
             return;
         }
 
@@ -6487,7 +6487,7 @@ async function loadAdminCalendarData(weekOffset, containerId) {
                 <table class="admin-table table-bordered" style="min-width: 1000px; width: 100%; margin: 0; border: none;">
                     <thead style="background: #F8FAFC;">
                         <tr>
-                            <th style="width: 90px; min-width: 90px; text-align: center; vertical-align: middle; position: sticky; left: 0; z-index: 10; background: #F8FAFC; border-right: 2px solid #e2e8f0; box-shadow: 2px 0 5px rgba(0,0,0,0.05);">CA LÀM</th>
+                            <th style="width: 125px; min-width: 125px; text-align: center; vertical-align: middle; position: sticky; left: 0; z-index: 10; background: #F8FAFC; border-right: 2px solid #e2e8f0; box-shadow: 2px 0 5px rgba(0,0,0,0.05);">CA LÀM</th>
                             ${dates.map(d => `<th style="min-width: 130px; text-align: center; vertical-align: middle; padding: 10px 5px;">${d.dayName}<br><small style="color:var(--text-muted); font-weight:normal;">${d.display}</small></th>`).join('')}
                         </tr>
                     </thead>
@@ -6502,7 +6502,8 @@ async function loadAdminCalendarData(weekOffset, containerId) {
         const todayDbDate = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}-${String(nowLocal.getDate()).padStart(2, '0')}`;
 
         caData.forEach(ca => {
-            html += `<tr><td style="text-align: center; font-weight: bold; background: #f8fafc; border-right: 2px solid #e2e8f0; position: sticky; left: 0; z-index: 5; box-shadow: 2px 0 5px rgba(0,0,0,0.05);">${ca.TenCa}</td>`;
+            const timeLabel = (ca.GioBatDau && ca.GioKetThuc) ? `<div style="font-size: 0.72rem; font-weight: 500; color: var(--text-muted); margin-top: 2px; white-space: nowrap;">${ca.GioBatDau.substring(0,5)} - ${ca.GioKetThuc.substring(0,5)}</div>` : '';
+            html += `<tr><td style="text-align: center; font-weight: bold; background: #f8fafc; border-right: 2px solid #e2e8f0; position: sticky; left: 0; z-index: 5; box-shadow: 2px 0 5px rgba(0,0,0,0.05);">${ca.TenCa}${timeLabel}</td>`;
             
             dates.forEach(date => {
                 // Kiểm tra xem ngày của cột này đã bị quá ngày so với hôm nay chưa
@@ -7116,105 +7117,291 @@ async function executeManagerAssignShift() {
 }
 
 // ======================================================
-// LOGIC: CẤU HÌNH CA LÀM VIỆC (MẪU)
+// LOGIC: CẤU HÌNH CA LÀM VIỆC LINH HOẠT (TÙY Ý SỐ LƯỢNG CA & GIỜ GIAO CA)
 // ======================================================
+let tempShiftConfigs = [];
+let clusterOpenTime = '06:00';
+let clusterCloseTime = '22:00';
+
+// Tạo danh sách các mốc giờ (cách nhau 30 phút) nằm giữa Giờ mở cửa và Giờ đóng cửa
+function getAvailableTimeOptions(selectedVal = '') {
+    const [openH, openM] = clusterOpenTime.split(':').map(Number);
+    const [closeH, closeM] = clusterCloseTime.split(':').map(Number);
+    const startMins = openH * 60 + openM;
+    const endMins = closeH * 60 + closeM;
+
+    let html = '';
+    for (let m = startMins + 30; m <= endMins - 30; m += 30) {
+        const hh = String(Math.floor(m / 60)).padStart(2, '0');
+        const mm = String(m % 60).padStart(2, '0');
+        const timeStr = `${hh}:${mm}`;
+        html += `<option value="${timeStr}" ${timeStr === selectedVal ? 'selected' : ''}>${timeStr}</option>`;
+    }
+    return html;
+}
+
+async function openCauHinhCaModal() {
+    let modal = document.getElementById('dynamic-cauhinh-ca-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'dynamic-cauhinh-ca-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 10000; align-items: center; justify-content: center;';
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 820px; width: 95%; padding: 0; border-radius: 14px; overflow: hidden;">
+            <div class="modal-header" style="padding: 18px 24px; background: #f8fafc; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h3 style="margin: 0; font-size: 1.2rem; color: var(--text-dark);"><i class="fa-solid fa-sliders" style="color: var(--primary); margin-right: 8px;"></i> Cấu hình Ca làm việc & Giờ giao ca</h3>
+                    <div id="shift-config-subtitle" style="font-size: 0.82rem; color: var(--text-muted); margin-top: 3px;">Đang tải thông tin cụm sân...</div>
+                </div>
+                <i class="fa-solid fa-xmark" style="cursor: pointer; font-size: 1.2rem; color: var(--text-muted);" onclick="closeCauHinhCaModal()"></i>
+            </div>
+
+            <div id="dynamic-cauhinh-alert" class="modal-alert" style="display: none; margin: 14px 24px 0;"></div>
+
+            <div class="modal-body" style="padding: 20px 24px; max-height: 68vh; overflow-y: auto;">
+                <div style="background: #fffbeb; border: 1px solid #fde68a; border-left: 4px solid #f59e0b; padding: 10px 14px; border-radius: 8px; font-size: 0.84rem; color: #92400e; margin-bottom: 16px; line-height: 1.5;">
+                    <i class="fa-solid fa-circle-info"></i> <strong>Quy tắc áp dụng:</strong> Giờ kết thúc của ca trước chính là <strong>giờ giao ca</strong> (bắt đầu của ca kế tiếp). Nếu <strong>Tuần Hiện Tại</strong> đã có lịch duyệt, cấu hình mới sẽ được áp dụng cho các tuần trống (như <strong>Tuần Sau</strong>) để không làm xáo trộn lịch đang chạy.
+                </div>
+
+                <div id="shift-config-rows-container">
+                    <div style="text-align: center; padding: 30px;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải...</div>
+                </div>
+
+                <div style="margin-top: 14px; display: flex; justify-content: space-between; align-items: center;">
+                    <button type="button" class="btn-outline-sm" style="color: var(--primary); border-color: var(--primary); background: #f0fdf4; padding: 8px 16px;" onclick="addNewShiftRow()">
+                        <i class="fa-solid fa-plus"></i> Thêm ca làm việc
+                    </button>
+                    <span style="font-size: 0.82rem; color: var(--text-muted);">* Bạn có thể thiết lập 1, 2, 3 hoặc nhiều ca tùy ý</span>
+                </div>
+            </div>
+
+            <div class="modal-footer" style="padding: 16px 24px; background: #f8fafc; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; align-items: center; gap: 12px;">
+                <button type="button" onclick="closeCauHinhCaModal()" style="padding: 10px 22px; border-radius: 8px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-weight: 600; font-size: 0.92rem; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f1f5f9'; this.style.borderColor='#94a3b8'; this.style.color='#0f172a';" onmouseout="this.style.background='#ffffff'; this.style.borderColor='#cbd5e1'; this.style.color='#475569';">
+                    Hủy bỏ
+                </button>
+                <button type="button" id="btn-save-dynamic-shifts" class="btn-primary" style="padding: 10px 24px; border-radius: 8px; font-weight: 600; font-size: 0.92rem;" onclick="submitCauHinhCa()">
+                    <i class="fa-solid fa-floppy-disk" style="margin-right: 6px;"></i> Lưu cấu hình ca
+                </button>
+         </div>
+        </div>
+    `;
+
+    modal.style.display = 'flex';
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/ca-lam-viec?mode=config`);
+        const res = await response.json();
+
+        clusterOpenTime = res.gio_mo_cua || '06:00';
+        clusterCloseTime = res.gio_dong_cua || '22:00';
+
+        document.getElementById('shift-config-subtitle').innerHTML = `Khung giờ hoạt động của cơ sở: <strong style="color: var(--primary);">${clusterOpenTime} - ${clusterCloseTime}</strong>`;
+
+        if (res.success && res.data && res.data.length > 0) {
+            tempShiftConfigs = res.data.map(c => ({
+                ID: c.ID,
+                TenCa: c.TenCa,
+                GioBatDau: c.GioBatDau.substring(0, 5),
+                GioKetThuc: c.GioKetThuc.substring(0, 5),
+                SoLuongNhanVien: c.SoLuongNhanVien,
+                LuongThuNgan: Number(c.LuongThuNgan),
+                LuongPhucVu: Number(c.LuongPhucVu)
+            }));
+            // Đảm bảo ca đầu và ca cuối khớp giờ mở/đóng cửa
+            tempShiftConfigs[0].GioBatDau = clusterOpenTime;
+            tempShiftConfigs[tempShiftConfigs.length - 1].GioKetThuc = clusterCloseTime;
+        } else {
+            // Mặc định gợi ý 2 ca nếu cơ sở chưa cấu hình lần nào
+            tempShiftConfigs = [
+                { ID: null, TenCa: 'Ca Sáng', GioBatDau: clusterOpenTime, GioKetThuc: '15:00', SoLuongNhanVien: 2, LuongThuNgan: 170000, LuongPhucVu: 150000 },
+                { ID: null, TenCa: 'Ca Tối', GioBatDau: '15:00', GioKetThuc: clusterCloseTime, SoLuongNhanVien: 3, LuongThuNgan: 170000, LuongPhucVu: 150000 }
+            ];
+        }
+
+        renderShiftConfigRows();
+    } catch (e) {
+        showCauHinhCaAlert('Không thể tải dữ liệu cấu hình ca!', false);
+    }
+}
+
+function renderShiftConfigRows() {
+    const container = document.getElementById('shift-config-rows-container');
+    if (!container) return;
+
+    const total = tempShiftConfigs.length;
+
+    let html = `
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+    `;
+
+    tempShiftConfigs.forEach((shift, idx) => {
+        const isLast = (idx === total - 1);
+
+        // Giờ bắt đầu luôn tự động nối với Giờ kết thúc của ca liền trước (Ca đầu tiên là Giờ mở cửa)
+        const startDisplay = `<input type="text" class="form-control" value="${shift.GioBatDau}" disabled style="background: #f1f5f9; font-weight: 700; color: #334155; text-align: center;">`;
+
+        // Giờ kết thúc (= Giờ giao ca sang ca tiếp theo). Riêng ca cuối cùng khóa cứng bằng Giờ đóng cửa
+        let endDisplay = '';
+        if (isLast) {
+            endDisplay = `<input type="text" class="form-control" value="${clusterCloseTime}" disabled style="background: #f1f5f9; font-weight: 700; color: #334155; text-align: center;" title="Ca cuối kết thúc vào giờ đóng cửa sân">`;
+        } else {
+            endDisplay = `
+                <select class="form-control" style="font-weight: 700; color: var(--primary); border-color: #86efac; background: #f0fdf4; text-align: center; cursor: pointer;" onchange="handleHandoverTimeChange(${idx}, this.value)" title="Chọn giờ giao ca sang ca kế tiếp">
+                    ${getAvailableTimeOptions(shift.GioKetThuc)}
+                </select>
+            `;
+        }
+
+        const removeBtn = total > 1
+            ? `<button type="button" onclick="removeShiftRow(${idx})" style="background: #fef2f2; color: #ef4444; border: 1px solid #fecaca; width: 36px; height: 38px; border-radius: 8px; cursor: pointer;" title="Xóa ca này"><i class="fa-solid fa-trash-can"></i></button>`
+            : `<button type="button" disabled style="background: #f1f5f9; color: #cbd5e1; border: 1px solid #e2e8f0; width: 36px; height: 38px; border-radius: 8px; cursor: not-allowed;"><i class="fa-solid fa-trash-can"></i></button>`;
+
+        html += `
+            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+                <div style="display: grid; grid-template-columns: 1.3fr 0.9fr 1fr 0.8fr 1.1fr 1.1fr auto; gap: 10px; align-items: end;">
+                    <div>
+                        <label style="font-size: 0.78rem; font-weight: 600; color: #475569; display: block; margin-bottom: 4px;">Tên ca #${idx + 1}</label>
+                        <input type="text" class="form-control" value="${shift.TenCa}" placeholder="VD: Ca Chiều" oninput="tempShiftConfigs[${idx}].TenCa = this.value">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.78rem; font-weight: 600; color: #475569; display: block; margin-bottom: 4px;">Bắt đầu</label>
+                        ${startDisplay}
+                    </div>
+                    <div>
+                        <label style="font-size: 0.78rem; font-weight: 600; color: ${isLast ? '#475569' : 'var(--primary)'}; display: block; margin-bottom: 4px;">
+                            ${isLast ? 'Đóng cửa' : '<i class="fa-solid fa-clock-rotate-left"></i> Giờ giao ca'}
+                        </label>
+                        ${endDisplay}
+                    </div>
+                    <div>
+                        <label style="font-size: 0.78rem; font-weight: 600; color: #475569; display: block; margin-bottom: 4px;">Số NV</label>
+                        <input type="number" class="form-control" min="1" value="${shift.SoLuongNhanVien}" oninput="tempShiftConfigs[${idx}].SoLuongNhanVien = this.value">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.78rem; font-weight: 600; color: #475569; display: block; margin-bottom: 4px;">Lương Thu Ngân</label>
+                        <input type="number" class="form-control" min="1000" step="5000" value="${shift.LuongThuNgan}" oninput="tempShiftConfigs[${idx}].LuongThuNgan = this.value">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.78rem; font-weight: 600; color: #475569; display: block; margin-bottom: 4px;">Lương Phục Vụ</label>
+                        <input type="number" class="form-control" min="1000" step="5000" value="${shift.LuongPhucVu}" oninput="tempShiftConfigs[${idx}].LuongPhucVu = this.value">
+                    </div>
+                    <div>
+                        ${removeBtn}
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    html += `</div>`;
+    container.innerHTML = html;
+}
+
+// Khi đổi Giờ giao ca của ca thứ idx -> Tự động cập nhật Giờ bắt đầu của ca (idx + 1) nối tiếp ngay lập tức
+window.handleHandoverTimeChange = function(idx, newTime) {
+    tempShiftConfigs[idx].GioKetThuc = newTime;
+    if (idx + 1 < tempShiftConfigs.length) {
+        tempShiftConfigs[idx + 1].GioBatDau = newTime;
+    }
+    renderShiftConfigRows();
+};
+
+// Chia đều khoảng giờ tự động khi Thêm hoặc Xóa ca để Quản lý tiện chỉnh
+function redistributeShiftTimes() {
+    const [openH, openM] = clusterOpenTime.split(':').map(Number);
+    const [closeH, closeM] = clusterCloseTime.split(':').map(Number);
+    const startMins = openH * 60 + openM;
+    const endMins = closeH * 60 + closeM;
+    const count = tempShiftConfigs.length;
+    const step = Math.floor((endMins - startMins) / count / 30) * 30;
+
+    for (let i = 0; i < count; i++) {
+        if (i === 0) {
+            tempShiftConfigs[i].GioBatDau = clusterOpenTime;
+        } else {
+            tempShiftConfigs[i].GioBatDau = tempShiftConfigs[i - 1].GioKetThuc;
+        }
+
+        if (i === count - 1) {
+            tempShiftConfigs[i].GioKetThuc = clusterCloseTime;
+        } else {
+            const nextMin = startMins + step * (i + 1);
+            const hh = String(Math.floor(nextMin / 60)).padStart(2, '0');
+            const mm = String(nextMin % 60).padStart(2, '0');
+            tempShiftConfigs[i].GioKetThuc = `${hh}:${mm}`;
+        }
+    }
+}
+
+window.addNewShiftRow = function() {
+    const defaultNames = ['Ca Sáng', 'Ca Chiều', 'Ca Tối', 'Ca Đêm'];
+    const nextIdx = tempShiftConfigs.length;
+    const suggestedName = defaultNames[nextIdx] || `Ca ${nextIdx + 1}`;
+    const lastShift = tempShiftConfigs[tempShiftConfigs.length - 1] || { SoLuongNhanVien: 2, LuongThuNgan: 170000, LuongPhucVu: 150000 };
+
+    tempShiftConfigs.push({
+        ID: null,
+        TenCa: suggestedName,
+        GioBatDau: '12:00',
+        GioKetThuc: clusterCloseTime,
+        SoLuongNhanVien: lastShift.SoLuongNhanVien,
+        LuongThuNgan: lastShift.LuongThuNgan,
+        LuongPhucVu: lastShift.LuongPhucVu
+    });
+
+    if (tempShiftConfigs.length === 3) {
+        tempShiftConfigs[0].TenCa = 'Ca Sáng';
+        tempShiftConfigs[1].TenCa = 'Ca Chiều';
+        tempShiftConfigs[2].TenCa = 'Ca Tối';
+    }
+
+    redistributeShiftTimes();
+    renderShiftConfigRows();
+};
+
+window.removeShiftRow = function(idx) {
+    if (tempShiftConfigs.length <= 1) return;
+    tempShiftConfigs.splice(idx, 1);
+    redistributeShiftTimes();
+    renderShiftConfigRows();
+};
 
 function showCauHinhCaAlert(msg, isSuccess) {
-    const alert = document.getElementById('cauhinh-ca-alert');
+    const alert = document.getElementById('dynamic-cauhinh-alert');
+    if (!alert) return;
     alert.textContent = msg;
     alert.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
     alert.style.display = 'block';
-    setTimeout(() => alert.style.display = 'none', 3000);
-}
-
-// Khi Quản lý bấm nút "Cấu hình Ca làm việc"
-async function openCauHinhCaModal() {
-    // 1. Dựng 1 Modal trung gian nhỏ nhắn để hỏi muốn cấu hình ca nào
-    let selectModal = document.getElementById('select-ca-modal');
-    if (!selectModal) {
-        selectModal = document.createElement('div');
-        selectModal.id = 'select-ca-modal';
-        selectModal.className = 'modal-overlay';
-        selectModal.style.cssText = 'display: none; z-index: 10000;';
-        selectModal.innerHTML = `
-            <div class="modal-content" style="max-width: 350px; text-align: center; padding: 30px 20px;">
-                <h3 style="margin-bottom: 10px; font-size: 1.2rem; color: var(--text-dark);"><i class="fa-solid fa-layer-group"></i> Chọn ca để cấu hình</h3>
-                <p style="color: var(--text-muted); margin-bottom: 25px; font-size: 0.9rem;">Hệ thống chia làm 2 ca mặc định (giao ca lúc 15:00)</p>
-                <div style="display: flex; flex-direction: column; gap: 12px;">
-                    <button class="btn-outline" style="width: 100%; border-color: #3b82f6; color: #1d4ed8; padding: 12px;" onclick="loadAndShowCauHinhForm('Ca Sáng')"><i class="fa-regular fa-sun" style="margin-right: 8px;"></i> Cấu hình Ca Sáng</button>
-                    <button class="btn-outline" style="width: 100%; border-color: #6366f1; color: #4338ca; padding: 12px;" onclick="loadAndShowCauHinhForm('Ca Tối')"><i class="fa-solid fa-moon" style="margin-right: 8px;"></i> Cấu hình Ca Tối</button>
-                    <button type="button" onclick="document.getElementById('select-ca-modal').style.display='none'" style="width: 100%; margin-top: 12px; padding: 10px 16px; background-color: #fee2e2; color: #ef4444; border: 1px solid #fecaca; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s ease;">Hủy</button>
-                </div>
-            </div>`;
-        document.body.appendChild(selectModal);
-    }
-    selectModal.style.display = 'flex';
-}
-
-// Mở form nhập thông tin sau khi chọn Ca Sáng/Tối
-async function loadAndShowCauHinhForm(tenCa) {
-    document.getElementById('select-ca-modal').style.display = 'none';
-    document.getElementById('cauhinh-ca-alert').style.display = 'none';
-    
-    // Gán tên ca lên form
-    document.getElementById('cc-tenca').value = tenCa;
-    document.getElementById('cc-tenca-display').value = tenCa;
-    
-    // Nút lưu ở trạng thái chờ
-    const btn = document.getElementById('btn-save-cauhinh-ca');
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang tải dữ liệu cũ...';
-    btn.disabled = true;
-    
-    document.getElementById('cauhinh-ca-modal').style.display = 'flex';
-
-    try {
-        // Tải dữ liệu cũ nếu đã từng cài đặt
-        const response = await fetch(`${API_BASE_URL}/ca-lam-viec`);
-        const res = await response.json();
-        
-        if (res.success) {
-            const dataCu = res.data.find(c => c.TenCa === tenCa);
-            if (dataCu) {
-                document.getElementById('cc-soluong').value = dataCu.SoLuongNhanVien;
-                document.getElementById('cc-luong-tn').value = dataCu.LuongThuNgan;
-                document.getElementById('cc-luong-pv').value = dataCu.LuongPhucVu;
-            } else {
-                document.getElementById('cc-soluong').value = '';
-                document.getElementById('cc-luong-tn').value = '';
-                document.getElementById('cc-luong-pv').value = '';
-            }
-        }
-    } catch(e) {
-        showCauHinhCaAlert('Không thể tải dữ liệu cũ', false);
-    } finally {
-        btn.innerHTML = 'Lưu cấu hình';
-        btn.disabled = false;
-    }
+    setTimeout(() => { alert.style.display = 'none'; }, 3500);
 }
 
 function closeCauHinhCaModal() {
-    document.getElementById('cauhinh-ca-modal').style.display = 'none';
+    const modal = document.getElementById('dynamic-cauhinh-ca-modal');
+    if (modal) modal.style.display = 'none';
 }
 
 async function submitCauHinhCa() {
-    const tenCa = document.getElementById('cc-tenca').value;
-    const soLuong = document.getElementById('cc-soluong').value;
-    const luongTN = document.getElementById('cc-luong-tn').value;
-    const luongPV = document.getElementById('cc-luong-pv').value;
-
-    if (!soLuong || !luongTN || !luongPV) {
-        return showCauHinhCaAlert('Vui lòng điền đầy đủ số lượng và mức lương!', false);
+    for (let i = 0; i < tempShiftConfigs.length; i++) {
+        const s = tempShiftConfigs[i];
+        if (!s.TenCa || !String(s.TenCa).trim()) {
+            return showCauHinhCaAlert(`Vui lòng nhập tên cho ca thứ ${i + 1}!`, false);
+        }
+        if (s.GioBatDau >= s.GioKetThuc) {
+            return showCauHinhCaAlert(`Ca "${s.TenCa}": Giờ giao ca/kết thúc (${s.GioKetThuc}) phải sau giờ bắt đầu (${s.GioBatDau})!`, false);
+        }
+        if (!s.SoLuongNhanVien || Number(s.SoLuongNhanVien) <= 0) {
+            return showCauHinhCaAlert(`Ca "${s.TenCa}": Số lượng nhân viên phải lớn hơn 0!`, false);
+        }
+        if (!s.LuongThuNgan || Number(s.LuongThuNgan) <= 0 || !s.LuongPhucVu || Number(s.LuongPhucVu) <= 0) {
+            return showCauHinhCaAlert(`Ca "${s.TenCa}": Mức lương phải lớn hơn 0!`, false);
+        }
     }
 
-    if (Number(soLuong) <= 0) {
-        return showCauHinhCaAlert('Số lượng nhân viên tối đa phải lớn hơn 0!', false);
-    }
-    
-    if (Number(luongTN) <= 0 || Number(luongPV) <= 0) {
-        return showCauHinhCaAlert('Mức lương không được là số âm hoặc bằng 0!', false);
-    }
-
-    const btn = document.getElementById('btn-save-cauhinh-ca');
+    const btn = document.getElementById('btn-save-dynamic-shifts');
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang lưu...';
     btn.disabled = true;
 
@@ -7222,12 +7409,7 @@ async function submitCauHinhCa() {
         const response = await fetch(`${API_BASE_URL}/ca-lam-viec`, {
             method: 'POST',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                TenCa: tenCa,
-                SoLuongNhanVien: soLuong,
-                LuongThuNgan: luongTN,
-                LuongPhucVu: luongPV
-            })
+            body: JSON.stringify({ shifts: tempShiftConfigs })
         });
 
         const data = await response.json();
@@ -7235,18 +7417,20 @@ async function submitCauHinhCa() {
             showCauHinhCaAlert(data.message, true);
             setTimeout(() => {
                 closeCauHinhCaModal();
-                // NẾU ĐANG Ở TAB LỊCH, RENDER LẠI ĐỂ MẤT CẢNH BÁO "Vui lòng cài đặt..."
-                const activeTab = document.querySelector('.nav-tab.active').innerText;
-                if (activeTab === 'Tuần Hiện Tại') loadAdminCalendarData(0, 'grid-current-week');
-                else loadAdminCalendarData(1, 'grid-next-week');
-            }, 1500);
+                const activeTab = document.querySelector('.nav-tab.active')?.innerText || '';
+                if (activeTab.includes('Tuần Hiện Tại')) {
+                    loadAdminCalendarData(0, 'grid-current-week');
+                } else if (activeTab.includes('Tuần Sau')) {
+                    loadAdminCalendarData(1, 'grid-next-week');
+                }
+            }, 1400);
         } else {
-            showCauHinhCaAlert(data.message || 'Lỗi khi lưu.', false);
+            showCauHinhCaAlert(data.message || 'Lỗi khi lưu cấu hình ca!', false);
         }
     } catch (e) {
-        showCauHinhCaAlert('Mất kết nối máy chủ.', false);
+        showCauHinhCaAlert('Mất kết nối máy chủ!', false);
     } finally {
-        btn.innerHTML = 'Lưu cấu hình';
+        btn.innerHTML = '<i class="fa-solid fa-floppy-disk" style="margin-right: 6px;"></i> Lưu cấu hình ca';
         btn.disabled = false;
     }
 }
@@ -7796,7 +7980,9 @@ window.executeAdminChotCuongChe = function(bgcId) {
             <h3 style="margin-bottom: 10px; font-size: 1.4rem;">Chốt cưỡng chế?</h3>
             <p style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5;">Bạn có chắc chắn muốn CHỐT CƯỠNG CHẾ ca làm việc này? (Hệ thống sẽ tự ép số liệu thực tế khớp với hệ thống)</p>
             <div style="display: flex; justify-content: center; gap: 12px;">
-                <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="document.getElementById('chot-cuong-che-modal').style.display='none'">Hủy bỏ</button>
+                <button type="button" onclick="document.getElementById('chot-cuong-che-modal').style.display='none'" style="width: auto; padding: 10px 24px; border-radius: 8px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-weight: 600; font-size: 0.92rem; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f1f5f9'; this.style.borderColor='#94a3b8'; this.style.color='#0f172a';" onmouseout="this.style.background='#ffffff'; this.style.borderColor='#cbd5e1'; this.style.color='#475569';">
+                    Hủy bỏ
+                </button>
                 <button class="btn-primary" style="width: auto; padding: 10px 24px; background-color: #ef4444; border-color: #ef4444;" id="btn-confirm-cuong-che">Đồng ý chốt</button>
             </div>
         </div>

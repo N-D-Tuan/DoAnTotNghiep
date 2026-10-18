@@ -761,7 +761,9 @@
             <input type="hidden" id="confirm-chot-luong-nv-id">
 
             <div style="display: flex; justify-content: center; gap: 12px;">
-                <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="document.getElementById('confirm-chot-luong-modal').style.display='none'">Hủy bỏ</button>
+                <button type="button" onclick="document.getElementById('confirm-chot-luong-modal').style.display='none'" style="width: auto; padding: 10px 24px; border-radius: 8px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-weight: 600; font-size: 0.92rem; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f1f5f9'; this.style.borderColor='#94a3b8'; this.style.color='#0f172a';" onmouseout="this.style.background='#ffffff'; this.style.borderColor='#cbd5e1'; this.style.color='#475569';">
+                    Hủy bỏ
+                </button>
                 <button id="btn-agree-chot-luong" class="btn-primary" style="width: auto; padding: 10px 24px; background-color: #10b981; border-color: #10b981;" onclick="executeChotLuong()">Đồng ý Chốt</button>
             </div>
         </div>
