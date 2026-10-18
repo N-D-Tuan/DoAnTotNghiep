@@ -89,6 +89,14 @@ class LichLamViecController extends Controller
             'thong_bao_thay_doi' => 'nullable|boolean'
         ]);
 
+        $todayStr = Carbon::now()->toDateString();
+        if ($request->ngay_lam < $todayStr) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Không thể phân công hoặc chỉnh sửa lịch làm việc của ngày đã qua!'
+            ], 422);
+        }
+
         $lich = LichLamViec::updateOrCreate(
             [
                 'ID_CaLamViec' => $request->id_ca_lam_viec,
@@ -179,6 +187,12 @@ class LichLamViecController extends Controller
 
         // Nếu là Quản lý hoặc Admin xóa ca của nhân viên (Nhận ID từ Frontend truyền lên)
         if (in_array($user->VaiTro, ['Admin', 'QuanLySan']) && $request->has('id_nhan_vien')) {
+            if ($request->ngay_lam < Carbon::now()->toDateString()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ca làm việc đã qua ngày, không thể gỡ nhân sự!'
+                ], 422);
+            }
             $lich = LichLamViec::where('ID_NhanVien', $request->id_nhan_vien)
                                ->where('ID_CaLamViec', $request->id_ca_lam_viec)
                                ->where('NgayLam', $request->ngay_lam)
