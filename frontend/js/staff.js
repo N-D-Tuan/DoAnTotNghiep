@@ -2428,7 +2428,7 @@ async function loadStaffCalendarData(weekOffset, containerId) {
 
     try {
         const [caRes, lichRes] = await Promise.all([
-            fetch(`${API_BASE_URL}/ca-lam-viec`),
+            fetch(`${API_BASE_URL}/ca-lam-viec?tu_ngay=${tuNgay}&den_ngay=${denNgay}`),
             fetch(`${API_BASE_URL}/lich-lam-viec?tu_ngay=${tuNgay}&den_ngay=${denNgay}`)
         ]);
 
@@ -2500,7 +2500,7 @@ async function loadStaffCalendarData(weekOffset, containerId) {
                 <table class="admin-table table-bordered" style="min-width: 1000px; width: 100%; margin: 0; border: none;">
                     <thead style="background: #F8FAFC;">
                         <tr>
-                            <th style="width: 100px; text-align: center;">CA LÀM</th>
+                            <th style="width: 125px; min-width: 125px; text-align: center;">CA LÀM</th>
                             ${dates.map(d => `<th style="text-align: center;">${d.dayName}<br><small style="color:var(--text-muted); font-weight:normal;">${d.display}</small></th>`).join('')}
                         </tr>
                     </thead>
@@ -2510,7 +2510,9 @@ async function loadStaffCalendarData(weekOffset, containerId) {
         let myShiftsArray = [];
 
         caData.forEach(ca => {
-            html += `<tr><td style="text-align: center; font-weight: bold; background: #f8fafc; border-right: 1px solid var(--border);">${ca.TenCa}</td>`;
+            const timeStr = (ca.GioBatDau && ca.GioKetThuc) ? `${ca.GioBatDau.substring(0,5)} - ${ca.GioKetThuc.substring(0,5)}` : '';
+            const timeLabel = timeStr ? `<div style="font-size: 0.72rem; font-weight: 500; color: var(--text-muted); margin-top: 2px; white-space: nowrap;">${timeStr}</div>` : '';
+            html += `<tr><td style="width: 125px; min-width: 125px; padding: 10px 8px; text-align: center; font-weight: bold; background: #f8fafc; border-right: 1px solid var(--border);">${ca.TenCa}${timeLabel}</td>`;
             
             dates.forEach(date => {
                 const shifts = lichData.filter(l => String(l.ID_CaLamViec) === String(ca.ID) && l.NgayLam === date.dbDate);
@@ -2618,7 +2620,7 @@ async function loadStaffCalendarData(weekOffset, containerId) {
                 const currentNote = myShift ? (myShift.GhiChu || '') : '';
                 // Cho phép click để mở modal nạp dữ liệu cũ
                 const clickEvent = isClickable 
-                    ? `onclick="openStaffRegisterModal(${ca.ID}, '${ca.TenCa}', '${date.dbDate}', '${date.display}', '${currentNote}', ${myShift !== undefined})"` 
+                    ? `onclick="openStaffRegisterModal(${ca.ID}, '${ca.TenCa}', '${date.dbDate}', '${date.display}', '${currentNote}', ${myShift !== undefined}, '${timeStr}', ${Number(ca.LuongThuNgan || 0)}, ${Number(ca.LuongPhucVu || 0)})"` 
                     : '';
 
                 html += `
@@ -2670,19 +2672,47 @@ async function loadStaffCalendarData(weekOffset, containerId) {
 }
 
 // Mở Modal ghi chú
-function openStaffRegisterModal(caId, tenCa, ngayLam, displayDate, currentNote, isAlreadyRegistered) {
-    document.getElementById('staff-reg-shift-info').innerText = `${tenCa} - Ngày ${displayDate}`;
+function openStaffRegisterModal(caId, tenCa, ngayLam, displayDate, currentNote, isAlreadyRegistered, timeStr = '', luongTN = 0, luongPV = 0) {
+    const infoEl = document.getElementById('staff-reg-shift-info');
+    infoEl.innerHTML = `
+        <div style="margin-bottom: 10px;">
+            <strong style="color: var(--text-dark); font-size: 1rem;">${tenCa}</strong>
+            ${timeStr ? `<span style="color: var(--primary); font-weight: 600;"> (${timeStr})</span>` : ''} 
+            &bull; Ngày <strong>${displayDate}</strong>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; text-align: left;">
+            <div style="border-right: 1px dashed #cbd5e1; padding-right: 8px;">
+                <div style="font-size: 0.74rem; color: #64748b; font-weight: 600;"><i class="fa-solid fa-cash-register" style="color: #0284c7; margin-right: 4px;"></i>Vị trí Thu Ngân</div>
+                <div style="font-size: 0.95rem; font-weight: 800; color: #0284c7; margin-top: 2px;">${Number(luongTN).toLocaleString('vi-VN')}đ <span style="font-size: 0.72rem; font-weight: 500; color: #64748b;">/ca</span></div>
+            </div>
+            <div style="padding-left: 4px;">
+                <div style="font-size: 0.74rem; color: #64748b; font-weight: 600;"><i class="fa-solid fa-shirt" style="color: #16a34a; margin-right: 4px;"></i>Vị trí Phục Vụ</div>
+                <div style="font-size: 0.95rem; font-weight: 800; color: #16a34a; margin-top: 2px;">${Number(luongPV).toLocaleString('vi-VN')}đ <span style="font-size: 0.72rem; font-weight: 500; color: #64748b;">/ca</span></div>
+            </div>
+        </div>
+    `;
+
     document.getElementById('staff-reg-ca-id').value = caId;
     document.getElementById('staff-reg-date').value = ngayLam;
     document.getElementById('staff-reg-note').value = currentNote; 
     
+    const modal = document.getElementById('staff-register-shift-modal');
     const btnCancel = document.getElementById('btn-cancel-staff-reg');
-    const btnSubmit = document.getElementById('staff-register-shift-modal').querySelector('.btn-primary');
+    const btnSubmit = modal.querySelector('.btn-primary');
+
+    // Chỉnh lại style cho nút "Hủy bỏ" (đóng modal) cho sang trọng, rõ viền
+    const btnCloseModal = modal.querySelector('button[onclick*="staff-register-shift-modal"]');
+    if (btnCloseModal) {
+        btnCloseModal.style.cssText = 'width: auto; padding: 10px 22px; border-radius: 8px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-weight: 600; font-size: 0.9rem; cursor: pointer; transition: all 0.2s ease;';
+        btnCloseModal.onmouseover = function() { this.style.background = '#f1f5f9'; this.style.borderColor = '#94a3b8'; this.style.color = '#0f172a'; };
+        btnCloseModal.onmouseout = function() { this.style.background = '#ffffff'; this.style.borderColor = '#cbd5e1'; this.style.color = '#475569'; };
+    }
     
     if (btnCancel) {
         if (isAlreadyRegistered) {
             btnCancel.style.display = 'inline-block';
-            btnCancel.onclick = function() { executeStaffRegisterShift(true); }; // Bấm để XÓA ca
+            btnCancel.style.cssText = 'width: auto; padding: 10px 18px; border-radius: 8px; border: 1px solid #fecaca; background: #fef2f2; color: #dc2626; font-weight: 600; font-size: 0.9rem; cursor: pointer; transition: 0.2s;';
+            btnCancel.onclick = function() { executeStaffRegisterShift(true); };
             btnSubmit.innerHTML = 'Cập nhật ghi chú';
         } else {
             btnCancel.style.display = 'none';
@@ -2690,7 +2720,7 @@ function openStaffRegisterModal(caId, tenCa, ngayLam, displayDate, currentNote, 
         }
     }
 
-    document.getElementById('staff-register-shift-modal').style.display = 'flex';
+    modal.style.display = 'flex';
 }
 
 // Hàm Xử lý Lưu Tạm Giao Diện (Đánh dấu isStaffScheduleChanged = true)
@@ -2937,7 +2967,7 @@ async function loadDanhSachCaHomNay() {
                                     <button class="btn-outline-sm" style="flex: 1; color: #3b82f6; border-color: #bfdbfe; background: #eff6ff;" onclick="openDanhSachPhieuChiModal(${bgc.ID})"><i class="fa-solid fa-list-ul"></i> Lịch sử Thu/Chi</button>
                                     <button class="btn-outline-sm" style="flex: 1; color: #ef4444; border-color: #fecaca; background: #fef2f2;" onclick="openLapPhieuChiModal(${bgc.ID})"><i class="fa-solid fa-money-bill-transfer"></i> Lập phiếu mới</button>
                                 </div>
-                                <button class="btn-primary" style="width: 100%; margin-top: 10px; padding: 12px; font-size: 1rem; background: #10b981; border-color: #10b981;" onclick="openGiaoCaModal(${bgc.ID}, '${ca.TenCa}')"><i class="fa-solid fa-arrow-right-arrow-left" style="margin-right: 8px;"></i> Bàn giao & Chốt ca</button>
+                                <button class="btn-primary" style="width: 100%; margin-top: 10px; padding: 12px; font-size: 1rem; background: #10b981; border-color: #10b981;" onclick="openGiaoCaModal(${bgc.ID}, '${ca.TenCa}', '${ca.GioKetThuc}')"><i class="fa-solid fa-arrow-right-arrow-left" style="margin-right: 8px;"></i> Bàn giao & Chốt ca</button>
                             `;
                         } else { 
                             // BƯỚC 4: CA ĐÃ ĐƯỢC CHỐT (DaChot hoặc ChotCuongChe)
@@ -3041,11 +3071,11 @@ window.openNhanCaModal = function(caId, tenCa) {
     
     // XÁC ĐỊNH TIỀN HỆ THỐNG GỢI Ý ĐẦU CA
     let tienHeThong = 200000; // Mặc định là 200.000đ cho Ca Sáng
-    if (tenCa.toLowerCase().includes('tối') || tenCa.toLowerCase().includes('chiều')) {
-        // Nếu là ca tối, tìm Phiếu Bàn Giao Ca của ca trước đó đã chốt
-        const caTruoc = window.bgcTodayData ? window.bgcTodayData.find(b => b.TrangThai === 'DaChotCa' || b.TrangThai === 'ChotCuongChe') : null;
-        if (caTruoc) {
-            tienHeThong = Number(caTruoc.TienGiao);
+    if (window.bgcTodayData && window.bgcTodayData.length > 0) {
+        const cacCaDaChot = window.bgcTodayData.filter(b => b.TrangThai === 'DaChotCa' || b.TrangThai === 'ChotCuongChe');
+        if (cacCaDaChot.length > 0) {
+            const caGanNhat = cacCaDaChot[cacCaDaChot.length - 1];
+            tienHeThong = Number(caGanNhat.TienGiao);
         }
     }
 
@@ -3108,7 +3138,7 @@ window.openLapPhieuChiModal = function(bgcId) {
 // Mở Modal xem danh sách Thu/Chi
 window.openDanhSachPhieuChiModal = async function(bgcId) {
     const listContainer = document.getElementById('ds-phieu-chi-list');
-    listContainer.innerHTML = '<div style="text-align:center; padding: 30px;"><i class="fa-solid fa-spinner fa-spin text-primary" style="font-size: 1.5rem;"></i><br><br>Đang tải dữ liệu...</div>';
+    listContainer.innerHTML = '<div style="text-align: center; padding: 30px;"><i class="fa-solid fa-spinner fa-spin text-primary" style="font-size: 1.5rem;"></i><br><br>Đang tải dữ liệu...</div>';
     document.getElementById('danh-sach-phieu-chi-modal').style.display = 'flex';
 
     try {
@@ -3275,6 +3305,24 @@ window.submitPhieuChi = async function() {
 
 // --- LOGIC BÀN GIAO & CHỐT CA ---
 window.openGiaoCaModal = async function(bgcId, tenCa) {
+    // 1. KIỂM TRA KHÔNG CHO BÀN GIAO CA QUÁ SỚM (Chỉ cho phép trước giờ kết thúc ca tối đa 30 phút)
+    if (gioKetThuc) {
+        const now = new Date();
+        const [endH, endM] = gioKetThuc.substring(0, 5).split(':').map(Number);
+        const shiftEndTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), endH, endM, 0);
+        
+        // Cho phép chốt bàn giao từ 30 phút trước giờ kết thúc ca trở đi
+        const allowHandoverTime = new Date(shiftEndTime.getTime() - 30 * 60 * 1000);
+        if (now < allowHandoverTime) {
+            const allowStr = `${String(allowHandoverTime.getHours()).padStart(2, '0')}:${String(allowHandoverTime.getMinutes()).padStart(2, '0')}`;
+            return showSystemModal(
+                "Chưa đến giờ giao ca", 
+                `Ca làm việc này kết thúc lúc <strong>${gioKetThuc.substring(0,5)}</strong>. Bạn chỉ có thể lập phiếu bàn giao ca từ <strong>${allowStr}</strong> trở đi (trước giờ giao ca tối đa 30 phút)!`, 
+                "error"
+            );
+        }
+    }
+
     document.getElementById('gc-title-info').innerText = `Bàn Giao - ${tenCa}`;
     document.getElementById('gc-tien-nop').value = '';
     document.getElementById('gc-tien-giao').value = '';
@@ -3284,7 +3332,19 @@ window.openGiaoCaModal = async function(bgcId, tenCa) {
     const btn = document.getElementById('btn-submit-gc');
     btn.disabled = true;
 
-    const isCaToi = tenCa.toLowerCase().includes('tối') || tenCa.toLowerCase().includes('chiều');
+    // 2. XÁC ĐỊNH ĐỘNG XEM ĐÂY CÓ PHẢI CA CUỐI CÙNG TRONG NGÀY KHÔNG (Dựa theo danh sách ca hiện hành)
+    let isCaCuoiNgay = tenCa.toLowerCase().includes('tối') || tenCa.toLowerCase().includes('đêm');
+    try {
+        const todayStr = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10);
+        const caRes = await fetch(`${API_BASE_URL}/ca-lam-viec?tu_ngay=${todayStr}&den_ngay=${todayStr}`);
+        const caJson = await caRes.json();
+        if (caJson.success && caJson.data && caJson.data.length > 0) {
+            // Sắp xếp các ca theo GioKetThuc tăng dần, ca cuối cùng trong mảng chính là ca cuối ngày
+            const sortedCa = [...caJson.data].sort((a, b) => a.GioKetThuc.localeCompare(b.GioKetThuc));
+            const lastCa = sortedCa[sortedCa.length - 1];
+            isCaCuoiNgay = (lastCa.TenCa === tenCa) || (gioKetThuc && lastCa.GioKetThuc.substring(0,5) === gioKetThuc.substring(0,5));
+        }
+    } catch (e) {}
 
     try {
         const response = await fetch(`${API_BASE_URL}/ban-giao-ca/${bgcId}/thong-tin-chot`, {
@@ -3326,7 +3386,7 @@ window.openGiaoCaModal = async function(bgcId, tenCa) {
             const elGiao = document.getElementById('gc-tien-giao');
             const groupNop = elNop.closest('.form-group');
 
-            if (isCaToi) {
+            if (isCaCuoiNgay) {
                 if (groupNop) groupNop.style.display = 'block';
                 let tienGiao = 200000;
                 let tienNop = tienHT - 200000;
@@ -3787,7 +3847,7 @@ function handleStaffHistoryFilter() {
 
 async function loadStaffHistoryData() {
     const tbody = document.getElementById('staff-history-tbody');
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center" style="padding: 40px;"><i class="fa-solid fa-spinner fa-spin text-primary"></i> Đang tải dữ liệu...</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center" style="padding: 40px; text-align: center;"><i class="fa-solid fa-spinner fa-spin text-primary"></i> Đang tải dữ liệu...</td></tr>`;
     document.getElementById('staff-history-pagination').innerHTML = '';
 
     // LẤY MẶC ĐỊNH LÀ THÁNG HIỆN TẠI NẾU CHƯA CÓ
@@ -3850,7 +3910,7 @@ function renderStaffHistoryPagination() {
     const tbody = document.getElementById('staff-history-tbody');
     
     if (pageData.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="padding: 40px;">Tháng này bạn chưa đăng ký ca nào hoặc đơn đã bị từ chối.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="padding: 40px; text-align: center;">Tháng này bạn chưa đăng ký ca nào hoặc đơn đã bị từ chối.</td></tr>`;
         document.getElementById('staff-history-pagination').innerHTML = '';
         return;
     }
