@@ -6497,10 +6497,17 @@ async function loadAdminCalendarData(weekOffset, containerId) {
         let myShiftsArray = [];
         window.adminShiftCache = {}; // Reset mảng cache trước khi vẽ lịch
 
+        // Lấy ngày hôm nay theo múi giờ Local (định dạng YYYY-MM-DD) để so sánh quá ngày
+        const nowLocal = new Date();
+        const todayDbDate = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}-${String(nowLocal.getDate()).padStart(2, '0')}`;
+
         caData.forEach(ca => {
             html += `<tr><td style="text-align: center; font-weight: bold; background: #f8fafc; border-right: 2px solid #e2e8f0; position: sticky; left: 0; z-index: 5; box-shadow: 2px 0 5px rgba(0,0,0,0.05);">${ca.TenCa}</td>`;
             
             dates.forEach(date => {
+                // Kiểm tra xem ngày của cột này đã bị quá ngày so với hôm nay chưa
+                const isPastDate = date.dbDate < todayDbDate;
+
                 const shifts = lichData.filter(l => String(l.ID_CaLamViec) === String(ca.ID) && l.NgayLam === date.dbDate);
                 const approvedCount = shifts.filter(s => s.TrangThaiXepLich === 'DaDuyet').length;
                 const reqCount = ca.SoLuongNhanVien;
@@ -6528,13 +6535,11 @@ async function loadAdminCalendarData(weekOffset, containerId) {
                     // BƯỚC 2: HIỂN THỊ TÊN - Đổi thành "Tôi" nếu là ca của mình
                     let nameDisplay = isMyShift ? 'Tôi' : (s.nhan_vien ? s.nhan_vien.HoTen : 'N/A');
 
-                    // Thêm nút Xóa cho những ca Lưu tạm ở Tuần Sau
+                    // Thêm nút Xóa: Ở Tuần Hiện Tại (weekOffset === 0), CHỈ hiện nút X nếu CHƯA QUÁ NGÀY (!isPastDate)
                     let removeBtn = '';
-                    
-                    // Logic hiển thị nút X
                     const showRemoveBtn = (weekOffset === 1 && isLocal) || 
                                           (weekOffset === 1 && (!isNextWeekLocked || pendingManagerAssignments.length > 0) && s.TrangThaiXepLich === 'DaDuyet') || 
-                                          (weekOffset === 0 && isEditModeCurrentWeek && s.TrangThaiXepLich === 'DaDuyet'); 
+                                          (weekOffset === 0 && isEditModeCurrentWeek && !isPastDate && s.TrangThaiXepLich === 'DaDuyet'); 
                     
                     if (showRemoveBtn) {
                         const isTuChoiTuanSau = (weekOffset === 1 && s.TrangThaiXepLich === 'DaDuyet' && !isLocal);
@@ -6548,12 +6553,11 @@ async function loadAdminCalendarData(weekOffset, containerId) {
                     // BƯỚC 3: XỬ LÝ BACKGROUND - Bôi xanh nền nếu là ca của mình
                     let localStyle = '';
                     if (isMyShift && s.TrangThaiXepLich === 'DaDuyet') {
-                        localStyle = 'background: #d1fae5; padding: 2px 4px; border-radius: 4px;'; // Nền xanh ngọc nhạt
+                        localStyle = 'background: #d1fae5; padding: 2px 4px; border-radius: 4px;';
                     } else if (isLocal) {
-                        localStyle = 'background: #f0f9ff; padding: 3px 6px; border-radius: 4px; border: 1px dashed #bae6fd;'; // Nền xanh dương lưu tạm
+                        localStyle = 'background: #f0f9ff; padding: 3px 6px; border-radius: 4px; border: 1px dashed #bae6fd;';
                     }
 
-                    // Xử lý title tooltip để không bị tràn HTML
                     const fullText = `${nameDisplay}${noteStr.replace(/<[^>]*>?/gm, '')}`;
 
                     return `<div style="font-size: 0.8rem; color: ${color}; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; gap: 8px; ${localStyle}" title="${fullText}">
@@ -6568,9 +6572,7 @@ async function loadAdminCalendarData(weekOffset, containerId) {
                             </div>`;
                 }).join('');
 
-                // Cập nhật lại logic mảng rỗng theo displayShifts
                 if(displayShifts.length === 0) staffHtml = `<div style="font-size: 0.8rem; color: #94a3b8; text-align: center;">Chưa có người</div>`;
-
                 if(shifts.length === 0) staffHtml = `<div style="font-size: 0.8rem; color: #94a3b8; text-align: center;">Chưa có người</div>`;
 
                 if (weekOffset === 0) {
@@ -6584,7 +6586,6 @@ async function loadAdminCalendarData(weekOffset, containerId) {
                     }
                 }
 
-                // Lưu danh sách nhân viên vào biến toàn cục thay vì nhét vào thuộc tính HTML
                 const cacheKey = `${ca.ID}_${date.dbDate}`;
                 window.adminShiftCache[cacheKey] = shifts;
 
@@ -6593,11 +6594,17 @@ async function loadAdminCalendarData(weekOffset, containerId) {
 
                 if (weekOffset === 1 && (!isNextWeekLocked || pendingManagerAssignments.length > 0)) {
                     pointerStyle = 'cursor: pointer; transition: 0.2s;';
-                    // Chỉ truyền cacheKey thay vì chuỗi JSON
                     clickEvent = `onmouseover="this.style.filter='brightness(0.95)'" onmouseout="this.style.filter='brightness(1)'" onclick="openManagerShiftModal(${ca.ID}, '${ca.TenCa}', '${date.dbDate}', '${date.display}', '${cacheKey}', 1)"`;
                 } else if (weekOffset === 0 && isEditModeCurrentWeek) {
-                    pointerStyle = 'cursor: pointer; outline: 2px dashed #f59e0b; outline-offset: -2px; transition: 0.2s;';
-                    clickEvent = `onmouseover="this.style.filter='brightness(0.95)'" onmouseout="this.style.filter='brightness(1)'" onclick="openManagerShiftModal(${ca.ID}, '${ca.TenCa}', '${date.dbDate}', '${date.display}', '${cacheKey}', 0)"`;
+                    if (!isPastDate) {
+                        // Chỉ cho phép click & hiện viền nét đứt cam với ca TRONG NGÀY hoặc CHƯA ĐẾN NGÀY
+                        pointerStyle = 'cursor: pointer; outline: 2px dashed #f59e0b; outline-offset: -2px; transition: 0.2s;';
+                        clickEvent = `onmouseover="this.style.filter='brightness(0.95)'" onmouseout="this.style.filter='brightness(1)'" onclick="openManagerShiftModal(${ca.ID}, '${ca.TenCa}', '${date.dbDate}', '${date.display}', '${cacheKey}', 0)"`;
+                    } else {
+                        // Các ngày đã qua: Làm mờ nhẹ, khóa con trỏ chuột và không gắn onclick
+                        pointerStyle = 'cursor: not-allowed; opacity: 0.68;';
+                        clickEvent = `title="Ca làm việc đã qua ngày (${date.display}), không thể chỉnh sửa"`;
+                    }
                 }
 
                 html += `
@@ -6909,6 +6916,15 @@ async function executeLockScheduleAPI() {
 }
 
 async function openManagerShiftModal(caId, tenCa, ngayLam, displayDate, cacheKey, weekOffset) {
+    if (weekOffset === 0) {
+        const nowLocal = new Date();
+        const todayDbDate = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}-${String(nowLocal.getDate()).padStart(2, '0')}`;
+        if (ngayLam < todayDbDate) {
+            showSystemModal('Không thể chỉnh sửa', 'Ca làm việc này đã qua ngày, bạn chỉ có thể chỉnh sửa các ca trong ngày hôm nay hoặc những ngày tiếp theo.', 'error');
+            return;
+        }
+    }
+
     if (weekOffset === 1 && isNextWeekLocked && pendingManagerAssignments.length === 0) {
         showSystemModal('Đã khóa lịch', 'Bạn đã chốt lịch tuần sau. Vui lòng bấm "Mở khóa chỉnh sửa" để tiếp tục.', 'error');
         return;
@@ -7237,6 +7253,15 @@ async function submitCauHinhCa() {
 
 // Hàm gỡ nhân viên khỏi ca đã chốt trên Server (Tuần Hiện Tại)
 window.executeRemoveApprovedShift = async function(idCa, ngayLam, idNhanVien, weekOffset) {
+    if (weekOffset === 0) {
+        const nowLocal = new Date();
+        const todayDbDate = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}-${String(nowLocal.getDate()).padStart(2, '0')}`;
+        if (ngayLam < todayDbDate) {
+            showSystemModal('Không thể chỉnh sửa', 'Ca làm việc này đã qua ngày, bạn chỉ có thể chỉnh sửa các ca trong ngày hôm nay hoặc những ngày tiếp theo.', 'error');
+            return;
+        }
+    }
+    
     // 1. Tạo modal popup nếu chưa tồn tại trên giao diện
     let modal = document.getElementById('remove-shift-confirm-modal');
     if (!modal) {
