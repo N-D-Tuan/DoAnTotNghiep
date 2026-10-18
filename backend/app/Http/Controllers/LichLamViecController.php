@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use App\Models\NguoiDung;
 use App\Models\LichLamViec;
 use App\Models\CaLamViec;
 use App\Models\ThongBao;
@@ -15,7 +17,6 @@ class LichLamViecController extends Controller
     {
         $idCumSan = $request->user()->ID_CumSan;
         
-        // Lấy từ ngày đến ngày (Frontend truyền lên, ví dụ: 1 tuần)
         $tuNgay = $request->query('tu_ngay', Carbon::now()->startOfWeek()->toDateString());
         $denNgay = $request->query('den_ngay', Carbon::now()->endOfWeek()->toDateString());
 
@@ -26,7 +27,16 @@ class LichLamViecController extends Controller
             ->whereBetween('NgayLam', [$tuNgay, $denNgay])
             ->get();
 
-        return response()->json(['success' => true, 'data' => $lichLamViec]);
+        // Kiểm tra quyền mở đăng ký khẩn cấp (1 lần) trong ngày Chủ Nhật hiện tại
+        $todayStr = Carbon::now()->toDateString();
+        $user = $request->user();
+        $quyenKhanCapCuaToi = Cache::get("emergency_reg_{$user->ID}_{$todayStr}", false);
+
+        return response()->json([
+            'success' => true,
+            'data' => $lichLamViec,
+            'quyen_khan_cap' => (bool) $quyenKhanCapCuaToi
+        ]);
     }
 
     // 2. NHÂN VIÊN ĐĂNG KÝ CA (Mặc định TrangThaiXepLich = 'DangKy')
@@ -303,5 +313,93 @@ class LichLamViecController extends Controller
         broadcast(new \App\Events\SystemDataUpdated())->toOthers();
 
         return response()->json(['success' => true, 'message' => 'Đã cập nhật trạng thái điểm danh.']);
+    }
+
+    // 9. QUẢN LÝ CẤP QUYỀN MỞ ĐĂNG KÝ KHẨN CẤP (1 LẦN) VÀO CHỦ NHẬT
+    public function moDangKyKhanCap(Request $request)
+    {
+        $request->validate([
+            'id_nhan_vien' => 'required|exists:NguoiDung,ID'
+        ]);
+
+        // Kiểm tra hôm nay có phải Chủ Nhật không (0 = Chủ Nhật trong Carbon dayOfWeek)
+        if (Carbon::now()->dayOfWeek !== Carbon::SUNDAY) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Chức năng này chỉ hoạt động vào Chủ Nhật (khi đã hết hạn đăng ký tự do)!'
+            ]);
+        }
+
+        $idNhanVien = $request->id_nhan_vien;
+        $todayStr = Carbon::now()->toDateString();
+
+        // Lưu quyền mở khẩn cấp có hiệu lực đến hết ngày Chủ Nhật hôm nay
+        Cache::put("emergency_reg_{$idNhanVien}_{$todayStr}", true, Carbon::now()->endOfDay());
+
+        // Gửi thông báo cho nhân viên
+        ThongBao::create([
+            'ID_NguoiDung' => $idNhanVien,
+            'TieuDe'       => 'Được mở đăng ký lịch khẩn cấp (1 lần)',
+            'NoiDung'      => 'Quản lý vừa mở khóa cho phép bạn đăng ký/chỉnh sửa lịch làm việc tuần sau (1 lượt gửi duy nhất trong hôm nay).',
+            'LoaiThongBao' => 'HeThong'
+        ]);
+
+        broadcast(new \App\Events\UserDataUpdated($idNhanVien))->toOthers();
+        broadcast(new \App\Events\SystemDataUpdated())->toOthers();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Đã mở quyền đăng ký khẩn cấp (1 lần) và gửi thông báo cho nhân viên!'
+        ]);
+    }
+
+    // 10. THU HỒI QUYỀN KHẨN CẤP SAU KHI NHÂN VIÊN BẤM GỬI LỊCH XONG (DÙNG 1 LẦN)
+    public function hoanTatGuiLichKhanCap(Request $request)
+    {
+        $user = $request->user();
+        $todayStr = Carbon::now()->toDateString();
+        $cacheKey = "emergency_reg_{$user->ID}_{$todayStr}";
+
+        if (Cache::has($cacheKey)) {
+            Cache::forget($cacheKey);
+
+            // Báo cho Quản lý biết nhân viên đã gửi lịch khẩn cấp xong
+            $managers = NguoiDung::where('VaiTro', 'QuanLySan')
+                ->where('ID_CumSan', $user->ID_CumSan)
+                ->get();
+            foreach ($managers as $mgr) {
+                ThongBao::create([
+                    'ID_NguoiDung' => $mgr->ID,
+                    'TieuDe'       => 'Nhân viên đã gửi lịch bổ sung',
+                    'NoiDung'      => "Nhân viên {$user->HoTen} đã hoàn tất gửi lịch làm việc tuần sau từ lượt mở khẩn cấp.",
+                    'LoaiThongBao' => 'HeThong'
+                ]);
+                broadcast(new \App\Events\UserDataUpdated($mgr->ID))->toOthers();
+            }
+        }
+
+        broadcast(new \App\Events\SystemDataUpdated())->toOthers();
+
+        return response()->json(['success' => true]);
+    }
+
+    // 11. KIỂM TRA TRẠNG THÁI QUYỀN KHẨN CẤP CỦA DANH SÁCH NHÂN VIÊN (CHO QUẢN LÝ)
+    public function trangThaiKhanCapTuanSau(Request $request)
+    {
+        $idCumSan = $request->user()->ID_CumSan;
+        $todayStr = Carbon::now()->toDateString();
+
+        $staffIds = NguoiDung::where('ID_CumSan', $idCumSan)
+            ->where('VaiTro', 'NhanVien')
+            ->pluck('ID');
+
+        $unlockedIds = [];
+        foreach ($staffIds as $id) {
+            if (Cache::get("emergency_reg_{$id}_{$todayStr}", false)) {
+                $unlockedIds[] = $id;
+            }
+        }
+
+        return response()->json(['success' => true, 'unlocked_ids' => $unlockedIds]);
     }
 }

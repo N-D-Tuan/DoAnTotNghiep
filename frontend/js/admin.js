@@ -6697,14 +6697,19 @@ async function loadStaffRegistrationStatus() {
         const tuNgay = dates[0].dbDate;
         const denNgay = dates[6].dbDate;
 
-        const [usersRes, lichRes] = await Promise.all([
+        const [usersRes, lichRes, emergencyRes] = await Promise.all([
             fetch(`${API_BASE_URL}/admin/khach-hang`), 
-            fetch(`${API_BASE_URL}/lich-lam-viec?tu_ngay=${tuNgay}&den_ngay=${denNgay}`)
+            fetch(`${API_BASE_URL}/lich-lam-viec?tu_ngay=${tuNgay}&den_ngay=${denNgay}`),
+            fetch(`${API_BASE_URL}/lich-lam-viec/trang-thai-khan-cap`)
         ]);
 
         const usersData = await usersRes.json();
         const lichData = (await lichRes.json()).data || [];
+        const emergencyData = await emergencyRes.json();
+        const unlockedIds = emergencyData.unlocked_ids || [];
+
         const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+        const isSunday = new Date().getDay() === 0; // 0 = Chủ Nhật
 
         const activeStaff = usersData.data.filter(u => 
             (u.VaiTro === 'NhanVien' || u.VaiTro === 'QuanLySan') && 
@@ -6714,28 +6719,52 @@ async function loadStaffRegistrationStatus() {
 
         let html = '';
         activeStaff.forEach(staff => {
-            // Lấy TẤT CẢ các ca thuộc về nhân viên này (cả đăng ký trên server + xếp cục bộ của quản lý)
             let userShifts = lichData.filter(l => String(l.ID_NhanVien) === String(staff.ID));
             const localShifts = pendingManagerAssignments.filter(p => String(p.id_nhan_vien) === String(staff.ID));
             
-            // Số lượng ca đăng ký (từ server)
             const totalRequested = userShifts.length;
-            
-            // Số lượng ca ĐÃ ĐƯỢC CHỐT (trên server + local) - YÊU CẦU 4
             const approvedOnServer = userShifts.filter(l => l.TrangThaiXepLich === 'DaDuyet').length;
             const approvedTotal = approvedOnServer + localShifts.length;
 
             const color = totalRequested === 0 ? '#ef4444' : '#10b981';
             const alertIcon = totalRequested === 0 ? `<i class="fa-solid fa-triangle-exclamation" style="color:#ef4444;" title="Chưa đăng ký ca nào"></i>` : '';
 
-            // YÊU CẦU 4: Format hiển thị "Chốt / Đăng ký" (VD: 3/4)
+            // Nút mở đăng ký khẩn cấp (chỉ dành cho Nhân viên, không hiện cho chính Quản lý)
+            let emergencyBtnHtml = '';
+            if (staff.VaiTro === 'NhanVien') {
+                const isUnlocked = unlockedIds.some(id => String(id) === String(staff.ID));
+
+                if (!isSunday) {
+                    // Thứ 2 -> Thứ 7: Hiển thị dạng Disabled kèm giải thích khi hover
+                    emergencyBtnHtml = `
+                        <span title="Chỉ dùng vào Chủ Nhật (khi đã hết hạn đăng ký tự do từ T2 - T7) để mở khóa khẩn cấp 1 lần cho nhân viên" style="display: inline-block; cursor: not-allowed;">
+                            <button type="button" disabled style="padding: 3px 8px; font-size: 0.72rem; border-radius: 6px; border: 1px solid #cbd5e1; background: #f1f5f9; color: #94a3b8; cursor: not-allowed; pointer-events: none;">
+                                <i class="fa-solid fa-unlock-keyhole"></i> Mở ĐK
+                            </button>
+                        </span>`;
+                } else if (isUnlocked) {
+                    // Chủ nhật & Đã mở quyền (đang chờ nhân viên gửi lịch)
+                    emergencyBtnHtml = `
+                        <span title="Đã mở khóa 1 lần. Quyền sẽ tự động đóng ngay sau khi nhân viên bấm Gửi lịch" style="padding: 3px 8px; font-size: 0.72rem; border-radius: 6px; background: #fef3c7; color: #b45309; border: 1px solid #fde68a; font-weight: 600;">
+                            <i class="fa-solid fa-clock-rotate-left"></i> Đang mở 1 lần
+                        </span>`;
+                } else {
+                    // Chủ nhật & Chưa mở quyền -> Cho phép click
+                    emergencyBtnHtml = `
+                        <button type="button" onclick="grantEmergencyScheduleAccess(${staff.ID}, '${staff.HoTen.replace(/'/g, "\\'")}')" title="Cho phép nhân viên này đăng ký / sửa lịch khẩn cấp 1 lần trong hôm nay (Chủ Nhật)" style="padding: 3px 8px; font-size: 0.72rem; border-radius: 6px; border: 1px solid #bfdbfe; background: #eff6ff; color: #2563eb; font-weight: 600; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'">
+                            <i class="fa-solid fa-unlock-keyhole"></i> Mở ĐK (1 lần)
+                        </button>`;
+                }
+            }
+
             html += `
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px dashed #e2e8f0;">
-                    <div>
-                        <div style="font-size: 0.9rem; color: var(--text-dark); font-weight: 500;">${staff.HoTen} ${alertIcon}</div>
-                        <div style="font-size: 0.75rem; color: var(--text-muted);">${staff.SoDienThoai}</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px dashed #e2e8f0; gap: 8px;">
+                    <div style="min-width: 0; flex: 1;">
+                        <div style="font-size: 0.9rem; color: var(--text-dark); font-weight: 600;">${staff.HoTen} ${alertIcon}</div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">${staff.SoDienThoai}</div>
+                        ${emergencyBtnHtml}
                     </div>
-                    <div style="font-weight: bold; color: ${color}; font-size: 0.95rem;">${approvedTotal}/${totalRequested}</div>
+                    <div style="font-weight: bold; color: ${color}; font-size: 0.95rem; flex-shrink: 0;">${approvedTotal}/${totalRequested}</div>
                 </div>
             `;
         });
@@ -6746,6 +6775,27 @@ async function loadStaffRegistrationStatus() {
         listContainer.innerHTML = '<div style="color:red; font-size: 0.85rem;">Lỗi tải dữ liệu.</div>';
     }
 }
+
+// Hàm Quản lý bấm Mở đăng ký khẩn cấp 1 lần cho nhân viên
+window.grantEmergencyScheduleAccess = async function(staffId, staffName) {
+    try {
+        const res = await fetch(`${API_BASE_URL}/lich-lam-viec/mo-khan-cap`, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id_nhan_vien: staffId })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+            showSystemModal('Đã mở khóa khẩn cấp', `Đã cấp 1 lượt đăng ký/chỉnh sửa lịch tuần sau và gửi thông báo cho <strong>${staffName}</strong>.`, 'success');
+            loadStaffRegistrationStatus();
+        } else {
+            showSystemModal('Không thể mở khóa', data.message || 'Có lỗi xảy ra!', 'error');
+        }
+    } catch (e) {
+        showSystemModal('Lỗi kết nối', 'Không thể kết nối máy chủ!', 'error');
+    }
+};
 
 // Logic Chốt lịch
 async function lockNextWeekSchedule() {

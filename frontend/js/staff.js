@@ -199,6 +199,12 @@ document.addEventListener('DOMContentLoaded', () => {
             
             await loadNotifications();
 
+            // Tự động mở khóa lưới lịch tuần sau nếu Quản lý vừa cấp quyền khẩn cấp
+            const nextTabStaff = document.getElementById('staff-cal-next');
+            if (nextTabStaff && nextTabStaff.style.display !== 'none' && pendingStaffShifts.length === 0) {
+                loadStaffCalendarData(1, 'grid-staff-next-week');
+            }
+
             try {
                 // Fetch thông báo mới nhất để kiểm tra nội dung
                 const res = await fetch(`${API_BASE_URL}/thong-bao`);
@@ -2427,7 +2433,9 @@ async function loadStaffCalendarData(weekOffset, containerId) {
         ]);
 
         const caData = (await caRes.json()).data || [];
-        let lichData = (await lichRes.json()).data || [];
+        const lichJson = await lichRes.json();
+        let lichData = lichJson.data || [];
+        const hasEmergencyUnlock = lichJson.quyen_khan_cap === true;
 
         // TRỘN DỮ LIỆU LOCAL: Đưa các ca vừa đăng ký tạm thời vào mảng lichData để hiển thị lên lưới
         pendingStaffShifts.forEach(pending => {
@@ -2454,30 +2462,34 @@ async function loadStaffCalendarData(weekOffset, containerId) {
         // Logic ẩn/hiện nút Gửi Lịch dựa vào biến isStaffScheduleChanged
         if (weekOffset === 1) {
             const isLocked = lichData.some(l => l.TrangThaiXepLich === 'DaDuyet' && String(l.ID_NhanVien) !== String(currentUser.ID)); 
-            const isPastDeadline = new Date().getDay() === 0; // Hàm getDay() trả về 0 nếu hôm nay là Chủ Nhật
+            const isPastDeadline = new Date().getDay() === 0; // Chủ Nhật
             const btnSubmit = document.getElementById('btn-submit-staff-schedule');
             
-            if (isLocked) {
+            if (isLocked && !hasEmergencyUnlock) {
                 btnSubmit.innerHTML = '<i class="fa-solid fa-lock"></i> Đã khóa đăng ký';
                 btnSubmit.disabled = true;
                 btnSubmit.classList.add('btn-disabled');
-            } else if (isPastDeadline) {
-                // Nếu là Chủ Nhật, vô hiệu hóa việc đăng ký
+            } else if (isPastDeadline && !hasEmergencyUnlock) {
+                // Nếu là Chủ Nhật VÀ KHÔNG được Quản lý mở khẩn cấp -> Khóa
                 btnSubmit.innerHTML = '<i class="fa-solid fa-clock"></i> Hết hạn đăng ký (Chỉ từ T2 - T7)';
                 btnSubmit.disabled = true;
                 btnSubmit.classList.add('btn-disabled');
                 btnSubmit.style.opacity = '0.7';
                 btnSubmit.style.cursor = 'not-allowed';
             } else if (!isStaffScheduleChanged) {
-                // Nếu chưa có thay đổi gì, disable nút Gửi đi
-                btnSubmit.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Gửi lịch làm việc';
+                btnSubmit.innerHTML = hasEmergencyUnlock 
+                    ? '<i class="fa-solid fa-paper-plane"></i> Gửi lịch (Lượt mở khẩn cấp 1 lần)' 
+                    : '<i class="fa-solid fa-paper-plane"></i> Gửi lịch làm việc';
                 btnSubmit.disabled = true;
+                btnSubmit.classList.remove('btn-disabled');
                 btnSubmit.style.opacity = '0.5';
                 btnSubmit.style.cursor = 'not-allowed';
             } else {
-                // Đã có thay đổi, bật nút Gửi lên
-                btnSubmit.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Gửi lịch làm việc';
+                btnSubmit.innerHTML = hasEmergencyUnlock 
+                    ? '<i class="fa-solid fa-paper-plane"></i> Gửi lịch (Lượt mở khẩn cấp 1 lần)' 
+                    : '<i class="fa-solid fa-paper-plane"></i> Gửi lịch làm việc';
                 btnSubmit.disabled = false;
+                btnSubmit.classList.remove('btn-disabled');
                 btnSubmit.style.opacity = '1';
                 btnSubmit.style.cursor = 'pointer';
             }
@@ -2772,6 +2784,14 @@ async function submitStaffSchedule() {
             // Thành công hoàn toàn: Xóa mảng tạm, tắt cờ trạng thái, báo thành công
             pendingStaffShifts = [];
             isStaffScheduleChanged = false;
+
+            // Nếu đang gửi vào Chủ Nhật (lượt mở khẩn cấp 1 lần) -> Thu hồi quyền ngay sau khi gửi xong
+            if (new Date().getDay() === 0) {
+                await fetch(`${API_BASE_URL}/lich-lam-viec/hoan-tat-khan-cap`, {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` }
+                });
+            }
             
             showSystemModal("Thành công", "Đã đồng bộ lịch làm việc của bạn lên hệ thống.", "success");
         }
