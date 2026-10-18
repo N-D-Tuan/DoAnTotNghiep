@@ -157,6 +157,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/lich-lam-viec/chot-tuan', [LichLamViecController::class, 'chotLichTuan']);
     Route::put('/lich-lam-viec/{id}/chot-cong', [LichLamViecController::class, 'quanLyChotCong']);
 
+    // Trường hợp khẩn cấp
+    Route::post('/lich-lam-viec/mo-khan-cap', [LichLamViecController::class, 'moDangKyKhanCap']);
+    Route::post('/lich-lam-viec/hoan-tat-khan-cap', [LichLamViecController::class, 'hoanTatGuiLichKhanCap']);
+    Route::get('/lich-lam-viec/trang-thai-khan-cap', [LichLamViecController::class, 'trangThaiKhanCapTuanSau']);
 
     // ==========================================
     // NHẬN CA & BÀN GIAO CA

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use App\Models\BangLuong;
 use App\Models\LichLamViec;
 use App\Models\NguoiDung;
@@ -19,9 +20,8 @@ class BangLuongController extends Controller
     public function layDanhSachLuongQuanLy(Request $request)
     {
         $user = $request->user();
-        $thangNam = $request->query('thang_nam', Carbon::now()->format('m-Y')); // Mặc định tháng hiện tại (VD: 10-2026)
+        $thangNam = $request->query('thang_nam', Carbon::now()->format('m-Y'));
 
-        // Phân tách tháng năm
         $parts = explode('-', $thangNam);
         if (count($parts) !== 2) {
             return response()->json(['success' => false, 'message' => 'Định dạng tháng năm sai (MM-YYYY)']);
@@ -29,8 +29,6 @@ class BangLuongController extends Controller
         $thang = $parts[0];
         $nam = $parts[1];
 
-        // Nếu là Quản lý sân -> Chỉ lấy nhân viên thuộc cơ sở của Quản lý
-        // Nếu là Admin -> Lấy toàn bộ nhân viên của tất cả các cụm sân
         $queryNhanVien = NguoiDung::with('cumSan')->whereIn('VaiTro', ['NhanVien']);
         if ($user->VaiTro === 'QuanLySan') {
             $queryNhanVien->where('ID_CumSan', $user->ID_CumSan);
@@ -39,18 +37,39 @@ class BangLuongController extends Controller
         }
 
         $nhanViens = $queryNhanVien->orderBy('ID_CumSan', 'asc')->orderBy('ID', 'asc')->get();
-
         $danhSach = [];
 
         foreach ($nhanViens as $nv) {
-            // Kiểm tra xem tháng này đã có record chốt lương trong DB chưa
             $bangLuongChot = BangLuong::where('ID_NhanVien', $nv->ID)
                 ->where('ThangNam', $thangNam)
                 ->first();
 
             $tenCumSan = $nv->cumSan ? $nv->cumSan->TenCumSan : 'Chưa phân cơ sở';
 
-            if ($bangLuongChot && $bangLuongChot->TrangThai !== 'KhieuNai') {
+            // NẾU ĐÃ CÓ BẢNG LƯƠNG (Bất kể trạng thái ChoXacNhan, KhieuNai, ChoThanhToan, DaThanhToan)
+            // -> LUÔN GIỮ NGUYÊN TongTienLuong ĐÃ CHỐT TRONG BẢNG LƯƠNG
+            if ($bangLuongChot) {
+                if ($bangLuongChot->TrangThai === 'KhieuNai') {
+                    // Khi đang Khiếu nại: Giữ nguyên Lương cơ bản lúc chốt, chỉ cập nhật lại Thưởng/Phạt nếu Quản lý vừa sửa công
+                    $lichLamThang = LichLamViec::where('ID_NhanVien', $nv->ID)
+                        ->where('TrangThaiXepLich', 'DaDuyet')
+                        ->whereMonth('NgayLam', $thang)
+                        ->whereYear('NgayLam', $nam)
+                        ->get();
+
+                    $tongCa = $lichLamThang->where('TrangThaiDiemDanh', 'DaLam')->count();
+                    $tongLuong = (int) $bangLuongChot->TongTienLuong; // CỐ ĐỊNH LƯƠNG CƠ BẢN ĐÃ CHỐT
+                    $tongThuong = (int) $lichLamThang->sum('TienThuong');
+                    $tongPhat = (int) $lichLamThang->sum('TienPhat');
+                    $thucLanh = max(0, $tongLuong + $tongThuong - $tongPhat);
+                } else {
+                    $tongCa = (int) $bangLuongChot->TongCaLam;
+                    $tongLuong = (int) $bangLuongChot->TongTienLuong;
+                    $tongThuong = (int) $bangLuongChot->TongTienThuong;
+                    $tongPhat = (int) $bangLuongChot->TongTienPhat;
+                    $thucLanh = (int) $bangLuongChot->ThucLanh;
+                }
+
                 $danhSach[] = [
                     'id_nhan_vien'        => $nv->ID,
                     'ten_nhan_vien'       => $nv->HoTen,
@@ -58,21 +77,21 @@ class BangLuongController extends Controller
                     'id_cum_san'          => $nv->ID_CumSan,
                     'ten_cum_san'         => $tenCumSan,
                     'bang_luong_id'       => $bangLuongChot->ID,
-                    'tong_ca_lam'         => $bangLuongChot->TongCaLam,
-                    'tong_luong'          => $bangLuongChot->TongTienLuong,
-                    'tong_thuong'         => $bangLuongChot->TongTienThuong,
-                    'tong_phat'           => $bangLuongChot->TongTienPhat,
-                    'thuc_lanh'           => $bangLuongChot->ThucLanh,
+                    'tong_ca_lam'         => $tongCa,
+                    'tong_luong'          => $tongLuong,
+                    'tong_thuong'         => $tongThuong,
+                    'tong_phat'           => $tongPhat,
+                    'thuc_lanh'           => $thucLanh,
                     'trang_thai'          => $bangLuongChot->TrangThai,
                     'thong_tin_ngan_hang' => $bangLuongChot->ThongTinNganHang,
                     'ly_do_khieu_nai'     => $bangLuongChot->LyDoKhieuNai,
                     'ngay_chot'           => $bangLuongChot->NgayChot,
                     'ngay_xac_nhan'       => $bangLuongChot->NgayXacNhan,
                     'ngay_thanh_toan'     => $bangLuongChot->NgayThanhToan,
-                    'is_chot'             => true
+                    'is_chot'             => ($bangLuongChot->TrangThai !== 'KhieuNai')
                 ];
             } else {
-                // NẾU CHƯA CHỐT (hoặc đang Khiếu nại): Tính toán động Realtime từ bảng LichLamViec
+                // CHƯA CÓ BẢNG LƯƠNG (ChuaChot): Tính động theo cấu hình CaLamViec hiện tại
                 $lichLamThang = LichLamViec::join('CaLamViec', 'LichLamViec.ID_CaLamViec', '=', 'CaLamViec.ID')
                     ->where('LichLamViec.ID_NhanVien', $nv->ID)
                     ->where('LichLamViec.TrangThaiXepLich', 'DaDuyet')
@@ -81,25 +100,21 @@ class BangLuongController extends Controller
                     ->select('LichLamViec.*', 'CaLamViec.LuongThuNgan', 'CaLamViec.LuongPhucVu')
                     ->get();
 
-                $tongCa = 0; // Đã fix lỗi cộng dồn gấp đôi
+                $tongCa = 0;
                 $tongLuong = 0;
                 $tongThuong = 0;
                 $tongPhat = 0;
 
                 foreach ($lichLamThang as $lich) {
-                    // Chỉ đếm số lượng ca và tính lương CB cho ca DaLam
                     if ($lich->TrangThaiDiemDanh === 'DaLam') {
                         $tongCa++;
                         $tongLuong += ($lich->CongViec === 'ThuNgan') ? $lich->LuongThuNgan : $lich->LuongPhucVu;
                     }
-                    
-                    // Thưởng và Phạt tính cho TẤT CẢ các ca (Vắng mặt vẫn bị phạt)
                     $tongThuong += ($lich->TienThuong ?? 0);
                     $tongPhat += ($lich->TienPhat ?? 0);
                 }
 
-                $thucLanh = $tongLuong + $tongThuong - $tongPhat;
-                if ($thucLanh < 0) $thucLanh = 0;
+                $thucLanh = max(0, $tongLuong + $tongThuong - $tongPhat);
 
                 $danhSach[] = [
                     'id_nhan_vien'        => $nv->ID,
@@ -107,18 +122,18 @@ class BangLuongController extends Controller
                     'so_dien_thoai'       => $nv->SoDienThoai,
                     'id_cum_san'          => $nv->ID_CumSan,
                     'ten_cum_san'         => $tenCumSan,
-                    'bang_luong_id'       => $bangLuongChot ? $bangLuongChot->ID : null,
+                    'bang_luong_id'       => null,
                     'tong_ca_lam'         => $tongCa,
                     'tong_luong'          => $tongLuong,
                     'tong_thuong'         => $tongThuong,
                     'tong_phat'           => $tongPhat,
                     'thuc_lanh'           => $thucLanh,
-                    'trang_thai'          => $bangLuongChot ? $bangLuongChot->TrangThai : 'ChuaChot',
-                    'thong_tin_ngan_hang' => $bangLuongChot ? $bangLuongChot->ThongTinNganHang : null,
-                    'ly_do_khieu_nai'     => $bangLuongChot ? $bangLuongChot->LyDoKhieuNai : null,
-                    'ngay_chot'           => $bangLuongChot ? $bangLuongChot->NgayChot : null,
-                    'ngay_xac_nhan'       => $bangLuongChot ? $bangLuongChot->NgayXacNhan : null,
-                    'ngay_thanh_toan'     => $bangLuongChot ? $bangLuongChot->NgayThanhToan : null,
+                    'trang_thai'          => 'ChuaChot',
+                    'thong_tin_ngan_hang' => null,
+                    'ly_do_khieu_nai'     => null,
+                    'ngay_chot'           => null,
+                    'ngay_xac_nhan'       => null,
+                    'ngay_thanh_toan'     => null,
                     'is_chot'             => false
                 ];
             }
@@ -138,13 +153,11 @@ class BangLuongController extends Controller
         $thangNam = $request->thang_nam;
         $idNhanVien = $request->id_nhan_vien;
 
-        // Tránh chốt đúp
         $exist = BangLuong::where('ID_NhanVien', $idNhanVien)->where('ThangNam', $thangNam)->first();
         if ($exist && $exist->TrangThai !== 'KhieuNai') {
             return response()->json(['success' => false, 'message' => 'Lương tháng này đã được chốt.']);
         }
 
-        // Tính toán lại lần cuối để lưu cứng
         $parts = explode('-', $thangNam);
         $thang = $parts[0]; $nam = $parts[1];
 
@@ -156,17 +169,33 @@ class BangLuongController extends Controller
             ->select('LichLamViec.*', 'CaLamViec.LuongThuNgan', 'CaLamViec.LuongPhucVu')
             ->get();
 
-        $tongCa = 0; // Đã fix lỗi cộng dồn gấp đôi
+        // Key lưu Snapshot mức lương cơ bản của từng ca lúc chốt
+        $snapshotKey = "salary_snapshot_{$idNhanVien}_{$thangNam}";
+        $existingSnapshot = Cache::get($snapshotKey, []);
+        $newSnapshot = $existingSnapshot;
+
+        $tongCa = 0;
         $tongLuong = 0; $tongThuong = 0; $tongPhat = 0;
 
         foreach ($lichLamThang as $lich) {
             if ($lich->TrangThaiDiemDanh === 'DaLam') {
                 $tongCa++;
-                $tongLuong += ($lich->CongViec === 'ThuNgan') ? $lich->LuongThuNgan : $lich->LuongPhucVu;
+                // Nếu ca này đã từng được lưu mức lương lúc chốt lần đầu (trường hợp chốt lại sau Khiếu nại) -> Giữ nguyên mức lương cũ
+                // Nếu là ca mới được chấm công bổ sung -> Lấy mức lương tại thời điểm chốt này và khóa lại
+                if (isset($existingSnapshot[$lich->ID])) {
+                    $mucLuongCa = (int) $existingSnapshot[$lich->ID];
+                } else {
+                    $mucLuongCa = (int) (($lich->CongViec === 'ThuNgan') ? $lich->LuongThuNgan : $lich->LuongPhucVu);
+                    $newSnapshot[$lich->ID] = $mucLuongCa;
+                }
+                $tongLuong += $mucLuongCa;
             }
             $tongThuong += ($lich->TienThuong ?? 0);
             $tongPhat += ($lich->TienPhat ?? 0);
         }
+
+        // Lưu cứng bảng giá từng ca vào Cache vĩnh viễn
+        Cache::forever($snapshotKey, $newSnapshot);
 
         $ngayHienTai = Carbon::now()->toDateTimeString();
 
@@ -175,6 +204,7 @@ class BangLuongController extends Controller
             $exist->TongTienLuong = $tongLuong;
             $exist->TongTienThuong = $tongThuong;
             $exist->TongTienPhat = $tongPhat;
+            $exist->ThucLanh = max(0, $tongLuong + $tongThuong - $tongPhat);
             $exist->TrangThai = 'ChoXacNhan';
             $exist->NgayChot = $ngayHienTai;
             $exist->save();
@@ -186,6 +216,7 @@ class BangLuongController extends Controller
                 'TongTienLuong'  => $tongLuong,
                 'TongTienThuong' => $tongThuong,
                 'TongTienPhat'   => $tongPhat,
+                'ThucLanh'       => max(0, $tongLuong + $tongThuong - $tongPhat),
                 'TrangThai'      => 'ChoXacNhan',
                 'NgayChot'       => $ngayHienTai
             ]);
@@ -274,18 +305,29 @@ class BangLuongController extends Controller
             ->orderBy('NgayLam', 'asc')
             ->get();
 
-        $lichThang = $lichLamViec->map(function($lich) {
-            $luong = 0;
+        // Lấy Snapshot lương từng ca nếu tháng này đã có Bảng lương
+        $snapshotKey = "salary_snapshot_{$idNhanVien}_{$thangNam}";
+        $snapshot = $bangLuong ? Cache::get($snapshotKey, []) : [];
+
+        $lichThang = $lichLamViec->map(function($lich) use ($bangLuong, $snapshot) {
+            $luongHienThi = 0;
             if ($lich->caLamViec) {
-                $luong = ($lich->CongViec === 'ThuNgan') ? $lich->caLamViec->LuongThuNgan : $lich->caLamViec->LuongPhucVu;
+                $luongHienThi = ($lich->CongViec === 'ThuNgan')
+                    ? (int) $lich->caLamViec->LuongThuNgan
+                    : (int) $lich->caLamViec->LuongPhucVu;
             }
-            
+
+            // Nếu đã có Bảng lương và có lưu Snapshot của ca này -> Lấy đúng số tiền nguyên bản lúc chốt (VD: 150.000đ, 170.000đ)
+            if ($bangLuong && isset($snapshot[$lich->ID])) {
+                $luongHienThi = (int) $snapshot[$lich->ID];
+            }
+
             return [
                 'ngay_lam'             => $lich->NgayLam,
                 'ten_ca'               => $lich->caLamViec ? $lich->caLamViec->TenCa : 'N/A',
                 'cong_viec'            => $lich->CongViec,
                 'trang_thai_diem_danh' => $lich->TrangThaiDiemDanh, 
-                'luong_co_ban'         => (int) $luong,
+                'luong_co_ban'         => (int) $luongHienThi,
                 'tien_thuong'          => (int) ($lich->TienThuong ?? 0),
                 'tien_phat'            => (int) ($lich->TienPhat ?? 0),
                 'ly_do'                => $lich->LyDoDieuChinh
@@ -301,9 +343,9 @@ class BangLuongController extends Controller
             $tongThuong += $l['tien_thuong'];
             $tongPhat += $l['tien_phat'];
         }
-        $thucLanh = max(0, $tongLuong + $tongThuong - $tongPhat);
 
         if (!$bangLuong) {
+            $thucLanh = max(0, $tongLuong + $tongThuong - $tongPhat);
             $tongTin = [
                 'is_chot'        => false,
                 'ThangNam'       => $thangNam,
@@ -317,9 +359,13 @@ class BangLuongController extends Controller
         } else {
             $tongTin = clone $bangLuong;
             $tongTin->is_chot = true;
-            $tongTin->TongTienThuong = $tongThuong;
-            $tongTin->TongTienPhat = $tongPhat;
-            $tongTin->ThucLanh = $thucLanh;
+            $tongTin->TongTienLuong = (int) $bangLuong->TongTienLuong;
+            if ($bangLuong->TrangThai === 'KhieuNai') {
+                $tongTin->TongCaLam = $tongCa;
+                $tongTin->TongTienThuong = $tongThuong;
+                $tongTin->TongTienPhat = $tongPhat;
+                $tongTin->ThucLanh = max(0, (int) $bangLuong->TongTienLuong + $tongThuong - $tongPhat);
+            }
         }
 
         return response()->json([
