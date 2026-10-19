@@ -32,8 +32,9 @@ class CaLamViecController extends Controller
         if ($request->filled('tu_ngay') && $request->filled('den_ngay') && $request->query('mode') !== 'config') {
             $tuNgay = $request->query('tu_ngay');
             $denNgay = $request->query('den_ngay');
+            $snapshotKey = "week_shift_snapshot_data_{$idCumSan}_{$tuNgay}";
 
-            // Kiểm tra tuần này đã có ca nào ở trạng thái 'DaDuyet' HOẶC 'DangKy' chưa
+            // Kiểm tra tuần này đã có bất kỳ ca nào ở trạng thái 'DaDuyet' HOẶC 'DangKy' chưa
             $usedCaIds = LichLamViec::whereHas('caLamViec', function ($q) use ($idCumSan) {
                     $q->where('ID_CumSan', $idCumSan);
                 })
@@ -44,22 +45,40 @@ class CaLamViecController extends Controller
                 ->toArray();
 
             if (!empty($usedCaIds)) {
-                // NẾU TUẦN NÀY ĐÃ CÓ LỊCH (Dù là Đã duyệt hay Nhân viên mới Đăng ký)
-                // -> Giữ nguyên bộ ca đang có của tuần đó, không render đè bộ ca mới làm mất/loạn lịch
-                $hasOldShift = array_diff($usedCaIds, $activeIds);
-                if (!empty($hasOldShift)) {
-                    // Tìm toàn bộ bộ ca cùng thế hệ (hoặc các ca đang có lịch trong tuần đó)
-                    $snapshotWeekIds = Cache::get("week_shift_snapshot_{$idCumSan}_{$tuNgay}");
-                    if (is_array($snapshotWeekIds) && !empty($snapshotWeekIds)) {
-                        $mergedOldIds = array_unique(array_merge($snapshotWeekIds, $usedCaIds));
-                        $caTheoTuan = $allCa->whereIn('ID', $mergedOldIds)->values();
-                    } else {
-                        $caTheoTuan = $allCa->whereIn('ID', $usedCaIds)->values();
+                // TUẦN NÀY ĐÃ CÓ NHÂN VIÊN ĐĂNG KÝ HOẶC ĐÃ DUYỆT LỊCH
+                // 1. Nếu đã có bản chụp (Snapshot) bộ ca của tuần này trước khi Quản lý sửa
+                $savedSnapshot = Cache::get($snapshotKey);
+                if (is_array($savedSnapshot) && !empty($savedSnapshot)) {
+                    // Lọc bỏ các dòng bị trùng Tên ca trong Snapshot cũ và chỉ giữ các ca còn tồn tại hoặc đang có lịch
+                    $existingDbIds = $allCa->pluck('ID')->toArray();
+                    $validSnapshot = collect($savedSnapshot)
+                        ->filter(function ($item) use ($existingDbIds, $usedCaIds) {
+                            $id = $item['ID'] ?? null;
+                            return in_array($id, $existingDbIds) || in_array($id, $usedCaIds);
+                        })
+                        ->unique('TenCa')
+                        ->values()
+                        ->toArray();
+
+                    // Nếu Snapshot cũ bị dính dữ liệu rác trước đây -> Tự động cập nhật lại Snapshot sạch
+                    if (count($validSnapshot) !== count($savedSnapshot)) {
+                        Cache::put($snapshotKey, $validSnapshot, now()->addDays(30));
                     }
-                } else {
-                    $mergedIds = array_unique(array_merge($activeIds, $usedCaIds));
-                    $caTheoTuan = $allCa->whereIn('ID', $mergedIds)->values();
+
+                    return response()->json([
+                        'success'           => true,
+                        'data'              => $validSnapshot,
+                        'is_locked_by_week' => true,
+                        'gio_mo_cua'        => $cumSan ? substr($cumSan->GioMoCua, 0, 5) : '06:00',
+                        'gio_dong_cua'      => $cumSan ? substr($cumSan->GioDongCua, 0, 5) : '22:00',
+                    ]);
                 }
+
+                // 2. Nếu chưa có bản chụp (tức là Quản lý chưa sửa cấu hình kể từ lúc nhân viên đăng ký)
+                // -> Lấy bộ ca hiện hành + các ca đang được đăng ký và lưu làm Snapshot cố định cho tuần này luôn
+                $mergedIds = array_unique(array_merge($activeIds, $usedCaIds));
+                $caTheoTuan = $allCa->whereIn('ID', $mergedIds)->unique('TenCa')->values();
+                Cache::put($snapshotKey, $caTheoTuan->toArray(), now()->addDays(30));
 
                 return response()->json([
                     'success'           => true,
@@ -68,10 +87,14 @@ class CaLamViecController extends Controller
                     'gio_mo_cua'        => $cumSan ? substr($cumSan->GioMoCua, 0, 5) : '06:00',
                     'gio_dong_cua'      => $cumSan ? substr($cumSan->GioDongCua, 0, 5) : '22:00',
                 ]);
+            } else {
+                // NẾU TUẦN NÀY HOÀN TOÀN TRỐNG (Nhân viên đã hủy hết đăng ký hoặc chưa ai đăng ký)
+                // -> Xóa Snapshot cũ (nếu có) để tuần này nhận ngay bộ Ca làm việc mới nhất!
+                Cache::forget($snapshotKey);
             }
         }
 
-        // CHỈ KHI TUẦN HOÀN TOÀN TRỐNG (Không có DaDuyet và không có DangKy) -> Render bộ Ca mới nhất
+        // TUẦN HOÀN TOÀN TRỐNG HOẶC MỞ MODAL CẤU HÌNH -> Render bộ Ca mới nhất
         $activeShifts = $allCa->whereIn('ID', $activeIds)->values();
 
         return response()->json([
@@ -83,7 +106,7 @@ class CaLamViecController extends Controller
         ]);
     }
 
-    // 2. Quản lý lưu danh sách nhiều ca làm việc & giờ giao ca tùy ý
+    // 2. Quản lý lưu cấu hình ca: Chỉnh sửa theo ID_CumSan & TenCa, không sinh dòng trùng lặp
     public function luuCauHinhCa(Request $request)
     {
         $idCumSan = $request->user()->ID_CumSan;
@@ -143,9 +166,6 @@ class CaLamViecController extends Controller
                     }
                 }
 
-                if ($i === count($shifts - 1) && $ketThuc !== $dongCua) {
-                    // Đảm bảo kiểm tra ca cuối cùng
-                }
                 if ($i === count($shifts) - 1 && $ketThuc !== $dongCua) {
                     return response()->json([
                         'success' => false,
@@ -156,73 +176,76 @@ class CaLamViecController extends Controller
 
             DB::beginTransaction();
             try {
-                // Lấy khoảng ngày của Tuần Hiện Tại và Tuần Sau
                 $curMonday = \Carbon\Carbon::now()->startOfWeek()->toDateString();
                 $curSunday = \Carbon\Carbon::now()->endOfWeek()->toDateString();
                 $nextMonday = \Carbon\Carbon::now()->addWeek()->startOfWeek()->toDateString();
                 $nextSunday = \Carbon\Carbon::now()->addWeek()->endOfWeek()->toDateString();
 
-                // Lưu lại snapshot bộ ca cũ cho tuần hiện tại / tuần sau nếu tuần đó ĐÃ CÓ LỊCH (DaDuyet hoặc DangKy)
+                // Lấy bộ ca ĐANG HIỆN HÀNH TRƯỚC KHI SỬA để đóng băng (Snapshot) cho tuần nào đã có lịch
                 $oldActiveIds = Cache::get("active_shift_ids_cumsan_{$idCumSan}");
-                if (!is_array($oldActiveIds) || empty($oldActiveIds)) {
-                    $oldActiveIds = CaLamViec::where('ID_CumSan', $idCumSan)->pluck('ID')->toArray();
-                }
+                $allCurrentCa = CaLamViec::where('ID_CumSan', $idCumSan)
+                    ->orderBy('GioBatDau', 'asc')
+                    ->orderBy('ID', 'asc')
+                    ->get();
 
+                if (!is_array($oldActiveIds) || empty($oldActiveIds)) {
+                    $oldActiveIds = $allCurrentCa->pluck('ID')->toArray();
+                }
+                $oldActiveShiftsArray = $allCurrentCa->whereIn('ID', $oldActiveIds)->values()->toArray();
+
+                // Kiểm tra Tuần Hiện Tại: Nếu đã có DaDuyet hoặc DangKy thì khóa Snapshot bộ ca cũ lại
                 $curWeekHasSchedule = LichLamViec::whereHas('caLamViec', fn($q) => $q->where('ID_CumSan', $idCumSan))
                     ->whereBetween('NgayLam', [$curMonday, $curSunday])
                     ->whereIn('TrangThaiXepLich', ['DaDuyet', 'DangKy'])
                     ->exists();
-                if ($curWeekHasSchedule && !Cache::has("week_shift_snapshot_{$idCumSan}_{$curMonday}")) {
-                    Cache::put("week_shift_snapshot_{$idCumSan}_{$curMonday}", $oldActiveIds, now()->addDays(30));
+                $curSnapshotKey = "week_shift_snapshot_data_{$idCumSan}_{$curMonday}";
+                if ($curWeekHasSchedule) {
+                    if (!Cache::has($curSnapshotKey)) {
+                        Cache::put($curSnapshotKey, $oldActiveShiftsArray, now()->addDays(30));
+                    }
+                } else {
+                    Cache::forget($curSnapshotKey);
                 }
 
+                // Kiểm tra Tuần Sau: Nếu đã có DaDuyet hoặc DangKy thì khóa Snapshot bộ ca cũ lại ngay từ lần sửa đầu tiên!
                 $nextWeekHasSchedule = LichLamViec::whereHas('caLamViec', fn($q) => $q->where('ID_CumSan', $idCumSan))
                     ->whereBetween('NgayLam', [$nextMonday, $nextSunday])
                     ->whereIn('TrangThaiXepLich', ['DaDuyet', 'DangKy'])
                     ->exists();
-                if ($nextWeekHasSchedule && !Cache::has("week_shift_snapshot_{$idCumSan}_{$nextMonday}")) {
-                    Cache::put("week_shift_snapshot_{$idCumSan}_{$nextMonday}", $oldActiveIds, now()->addDays(30));
+                $nextSnapshotKey = "week_shift_snapshot_data_{$idCumSan}_{$nextMonday}";
+                if ($nextWeekHasSchedule) {
+                    if (!Cache::has($nextSnapshotKey)) {
+                        Cache::put($nextSnapshotKey, $oldActiveShiftsArray, now()->addDays(30));
+                    }
+                } else {
+                    Cache::forget($nextSnapshotKey);
                 }
 
-                // Danh sách tất cả ID ca đang bận được gắn lịch (DaDuyet hoặc DangKy) ở tuần này hoặc tuần sau
-                $busyCaIds = LichLamViec::whereHas('caLamViec', function ($q) use ($idCumSan) {
-                        $q->where('ID_CumSan', $idCumSan);
-                    })
-                    ->whereBetween('NgayLam', [$curMonday, $nextSunday])
-                    ->whereIn('TrangThaiXepLich', ['DaDuyet', 'DangKy'])
-                    ->pluck('ID_CaLamViec')
-                    ->unique()
-                    ->toArray();
-
+                // CẬP NHẬT HOẶC THÊM MỚI CA LÀM VIỆC THEO (ID_CumSan + TenCa) HOẶC ID
                 $newActiveIds = [];
 
                 foreach ($shifts as $s) {
                     $idCa = isset($s['ID']) && $s['ID'] ? (int) $s['ID'] : null;
                     $tenCa = trim($s['TenCa']);
-                    $batDauHHMM = substr(trim($s['GioBatDau']), 0, 5);
-                    $ketThucHHMM = substr(trim($s['GioKetThuc']), 0, 5);
-                    $gioBD = $batDauHHMM . ':00';
-                    $gioKT = $ketThucHHMM . ':00';
+                    $gioBD = substr(trim($s['GioBatDau']), 0, 5) . ':00';
+                    $gioKT = substr(trim($s['GioKetThuc']), 0, 5) . ':00';
 
-                    $existingCa = null;
-                    if ($idCa) {
-                        $existingCa = CaLamViec::where('ID_CumSan', $idCumSan)->where('ID', $idCa)->first();
-                    }
+                    // 1. Ưu tiên tìm theo ID_CumSan và TenCa (để tái sử dụng ca cùng tên, không sinh dòng mới)
+                    $existingCa = CaLamViec::where('ID_CumSan', $idCumSan)
+                        ->where('TenCa', $tenCa)
+                        ->orderBy('ID', 'asc')
+                        ->first();
 
-                    // Nếu ca này đang có lịch (DaDuyet hoặc DangKy) VÀ bị đổi Tên ca hoặc đổi Giờ
-                    // -> Tách ra tạo bản ghi mới để lịch đang có không bị nhảy giờ/nhảy tên
-                    if ($existingCa && in_array($existingCa->ID, $busyCaIds)) {
-                        $isTimeOrNameChanged = ($existingCa->TenCa !== $tenCa)
-                            || (substr($existingCa->GioBatDau, 0, 5) !== $batDauHHMM)
-                            || (substr($existingCa->GioKetThuc, 0, 5) !== $ketThucHHMM);
-
-                        if ($isTimeOrNameChanged) {
-                            $existingCa = null;
-                        }
+                    // 2. Nếu đổi tên ca từ một ca cũ đang chọn (có ID) và tên mới chưa tồn tại
+                    if (!$existingCa && $idCa) {
+                        $existingCa = CaLamViec::where('ID_CumSan', $idCumSan)
+                            ->where('ID', $idCa)
+                            ->whereNotIn('ID', $newActiveIds)
+                            ->first();
                     }
 
                     if ($existingCa) {
-                        // CẬP NHẬT DỮ LIỆU CŨ (Khi không đổi giờ/tên của ca đang có lịch, hoặc chỉ đổi lương/số lượng NV)
+                        // Chỉnh sửa trực tiếp dữ liệu cũ
                         $existingCa->update([
                             'TenCa'           => $tenCa,
                             'GioBatDau'       => $gioBD,
@@ -233,7 +256,7 @@ class CaLamViecController extends Controller
                         ]);
                         $newActiveIds[] = $existingCa->ID;
                     } else {
-                        // THÊM DỮ LIỆU MỚI (Khi thêm ca mới hoặc tách ca mới cho tuần trống)
+                        // Chỉ tạo mới khi thực sự là ca mới (chưa có TenCa này trong Cụm sân)
                         $created = CaLamViec::create([
                             'ID_CumSan'       => $idCumSan,
                             'TenCa'           => $tenCa,
@@ -247,17 +270,18 @@ class CaLamViecController extends Controller
                     }
                 }
 
-                // Dọn dẹp các ca cũ không nằm trong bộ mới và chưa từng có bất kỳ lịch (DaDuyet / DangKy) nào
-                $oldUnusedShifts = CaLamViec::where('ID_CumSan', $idCumSan)
+                // Dọn dẹp các dòng CaLamViec thừa/trùng lặp không nằm trong bộ mới (nếu chưa có lịch sử gắn vào)
+                $unusedShifts = CaLamViec::where('ID_CumSan', $idCumSan)
                     ->whereNotIn('ID', $newActiveIds)
                     ->get();
 
-                foreach ($oldUnusedShifts as $oldCa) {
-                    $hasAnySchedule = LichLamViec::where('ID_CaLamViec', $oldCa->ID)
+                foreach ($unusedShifts as $oldCa) {
+                    $hasSchedule = LichLamViec::where('ID_CaLamViec', $oldCa->ID)
                         ->whereIn('TrangThaiXepLich', ['DaDuyet', 'DangKy'])
                         ->exists();
+                    $hasHandover = DB::table('BanGiaoCa')->where('ID_CaLamViec', $oldCa->ID)->exists();
 
-                    if (!$hasAnySchedule) {
+                    if (!$hasSchedule && !$hasHandover) {
                         LichLamViec::where('ID_CaLamViec', $oldCa->ID)->delete();
                         $oldCa->delete();
                     }
@@ -269,8 +293,8 @@ class CaLamViecController extends Controller
                 broadcast(new \App\Events\SystemDataUpdated())->toOthers();
 
                 $msg = ($curWeekHasSchedule || $nextWeekHasSchedule)
-                    ? 'Đã lưu cấu hình ca! Các tuần đã có nhân viên đăng ký/duyệt lịch sẽ giữ nguyên ca cũ; cấu hình mới sẽ hiển thị ở các tuần trống.'
-                    : 'Đã lưu cấu hình ca làm việc và cập nhật lên lịch thành công!';
+                    ? 'Đã lưu cấu hình ca! Tuần đã có nhân viên đăng ký/duyệt lịch sẽ giữ nguyên lịch cũ; cấu hình mới sẽ áp dụng cho tuần trống.'
+                    : 'Đã cập nhật cấu hình ca làm việc thành công!';
 
                 return response()->json([
                     'success' => true,

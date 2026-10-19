@@ -3210,7 +3210,7 @@ window.executeXoaPhieuChi = function(idPhieu, bgcId) {
             <h3 style="margin-bottom: 10px; font-size: 1.4rem;">Xóa phiếu thu/chi</h3>
             <p style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5;">Bạn có chắc chắn muốn xóa dữ liệu này không? Hành động không thể hoàn tác.</p>
             <div style="display: flex; justify-content: center; gap: 12px;">
-                <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="document.getElementById('xoa-phieu-chi-modal').style.display='none'">Hủy bỏ</button>
+                <button type="button" onclick="document.getElementById('xoa-phieu-chi-modal').style.display='none'" style="width: auto; padding: 10px 24px; border-radius: 8px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-weight: 600; font-size: 0.92rem; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f1f5f9'; this.style.borderColor='#94a3b8'; this.style.color='#0f172a';" onmouseout="this.style.background='#ffffff'; this.style.borderColor='#cbd5e1'; this.style.color='#475569';">Hủy bỏ</button>
                 <button class="btn-primary" style="width: auto; padding: 10px 24px; background-color: #ef4444; border-color: #ef4444;" id="btn-confirm-xoa-phieu">Đồng ý xóa</button>
             </div>
         </div>
@@ -3304,7 +3304,7 @@ window.submitPhieuChi = async function() {
 };
 
 // --- LOGIC BÀN GIAO & CHỐT CA ---
-window.openGiaoCaModal = async function(bgcId, tenCa) {
+window.openGiaoCaModal = async function(bgcId, tenCa, gioKetThuc = '') {
     // 1. KIỂM TRA KHÔNG CHO BÀN GIAO CA QUÁ SỚM (Chỉ cho phép trước giờ kết thúc ca tối đa 30 phút)
     if (gioKetThuc) {
         const now = new Date();
