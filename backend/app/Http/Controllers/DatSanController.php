@@ -99,6 +99,7 @@ class DatSanController extends Controller
             // 3. TẠO CÁC LỊCH ĐẶT SÂN
             $failed_slots = [];
             $failed_messages = [];
+            $cacVeVuaTao = [];
 
             foreach ($slots as $slot) {
                 // Chuyển đổi định dạng ngày DD/MM/YYYY sang Y-m-d
@@ -124,7 +125,7 @@ class DatSanController extends Controller
                     $failed_messages[] = "[{$slot['time']} ngày {$slot['date']}]";
                 } else if (empty($failed_slots)) {
                     // Chỉ Insert nếu CHƯA phát hiện bất kỳ lỗi nào trong toàn bộ vòng lặp
-                    DatSan::create([
+                    $veMoi = DatSan::create([
                         'ID_NguoiDung' => $user->ID,
                         'ID_SanBong'   => $slot['pitchId'],
                         'ID_KhungGio'  => $khungGio->ID,
@@ -135,6 +136,16 @@ class DatSanController extends Controller
                         'TienCoc'      => $slot['price'] * $tyLeCoc,
                         'TrangThai'    => 'DaCoc' 
                     ]);
+
+                    $cacVeVuaTao[] = [
+                        'maVe'    => ($purpose !== 'normal') ? ('GD-' . $purpose) : ('PT-' . $veMoi->ID),
+                        'tenSan'  => $slot['pitchName'] ?? 'Sân bóng',
+                        'cumSan'  => $slot['clusterName'] ?? '',
+                        'ngay'    => $slot['date'],
+                        'gio'     => $slot['time'],
+                        'tienCoc' => number_format($slot['price'] * $tyLeCoc, 0, ',', '.') . 'đ',
+                        'conLai'  => number_format($slot['price'] * (1 - $tyLeCoc), 0, ',', '.') . 'đ'
+                    ];
                 }
             }
 
@@ -160,11 +171,39 @@ class DatSanController extends Controller
 
             // MỌI THỨ AN TOÀN -> LƯU VÀO DB
             DB::commit();
+
+            if ($user->Email && !str_ends_with($user->Email, '.offline')) {
+                try {
+                    $htmlVe = '';
+                    foreach ($cacVeVuaTao as $ve) {
+                        $qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=6&data=" . urlencode($ve['maVe']);
+                        $htmlVe .= "
+                            <div style='border:1px solid #cbd5e1; padding:16px; margin-bottom:15px; border-radius:10px; display:flex; align-items:center; justify-content:space-between; background:#ffffff;'>
+                                <div style='padding-right:15px;'>
+                                    <h3 style='margin:0 0 10px 0; color:#10B981; font-size:18px;'>Mã vé: #{$ve['maVe']}</h3>
+                                    <p style='margin:4px 0;'><strong>Sân:</strong> {$ve['tenSan']} ({$ve['cumSan']})</p>
+                                    <p style='margin:4px 0;'><strong>Ngày:</strong> {$ve['ngay']} | <strong>Giờ:</strong> {$ve['gio']}</p>
+                                    <hr style='border:0; border-top:1px dashed #cbd5e1; margin:10px 0;'/>
+                                    <p style='margin:4px 0;'><strong>Đã cọc:</strong> {$ve['tienCoc']}</p>
+                                    <p style='margin:4px 0; color:#e11d48;'><strong>Cần thanh toán tại sân:</strong> {$ve['conLai']}</p>
+                                </div>
+                                <div style='text-align:center; border-left:1px dashed #cbd5e1; padding-left:15px;'>
+                                    <img src='{$qrUrl}' alt='QR {$ve['maVe']}' style='width:120px; height:120px; display:block; margin:0 auto; border:1px solid #e2e8f0; border-radius:8px;' />
+                                    <div style='font-size:11px; color:#64748b; margin-top:5px;'>Quét mã khi đến sân</div>
+                                </div>
+                            </div>
+                        ";
+                    }
+                    Mail::html("<h2>Xác nhận đặt sân thành công - DN Football</h2><p>Chào <strong>{$user->HoTen}</strong>, dưới đây là vé điện tử kèm mã QR nhận sân của bạn:</p>{$htmlVe}", function ($message) use ($user) {
+                        $message->to($user->Email)->subject('Vé Điện Tử QR Code - DN Football');
+                    });
+                } catch (\Exception $mailEx) {}
+            }
             
             broadcast(new \App\Events\AdminDataUpdated())->toOthers();
             broadcast(new \App\Events\SystemDataUpdated())->toOthers();
 
-            return response()->json(['success' => true, 'message' => 'Đặt sân thành công! Số dư đã được trừ.']);
+            return response()->json(['success' => true, 'message' => 'Đặt sân thành công! Số dư đã được trừ.', 'data' => $cacVeVuaTao]);
 
         } catch (\Exception $e) {
             // NẾU CÓ LỖI (Người khác đặt trước, lỗi DB) -> HOÀN TÁC TOÀN BỘ VÀ KHÔNG TRỪ TIỀN
@@ -869,15 +908,21 @@ class DatSanController extends Controller
             try {
                 $htmlVe = '';
                 foreach ($cacVeVuaTao as $ve) {
+                    $qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=6&data=" . urlencode($ve['maVe']);
                     $htmlVe .= "
-                        <div style='border:1px solid #ccc; padding:15px; margin-bottom:15px; border-radius:8px;'>
-                            <h3 style='margin:0 0 10px 0; color:#10B981;'>Mã vé: {$ve['maVe']}</h3>
-                            <p><strong>Sân:</strong> {$ve['tenSan']} ({$ve['cumSan']})</p>
-                            <p><strong>Ngày:</strong> {$ve['ngay']}</p>
-                            <p><strong>Giờ:</strong> {$ve['gio']}</p>
-                            <hr style='border:0; border-top:1px dashed #ccc;'/>
-                            <p><strong>Đã cọc:</strong> {$ve['tienCoc']}</p>
-                            <p style='color:#e11d48;'><strong>Cần thanh toán tại sân:</strong> {$ve['conLai']}</p>
+                        <div style='border:1px solid #cbd5e1; padding:16px; margin-bottom:15px; border-radius:10px; display:flex; align-items:center; justify-content:space-between; background:#ffffff;'>
+                            <div style='padding-right:15px;'>
+                                <h3 style='margin:0 0 10px 0; color:#10B981; font-size:18px;'>Mã vé: #{$ve['maVe']}</h3>
+                                <p style='margin:4px 0;'><strong>Sân:</strong> {$ve['tenSan']} ({$ve['cumSan']})</p>
+                                <p style='margin:4px 0;'><strong>Ngày:</strong> {$ve['ngay']} | <strong>Giờ:</strong> {$ve['gio']}</p>
+                                <hr style='border:0; border-top:1px dashed #cbd5e1; margin:10px 0;'/>
+                                <p style='margin:4px 0;'><strong>Đã cọc:</strong> {$ve['tienCoc']}</p>
+                                <p style='margin:4px 0; color:#e11d48;'><strong>Cần thanh toán tại sân:</strong> {$ve['conLai']}</p>
+                            </div>
+                            <div style='text-align:center; border-left:1px dashed #cbd5e1; padding-left:15px;'>
+                                <img src='{$qrUrl}' alt='QR {$ve['maVe']}' style='width:120px; height:120px; display:block; margin:0 auto; border:1px solid #e2e8f0; border-radius:8px;' />
+                                <div style='font-size:11px; color:#64748b; margin-top:5px;'>Quét mã khi đến sân</div>
+                            </div>
                         </div>
                     ";
                 }

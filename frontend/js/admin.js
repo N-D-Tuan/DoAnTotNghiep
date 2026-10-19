@@ -2326,10 +2326,13 @@ function renderQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = null) {
             <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
                 <div style="position: relative; flex: 1; min-width: 250px;">
                     <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
-                    <input type="text" class="form-control" style="padding-left: 35px;" placeholder="Tìm SDT, Tên khách, Tên sân..." oninput="handleDSSearch(this.value)">
+                    <input type="text" id="ds-search-input" class="form-control" style="padding-left: 35px;" placeholder="Tìm Mã vé (PT-..., GD-...), SĐT, Tên khách..." oninput="handleDSSearch(this.value)">
                 </div>
+                <button type="button" class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 0 18px; background: #0f172a; border-color: #0f172a; white-space: nowrap;" onclick="openAdminQrScannerModal()">
+                    <i class="fa-solid fa-qrcode"></i> Quét mã vé
+                </button>
                 <input type="date" class="form-control" style="width: 150px;" id="ds-date-input" onchange="handleDSDate(this.value)">
-                <select class="form-control" style="width: 180px;" onchange="handleDSFilter(this.value)">
+                <select class="form-control" id="ds-status-select" style="width: 180px;" onchange="handleDSFilter(this.value)">
                     <option value="All" ${defaultStatus === 'All' ? 'selected' : ''}>Tất cả trạng thái</option>
                     <option value="DaCoc" ${defaultStatus === 'DaCoc' ? 'selected' : ''}>Đã cọc</option>
                     <option value="HoanThanh" ${defaultStatus === 'HoanThanh' ? 'selected' : ''}>Hoàn thành</option>
@@ -2843,6 +2846,154 @@ async function executeCapNhatDatSan(trangThai, otp = null, customAlertBox = null
     } catch (e) {
         showDSAlert('Lỗi kết nối máy chủ.', false);
         return false;
+    }
+}
+
+// ======================================================
+// QUÉT MÃ QR CHECK-IN VÉ ĐẶT SÂN (QUẢN LÝ SÂN)
+// ======================================================
+let adminHtml5QrScanner = null;
+
+function ensureHtml5QrcodeLoadedAdmin() {
+    return new Promise((resolve, reject) => {
+        if (window.Html5Qrcode) return resolve();
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Không thể tải thư viện quét QR'));
+        document.head.appendChild(script);
+    });
+}
+
+window.openAdminQrScannerModal = async function() {
+    let modal = document.getElementById('admin-qr-scanner-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'admin-qr-scanner-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 10000; align-items: center; justify-content: center;';
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 460px; width: 92%; padding: 0; border-radius: 14px; overflow: hidden; background: #fff;">
+            <div style="padding: 16px 20px; background: #0f172a; color: #fff; display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="margin: 0; font-size: 1.05rem; font-weight: 700;"><i class="fa-solid fa-qrcode" style="color: #4ade80; margin-right: 8px;"></i>Quét mã QR Vé Đặt Sân</h3>
+                <i class="fa-solid fa-xmark" style="cursor: pointer; font-size: 1.2rem; color: #94a3b8;" onclick="closeAdminQrScannerModal()"></i>
+            </div>
+            <div style="padding: 20px; text-align: center;">
+                <div id="admin-qr-reader" style="width: 100%; min-height: 250px; border-radius: 12px; overflow: hidden; border: 2px dashed #cbd5e1; background: #f8fafc; display: flex; align-items: center; justify-content: center;">
+                    <span style="color: #64748b; font-size: 0.9rem;"><i class="fa-solid fa-spinner fa-spin"></i> Đang khởi động Camera...</span>
+                </div>
+                <div id="admin-qr-error" style="display: none; margin-top: 10px; color: #dc2626; font-size: 0.85rem; font-weight: 600;"></div>
+
+                <div style="margin-top: 16px; padding-top: 14px; border-top: 1px dashed #e2e8f0; display: flex; flex-direction: column; gap: 10px;">
+                    <label style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 16px; border-radius: 8px; border: 1px solid #cbd5e1; background: #f8fafc; color: #334155; font-weight: 600; font-size: 0.88rem; cursor: pointer;">
+                        <i class="fa-solid fa-image" style="color: var(--primary);"></i> Chọn ảnh vé QR từ máy tính
+                        <input type="file" accept="image/*" style="display: none;" onchange="scanAdminQrFromFile(this)">
+                    </label>
+                </div>
+            </div>
+        </div>
+    `;
+
+    modal.style.display = 'flex';
+
+    try {
+        await ensureHtml5QrcodeLoadedAdmin();
+        adminHtml5QrScanner = new Html5Qrcode("admin-qr-reader");
+        await adminHtml5QrScanner.start(
+            { facingMode: "environment" },
+            { fps: 10, qrbox: { width: 220, height: 220 } },
+            (decodedText) => {
+                handleAdminQrResult(decodedText);
+            },
+            () => {}
+        );
+    } catch (err) {
+        const readerEl = document.getElementById('admin-qr-reader');
+        if (readerEl) {
+            readerEl.innerHTML = `<div style="padding: 30px 15px; color: #64748b; font-size: 0.88rem;"><i class="fa-solid fa-video-slash" style="font-size: 2rem; color: #94a3b8; margin-bottom: 8px; display: block;"></i>Không tìm thấy Camera hoặc chưa cấp quyền.<br>Bạn có thể chọn <strong>ảnh vé QR</strong> bên dưới để quét!</div>`;
+        }
+    }
+};
+
+window.scanAdminQrFromFile = async function(input) {
+    if (!input.files || input.files.length === 0) return;
+    const imageFile = input.files[0];
+    const errEl = document.getElementById('admin-qr-error');
+    if (errEl) errEl.style.display = 'none';
+
+    try {
+        await ensureHtml5QrcodeLoadedAdmin();
+        if (adminHtml5QrScanner && adminHtml5QrScanner.isScanning) {
+            await adminHtml5QrScanner.stop();
+        }
+        if (!adminHtml5QrScanner) {
+            adminHtml5QrScanner = new Html5Qrcode("admin-qr-reader");
+        }
+        const decodedText = await adminHtml5QrScanner.scanFile(imageFile, true);
+        handleAdminQrResult(decodedText);
+    } catch (err) {
+        if (errEl) {
+            errEl.textContent = 'Không tìm thấy mã QR hợp lệ trong bức ảnh này!';
+            errEl.style.display = 'block';
+        }
+    }
+};
+
+window.closeAdminQrScannerModal = async function() {
+    const modal = document.getElementById('admin-qr-scanner-modal');
+    if (modal) modal.style.display = 'none';
+    if (adminHtml5QrScanner) {
+        try {
+            if (adminHtml5QrScanner.isScanning) await adminHtml5QrScanner.stop();
+            adminHtml5QrScanner.clear();
+        } catch (e) {}
+        adminHtml5QrScanner = null;
+    }
+};
+
+function handleAdminQrResult(rawText) {
+    closeAdminQrScannerModal();
+    const cleaned = String(rawText || '').trim().toUpperCase().replace(/^#/, '');
+    const match = cleaned.match(/(PT|GD)-(\d+)/);
+
+    if (!match) {
+        return showDSAlert(`Mã QR "${rawText}" không đúng định dạng vé DN Football (PT-... hoặc GD-...)!`, false);
+    }
+
+    const prefix = match[1];
+    const idNum = Number(match[2]);
+    const codeStr = `${prefix}-${idNum}`;
+
+    // Mở rộng bộ lọc sang Tất cả ngày & Tất cả trạng thái để luôn tìm thấy vé
+    currentDSDate = '';
+    currentDSFilter = 'All';
+    currentDSSearch = codeStr.toLowerCase();
+    currentDSPage = 1;
+
+    if (document.getElementById('ds-date-input')) document.getElementById('ds-date-input').value = '';
+    if (document.getElementById('ds-status-select')) document.getElementById('ds-status-select').value = 'All';
+    if (document.getElementById('ds-search-input')) document.getElementById('ds-search-input').value = codeStr;
+
+    applyDSFiltersAndRender();
+
+    if (prefix === 'PT') {
+        const booking = allDatSanData.find(b => b.ID_GiaiDau === null && Number(b.ID) === idNum);
+        if (booking) {
+            showDSAlert(`Đã quét thành công vé phong trào #${codeStr}!`, true);
+            openBookingDetailModalAdmin(booking.ID);
+        } else {
+            showDSAlert(`Không tìm thấy vé #${codeStr} thuộc cụm sân của bạn!`, false);
+        }
+    } else {
+        const tourMatches = allDatSanData.filter(b => Number(b.ID_GiaiDau) === idNum);
+        if (tourMatches.length > 0) {
+            showDSAlert(`Đã quét Thẻ Giải Đấu #${codeStr} (Tìm thấy ${tourMatches.length} trận đấu)!`, true);
+        } else {
+            showDSAlert(`Không tìm thấy lịch thi đấu nào của giải #${codeStr}!`, false);
+        }
     }
 }
 
