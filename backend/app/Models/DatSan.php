@@ -41,4 +41,9 @@ class DatSan extends Model
     {
         return $this->belongsTo(NguoiDung::class, 'ID_NhanVienXuLy', 'ID');
     }
+    // Mỗi lịch đặt sân có tối đa 1 đánh giá
+    public function danhGia()
+    {
+        return $this->hasOne(DanhGia::class, 'ID_DatSan', 'ID');
+    }
 }

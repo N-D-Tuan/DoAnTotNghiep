@@ -230,11 +230,11 @@ class DatSanController extends Controller
     public function layDanhSachCuaToi(Request $request)
     {
         $user = NguoiDung::find(Auth::id() ?? $request->user()->ID);
-        
-        $danhSach = DatSan::with(['sanBong.cumSan', 'khungGio', 'giaiDau'])
-                          ->where('ID_NguoiDung', $user->ID)
-                          ->orderBy('NgayDa', 'desc')
-                          ->get();
+
+        $danhSach = DatSan::with(['sanBong.cumSan', 'khungGio', 'giaiDau', 'danhGia'])
+                        ->where('ID_NguoiDung', $user->ID)
+                        ->orderBy('NgayDa', 'desc')
+                        ->get();
 
         return response()->json(['success' => true, 'data' => $danhSach]);
     }

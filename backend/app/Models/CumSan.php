@@ -63,4 +63,9 @@ class CumSan extends Model
     {
         return $this->hasMany(PhieuNhapHang::class, 'ID_CumSan', 'ID');
     }
+
+    public function danhGias()
+    {
+        return $this->hasMany(DanhGia::class, 'ID_CumSan', 'ID');
+    }
 }
