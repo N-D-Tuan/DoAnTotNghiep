@@ -279,11 +279,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const vnpayStatus = urlParams.get('vnpay_status');
         if (vnpayStatus) {
             showGuestPaymentResultModal(vnpayStatus);
-            // Xóa param trên URL để F5 không bị hiện lại thông báo
             window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
         }
 
-        // Khởi tạo giống hệt customer.js, admin.js, staff.js
         const REVERB_APP_KEY = '32o5b6sskjqfuf7qnqtd'; 
         window.Echo = new Echo({
             broadcaster: 'reverb',
@@ -294,18 +292,29 @@ document.addEventListener('DOMContentLoaded', () => {
             disableStats: true
         });
 
-        // Lắng nghe kênh system-updates theo đúng chuẩn data-slot-id của admin.js & staff.js
+        // Tự động khôi phục kết nối & dữ liệu nếu trình duyệt rơi vào Back-Forward Cache (bfcache)
+        window.addEventListener('pageshow', (event) => {
+            if (event.persisted) {
+                if (window.Echo && window.Echo.connector && window.Echo.connector.pusher) {
+                    window.Echo.connector.pusher.connect();
+                }
+                loadClusters();
+            }
+        });
+
+        // Lắng nghe kênh system-updates
         window.Echo.channel('system-updates')
             .listen('SystemDataUpdated', async (e) => {
-                console.log('⚡ Hệ thống có người vừa đặt sân (Guest View)...');
+                console.log('⚡ Hệ thống có tín hiệu cập nhật dữ liệu (Guest View)...');
+                const cacheBuster = new Date().getTime();
                 
+                // A. Nếu đang xem bảng lịch của 1 sân bóng -> Cập nhật các ô Đã đặt / Trống
                 if (appState.currentPitch !== null && document.querySelector('.schedule-table')) {
                     try {
                         const currentPitchId = appState.currentPitch.ID;
-                        const dsRes = await fetch(`${API_BASE_URL}/dat-san/da-dat?id_san_bong=${currentPitchId}&_t=${new Date().getTime()}`);
+                        const dsRes = await fetch(`${API_BASE_URL}/dat-san/da-dat?id_san_bong=${currentPitchId}&_t=${cacheBuster}`);
                         const bookedSlots = (await dsRes.json()).data || [];
 
-                        // 1. Nhả tất cả các ô đang xám (Đã đặt) thành màu xanh (TRỐNG)
                         document.querySelectorAll('.schedule-table .slot-btn.booked').forEach(el => {
                             if (el.innerText === 'Đã đặt') {
                                 el.classList.remove('booked');
@@ -318,7 +327,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                         });
 
-                        // 2. Quét mảng bookedSlots từ CSDL để khóa những ô thực sự đã bị đặt
                         bookedSlots.forEach(booked => {
                             const targetSlotId = `${currentPitchId}-${booked.NgayDa}-${booked.ID_KhungGio}`;
                             const slotEl = document.querySelector(`.schedule-table .slot-btn[data-slot-id="${targetSlotId}"]`);
@@ -330,7 +338,6 @@ document.addEventListener('DOMContentLoaded', () => {
                                 slotEl.disabled = true;
                                 slotEl.removeAttribute('onclick');
 
-                                // 3. Nếu khách đang chọn đúng ô vừa bị người khác đặt -> Gỡ khỏi giỏ hàng
                                 const existingIndex = guestSelectedSlots.findIndex(s => s.id === targetSlotId);
                                 if (existingIndex > -1) {
                                     guestSelectedSlots.splice(existingIndex, 1);
@@ -342,10 +349,62 @@ document.addEventListener('DOMContentLoaded', () => {
                                     }
                                 }
                             }
-                        });
+                        });                       
                     } catch (err) {
                         console.error("Lỗi cập nhật ngầm lịch Khách vãng lai:", err);
                     }
+                }
+
+                // B. Cập nhật ngầm số sao & tổng lượt đánh giá trên danh sách Cụm Sân (thêm _t để chống cache)
+                try {
+                    const [res, ratingRes] = await Promise.all([
+                        fetch(`${API_BASE_URL}/cum-san?_t=${cacheBuster}`),
+                        fetch(`${API_BASE_URL}/danh-gia?_t=${cacheBuster}`)
+                    ]);
+                    const data = await res.json();
+                    const ratingMap = (await ratingRes.json()).data || {};
+
+                    appState.clusters = (data.data || []).filter(c => c.deleted_at === null).map(c => {
+                        const r = ratingMap[c.ID];
+                        return {
+                            ...c,
+                            avg_rating: r ? Number(r.trung_binh_sao) : (c.danh_gias_avg_so_sao ? Math.round(c.danh_gias_avg_so_sao * 10) / 10 : 0),
+                            total_reviews: r ? Number(r.tong_danh_gia) : (c.danh_gias_count || 0)
+                        };
+                    });
+
+                    // Nếu khách vãng lai đang đứng ở màn hình Danh sách Cụm Sân -> Vẽ lại ngay
+                    if (!breadcrumbEl || breadcrumbEl.style.display === 'none' || document.querySelector('.cluster-grid')) {
+                        renderClusters();
+                    }
+                } catch (err) {
+                    console.error("Lỗi cập nhật ngầm đánh giá cụm sân Guest:", err);
+                }
+
+                // C. Nếu khách vãng lai đang mở Modal xem đánh giá của 1 cụm sân -> Cập nhật nội dung Modal ngay lập tức
+                const guestRevModal = document.getElementById('guest-reviews-modal');
+                if (guestRevModal && guestRevModal.style.display === 'flex' && typeof currentGuestViewedReviewClusterId !== 'undefined' && currentGuestViewedReviewClusterId) {
+                    try {
+                        const revRes = await fetch(`${API_BASE_URL}/danh-gia?id_cum_san=${currentGuestViewedReviewClusterId}&_t=${cacheBuster}`);
+                        const revData = await revRes.json();
+                        if (revData.success && revData.tong_so > 0) {
+                            guestModalReviewsData = revData.data || [];
+                            const summaryScoreEl = guestRevModal.querySelector('#guest-reviews-content > div:first-child');
+                            if (summaryScoreEl && document.getElementById('guest-review-items-box')) {
+                                summaryScoreEl.innerHTML = `
+                                    <div>
+                                        <div style="font-size:0.82rem; color:var(--text-muted);">Điểm đánh giá trung bình</div>
+                                        <div style="font-size:1.8rem; font-weight:800; color:#fbbf24;">${Number(revData.trung_binh).toFixed(1)} <span style="font-size:0.95rem; color:var(--text-muted);">/ 5.0 (${revData.tong_so} đánh giá)</span></div>
+                                    </div>
+                                    <div style="color:#fbbf24; font-size:1.4rem;">★★★★★</div>
+                                `;
+                                renderGuestModalReviewsList();
+                            } else {
+                                const titleText = guestRevModal.querySelector('h3')?.innerText.replace('Đánh giá:', '').trim() || 'Cụm sân';
+                                openGuestReviewsModal(currentGuestViewedReviewClusterId, titleText);
+                            }
+                        }
+                    } catch (err) {}
                 }
             });
     }
@@ -359,9 +418,21 @@ document.addEventListener('DOMContentLoaded', () => {
 async function loadClusters() {
     appContent.innerHTML = '<div style="text-align:center; padding: 40px;"><i class="fa-solid fa-spinner fa-spin fa-2x" style="color:#10B981"></i></div>';
     try {
-        const res = await fetch(`${API_BASE_URL}/cum-san`);
+        const [res, ratingRes] = await Promise.all([
+            fetch(`${API_BASE_URL}/cum-san`),
+            fetch(`${API_BASE_URL}/danh-gia`)
+        ]);
         const data = await res.json();
-        appState.clusters = (data.data || []).filter(c => c.deleted_at === null);
+        const ratingMap = (await ratingRes.json()).data || {};
+
+        appState.clusters = (data.data || []).filter(c => c.deleted_at === null).map(c => {
+            const r = ratingMap[c.ID];
+            return {
+                ...c,
+                avg_rating: r ? Number(r.trung_binh_sao) : (c.danh_gias_avg_so_sao ? Math.round(c.danh_gias_avg_so_sao * 10) / 10 : 0),
+                total_reviews: r ? Number(r.tong_danh_gia) : (c.danh_gias_count || 0)
+            };
+        });
         renderClusters();
     } catch (err) {
         appContent.innerHTML = '<p style="text-align:center; color:red;">Lỗi tải dữ liệu. Vui lòng thử lại.</p>';
@@ -378,14 +449,21 @@ function renderClusters() {
     `;
 
     appState.clusters.forEach(c => {
-        // Bắt sự kiện onclick TRỰC TIẾP trên thẻ div.cluster-card
+        const avgStar = c.total_reviews > 0 ? Number(c.avg_rating).toFixed(1) : '0.0';
+        const reviewText = `(${c.total_reviews} đánh giá)`;
+
         html += `
             <div class="cluster-card" onclick="loadPitches(${c.ID})">
                 <div class="cluster-img-box">
                     ${c.HinhAnh ? `<img src="http://127.0.0.1:8000${c.HinhAnh}" class="cluster-img">` : `<div style="display:flex; height:100%; align-items:center; justify-content:center; background:#E5E7EB;"><i class="fa-solid fa-futbol fa-3x" style="color:#9CA3AF"></i></div>`}
                 </div>
                 <div class="cluster-info">
-                    <h3 class="cluster-name">${c.TenCumSan}</h3>
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:6px;">
+                        <h3 class="cluster-name" style="margin:0;">${c.TenCumSan}</h3>
+                        <button type="button" onclick="event.stopPropagation(); openGuestReviewsModal(${c.ID}, '${c.TenCumSan.replace(/'/g, "\\'")}')" style="background:rgba(245, 158, 11, 0.15); border:1px solid rgba(245, 158, 11, 0.4); color:#fbbf24; padding:4px 9px; border-radius:999px; font-size:0.78rem; font-weight:700; cursor:pointer; white-space:nowrap;">
+                            <i class="fa-solid fa-star"></i> ${avgStar} <span style="font-weight:400; opacity:0.9;">${reviewText}</span>
+                        </button>
+                    </div>
                     <div class="cluster-meta"><i class="fa-solid fa-location-dot" style="color: #10B981;"></i> ${c.DiaChi}</div>
                     <div class="cluster-meta"><i class="fa-solid fa-clock"></i> ${c.GioMoCua?.substring(0,5)} - ${c.GioDongCua?.substring(0,5)}</div>
                 </div>
@@ -393,7 +471,6 @@ function renderClusters() {
         `;
     });
     appContent.innerHTML = html + '</div>';
-    //scrollToFields();
 }
 
 async function loadPitches(clusterId) {
@@ -961,3 +1038,171 @@ window.addEventListener('click', function(e) {
         }
     }
 });
+
+let guestModalReviewsData = [];
+let guestModalReviewSort = 'all';
+let guestModalReviewPage = 1;
+let currentGuestViewedReviewClusterId = null;
+const GUEST_REVIEWS_PER_PAGE = 6;
+
+window.openGuestReviewsModal = async function(idCumSan, tenCumSan) {
+    currentGuestViewedReviewClusterId = idCumSan;
+
+    let modal = document.getElementById('guest-reviews-modal');
+
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'guest-reviews-modal';
+        modal.className = 'modal-overlay';
+        modal.onclick = function(e) {
+            if (e.target === modal) {
+                modal.classList.remove('active');
+                setTimeout(() => modal.style.display = 'none', 200);
+            }
+        };
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div class="modal-card" style="max-width: 580px; width: 92%; max-height: 86vh; overflow-y: auto; padding: 20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid var(--border-color);">
+                <h3 style="margin:0; font-size:1.15rem; color:var(--text-main);"><i class="fa-solid fa-star" style="color:#fbbf24; margin-right:6px;"></i>Đánh giá: ${tenCumSan}</h3>
+                <button class="modal-close-btn" style="position:static;" onclick="document.getElementById('guest-reviews-modal').classList.remove('active'); setTimeout(()=>document.getElementById('guest-reviews-modal').style.display='none',200)"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="guest-reviews-content" style="text-align:left;">
+                <div style="text-align:center; padding:30px;"><i class="fa-solid fa-spinner fa-spin fa-2x" style="color:#10B981"></i></div>
+            </div>
+        </div>
+    `;
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/danh-gia?id_cum_san=${idCumSan}`);
+        const data = await res.json();
+        const box = document.getElementById('guest-reviews-content');
+
+        if (!data.success || data.tong_so === 0) {
+            box.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">Chưa có đánh giá nào cho cụm sân này.</div>`;
+            return;
+        }
+
+        guestModalReviewsData = data.data || [];
+        guestModalReviewSort = 'all';
+        guestModalReviewPage = 1;
+
+        box.innerHTML = `
+            <div style="background:var(--bg-tertiary); border:1px solid var(--border-color); border-radius:10px; padding:14px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between;">
+                <div>
+                    <div style="font-size:0.82rem; color:var(--text-muted);">Điểm đánh giá trung bình</div>
+                    <div style="font-size:1.8rem; font-weight:800; color:#fbbf24;">${Number(data.trung_binh).toFixed(1)} <span style="font-size:0.95rem; color:var(--text-muted);">/ 5.0 (${data.tong_so} đánh giá)</span></div>
+                </div>
+                <div style="color:#fbbf24; font-size:1.4rem;">★★★★★</div>
+            </div>
+
+            <div id="guest-review-filter-btns" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--border-color);"></div>
+            <div id="guest-review-items-box"></div>
+            <div id="guest-review-pagination" style="display:flex; justify-content:center; align-items:center; gap:6px; margin-top:14px;"></div>
+        `;
+
+        renderGuestModalReviewsList();
+    } catch (e) {
+        document.getElementById('guest-reviews-content').innerHTML = `<p style="color:red; text-align:center;">Lỗi tải đánh giá.</p>`;
+    }
+};
+
+window.setGuestModalReviewSort = function(sortType) {
+    guestModalReviewSort = sortType;
+    guestModalReviewPage = 1;
+    renderGuestModalReviewsList();
+};
+
+window.changeGuestModalReviewPage = function(page) {
+    guestModalReviewPage = page;
+    renderGuestModalReviewsList();
+};
+
+function renderGuestModalReviewsList() {
+    const filterBox = document.getElementById('guest-review-filter-btns');
+    const listBox = document.getElementById('guest-review-items-box');
+    const pageBox = document.getElementById('guest-review-pagination');
+    if (!listBox) return;
+
+    const buttons = [
+        { key: 'all', label: 'Tất cả' },
+        { key: 'newest', label: 'Mới nhất' },
+        { key: 'highest', label: 'Cao nhất' },
+        { key: 'lowest', label: 'Thấp nhất' }
+    ];
+
+    if (filterBox) {
+        filterBox.innerHTML = buttons.map(b => {
+            const active = guestModalReviewSort === b.key;
+            const style = active
+                ? 'background: #10B981; color: #0F172A; border: 1px solid #10B981;'
+                : 'background: var(--bg-secondary); color: var(--text-muted); border: 1px solid var(--border-color);';
+            return `<button type="button" onclick="setGuestModalReviewSort('${b.key}')" style="${style} padding: 5px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; cursor: pointer;">${b.label}</button>`;
+        }).join('');
+    }
+
+    let sorted = [...guestModalReviewsData];
+    if (guestModalReviewSort === 'newest' || guestModalReviewSort === 'all') {
+        sorted.sort((a, b) => new Date(b.NgayTao || 0) - new Date(a.NgayTao || 0));
+    } else if (guestModalReviewSort === 'highest') {
+        sorted.sort((a, b) => Number(b.SoSao) - Number(a.SoSao) || (new Date(b.NgayTao || 0) - new Date(a.NgayTao || 0)));
+    } else if (guestModalReviewSort === 'lowest') {
+        sorted.sort((a, b) => Number(a.SoSao) - Number(b.SoSao) || (new Date(b.NgayTao || 0) - new Date(a.NgayTao || 0)));
+    }
+
+    const totalPages = Math.ceil(sorted.length / GUEST_REVIEWS_PER_PAGE) || 1;
+    if (guestModalReviewPage > totalPages) guestModalReviewPage = totalPages;
+    const startIdx = (guestModalReviewPage - 1) * GUEST_REVIEWS_PER_PAGE;
+    const pageItems = sorted.slice(startIdx, startIdx + GUEST_REVIEWS_PER_PAGE);
+
+    listBox.innerHTML = pageItems.map(r => {
+        const stars = '★'.repeat(Number(r.SoSao)) + '☆'.repeat(5 - Number(r.SoSao));
+        const d = r.NgayTao ? new Date(r.NgayTao) : null;
+        const dateStr = d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` : '';
+        const isGiaiDau = Boolean(r.dat_san?.ID_GiaiDau || r.dat_san?.giai_dau);
+        const subTag = isGiaiDau
+            ? `<span style="font-size:0.75rem; background:rgba(99,102,241,0.2); color:#a5b4fc; padding:2px 7px; border-radius:6px; margin-left:6px;"><i class="fa-solid fa-trophy"></i> Giải đấu: ${r.dat_san?.giai_dau?.TenGiaiDau || ('#GD-' + r.dat_san.ID_GiaiDau)}</span>`
+            : (r.dat_san?.san_bong?.TenSan ? `<span style="font-size:0.75rem; color:var(--text-muted); margin-left:6px;">(${r.dat_san.san_bong.TenSan})</span>` : '');
+
+        return `
+            <div style="padding:12px 0; border-bottom:1px solid var(--border-color);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; flex-wrap:wrap; gap:4px;">
+                    <div><strong style="color:var(--text-main); font-size:0.92rem;">${r.nguoi_dung?.HoTen || 'Khách hàng'}</strong>${subTag}</div>
+                    <span style="color:var(--text-muted); font-size:0.78rem;">${dateStr}</span>
+                </div>
+                <div style="color:#fbbf24; font-size:0.9rem; margin-bottom:4px;">${stars}</div>
+                <div style="color:var(--text-muted); font-size:0.88rem;">${r.NoiDung || '<i>(Không có lời bình)</i>'}</div>
+            </div>
+        `;
+    }).join('');
+
+    if (pageBox) {
+        if (totalPages <= 1) {
+            pageBox.innerHTML = '';
+        } else {
+            const isPrevDisabled = guestModalReviewPage === 1;
+            const isNextDisabled = guestModalReviewPage === totalPages;
+
+            const baseArrowStyle = `width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-main); transition: 0.2s;`;
+            const prevStyle = baseArrowStyle + (isPrevDisabled ? ' opacity: 0.35; cursor: not-allowed;' : ' cursor: pointer;');
+            const nextStyle = baseArrowStyle + (isNextDisabled ? ' opacity: 0.35; cursor: not-allowed;' : ' cursor: pointer;');
+
+            let pHtml = `<button type="button" ${isPrevDisabled ? 'disabled' : ''} onclick="changeGuestModalReviewPage(${guestModalReviewPage - 1})" style="${prevStyle}"><i class="fa-solid fa-chevron-left"></i></button>`;
+            
+            for (let i = 1; i <= totalPages; i++) {
+                const active = i === guestModalReviewPage;
+                const st = active 
+                    ? 'background:#10B981; color:#0F172A; border-color:#10B981; font-weight:700;' 
+                    : 'background:var(--bg-secondary); color:var(--text-main); border-color:var(--border-color);';
+                pHtml += `<button type="button" style="min-width: 34px; height: 34px; padding: 0 10px; border-radius: 8px; border: 1px solid; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; ${st}" onclick="changeGuestModalReviewPage(${i})">${i}</button>`;
+            }
+            
+            pHtml += `<button type="button" ${isNextDisabled ? 'disabled' : ''} onclick="changeGuestModalReviewPage(${guestModalReviewPage + 1})" style="${nextStyle}"><i class="fa-solid fa-chevron-right"></i></button>`;
+            pageBox.innerHTML = pHtml;
+        }
+    }
+}

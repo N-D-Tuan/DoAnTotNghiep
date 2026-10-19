@@ -735,15 +735,28 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Trạng thái 1: Khách đang xem trang Danh sách Cụm Sân (Dựa vào ID vùng chứa lưới sân)
                 if (document.getElementById('cluster-grid-container')) {
                     try {
-                        // Tải lại ngầm dữ liệu cụm sân
-                        const response = await fetch(`${API_BASE_URL}/cum-san`);
+                        const [response, ratingRes] = await Promise.all([
+                            fetch(`${API_BASE_URL}/cum-san`),
+                            fetch(`${API_BASE_URL}/danh-gia`)
+                        ]);
                         const res = await response.json();
-                        allActiveClusters = res.data.filter(c => c.deleted_at === null);
-                        
-                        // Gọi hàm lọc để vẽ lại sân mà KHÔNG làm mất chữ đang gõ trong thanh tìm kiếm
+                        const ratingMap = (await ratingRes.json()).data || {};
+                        allActiveClusters = (res.data || []).filter(c => c.deleted_at === null).map(c => {
+                            const r = ratingMap[c.ID];
+                            return {
+                                ...c,
+                                avg_rating: r ? Number(r.trung_binh_sao) : (c.danh_gias_avg_so_sao ? Number(c.danh_gias_avg_so_sao) : 0),
+                                total_reviews: r ? Number(r.tong_danh_gia) : Number(c.danh_gias_count || 0)
+                            };
+                        });
                         filterClusters(); 
                     } catch(err) { console.error(err); }
-                } 
+                }
+
+                // Nếu khách đang mở Modal xem danh sách đánh giá của Cụm sân
+                if (typeof refreshOpenCustomerReviewsModal === 'function') {
+                    refreshOpenCustomerReviewsModal();
+                }
 
                 // Trạng thái 2: Khách đang xem trang chi tiết Sân con bên trong 1 Cụm
                 else if (currentClusterId !== null && currentPitchId === null && document.querySelector('.cluster-detail-header')) {
@@ -1641,11 +1654,25 @@ async function renderClusters() {
     appContent.innerHTML = `<div style="text-align:center; padding: 60px;"><i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem; color: var(--primary);"></i><p style="margin-top: 12px; color: var(--text-muted); font-weight: 500;">Đang tải danh sách cụm sân...</p></div>`;
 
     try {
-        const response = await fetch(`${API_BASE_URL}/cum-san`);
-        const res = await response.json();
+        const [response, ratingRes] = await Promise.all([
+            fetch(`${API_BASE_URL}/cum-san`),
+            fetch(`${API_BASE_URL}/danh-gia`)
+        ]);
         
-        // 1. Lọc sân hoạt động và lưu vào biến toàn cục
-        allActiveClusters = res.data.filter(c => c.deleted_at === null);
+        const res = await response.json();
+        const ratingMap = (await ratingRes.json()).data || {};
+
+        // 1. Lọc sân hoạt động và gắn thông tin sao trung bình + tổng đánh giá (KHÔNG ghi đè lại ở dưới)
+        allActiveClusters = (res.data || []).filter(c => c.deleted_at === null).map(c => {
+            const r = ratingMap[c.ID];
+            const avg = r ? Number(r.trung_binh_sao) : (c.danh_gias_avg_so_sao ? Number(c.danh_gias_avg_so_sao) : 0);
+            const total = r ? Number(r.tong_danh_gia) : Number(c.danh_gias_count || 0);
+            return {
+                ...c,
+                avg_rating: avg,
+                total_reviews: total
+            };
+        });
 
         // 2. Trích xuất danh sách Phường tự động từ dữ liệu cụm sân
         const uniquePhuongs = [];
@@ -1657,7 +1684,7 @@ async function renderClusters() {
             }
         });
 
-        // 3. Render Giao diện (Giữ nguyên toàn bộ ID: search-cluster, filter-phuong, cluster-grid-container)
+        // 3. Render Giao diện
         let html = `
             <div class="page-header" style="background: linear-gradient(135deg, #0b5d3b 0%, #15803d 100%); padding: 28px 32px; border-radius: 18px; color: white; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; box-shadow: 0 10px 25px rgba(11, 93, 59, 0.18); margin-bottom: 24px;">
                 <div>
@@ -1679,7 +1706,6 @@ async function renderClusters() {
                 </div>
             </div>
 
-            <!-- THANH CÔNG CỤ TÌM KIẾM VÀ LỌC -->
             <div style="display: flex; gap: 14px; margin-bottom: 26px; flex-wrap: wrap; background: #fff; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); align-items: center;">
                 <div style="flex: 1; min-width: 260px; position: relative;">
                     <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: #64748b;"></i>
@@ -1693,13 +1719,10 @@ async function renderClusters() {
                 </div>
             </div>
 
-            <!-- VÙNG CHỨA DANH SÁCH (Sẽ được điền bởi JS) -->
             <div class="cluster-grid" id="cluster-grid-container"></div>
         `;
         
         appContent.innerHTML = html;
-
-        // 4. Kích hoạt bộ lọc lần đầu để vẽ danh sách
         filterClusters();
 
     } catch (error) {
@@ -1739,6 +1762,9 @@ function filterClusters() {
     filtered.forEach(cluster => {
         const imgUrl = cluster.HinhAnh ? `http://127.0.0.1:8000${cluster.HinhAnh}` : 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?q=80&w=600&auto=format&fit=crop';
         const tenPhuong = cluster.phuong?.TenPhuong || 'Đà Nẵng';
+        const avgStar = cluster.total_reviews > 0 ? Number(cluster.avg_rating).toFixed(1) : '0.0';
+        const reviewText = `(${cluster.total_reviews} đánh giá)`;
+
         gridHtml += `
             <div class="cluster-card" onclick="renderPitches(${cluster.ID}, '${cluster.TenCumSan}', '${cluster.DiaChi}', '${cluster.GioMoCua}', '${cluster.GioDongCua}')">
                 <div class="cluster-img-box">
@@ -1746,7 +1772,12 @@ function filterClusters() {
                     <span class="cluster-ward-tag"><i class="fa-solid fa-location-dot" style="margin-right: 5px; color: #4ade80;"></i>${tenPhuong}</span>
                 </div>
                 <div class="cluster-info">
-                    <div class="cluster-name">${cluster.TenCumSan}</div>
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px;">
+                        <div class="cluster-name" style="margin-bottom: 0;">${cluster.TenCumSan}</div>
+                        <button type="button" onclick="event.stopPropagation(); openClusterReviewsModal(${cluster.ID}, '${cluster.TenCumSan.replace(/'/g, "\\'")}')" style="background: #fffbeb; border: 1px solid #fde68a; color: #b45309; padding: 3px 8px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;" title="Nhấn để xem các đánh giá">
+                            <i class="fa-solid fa-star" style="color: #f59e0b;"></i> ${avgStar} <span style="font-weight: 500; color: #92400e;">${reviewText}</span>
+                        </button>
+                    </div>
                     <div class="cluster-address">
                         <i class="fa-solid fa-map-pin" style="color: #16a34a;"></i>
                         <span>${cluster.DiaChi}${cluster.phuong ? ', ' + cluster.phuong.TenPhuong : ''}</span>
@@ -2345,6 +2376,25 @@ function applyBookingFiltersAndRender() {
                 cardClick = `onclick="openTicketModal('phong_trao', ${item.ID})" title="Nhấn vào để xem Vé điện tử"`;
                 cursorStyle = 'pointer';
                 ticketHint = `<div style="margin-top: 10px; text-align: center; font-size: 0.78rem; color: var(--primary); font-weight: 600;"><i class="fa-solid fa-qrcode"></i> Bấm vào thẻ để xem Vé Điện Tử (#PT-${item.ID})</div>`;
+            } else if (item.TrangThai === 'HoanThanh') {
+                const dg = item.danh_gia || item.danhGia || null;
+                if (dg) {
+                    const starsHtml = '★'.repeat(Number(dg.SoSao)) + '☆'.repeat(5 - Number(dg.SoSao));
+                    actionHtml = `
+                        <div style="margin-top: 12px; padding: 9px 12px; border-radius: 10px; background: #f0fdf4; border: 1px solid #bbf7d0; display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem;">
+                            <span style="color: #15803d; font-weight: 700;"><i class="fa-solid fa-circle-check"></i> Đã đánh giá</span>
+                            <span style="color: #f59e0b; font-weight: 800; letter-spacing: 1px;" title="${dg.NoiDung || ''}">${starsHtml} (${dg.SoSao}/5)</span>
+                        </div>
+                    `;
+                } else {
+                    const safeCumSan = (cumSan || 'Cụm sân').replace(/'/g, "\\'");
+                    const safeSanBong = (sanBong || 'Sân bóng').replace(/'/g, "\\'");
+                    actionHtml = `
+                        <button type="button" class="btn-primary" style="width: 100%; margin-top: 12px; padding: 10px 14px; border-radius: 10px; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); border: none; color: #fff; font-weight: 700; font-size: 0.88rem; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);" onclick="event.stopPropagation(); openCustomerReviewModal(${item.ID}, '${safeCumSan}', '${safeSanBong}', '${formatDate(item.NgayDa)}')">
+                            <i class="fa-solid fa-star"></i> Đánh giá cụm sân
+                        </button>
+                    `;
+                }
             }
 
             html += `
@@ -2428,20 +2478,50 @@ function applyBookingFiltersAndRender() {
             let cardClick = '';
             let cursorStyle = 'default';
 
-            if (gd.canCancel) {
-                actionTourHtml = `<button class="btn-cancel-tour" onclick="event.stopPropagation(); openCancelTourModal(${gd.idGiaiDau})"><i class="fa-solid fa-ban"></i><span>Hủy toàn bộ giải</span></button>`;
-                cardClick = `onclick="openTicketModal('giai_dau', ${gd.idGiaiDau})" title="Nhấn vào để xem Vé Tổng Giải Đấu"`;
-                cursorStyle = 'pointer';
-            } else {
-                actionTourHtml = `<div class="cancel-tour-disabled"><i class="fa-solid fa-lock"></i><span>Không thể hủy tự động</span></div>`;
-            }
-
             const thoiGianGiaiDau = (gd.ngayBatDau && gd.ngayKetThuc) 
                 ? `Thời gian diễn ra: <strong style="color: #0f172a;">${formatDate(gd.ngayBatDau)} - ${formatDate(gd.ngayKetThuc)}</strong>`
                 : 'Thời gian: Đang cập nhật';
 
             const firstMatch = gd.matches[0];
             const trangThaiGiaiDauGoc = firstMatch && firstMatch.giai_dau ? firstMatch.giai_dau.TrangThai : '';
+
+            // Kiểm tra xem Giải đấu đã Hoàn thành chưa
+            const isTourCompleted = (trangThaiGiaiDauGoc === 'HoanThanh') || 
+                (gd.matches.length > 0 && gd.matches.every(m => m.TrangThai !== 'DaCoc') && gd.matches.some(m => m.TrangThai === 'HoanThanh'));
+
+            // Kiểm tra xem trong các trận của giải đấu đã có đánh giá nào chưa (cả giải chỉ đánh giá 1 lần)
+            const matchedWithReview = gd.matches.find(m => m.danh_gia || m.danhGia);
+            const existingTourReview = matchedWithReview ? (matchedWithReview.danh_gia || matchedWithReview.danhGia) : null;
+
+            // Chọn 1 trận đại diện có trạng thái HoanThanh (hoặc trận đầu tiên) để gửi ID_DatSan khi đánh giá
+            const representativeMatch = gd.matches.find(m => m.TrangThai === 'HoanThanh') || firstMatch;
+
+            if (gd.canCancel) {
+                actionTourHtml = `<button class="btn-cancel-tour" onclick="event.stopPropagation(); openCancelTourModal(${gd.idGiaiDau})"><i class="fa-solid fa-ban"></i><span>Hủy toàn bộ giải</span></button>`;
+                cardClick = `onclick="openTicketModal('giai_dau', ${gd.idGiaiDau})" title="Nhấn vào để xem Vé Tổng Giải Đấu"`;
+                cursorStyle = 'pointer';
+            } else if (existingTourReview) {
+                // Nếu giải đấu đã được đánh giá -> Hiển thị số sao đã đánh giá
+                const starsHtml = '★'.repeat(Number(existingTourReview.SoSao)) + '☆'.repeat(5 - Number(existingTourReview.SoSao));
+                actionTourHtml = `
+                    <div style="padding: 8px 14px; border-radius: 10px; background: #f0fdf4; border: 1px solid #bbf7d0; display: inline-flex; align-items: center; gap: 10px; font-size: 0.85rem;" title="${existingTourReview.NoiDung || ''}">
+                        <span style="color: #15803d; font-weight: 700;"><i class="fa-solid fa-circle-check"></i> Đã đánh giá</span>
+                        <span style="color: #f59e0b; font-weight: 800; letter-spacing: 1px;">${starsHtml} (${existingTourReview.SoSao}/5)</span>
+                    </div>
+                `;
+            } else if (isTourCompleted && representativeMatch) {
+                // Nếu giải đấu đã Hoàn thành và chưa đánh giá -> Hiển thị nút Đánh giá giải đấu (1 lần cho cả giải)
+                const safeCumSan = (gd.cumSan || 'Cụm sân').replace(/'/g, "\\'");
+                const safeTenGiai = (`Giải đấu: ${gd.tenGiaiDau}`).replace(/'/g, "\\'");
+                const rangeDateStr = (gd.ngayBatDau && gd.ngayKetThuc) ? `${formatDate(gd.ngayBatDau)} - ${formatDate(gd.ngayKetThuc)}` : '';
+                actionTourHtml = `
+                    <button type="button" class="btn-primary" style="padding: 9px 16px; border-radius: 10px; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); border: none; color: #fff; font-weight: 700; font-size: 0.88rem; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);" onclick="event.stopPropagation(); openCustomerReviewModal(${representativeMatch.ID}, '${safeCumSan}', '${safeTenGiai}', '${rangeDateStr}')">
+                        <i class="fa-solid fa-star"></i> Đánh giá cụm sân
+                    </button>
+                `;
+            } else {
+                actionTourHtml = `<div class="cancel-tour-disabled"><i class="fa-solid fa-lock"></i><span>Không thể hủy tự động</span></div>`;
+            }
             
             let statusBadgeHtml = '';
             if (trangThaiGiaiDauGoc === 'HetHan') {
@@ -4616,5 +4696,367 @@ async function executeDeleteChat() {
     } finally {
         btn.innerHTML = 'Xóa';
         btn.disabled = false;
+    }
+}
+
+// ======================================================
+// MODULE: ĐÁNH GIÁ CỤM SÂN & XEM ĐÁNH GIÁ (KHÁCH HÀNG)
+// ======================================================
+let currentSelectedStar = 5;
+let pendingReviewDatSanId = null;
+
+window.openCustomerReviewModal = function(datSanId, tenCumSan, tenSan, ngayDa) {
+    pendingReviewDatSanId = datSanId;
+    currentSelectedStar = 5;
+
+    let modal = document.getElementById('customer-review-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'customer-review-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 10000; align-items: center; justify-content: center;';
+        modal.onclick = function(e) {
+            if (e.target === modal) closeCustomerReviewModal();
+        };
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 450px; width: 92%; padding: 0; border-radius: 16px; overflow: hidden; background: #fff;">
+            <div style="padding: 18px 22px; background: linear-gradient(135deg, #0b5d3b 0%, #15803d 100%); color: #fff; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800;"><i class="fa-solid fa-star" style="color: #fde047; margin-right: 6px;"></i>Đánh giá trải nghiệm sân</h3>
+                    <div style="font-size: 0.8rem; opacity: 0.9; margin-top: 2px;">${tenCumSan} &bull; ${tenSan} (${ngayDa})</div>
+                </div>
+                <i class="fa-solid fa-xmark" style="cursor: pointer; font-size: 1.2rem;" onclick="closeCustomerReviewModal()"></i>
+            </div>
+
+            <div id="review-modal-alert" class="modal-alert" style="display: none; margin: 14px 22px 0;"></div>
+
+            <div style="padding: 22px;">
+                <div style="text-align: center; margin-bottom: 18px;">
+                    <div style="font-size: 0.88rem; font-weight: 600; color: #475569; margin-bottom: 10px;">Mức độ hài lòng của bạn về cụm sân này:</div>
+                    <div id="star-selector-box" style="display: inline-flex; gap: 10px; font-size: 2.1rem; cursor: pointer;">
+                        ${[1, 2, 3, 4, 5].map(star => `
+                            <i class="fa-solid fa-star review-star-item" data-star="${star}" style="color: #f59e0b; transition: transform 0.15s;" onclick="selectReviewStar(${star})"></i>
+                        `).join('')}
+                    </div>
+                    <div id="star-rating-label" style="margin-top: 8px; font-weight: 700; font-size: 0.92rem; color: #d97706;">5 sao - Tuyệt vời!</div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 18px;">
+                    <label style="font-weight: 600; font-size: 0.88rem; color: #1e293b; margin-bottom: 6px; display: block;">Nhận xét của bạn (Tùy chọn)</label>
+                    <textarea id="review-content-input" class="form-control" rows="3" placeholder="Chia sẻ cảm nhận về mặt cỏ, ánh sáng, thái độ phục vụ tại cụm sân..." style="width: 100%; resize: none; border-radius: 10px;"></textarea>
+                </div>
+
+                <div style="display: flex; gap: 12px;">
+                    <button type="button" class="btn-outline" style="flex: 1; padding: 11px; border-radius: 10px; font-weight: 600;" onclick="closeCustomerReviewModal()">Hủy bỏ</button>
+                    <button type="button" id="btn-submit-review" class="btn-primary" style="flex: 1.5; padding: 11px; border-radius: 10px; font-weight: 700;" onclick="submitCustomerReview()">
+                        <i class="fa-solid fa-paper-plane" style="margin-right: 6px;"></i> Gửi đánh giá
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    modal.style.display = 'flex';
+};
+
+window.selectReviewStar = function(star) {
+    currentSelectedStar = star;
+    const labels = {
+        1: '1 sao - Rất tệ',
+        2: '2 sao - Không hài lòng',
+        3: '3 sao - Bình thường',
+        4: '4 sao - Hài lòng',
+        5: '5 sao - Tuyệt vời!'
+    };
+    document.querySelectorAll('#star-selector-box .review-star-item').forEach(el => {
+        const s = Number(el.getAttribute('data-star'));
+        el.style.color = s <= star ? '#f59e0b' : '#cbd5e1';
+        el.style.transform = s === star ? 'scale(1.18)' : 'scale(1)';
+    });
+    const lbl = document.getElementById('star-rating-label');
+    if (lbl) lbl.innerText = labels[star] || '';
+};
+
+window.closeCustomerReviewModal = function() {
+    const modal = document.getElementById('customer-review-modal');
+    if (modal) modal.style.display = 'none';
+    pendingReviewDatSanId = null;
+};
+
+window.submitCustomerReview = async function() {
+    if (!pendingReviewDatSanId) return;
+
+    const btn = document.getElementById('btn-submit-review');
+    const alertBox = document.getElementById('review-modal-alert');
+    const noiDung = document.getElementById('review-content-input')?.value.trim() || '';
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang gửi...';
+    alertBox.style.display = 'none';
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/danh-gia`, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id_dat_san: pendingReviewDatSanId,
+                so_sao: currentSelectedStar,
+                noi_dung: noiDung
+            })
+        });
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            closeCustomerReviewModal();
+            showToast(data.message || 'Đã gửi đánh giá thành công!');
+            loadMyBookingsData(); // Tải lại danh sách để nút chuyển ngay thành "Đã đánh giá"
+        } else {
+            alertBox.textContent = data.message || 'Không thể gửi đánh giá!';
+            alertBox.className = 'modal-alert error';
+            alertBox.style.display = 'block';
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-paper-plane" style="margin-right: 6px;"></i> Gửi đánh giá';
+        }
+    } catch (e) {
+        alertBox.textContent = 'Lỗi kết nối máy chủ!';
+        alertBox.className = 'modal-alert error';
+        alertBox.style.display = 'block';
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-paper-plane" style="margin-right: 6px;"></i> Gửi đánh giá';
+    }
+};
+
+// Biến toàn cục quản lý phân trang & lọc đánh giá bên Customer
+let customerModalReviewsData = [];
+let customerModalReviewSort = 'all';
+let customerModalReviewPage = 1;
+let currentViewedReviewClusterId = null;
+const CUSTOMER_REVIEWS_PER_PAGE = 6;
+
+window.openClusterReviewsModal = async function(idCumSan, tenCumSan) {
+    currentViewedReviewClusterId = idCumSan;
+
+    let modal = document.getElementById('cluster-reviews-view-modal');
+
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'cluster-reviews-view-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 10000; align-items: center; justify-content: center;';
+        modal.onclick = function(e) {
+            if (e.target === modal) modal.style.display = 'none';
+        };
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 600px; width: 94%; padding: 0; border-radius: 16px; overflow: hidden; background: #fff; max-height: 88vh; display: flex; flex-direction: column;">
+            <div style="padding: 16px 22px; background: #0f172a; color: #fff; display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700;"><i class="fa-solid fa-star" style="color: #fbbf24; margin-right: 8px;"></i>Đánh giá: ${tenCumSan}</h3>
+                <i class="fa-solid fa-xmark" style="cursor: pointer; font-size: 1.2rem; color: #94a3b8;" onclick="document.getElementById('cluster-reviews-view-modal').style.display='none'"></i>
+            </div>
+            <div id="cluster-reviews-body" style="padding: 20px; overflow-y: auto; flex: 1;">
+                <div style="text-align: center; padding: 30px;"><i class="fa-solid fa-spinner fa-spin" style="font-size: 1.8rem; color: var(--primary);"></i></div>
+            </div>
+        </div>
+    `;
+    modal.style.display = 'flex';
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/danh-gia?id_cum_san=${idCumSan}`);
+        const data = await res.json();
+        const bodyEl = document.getElementById('cluster-reviews-body');
+
+        if (!data.success || data.tong_so === 0) {
+            bodyEl.innerHTML = `
+                <div style="text-align: center; padding: 40px 20px; color: #64748b;">
+                    <i class="fa-regular fa-comment-dots" style="font-size: 2.8rem; color: #cbd5e1; margin-bottom: 10px; display: block;"></i>
+                    Chưa có đánh giá nào cho cụm sân này.
+                </div>`;
+            return;
+        }
+
+        customerModalReviewsData = data.data || [];
+        customerModalReviewSort = 'all';
+        customerModalReviewPage = 1;
+
+        bodyEl.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 18px; background: #fffbeb; border: 1px solid #fde68a; padding: 16px; border-radius: 12px; margin-bottom: 14px;">
+                <div style="text-align: center; padding-right: 18px; border-right: 1px dashed #fcd34d;">
+                    <div style="font-size: 2.2rem; font-weight: 800; color: #d97706; line-height: 1;">${Number(data.trung_binh).toFixed(1)}<span style="font-size: 1rem; color: #92400e;">/5</span></div>
+                    <div style="color: #f59e0b; font-size: 1rem; margin: 4px 0;">★★★★★</div>
+                    <div style="font-size: 0.78rem; color: #78350f; font-weight: 600;">${data.tong_so} đánh giá</div>
+                </div>
+                <div style="flex: 1; font-size: 0.8rem; color: #475569;">
+                    ${[5,4,3,2,1].map(s => {
+                        const count = data.phan_bo_sao[s] || 0;
+                        const pct = data.tong_so > 0 ? Math.round((count / data.tong_so) * 100) : 0;
+                        return `
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 3px;">
+                                <span style="width: 32px; font-weight: 600;">${s} ⭐</span>
+                                <div style="flex: 1; height: 7px; background: #fef3c7; border-radius: 99px; overflow: hidden;">
+                                    <div style="width: ${pct}%; height: 100%; background: #f59e0b;"></div>
+                                </div>
+                                <span style="width: 24px; text-align: right;">${count}</span>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+
+            <!-- Thanh nút lọc: Tất cả, Mới nhất, Cao nhất, Thấp nhất -->
+            <div id="customer-review-filter-btns" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #f1f5f9;"></div>
+
+            <!-- Danh sách đánh giá -->
+            <div id="customer-review-items-box"></div>
+
+            <!-- Phân trang -->
+            <div id="customer-review-pagination" style="display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 14px; padding-top: 10px;"></div>
+        `;
+
+        renderCustomerModalReviewsList();
+    } catch (e) {
+        document.getElementById('cluster-reviews-body').innerHTML = `<div style="color:red; text-align:center;">Lỗi tải đánh giá!</div>`;
+    }
+};
+
+async function refreshOpenCustomerReviewsModal() {
+    const modal = document.getElementById('cluster-reviews-view-modal');
+    if (!modal || modal.style.display !== 'flex' || !currentViewedReviewClusterId) return;
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/danh-gia?id_cum_san=${currentViewedReviewClusterId}`);
+        const data = await res.json();
+        if (!data.success) return;
+
+        // Nếu trước đó cụm sân chưa có đánh giá nào (đang hiện thông báo trống), vẽ lại toàn bộ khung
+        if (!document.getElementById('customer-review-items-box') && data.tong_so > 0) {
+            const titleEl = modal.querySelector('h3');
+            const tenCumSan = titleEl ? titleEl.innerText.replace('Đánh giá:', '').trim() : 'Cụm sân';
+            openClusterReviewsModal(currentViewedReviewClusterId, tenCumSan);
+            return;
+        }
+
+        customerModalReviewsData = data.data || [];
+
+        // Cập nhật lại hộp tổng quan điểm trung bình & thanh phần trăm sao ở trên cùng
+        const summaryBox = document.querySelector('#cluster-reviews-body > div:first-child');
+        if (summaryBox && data.tong_so > 0) {
+            summaryBox.innerHTML = `
+                <div style="text-align: center; padding-right: 18px; border-right: 1px dashed #fcd34d;">
+                    <div style="font-size: 2.2rem; font-weight: 800; color: #d97706; line-height: 1;">${Number(data.trung_binh).toFixed(1)}<span style="font-size: 1rem; color: #92400e;">/5</span></div>
+                    <div style="color: #f59e0b; font-size: 1rem; margin: 4px 0;">★★★★★</div>
+                    <div style="font-size: 0.78rem; color: #78350f; font-weight: 600;">${data.tong_so} đánh giá</div>
+                </div>
+                <div style="flex: 1; font-size: 0.8rem; color: #475569;">
+                    ${[5,4,3,2,1].map(s => {
+                        const count = data.phan_bo_sao[s] || 0;
+                        const pct = data.tong_so > 0 ? Math.round((count / data.tong_so) * 100) : 0;
+                        return `
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 3px;">
+                                <span style="width: 32px; font-weight: 600;">${s} ⭐</span>
+                                <div style="flex: 1; height: 7px; background: #fef3c7; border-radius: 99px; overflow: hidden;">
+                                    <div style="width: ${pct}%; height: 100%; background: #f59e0b;"></div>
+                                </div>
+                                <span style="width: 24px; text-align: right;">${count}</span>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        }
+
+        renderCustomerModalReviewsList();
+    } catch (e) {
+        console.error('Lỗi cập nhật ngầm modal đánh giá:', e);
+    }
+}
+
+window.setCustomerModalReviewSort = function(sortType) {
+    customerModalReviewSort = sortType;
+    customerModalReviewPage = 1;
+    renderCustomerModalReviewsList();
+};
+
+window.changeCustomerModalReviewPage = function(page) {
+    customerModalReviewPage = page;
+    renderCustomerModalReviewsList();
+};
+
+function renderCustomerModalReviewsList() {
+    const filterBox = document.getElementById('customer-review-filter-btns');
+    const listBox = document.getElementById('customer-review-items-box');
+    const pageBox = document.getElementById('customer-review-pagination');
+    if (!listBox) return;
+
+    const buttons = [
+        { key: 'all', label: 'Tất cả' },
+        { key: 'newest', label: 'Mới nhất' },
+        { key: 'highest', label: 'Cao nhất' },
+        { key: 'lowest', label: 'Thấp nhất' }
+    ];
+
+    if (filterBox) {
+        filterBox.innerHTML = buttons.map(b => {
+            const active = customerModalReviewSort === b.key;
+            const style = active
+                ? 'background: var(--primary); color: #fff; border: 1px solid var(--primary);'
+                : 'background: #f8fafc; color: #475569; border: 1px solid #cbd5e1;';
+            return `<button type="button" onclick="setCustomerModalReviewSort('${b.key}')" style="${style} padding: 6px 13px; border-radius: 999px; font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: 0.15s;">${b.label}</button>`;
+        }).join('');
+    }
+
+    let sorted = [...customerModalReviewsData];
+    if (customerModalReviewSort === 'newest' || customerModalReviewSort === 'all') {
+        sorted.sort((a, b) => new Date(b.NgayTao || 0) - new Date(a.NgayTao || 0));
+    } else if (customerModalReviewSort === 'highest') {
+        sorted.sort((a, b) => Number(b.SoSao) - Number(a.SoSao) || (new Date(b.NgayTao || 0) - new Date(a.NgayTao || 0)));
+    } else if (customerModalReviewSort === 'lowest') {
+        sorted.sort((a, b) => Number(a.SoSao) - Number(b.SoSao) || (new Date(b.NgayTao || 0) - new Date(a.NgayTao || 0)));
+    }
+
+    const totalPages = Math.ceil(sorted.length / CUSTOMER_REVIEWS_PER_PAGE) || 1;
+    if (customerModalReviewPage > totalPages) customerModalReviewPage = totalPages;
+    const startIdx = (customerModalReviewPage - 1) * CUSTOMER_REVIEWS_PER_PAGE;
+    const pageItems = sorted.slice(startIdx, startIdx + CUSTOMER_REVIEWS_PER_PAGE);
+
+    listBox.innerHTML = pageItems.map(r => {
+        const stars = '★'.repeat(Number(r.SoSao)) + '☆'.repeat(5 - Number(r.SoSao));
+        const tenKhach = r.nguoi_dung?.HoTen || 'Khách hàng';
+        const isGiaiDau = Boolean(r.dat_san?.ID_GiaiDau || r.dat_san?.giai_dau);
+        const tagHtml = isGiaiDau
+            ? `<span style="font-weight:600; font-size:0.76rem; color:#4338ca; background:#e0e7ff; padding:2px 8px; border-radius:6px; margin-left:6px;"><i class="fa-solid fa-trophy"></i> Giải đấu: ${r.dat_san?.giai_dau?.TenGiaiDau || ('#GD-' + r.dat_san.ID_GiaiDau)}</span>`
+            : (r.dat_san?.san_bong?.TenSan ? `<span style="font-weight:500; font-size:0.78rem; color:#64748b; background:#f1f5f9; padding:2px 8px; border-radius:6px; margin-left:6px;">${r.dat_san.san_bong.TenSan}</span>` : '');
+
+        const d = r.NgayTao ? new Date(r.NgayTao) : null;
+        const dateStr = d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` : '';
+
+        return `
+            <div style="border-bottom: 1px solid #f1f5f9; padding: 12px 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; flex-wrap: wrap; gap: 4px;">
+                    <div><strong style="color: #0f172a; font-size: 0.94rem;">${tenKhach}</strong>${tagHtml}</div>
+                    <span style="font-size: 0.78rem; color: #94a3b8;">${dateStr}</span>
+                </div>
+                <div style="color: #f59e0b; font-size: 0.95rem; letter-spacing: 1px; margin-bottom: 5px;">${stars}</div>
+                <div style="color: #334155; font-size: 0.9rem; line-height: 1.5;">${r.NoiDung ? r.NoiDung : '<span style="color:#94a3b8; font-style:italic;">(Khách hàng không để lại bình luận)</span>'}</div>
+            </div>
+        `;
+    }).join('');
+
+    if (pageBox) {
+        if (totalPages <= 1) {
+            pageBox.innerHTML = '';
+        } else {
+            let pHtml = `<button class="btn-outline-sm" ${customerModalReviewPage === 1 ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''} onclick="changeCustomerModalReviewPage(${customerModalReviewPage - 1})" style="padding: 5px 10px;"><i class="fa-solid fa-chevron-left"></i></button>`;
+            for (let i = 1; i <= totalPages; i++) {
+                const active = i === customerModalReviewPage;
+                pHtml += `<button class="${active ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 5px 12px;" onclick="changeCustomerModalReviewPage(${i})">${i}</button>`;
+            }
+            pHtml += `<button class="btn-outline-sm" ${customerModalReviewPage === totalPages ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''} onclick="changeCustomerModalReviewPage(${customerModalReviewPage + 1})" style="padding: 5px 10px;"><i class="fa-solid fa-chevron-right"></i></button>`;
+            pageBox.innerHTML = pHtml;
+        }
     }
 }

@@ -23,6 +23,7 @@ use App\Http\Controllers\CaLamViecController;
 use App\Http\Controllers\LichLamViecController;
 use App\Http\Controllers\BanGiaoCaController;
 use App\Http\Controllers\BangLuongController;
+use App\Http\Controllers\DanhGiaController;
 use App\Services\ChromaDBService;
 
 Route::get('/seed-chromadb', function (ChromaDBService $chroma) {
@@ -51,6 +52,9 @@ Route::get('/vnpay-return', [VNPayController::class, 'vnpayReturn']);
 Route::post('/dat-san-guest/thanh-toan', [DatSanController::class, 'thanhToanGuest']);
 Route::get('/dat-san-guest/vnpay-return', [DatSanController::class, 'vnpayReturnGuest']);
 
+//Xem danh sách đánh giá của 1 cụm sân hoặc tất cả cụm sân
+Route::get('/danh-gia', [DanhGiaController::class, 'layDanhSachTheoCumSan']);
+
 // ==========================================================
 // NHÓM 2: PROTECTED API (BẮT BUỘC TRUYỀN TOKEN TRONG HEADER)
 // Sử dụng auth:sanctum để tự động kiểm tra Token
@@ -68,7 +72,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/thong-bao/doc-tat-ca', [ThongBaoController::class, 'danhDauDaDocTatCa']);
     Route::put('/thong-bao/{id}/doc', [ThongBaoController::class, 'danhDauDaDocTheoId']);
 
-    // 3. Khách hàng: Nghiệp vụ Đặt Sân, Rút Tiền, Giải Đấu
+    // 3. Khách hàng: Nghiệp vụ Đặt Sân, Rút Tiền, Giải Đấu, Đánh giá
     Route::post('/dat-san', [DatSanController::class, 'datSan']);
     Route::get('/dat-san/cua-toi', [DatSanController::class, 'layDanhSachCuaToi']);
     Route::put('/dat-san/{id}/huy', [DatSanController::class, 'huySanPhongTrao']);
@@ -83,6 +87,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/vnpay/nap-tien', [VNPayController::class, 'createPayment']);
     Route::get('/giao-dich/cua-toi', [GiaoDichController::class, 'layGiaoDichCuaToi']);
     Route::post('/giao-dich/rut-tien', [GiaoDichController::class, 'rutTien']);
+
+    Route::post('/danh-gia', [DanhGiaController::class, 'taoDanhGia']);
 
     // 4. Chatbot
     Route::post('/chatbot/chat', [ChatbotController::class, 'nhanTinNhan']);

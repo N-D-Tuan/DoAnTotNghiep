@@ -11,7 +11,11 @@ class CumSanController extends Controller
     // 1. Lấy danh sách Cụm Sân (kèm tên Phường)
     public function index()
     {
-        $cumSans = CumSan::withTrashed()->with('phuong')->orderBy('ID', 'desc')->get();
+        $cumSans = CumSan::with('phuong')
+            ->withCount('danhGias')
+            ->withAvg('danhGias', 'SoSao')
+            ->withTrashed()
+            ->get();
         return response()->json(['success' => true, 'data' => $cumSans]);
     }
 
@@ -90,8 +94,14 @@ class CumSanController extends Controller
 
     public function show($id)
     {
-        $cumSan = CumSan::withTrashed()->with('phuong')->find($id);
+        $cumSan = CumSan::with('phuong')
+            ->withCount('danhGias')
+            ->withAvg('danhGias', 'SoSao')
+            ->withTrashed()
+            ->find($id);
+
         if (!$cumSan) return response()->json(['success' => false, 'message' => 'Không tìm thấy!']);
+        
         return response()->json(['success' => true, 'data' => $cumSan]);
     }
 

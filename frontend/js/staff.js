@@ -190,6 +190,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (document.getElementById('staff-bang-luong-tbody')) {
                 loadBangLuongStaffData();
             }
+
+            // 7. CẬP NHẬT REALTIME ĐIỂM ĐÁNH GIÁ CƠ SỞ & MODAL ĐÁNH GIÁ CỦA NHÂN VIÊN
+            const currentUserStaff = JSON.parse(sessionStorage.getItem('dn_football_user'));
+            if (currentUserStaff && currentUserStaff.ID_CumSan) {
+                syncStaffClusterRatingRealtime(currentUserStaff.ID_CumSan);
+            }
         });
 
     // Lắng nghe kênh CÁ NHÂN của chính nhân viên này
@@ -676,7 +682,7 @@ async function executeChangePassword() {
 }
 
 // ======================================================
-// MODULE: MÀN HÌNH THU NGÂN (ĐẶT SÂN HỘ)
+// MODULE: MÀN HÌNH THU NGÂN
 // ======================================================
 async function renderManHinhThuNgan() {
     const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
@@ -695,9 +701,13 @@ async function renderManHinhThuNgan() {
     contentArea.innerHTML = `<div style="text-align:center; padding: 50px;"><i class="fa-solid fa-spinner fa-spin text-primary" style="font-size: 2rem;"></i><br><br>Đang tải dữ liệu quầy thu ngân...</div>`;
 
     try {
-        // 1. Lấy thông tin cơ sở
-        const response = await fetch(`${API_BASE_URL}/cum-san/${cumSanId}`);
+        // 1. Lấy thông tin cơ sở + đánh giá cơ sở song song
+        const [response, ratingRes] = await Promise.all([
+            fetch(`${API_BASE_URL}/cum-san/${cumSanId}`),
+            fetch(`${API_BASE_URL}/danh-gia?id_cum_san=${cumSanId}`)
+        ]);
         const res = await response.json();
+        const ratingData = await ratingRes.json();
         
         if (!res.success) {
             contentArea.innerHTML = `<div style="text-align:center; color:red; padding: 20px;">Lỗi: Không tìm thấy dữ liệu cơ sở của bạn!</div>`;
@@ -749,10 +759,20 @@ async function renderManHinhThuNgan() {
         }
 
         // 4. RENDER TOÀN BỘ GIAO DIỆN
+        const countStarStaff = (ratingData && ratingData.success) ? Number(ratingData.tong_so || 0) : Number(cs.danh_gias_count || 0);
+        const rawAvgStaff = (ratingData && ratingData.success) ? Number(ratingData.trung_binh || 0) : Number(cs.danh_gias_avg_so_sao || 0);
+        const avgStarStaff = countStarStaff > 0 ? rawAvgStaff.toFixed(1) : '0.0';
+
         contentArea.innerHTML = `
-            <div class="page-header" style="margin-bottom: 24px;">
-                <h1 class="page-title">Màn hình Thu Ngân - ${cs.TenCumSan}</h1>
-                <p class="text-muted">Tổng quan ca làm việc và thao tác xử lý lịch đặt sân.</p>
+            <div class="page-header" style="margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                <div>
+                    <h1 class="page-title">Màn hình Thu Ngân - ${cs.TenCumSan}</h1>
+                    <p class="text-muted">Tổng quan ca làm việc và thao tác xử lý lịch đặt sân.</p>
+                </div>
+                <button type="button" onclick="openStaffClusterReviewsModal(${cumSanId}, '${cs.TenCumSan.replace(/'/g, "\\'")}')" style="background: #fffbeb; border: 1.5px solid #fcd34d; color: #b45309; padding: 10px 18px; border-radius: 12px; font-weight: 700; font-size: 0.92rem; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 2px 6px rgba(245, 158, 11, 0.15);">
+                    <i class="fa-solid fa-star" style="color: #f59e0b; font-size: 1.1rem;"></i>
+                    <span>Đánh giá cơ sở: <strong>${avgStarStaff}</strong> (${countStarStaff} đánh giá)</span>
+                </button>
             </div>
 
             <!-- KHU VỰC THỐNG KÊ NHANH TRONG NGÀY -->
@@ -4172,4 +4192,234 @@ function renderStaffHistoryPagination() {
 
     pageHtml += `<button class="btn-outline-sm" ${staffHistoryPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="staffHistoryPage++; renderStaffHistoryPagination()"><i class="fa-solid fa-chevron-right"></i></button>`;
     div.innerHTML = pageHtml;
+}
+
+let staffModalReviewsData = [];
+let staffModalReviewSort = 'all';
+let staffModalReviewPage = 1;
+const STAFF_REVIEWS_PER_PAGE = 6;
+
+window.openStaffClusterReviewsModal = async function(idCumSan, tenCumSan) {
+    let modal = document.getElementById('cluster-reviews-view-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'cluster-reviews-view-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 10000; align-items: center; justify-content: center;';
+        modal.onclick = function(e) {
+            if (e.target === modal) modal.style.display = 'none';
+        };
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 600px; width: 94%; padding: 0; border-radius: 16px; overflow: hidden; background: #fff; max-height: 88vh; display: flex; flex-direction: column;">
+            <div style="padding: 16px 22px; background: #0f172a; color: #fff; display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700;"><i class="fa-solid fa-star" style="color: #fbbf24; margin-right: 8px;"></i>Đánh giá: ${tenCumSan}</h3>
+                <i class="fa-solid fa-xmark" style="cursor: pointer; font-size: 1.2rem; color: #94a3b8;" onclick="document.getElementById('cluster-reviews-view-modal').style.display='none'"></i>
+            </div>
+            <div id="cluster-reviews-body" style="padding: 20px; overflow-y: auto; flex: 1;">
+                <div style="text-align: center; padding: 30px;"><i class="fa-solid fa-spinner fa-spin" style="font-size: 1.8rem; color: var(--primary);"></i></div>
+            </div>
+        </div>
+    `;
+    modal.style.display = 'flex';
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/danh-gia?id_cum_san=${idCumSan}`);
+        const data = await res.json();
+        const bodyEl = document.getElementById('cluster-reviews-body');
+
+        if (!data.success || data.tong_so === 0) {
+            bodyEl.innerHTML = `
+                <div style="text-align: center; padding: 40px 20px; color: #64748b;">
+                    <i class="fa-regular fa-comment-dots" style="font-size: 2.8rem; color: #cbd5e1; margin-bottom: 10px; display: block;"></i>
+                    Chưa có đánh giá nào cho cụm sân này.
+                </div>`;
+            return;
+        }
+
+        staffModalReviewsData = data.data || [];
+        staffModalReviewSort = 'all';
+        staffModalReviewPage = 1;
+
+        bodyEl.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 18px; background: #fffbeb; border: 1px solid #fde68a; padding: 16px; border-radius: 12px; margin-bottom: 14px;">
+                <div style="text-align: center; padding-right: 18px; border-right: 1px dashed #fcd34d;">
+                    <div style="font-size: 2.2rem; font-weight: 800; color: #d97706; line-height: 1;">${Number(data.trung_binh).toFixed(1)}<span style="font-size: 1rem; color: #92400e;">/5</span></div>
+                    <div style="color: #f59e0b; font-size: 1rem; margin: 4px 0;">★★★★★</div>
+                    <div style="font-size: 0.78rem; color: #78350f; font-weight: 600;">${data.tong_so} đánh giá</div>
+                </div>
+                <div style="flex: 1; font-size: 0.8rem; color: #475569;">
+                    ${[5,4,3,2,1].map(s => {
+                        const count = data.phan_bo_sao[s] || 0;
+                        const pct = data.tong_so > 0 ? Math.round((count / data.tong_so) * 100) : 0;
+                        return `
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 3px;">
+                                <span style="width: 32px; font-weight: 600;">${s} ⭐</span>
+                                <div style="flex: 1; height: 7px; background: #fef3c7; border-radius: 99px; overflow: hidden;">
+                                    <div style="width: ${pct}%; height: 100%; background: #f59e0b;"></div>
+                                </div>
+                                <span style="width: 24px; text-align: right;">${count}</span>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+
+            <div id="staff-review-filter-btns" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #f1f5f9;"></div>
+            <div id="staff-review-items-box"></div>
+            <div id="staff-review-pagination" style="display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 14px; padding-top: 10px;"></div>
+        `;
+
+        renderStaffModalReviewsList();
+    } catch (e) {
+        document.getElementById('cluster-reviews-body').innerHTML = `<div style="color:red; text-align:center;">Lỗi tải đánh giá!</div>`;
+    }
+};
+
+window.setStaffModalReviewSort = function(sortType) {
+    staffModalReviewSort = sortType;
+    staffModalReviewPage = 1;
+    renderStaffModalReviewsList();
+};
+
+window.changeStaffModalReviewPage = function(page) {
+    staffModalReviewPage = page;
+    renderStaffModalReviewsList();
+};
+
+function renderStaffModalReviewsList() {
+    const filterBox = document.getElementById('staff-review-filter-btns');
+    const listBox = document.getElementById('staff-review-items-box');
+    const pageBox = document.getElementById('staff-review-pagination');
+    if (!listBox) return;
+
+    const buttons = [
+        { key: 'all', label: 'Tất cả' },
+        { key: 'newest', label: 'Mới nhất' },
+        { key: 'highest', label: 'Cao nhất' },
+        { key: 'lowest', label: 'Thấp nhất' }
+    ];
+
+    if (filterBox) {
+        filterBox.innerHTML = buttons.map(b => {
+            const active = staffModalReviewSort === b.key;
+            const style = active
+                ? 'background: var(--primary); color: #fff; border: 1px solid var(--primary);'
+                : 'background: #f8fafc; color: #475569; border: 1px solid #cbd5e1;';
+            return `<button type="button" onclick="setStaffModalReviewSort('${b.key}')" style="${style} padding: 6px 13px; border-radius: 999px; font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: 0.15s;">${b.label}</button>`;
+        }).join('');
+    }
+
+    let sorted = [...staffModalReviewsData];
+    if (staffModalReviewSort === 'newest' || staffModalReviewSort === 'all') {
+        sorted.sort((a, b) => new Date(b.NgayTao || 0) - new Date(a.NgayTao || 0));
+    } else if (staffModalReviewSort === 'highest') {
+        sorted.sort((a, b) => Number(b.SoSao) - Number(a.SoSao) || (new Date(b.NgayTao || 0) - new Date(a.NgayTao || 0)));
+    } else if (staffModalReviewSort === 'lowest') {
+        sorted.sort((a, b) => Number(a.SoSao) - Number(b.SoSao) || (new Date(b.NgayTao || 0) - new Date(a.NgayTao || 0)));
+    }
+
+    const totalPages = Math.ceil(sorted.length / STAFF_REVIEWS_PER_PAGE) || 1;
+    if (staffModalReviewPage > totalPages) staffModalReviewPage = totalPages;
+    const startIdx = (staffModalReviewPage - 1) * STAFF_REVIEWS_PER_PAGE;
+    const pageItems = sorted.slice(startIdx, startIdx + STAFF_REVIEWS_PER_PAGE);
+
+    listBox.innerHTML = pageItems.map(r => {
+        const stars = '★'.repeat(Number(r.SoSao)) + '☆'.repeat(5 - Number(r.SoSao));
+        const tenKhach = r.nguoi_dung?.HoTen || 'Khách hàng';
+        const idGiaiDau = r.dat_san?.ID_GiaiDau || r.dat_san?.giai_dau?.ID || null;
+        const tenGiaiDau = r.dat_san?.giai_dau?.TenGiaiDau || '';
+        const tenSan = r.dat_san?.san_bong?.TenSan || 'Sân bóng';
+
+        const tagHtml = idGiaiDau
+            ? `<span style="font-weight:600; font-size:0.76rem; color:#4338ca; background:#eef2ff; border:1px solid #c7d2fe; padding:2px 8px; border-radius:6px; margin-left:6px;"><i class="fa-solid fa-trophy"></i> ${tenGiaiDau ? `Giải đấu: ${tenGiaiDau}` : 'Giải đấu'} &bull; #GD-${idGiaiDau}</span>`
+            : `<span style="font-weight:500; font-size:0.78rem; color:#64748b; background:#f1f5f9; padding:2px 8px; border-radius:6px; margin-left:6px;">${tenSan} &bull; Vé #PT-${r.ID_DatSan}</span>`;
+
+        const d = r.NgayTao ? new Date(r.NgayTao) : null;
+        const dateStr = d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` : '';
+
+        return `
+            <div style="border-bottom: 1px solid #f1f5f9; padding: 12px 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; flex-wrap: wrap; gap: 4px;">
+                    <div><strong style="color: #0f172a; font-size: 0.94rem;">${tenKhach}</strong>${tagHtml}</div>
+                    <span style="font-size: 0.78rem; color: #94a3b8;">${dateStr}</span>
+                </div>
+                <div style="color: #f59e0b; font-size: 0.95rem; letter-spacing: 1px; margin-bottom: 5px;">${stars}</div>
+                <div style="color: #334155; font-size: 0.9rem; line-height: 1.5;">${r.NoiDung ? r.NoiDung : '<span style="color:#94a3b8; font-style:italic;">(Khách hàng không để lại bình luận)</span>'}</div>
+            </div>
+        `;
+    }).join('');
+
+    if (pageBox) {
+        if (totalPages <= 1) {
+            pageBox.innerHTML = '';
+        } else {
+            let pHtml = `<button class="btn-outline-sm" ${staffModalReviewPage === 1 ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''} onclick="changeStaffModalReviewPage(${staffModalReviewPage - 1})" style="padding: 5px 10px;"><i class="fa-solid fa-chevron-left"></i></button>`;
+            for (let i = 1; i <= totalPages; i++) {
+                const active = i === staffModalReviewPage;
+                pHtml += `<button class="${active ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 5px 12px;" onclick="changeStaffModalReviewPage(${i})">${i}</button>`;
+            }
+            pHtml += `<button class="btn-outline-sm" ${staffModalReviewPage === totalPages ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''} onclick="changeStaffModalReviewPage(${staffModalReviewPage + 1})" style="padding: 5px 10px;"><i class="fa-solid fa-chevron-right"></i></button>`;
+            pageBox.innerHTML = pHtml;
+        }
+    }
+}
+
+async function syncStaffClusterRatingRealtime(idCumSan) {
+    try {
+        const res = await fetch(`${API_BASE_URL}/danh-gia?id_cum_san=${idCumSan}`);
+        const data = await res.json();
+        if (!data.success) return;
+
+        // 1. Cập nhật nút "Đánh giá cơ sở: X.X (Y đánh giá)" trên Màn hình Thu Ngân (nếu đang đứng ở trang Thu Ngân)
+        const ratingBtn = document.querySelector('button[onclick^="openStaffClusterReviewsModal"]');
+        if (ratingBtn) {
+            const countStar = Number(data.tong_so || 0);
+            const avgStar = countStar > 0 ? Number(data.trung_binh || 0).toFixed(1) : '0.0';
+            ratingBtn.innerHTML = `
+                <i class="fa-solid fa-star" style="color: #f59e0b; font-size: 1.1rem;"></i>
+                <span>Đánh giá cơ sở: <strong>${avgStar}</strong> (${countStar} đánh giá)</span>
+            `;
+        }
+
+        // 2. Nếu Nhân viên đang mở Modal xem đánh giá -> Cập nhật trực tiếp danh sách & biểu đồ sao
+        const modal = document.getElementById('cluster-reviews-view-modal');
+        if (modal && modal.style.display === 'flex') {
+            if (!document.getElementById('staff-review-items-box') && data.tong_so > 0) {
+                openStaffClusterReviewsModal(idCumSan, window.currentClusterNameStaff || 'Cơ sở');
+                return;
+            }
+            staffModalReviewsData = data.data || [];
+            const summaryBox = document.querySelector('#cluster-reviews-body > div:first-child');
+            if (summaryBox && data.tong_so > 0) {
+                summaryBox.innerHTML = `
+                    <div style="text-align: center; padding-right: 18px; border-right: 1px dashed #fcd34d;">
+                        <div style="font-size: 2.2rem; font-weight: 800; color: #d97706; line-height: 1;">${Number(data.trung_binh).toFixed(1)}<span style="font-size: 1rem; color: #92400e;">/5</span></div>
+                        <div style="color: #f59e0b; font-size: 1rem; margin: 4px 0;">★★★★★</div>
+                        <div style="font-size: 0.78rem; color: #78350f; font-weight: 600;">${data.tong_so} đánh giá</div>
+                    </div>
+                    <div style="flex: 1; font-size: 0.8rem; color: #475569;">
+                        ${[5,4,3,2,1].map(s => {
+                            const count = data.phan_bo_sao[s] || 0;
+                            const pct = data.tong_so > 0 ? Math.round((count / data.tong_so) * 100) : 0;
+                            return `
+                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 3px;">
+                                    <span style="width: 32px; font-weight: 600;">${s} ⭐</span>
+                                    <div style="flex: 1; height: 7px; background: #fef3c7; border-radius: 99px; overflow: hidden;">
+                                        <div style="width: ${pct}%; height: 100%; background: #f59e0b;"></div>
+                                    </div>
+                                    <span style="width: 24px; text-align: right;">${count}</span>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+            }
+            renderStaffModalReviewsList();
+        }
+    } catch (e) {
+        console.error('Lỗi đồng bộ đánh giá nhân viên:', e);
+    }
 }

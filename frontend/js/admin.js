@@ -341,6 +341,17 @@ document.addEventListener(
                 if (document.getElementById('revenueChart') && typeof updateDashboardStats === 'function') {
                     updateDashboardStats();
                 }
+
+                // 6. CẬP NHẬT REALTIME ĐÁNH GIÁ CỤM SÂN
+                // Trường hợp A: Admin đang đứng ở màn hình Danh sách Thẻ Cụm Sân
+                if (document.getElementById('cumsan-grid') && typeof loadCumSanCards === 'function') {
+                    loadCumSanCards();
+                }
+
+                // Trường hợp B: Admin hoặc Quản lý sân đang mở Chi tiết Cụm Sân ("Sân của tôi")
+                if (document.getElementById('admin-cs-reviews-list') && typeof currentCumSanId !== 'undefined' && currentCumSanId !== null) {
+                    syncAdminClusterReviewsRealtime(currentCumSanId);
+                }
             });
 
         if (currentUser && currentUser.ID) {
@@ -739,11 +750,14 @@ function renderQuanLySan() {
 // 2. Fetch API và vẽ Thẻ Cụm Sân
 async function loadCumSanCards() {
     try {
-        const response = await fetch(`${API_BASE_URL}/cum-san`);
+        const [response, ratingRes] = await Promise.all([
+            fetch(`${API_BASE_URL}/cum-san`),
+            fetch(`${API_BASE_URL}/danh-gia`)
+        ]);
         const res = await response.json();
+        const ratingMap = (await ratingRes.json()).data || {};
         
         const grid = document.getElementById('cumsan-grid');
-
         if (!grid) return;
 
         if (!res.success || res.data.length === 0) {
@@ -757,7 +771,11 @@ async function loadCumSanCards() {
             const bgStyle = cs.HinhAnh ? `background-image: url('${imgBaseUrl}${cs.HinhAnh}'); background-size: cover; background-position: center;` : '';
             const iconHtml = cs.HinhAnh ? '' : '<i class="fa-solid fa-map-location-dot"></i>';
             
-            // Nếu sân đã xóa mềm, thêm lớp phủ mờ mờ và nhãn "Tạm ngưng"
+            const r = ratingMap[cs.ID];
+            const countStar = r ? Number(r.tong_danh_gia) : Number(cs.danh_gias_count || 0);
+            const rawAvg = r ? Number(r.trung_binh_sao) : Number(cs.danh_gias_avg_so_sao || 0);
+            const avgStar = countStar > 0 ? rawAvg.toFixed(1) : '0.0';
+
             const cardStyle = isDeleted ? 'opacity: 0.6; filter: grayscale(1); border-color: #ef4444;' : '';
             const badgeHtml = isDeleted ? '<div style="position:absolute; top:12px; left:12px; background:#ef4444; color:white; padding:4px 10px; border-radius:4px; font-size:0.8rem; font-weight:bold;">Đã tạm ngưng</div>' : '';
 
@@ -766,7 +784,12 @@ async function loadCumSanCards() {
                 ${badgeHtml}
                 <div class="cumsan-card-img" style="${bgStyle}">${iconHtml}</div>
                 <div class="cumsan-card-body">
-                    <div class="cumsan-title">${cs.TenCumSan}</div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:6px;">
+                        <div class="cumsan-title" style="margin-bottom:0;">${cs.TenCumSan}</div>
+                        <span style="background:#fffbeb; border:1px solid #fde68a; color:#b45309; padding:3px 9px; border-radius:999px; font-size:0.78rem; font-weight:700; white-space:nowrap;">
+                            <i class="fa-solid fa-star" style="color:#f59e0b;"></i> ${avgStar} (${countStar} đánh giá)
+                        </span>
+                    </div>
                     <div class="cumsan-info"><i class="fa-solid fa-location-dot"></i> ${cs.DiaChi} (${cs.phuong ? cs.phuong.TenPhuong : ''})</div>
                     <div class="cumsan-info"><i class="fa-solid fa-clock"></i> ${cs.GioMoCua.substring(0,5)} - ${cs.GioDongCua.substring(0,5)}</div>
                 </div>
@@ -786,7 +809,7 @@ async function renderCumSanDetail(cumSanId) {
     currentCumSanId = cumSanId;
     const contentArea = document.querySelector('.admin-content');
     
-    // 1. FIX UX: Tự động set trạng thái Active màu xanh cho Menu Sidebar
+    // 1. Tự động set trạng thái Active màu xanh cho Menu Sidebar
     const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
     if (currentUser && currentUser.VaiTro === 'QuanLySan') {
@@ -829,7 +852,7 @@ async function renderCumSanDetail(cumSanId) {
         const statusBadge = isDeleted ? `<span class="badge badge-warning" style="margin-left: 10px; font-size: 0.9rem;">Đã tạm ngưng</span>` : '';
 
         // =======================================================
-        // 2. FIX BẢO MẬT: Ẩn nút "Quay lại" đối với Quản lý sân
+        // 2. Ẩn nút "Quay lại" đối với Quản lý sân
         // =======================================================
         const backBtnHtml = currentUser.VaiTro === 'QuanLySan' 
             ? '' // Trống (Không cho phép quay lại danh sách tổng)
@@ -884,11 +907,39 @@ async function renderCumSanDetail(cumSanId) {
 
             <div id="tab-giatien" class="tab-pane" style="margin-top: 24px;">
                 <div id="price-container">Đang tải cấu hình...</div>
-            </div>     
+            </div>
+            
+            <!-- KHU VỰC XEM ĐÁNH GIÁ CỦA CỤM SÂN (CHO ADMIN & QUẢN LÝ SÂN) -->
+            <div class="panel" style="margin-top: 24px;">
+                <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                    <div>
+                        <i class="fa-solid fa-star" style="color: #f59e0b; margin-right: 6px;"></i>
+                        Đánh giá của Khách hàng về Cụm sân
+                        <span id="admin-cs-rating-summary" style="margin-left: 10px; font-size: 0.9rem; color: #b45309; background: #fffbeb; border: 1px solid #fde68a; padding: 3px 10px; border-radius: 999px; font-weight: 700;">Đang tải...</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <div id="admin-cs-sort-btns" style="display: inline-flex; gap: 6px; flex-wrap: wrap;"></div>
+                        <select id="admin-cs-rating-filter" class="form-control" style="width: 165px; height: 36px; padding: 0 10px; font-size: 0.85rem;" onchange="handleAdminStarFilterChange(this.value)">
+                            <option value="all">Tất cả số sao</option>
+                            <option value="5">5 sao (Tuyệt vời)</option>
+                            <option value="4">4 sao (Hài lòng)</option>
+                            <option value="3">3 sao (Bình thường)</option>
+                            <option value="2">2 sao (Kém)</option>
+                            <option value="1">1 sao (Rất tệ)</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="admin-cs-reviews-list" style="padding: 16px 20px;">
+                    <div style="text-align: center; color: var(--text-muted); padding: 20px;">Đang tải đánh giá...</div>
+                </div>
+                <div id="admin-cs-reviews-pagination" style="display: flex; justify-content: center; align-items: center; gap: 8px; padding: 0 20px 18px 20px;"></div>
+            </div>
         `;
 
         loadSanBongTheoCum(cs.ID);
         loadGiaTienTheoCum(cs);
+        loadDanhGiaTheoCumAdmin(cs.ID);
+
     } catch (error) {
         console.error("Lỗi:", error);
     }
@@ -1048,6 +1099,178 @@ async function loadGiaTienTheoCum(cs) {
         });
         container.innerHTML = html;
     } catch (e) { console.error(e); }
+}
+
+let currentAdminClusterReviews = [];
+let adminReviewStarFilter = 'all';
+let adminReviewSortType = 'all'; // 'all' | 'newest' | 'highest' | 'lowest'
+let adminReviewCurrentPage = 1;
+const ADMIN_REVIEWS_PER_PAGE = 6;
+
+async function loadDanhGiaTheoCumAdmin(cumSanId) {
+    try {
+        const res = await fetch(`${API_BASE_URL}/danh-gia?id_cum_san=${cumSanId}`);
+        const data = await res.json();
+        const summaryEl = document.getElementById('admin-cs-rating-summary');
+
+        if (data.success) {
+            currentAdminClusterReviews = data.data || [];
+            adminReviewStarFilter = 'all';
+            adminReviewSortType = 'all';
+            adminReviewCurrentPage = 1;
+
+            if (summaryEl) {
+                summaryEl.innerHTML = data.tong_so > 0
+                    ? `⭐ ${Number(data.trung_binh).toFixed(1)}/5.0 (${data.tong_so} đánh giá)`
+                    : `⭐ 0.0/5.0 (0 đánh giá)`;
+            }
+            renderAdminCumSanReviews();
+        }
+    } catch (e) {
+        console.error('Lỗi tải đánh giá cụm sân:', e);
+    }
+}
+
+async function syncAdminClusterReviewsRealtime(cumSanId) {
+    try {
+        const res = await fetch(`${API_BASE_URL}/danh-gia?id_cum_san=${cumSanId}`);
+        const data = await res.json();
+        const summaryEl = document.getElementById('admin-cs-rating-summary');
+
+        if (data.success) {
+            currentAdminClusterReviews = data.data || [];
+            if (summaryEl) {
+                summaryEl.innerHTML = data.tong_so > 0
+                    ? `⭐ ${Number(data.trung_binh).toFixed(1)}/5.0 (${data.tong_so} đánh giá)`
+                    : `⭐ 0.0/5.0 (0 đánh giá)`;
+            }
+            renderAdminCumSanReviews();
+        }
+    } catch (e) {
+        console.error('Lỗi đồng bộ realtime đánh giá cụm sân:', e);
+    }
+}
+
+window.handleAdminStarFilterChange = function(starVal) {
+    adminReviewStarFilter = starVal;
+    adminReviewCurrentPage = 1;
+    renderAdminCumSanReviews();
+};
+
+window.handleAdminSortReviewChange = function(sortType) {
+    adminReviewSortType = sortType;
+    adminReviewCurrentPage = 1;
+    renderAdminCumSanReviews();
+};
+
+window.changeAdminReviewPage = function(page) {
+    adminReviewCurrentPage = page;
+    renderAdminCumSanReviews();
+};
+
+window.filterAdminCumSanReviews = function(starVal) {
+    handleAdminStarFilterChange(starVal);
+};
+
+function renderAdminCumSanReviews() {
+    const container = document.getElementById('admin-cs-reviews-list');
+    const sortBtnsContainer = document.getElementById('admin-cs-sort-btns');
+    const paginationContainer = document.getElementById('admin-cs-reviews-pagination');
+    if (!container) return;
+
+    // 1. Vẽ 4 nút sắp xếp: Tất cả, Mới nhất, Cao nhất, Thấp nhất
+    if (sortBtnsContainer) {
+        const sortOptions = [
+            { key: 'all', label: 'Tất cả' },
+            { key: 'newest', label: 'Mới nhất' },
+            { key: 'highest', label: 'Cao nhất' },
+            { key: 'lowest', label: 'Thấp nhất' }
+        ];
+        sortBtnsContainer.innerHTML = sortOptions.map(opt => {
+            const isActive = adminReviewSortType === opt.key;
+            const btnStyle = isActive
+                ? 'background: var(--primary); color: #fff; border: 1px solid var(--primary);'
+                : 'background: #f8fafc; color: #475569; border: 1px solid #cbd5e1;';
+            return `<button type="button" onclick="handleAdminSortReviewChange('${opt.key}')" style="${btnStyle} padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: 0.15s;">${opt.label}</button>`;
+        }).join('');
+    }
+
+    // 2. Lọc theo số sao (nếu có chọn)
+    let list = adminReviewStarFilter === 'all'
+        ? [...currentAdminClusterReviews]
+        : currentAdminClusterReviews.filter(r => String(r.SoSao) === String(adminReviewStarFilter));
+
+    // 3. Sắp xếp theo nút lọc
+    if (adminReviewSortType === 'newest' || adminReviewSortType === 'all') {
+        list.sort((a, b) => new Date(b.NgayTao || 0) - new Date(a.NgayTao || 0));
+    } else if (adminReviewSortType === 'highest') {
+        list.sort((a, b) => Number(b.SoSao) - Number(a.SoSao) || (new Date(b.NgayTao || 0) - new Date(a.NgayTao || 0)));
+    } else if (adminReviewSortType === 'lowest') {
+        list.sort((a, b) => Number(a.SoSao) - Number(b.SoSao) || (new Date(b.NgayTao || 0) - new Date(a.NgayTao || 0)));
+    }
+
+    if (list.length === 0) {
+        container.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 30px;">Không có đánh giá nào phù hợp với bộ lọc.</div>`;
+        if (paginationContainer) paginationContainer.innerHTML = '';
+        return;
+    }
+
+    // 4. Phân trang (6 đánh giá / 1 trang)
+    const totalPages = Math.ceil(list.length / ADMIN_REVIEWS_PER_PAGE) || 1;
+    if (adminReviewCurrentPage > totalPages) adminReviewCurrentPage = totalPages;
+    const startIdx = (adminReviewCurrentPage - 1) * ADMIN_REVIEWS_PER_PAGE;
+    const pageData = list.slice(startIdx, startIdx + ADMIN_REVIEWS_PER_PAGE);
+
+    // 5. Render danh sách (Hiển thị chuẩn #GD-... cho Giải đấu và #PT-... cho Phong trào)
+    container.innerHTML = pageData.map(r => {
+        const stars = '★'.repeat(Number(r.SoSao)) + '☆'.repeat(5 - Number(r.SoSao));
+        const tenKhach = r.nguoi_dung?.HoTen || 'Khách hàng';
+        const d = r.NgayTao ? new Date(r.NgayTao) : null;
+        const dateStr = d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` : '';
+
+        const idGiaiDau = r.dat_san?.ID_GiaiDau || r.dat_san?.giai_dau?.ID || null;
+        const tenGiaiDau = r.dat_san?.giai_dau?.TenGiaiDau || '';
+        const tenSan = r.dat_san?.san_bong?.TenSan || 'Sân bóng';
+
+        const badgeInfoHtml = idGiaiDau
+            ? `<span style="font-size: 0.8rem; color: #4338ca; margin-left: 8px; background: #eef2ff; border: 1px solid #c7d2fe; padding: 3px 9px; border-radius: 6px; font-weight: 600;">
+                   <i class="fa-solid fa-trophy"></i> ${tenGiaiDau ? `Giải đấu: ${tenGiaiDau}` : 'Giải đấu'} &bull; Mã #GD-${idGiaiDau}
+               </span>`
+            : `<span style="font-size: 0.8rem; color: #64748b; margin-left: 8px; background: #f1f5f9; border: 1px solid #e2e8f0; padding: 3px 9px; border-radius: 6px; font-weight: 500;">
+                   ${tenSan} &bull; Vé #PT-${r.ID_DatSan}
+               </span>`;
+
+        return `
+            <div style="border-bottom: 1px solid #f1f5f9; padding: 12px 0; display: flex; justify-content: space-between; gap: 15px; align-items: flex-start;">
+                <div>
+                    <div style="margin-bottom: 5px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px;">
+                        <strong style="color: #0f172a;">${tenKhach}</strong>
+                        ${badgeInfoHtml}
+                    </div>
+                    <div style="color: #334155; font-size: 0.9rem; line-height: 1.5;">${r.NoiDung || '<span style="color:#94a3b8; font-style:italic;">(Không có nội dung nhận xét)</span>'}</div>
+                </div>
+                <div style="text-align: right; flex-shrink: 0;">
+                    <div style="color: #f59e0b; font-size: 1rem; letter-spacing: 1px;">${stars}</div>
+                    <div style="font-size: 0.76rem; color: #94a3b8; margin-top: 2px;">${dateStr}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // 6. Vẽ nút phân trang
+    if (paginationContainer) {
+        if (totalPages <= 1) {
+            paginationContainer.innerHTML = '';
+        } else {
+            let pHtml = `<button class="btn-outline-sm" ${adminReviewCurrentPage === 1 ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''} onclick="changeAdminReviewPage(${adminReviewCurrentPage - 1})" style="padding: 5px 10px;"><i class="fa-solid fa-chevron-left"></i></button>`;
+            for (let i = 1; i <= totalPages; i++) {
+                const active = i === adminReviewCurrentPage;
+                pHtml += `<button class="${active ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 5px 12px;" onclick="changeAdminReviewPage(${i})">${i}</button>`;
+            }
+            pHtml += `<button class="btn-outline-sm" ${adminReviewCurrentPage === totalPages ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''} onclick="changeAdminReviewPage(${adminReviewCurrentPage + 1})" style="padding: 5px 10px;"><i class="fa-solid fa-chevron-right"></i></button>`;
+            paginationContainer.innerHTML = pHtml;
+        }
+    }
 }
 
 // ======================================================
