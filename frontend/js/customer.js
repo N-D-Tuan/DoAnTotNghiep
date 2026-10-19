@@ -3916,14 +3916,12 @@ function openTicketModal(type, id) {
     let ticketHtml = '';
     const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
 
-    // Hàm tiện ích format ngày
     const formatDate = (dateString) => {
         const d = new Date(dateString);
         return `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
     };
 
     if (type === 'phong_trao') {
-        // Lấy dữ liệu của 1 trận duy nhất
         const item = allMyBookingsData.find(b => b.ID === id);
         if(!item) return;
 
@@ -3933,66 +3931,72 @@ function openTicketModal(type, id) {
         const tongTien = Number(item.TongTien);
         const tienCoc = Number(item.TienCoc);
         const conLai = tongTien - tienCoc;
+        const maVe = `PT-${item.ID}`;
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=4&data=${encodeURIComponent(maVe)}`;
 
         ticketHtml = `
-            <!-- Nửa trên của vé -->
-            <div style="background: linear-gradient(135deg, var(--primary) 0%, #047857 100%); color: white; padding: 25px 20px; text-align: center;">
-                <div style="font-size: 0.9rem; letter-spacing: 2px; opacity: 0.8; margin-bottom: 5px;">DN FOOTBALL</div>
-                <h2 style="margin: 0; font-size: 1.8rem; font-weight: 800;">VÉ ĐẶT SÂN</h2>
-                <div style="margin-top: 10px; background: rgba(255,255,255,0.2); display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: bold;">MÃ VÉ: #PT-${item.ID}</div>
+            <!-- Header vé nhỏ gọn -->
+            <div style="background: linear-gradient(135deg, var(--primary) 0%, #047857 100%); color: white; padding: 14px 18px; text-align: center;">
+                <div style="font-size: 0.72rem; letter-spacing: 2px; opacity: 0.85; margin-bottom: 2px;">DN FOOTBALL</div>
+                <h2 style="margin: 0; font-size: 1.3rem; font-weight: 800;">VÉ ĐẶT SÂN</h2>
+                <div style="margin-top: 6px; background: rgba(255,255,255,0.2); display: inline-block; padding: 3px 12px; border-radius: 20px; font-size: 0.78rem; font-weight: bold;">MÃ VÉ: #${maVe}</div>
             </div>
             
-            <!-- Phần thân chứa thông tin -->
-            <div style="padding: 25px 20px; background: #fff; position: relative;">
-                <div style="margin-bottom: 20px;">
-                    <div style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 4px;">Khách hàng</div>
-                    <div style="font-weight: bold; font-size: 1.1rem; color: var(--text-dark);">${currentUser.HoTen} - ${currentUser.SoDienThoai}</div>
+            <!-- Thân vé -->
+            <div style="padding: 16px 18px; background: #fff; position: relative;">
+                <!-- Khách hàng -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #f1f5f9;">
+                    <span style="color: var(--text-muted); font-size: 0.8rem;">Khách hàng:</span>
+                    <strong style="font-size: 0.92rem; color: var(--text-dark);">${currentUser.HoTen} - ${currentUser.SoDienThoai}</strong>
                 </div>
 
-                <div style="background: #f8fafc; border-radius: 12px; padding: 15px; border: 1px solid var(--border); margin-bottom: 20px;">
-                    <div style="color: var(--primary); font-weight: 800; font-size: 1.3rem; margin-bottom: 5px;">${tenSan}</div>
-                    <div style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 12px;"><i class="fa-solid fa-location-dot"></i> ${cumSan}</div>
-                    <div style="display: flex; gap: 15px;">
-                        <div>
-                            <div style="color: var(--text-muted); font-size: 0.8rem;">Ngày đá</div>
-                            <div style="font-weight: bold; color: var(--text-dark);">${formatDate(item.NgayDa)}</div>
+                <!-- Bố cục 2 cột: Thông tin sân (Trái) + Mã QR (Phải) -->
+                <div style="display: flex; gap: 12px; align-items: center; background: #f8fafc; border-radius: 12px; padding: 12px; border: 1px solid var(--border); margin-bottom: 14px;">
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="color: var(--primary); font-weight: 800; font-size: 1.1rem; margin-bottom: 3px;">${tenSan}</div>
+                        <div style="color: var(--text-muted); font-size: 0.82rem; margin-bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><i class="fa-solid fa-location-dot"></i> ${cumSan}</div>
+                        <div style="margin-bottom: 6px;">
+                            <div style="color: var(--text-muted); font-size: 0.74rem;">Ngày đá</div>
+                            <div style="font-weight: 700; font-size: 0.88rem; color: var(--text-dark);">${formatDate(item.NgayDa)}</div>
                         </div>
                         <div>
-                            <div style="color: var(--text-muted); font-size: 0.8rem;">Khung giờ</div>
-                            <div style="font-weight: bold; color: var(--text-dark);">${gioDa}</div>
+                            <div style="color: var(--text-muted); font-size: 0.74rem;">Khung giờ</div>
+                            <div style="font-weight: 700; font-size: 0.88rem; color: var(--primary);">${gioDa}</div>
                         </div>
+                    </div>
+
+                    <div style="text-align: center; padding-left: 12px; border-left: 1px dashed #cbd5e1; flex-shrink: 0;">
+                        <img src="${qrUrl}" crossorigin="anonymous" alt="QR ${maVe}" style="width: 100px; height: 100px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; padding: 3px; display: block; margin: 0 auto;" />
+                        <div style="font-size: 0.68rem; color: #475569; font-weight: 600; margin-top: 4px;">Quét mã Check-in</div>
                     </div>
                 </div>
 
                 <!-- Đường đứt nét chia vé -->
-                <div style="border-top: 2px dashed #cbd5e1; margin: 0 -20px 20px -20px; position: relative;">
-                    <!-- Nửa vòng tròn khoét 2 bên mép vé -->
-                    <div style="position: absolute; width: 20px; height: 20px; background: rgba(0,0,0,0.6); border-radius: 50%; top: -11px; left: -10px;"></div>
-                    <div style="position: absolute; width: 20px; height: 20px; background: rgba(0,0,0,0.6); border-radius: 50%; top: -11px; right: -10px;"></div>
+                <div style="border-top: 2px dashed #cbd5e1; margin: 0 -18px 12px -18px; position: relative;">
+                    <div style="position: absolute; width: 18px; height: 18px; background: rgba(0,0,0,0.6); border-radius: 50%; top: -10px; left: -9px;"></div>
+                    <div style="position: absolute; width: 18px; height: 18px; background: rgba(0,0,0,0.6); border-radius: 50%; top: -10px; right: -9px;"></div>
                 </div>
 
                 <!-- Tài chính -->
-                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.85rem;">
                     <span style="color: var(--text-muted);">Tổng tiền:</span>
                     <strong style="color: var(--text-dark);">${tongTien.toLocaleString('vi-VN')}đ</strong>
                 </div>
-                <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 0.85rem;">
                     <span style="color: var(--text-muted);">Đã thanh toán (Cọc):</span>
                     <strong style="color: var(--text-dark);">${tienCoc.toLocaleString('vi-VN')}đ</strong>
                 </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; background: #fff1f2; padding: 12px; border-radius: 8px; border: 1px dashed #fecdd3;">
-                    <span style="color: #be123c; font-weight: bold; font-size: 0.9rem;">CẦN THU THÊM:</span>
-                    <strong style="color: #e11d48; font-size: 1.4rem;">${conLai.toLocaleString('vi-VN')}đ</strong>
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #fff1f2; padding: 9px 12px; border-radius: 8px; border: 1px dashed #fecdd3;">
+                    <span style="color: #be123c; font-weight: bold; font-size: 0.82rem;">CẦN THU THÊM:</span>
+                    <strong style="color: #e11d48; font-size: 1.18rem;">${conLai.toLocaleString('vi-VN')}đ</strong>
                 </div>
             </div>
         `;
     } 
     else if (type === 'giai_dau') {
-        // Lọc tất cả trận đấu thuộc Giải này
         const matches = allMyBookingsData.filter(b => b.ID_GiaiDau === id && b.TrangThai === 'DaCoc');
         if(matches.length === 0) return;
         
-        // Mặc định trận đầu tiên để lấy Tên giải, Cụm sân
         const firstMatch = matches[0];
         const tenGiai = firstMatch.giai_dau ? firstMatch.giai_dau.TenGiaiDau : 'N/A';
         const cumSan = firstMatch.san_bong && firstMatch.san_bong.cum_san ? firstMatch.san_bong.cum_san.TenCumSan : 'N/A';
@@ -4001,53 +4005,59 @@ function openTicketModal(type, id) {
         const tongTien = matches.reduce((sum, item) => sum + Number(item.TongTien), 0);
         const tienCoc = matches.reduce((sum, item) => sum + Number(item.TienCoc), 0);
         const conLai = tongTien - tienCoc;
+        const maVe = `GD-${id}`;
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=4&data=${encodeURIComponent(maVe)}`;
 
         ticketHtml = `
-            <!-- Nửa trên của vé tổng -->
-            <div style="background: linear-gradient(135deg, #4338ca 0%, #312e81 100%); color: white; padding: 25px 20px; text-align: center;">
-                <div style="font-size: 0.9rem; letter-spacing: 2px; opacity: 0.8; margin-bottom: 5px;">DN FOOTBALL</div>
-                <h2 style="margin: 0; font-size: 1.6rem; font-weight: 800;">THẺ TỔNG GIẢI ĐẤU</h2>
-                <div style="margin-top: 10px; background: rgba(255,255,255,0.2); display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: bold;">MÃ GIẢI: #GD-${id}</div>
+            <div style="background: linear-gradient(135deg, #4338ca 0%, #312e81 100%); color: white; padding: 14px 18px; text-align: center;">
+                <div style="font-size: 0.72rem; letter-spacing: 2px; opacity: 0.85; margin-bottom: 2px;">DN FOOTBALL</div>
+                <h2 style="margin: 0; font-size: 1.25rem; font-weight: 800;">THẺ TỔNG GIẢI ĐẤU</h2>
+                <div style="margin-top: 6px; background: rgba(255,255,255,0.2); display: inline-block; padding: 3px 12px; border-radius: 20px; font-size: 0.78rem; font-weight: bold;">MÃ GIẢI: #${maVe}</div>
             </div>
             
-            <div style="padding: 25px 20px; background: #fff; position: relative;">
-                <div style="margin-bottom: 20px;">
-                    <div style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 4px;">Khách hàng / Đại diện</div>
-                    <div style="font-weight: bold; font-size: 1.1rem; color: var(--text-dark);">${currentUser.HoTen} - ${currentUser.SoDienThoai}</div>
+            <div style="padding: 16px 18px; background: #fff; position: relative;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #f1f5f9;">
+                    <span style="color: var(--text-muted); font-size: 0.8rem;">Đại diện:</span>
+                    <strong style="font-size: 0.92rem; color: var(--text-dark);">${currentUser.HoTen} - ${currentUser.SoDienThoai}</strong>
                 </div>
 
-                <div style="background: #eef2ff; border-radius: 12px; padding: 15px; border: 1px solid #c7d2fe; margin-bottom: 20px;">
-                    <div style="color: #4338ca; font-weight: 800; font-size: 1.2rem; margin-bottom: 5px;"><i class="fa-solid fa-trophy"></i> ${tenGiai}</div>
-                    <div style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 12px;"><i class="fa-solid fa-location-dot"></i> ${cumSan}</div>
-                    <div style="display: flex; gap: 15px;">
-                        <div>
-                            <div style="color: var(--text-muted); font-size: 0.8rem;">Thời gian</div>
-                            <div style="font-weight: bold; color: var(--text-dark);">${formatDate(firstMatch.giai_dau.NgayBatDau)} - ${formatDate(firstMatch.giai_dau.NgayKetThuc)}</div>
+                <!-- Bố cục 2 cột: Thông tin giải (Trái) + Mã QR (Phải) -->
+                <div style="display: flex; gap: 12px; align-items: center; background: #eef2ff; border-radius: 12px; padding: 12px; border: 1px solid #c7d2fe; margin-bottom: 14px;">
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="color: #4338ca; font-weight: 800; font-size: 1.02rem; margin-bottom: 3px;"><i class="fa-solid fa-trophy"></i> ${tenGiai}</div>
+                        <div style="color: var(--text-muted); font-size: 0.82rem; margin-bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><i class="fa-solid fa-location-dot"></i> ${cumSan}</div>
+                        <div style="margin-bottom: 6px;">
+                            <div style="color: var(--text-muted); font-size: 0.74rem;">Thời gian</div>
+                            <div style="font-weight: 700; font-size: 0.82rem; color: var(--text-dark);">${formatDate(firstMatch.giai_dau.NgayBatDau)} - ${formatDate(firstMatch.giai_dau.NgayKetThuc)}</div>
                         </div>
                         <div>
-                            <div style="color: var(--text-muted); font-size: 0.8rem;">Quy mô</div>
-                            <div style="font-weight: bold; color: var(--text-dark);">${tongTrận} trận đấu</div>
+                            <div style="color: var(--text-muted); font-size: 0.74rem;">Quy mô</div>
+                            <div style="font-weight: 700; font-size: 0.86rem; color: #4338ca;">${tongTrận} trận đấu</div>
                         </div>
+                    </div>
+
+                    <div style="text-align: center; padding-left: 12px; border-left: 1px dashed #a5b4fc; flex-shrink: 0;">
+                        <img src="${qrUrl}" crossorigin="anonymous" alt="QR ${maVe}" style="width: 100px; height: 100px; border-radius: 8px; border: 1px solid #c7d2fe; background: #fff; padding: 3px; display: block; margin: 0 auto;" />
+                        <div style="font-size: 0.68rem; color: #4338ca; font-weight: 600; margin-top: 4px;">Quét tra cứu giải</div>
                     </div>
                 </div>
 
-                <div style="border-top: 2px dashed #cbd5e1; margin: 0 -20px 20px -20px; position: relative;">
-                    <div style="position: absolute; width: 20px; height: 20px; background: rgba(0,0,0,0.6); border-radius: 50%; top: -11px; left: -10px;"></div>
-                    <div style="position: absolute; width: 20px; height: 20px; background: rgba(0,0,0,0.6); border-radius: 50%; top: -11px; right: -10px;"></div>
+                <div style="border-top: 2px dashed #cbd5e1; margin: 0 -18px 12px -18px; position: relative;">
+                    <div style="position: absolute; width: 18px; height: 18px; background: rgba(0,0,0,0.6); border-radius: 50%; top: -10px; left: -9px;"></div>
+                    <div style="position: absolute; width: 18px; height: 18px; background: rgba(0,0,0,0.6); border-radius: 50%; top: -10px; right: -9px;"></div>
                 </div>
 
-                <!-- Tài chính -->
-                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.85rem;">
                     <span style="color: var(--text-muted);">Tổng tiền hợp đồng:</span>
                     <strong style="color: var(--text-dark);">${tongTien.toLocaleString('vi-VN')}đ</strong>
                 </div>
-                <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 0.85rem;">
                     <span style="color: var(--text-muted);">Đã thanh toán (Cọc 50%):</span>
                     <strong style="color: var(--text-dark);">${tienCoc.toLocaleString('vi-VN')}đ</strong>
                 </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; background: #fff1f2; padding: 12px; border-radius: 8px; border: 1px dashed #fecdd3;">
-                    <span style="color: #be123c; font-weight: bold; font-size: 0.9rem;">CẦN THU THÊM:</span>
-                    <strong style="color: #e11d48; font-size: 1.4rem;">${conLai.toLocaleString('vi-VN')}đ</strong>
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #fff1f2; padding: 9px 12px; border-radius: 8px; border: 1px dashed #fecdd3;">
+                    <span style="color: #be123c; font-weight: bold; font-size: 0.82rem;">CẦN THU THÊM:</span>
+                    <strong style="color: #e11d48; font-size: 1.18rem;">${conLai.toLocaleString('vi-VN')}đ</strong>
                 </div>
             </div>
         `;
@@ -4061,23 +4071,21 @@ function downloadTicket() {
     const ticketElement = document.getElementById('ticket-container');
     const btnDownload = document.getElementById('btn-download-ticket');
     
-    // Đổi UI báo đang tải
     btnDownload.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
     btnDownload.disabled = true;
 
-    // Sử dụng html2canvas để chụp ảnh khối div
     html2canvas(ticketElement, { 
-        scale: 2, // Tăng độ nét gấp đôi cho ảnh tải về
-        backgroundColor: null // Giữ nguyên bo góc nếu có
+        scale: 2,
+        useCORS: true, // Cho phép chụp cả ảnh mã QR từ server ngoài
+        allowTaint: false,
+        backgroundColor: null
     }).then(canvas => {
-        // Chuyển canvas thành đường dẫn ảnh PNG
         const imageURI = canvas.toDataURL("image/png");
 
         const now = new Date();
         const pad = n => n < 10 ? '0' + n : n;
         const timeString = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
         
-        // Tạo thẻ a ảo để trigger download
         const a = document.createElement("a");
         a.href = imageURI;
         a.download = `Ve_DNFootball_${timeString}.png`;
@@ -4085,7 +4093,6 @@ function downloadTicket() {
         a.click();
         document.body.removeChild(a);
 
-        // Khôi phục nút bấm
         btnDownload.innerHTML = '<i class="fa-solid fa-download"></i> Tải ảnh vé';
         btnDownload.disabled = false;
     });
