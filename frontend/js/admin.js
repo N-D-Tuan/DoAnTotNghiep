@@ -7683,6 +7683,7 @@ window.cancelEditNextWeek = function() {
 // MODULE: ADMIN - CHẤM CÔNG VÀ CHỐT LƯƠNG NHÂN VIÊN
 // ======================================================
 let currentChamCongData = [];
+let pendingQuickChotVangId = null;
 
 async function loadAdminChamCongData() {
     const dateInput = document.getElementById('admin-cc-date').value;
@@ -7768,14 +7769,20 @@ function renderAdminChamCongTable() {
         // Nút chức năng
         let actionBtn = '';
         const itemJsonStr = JSON.stringify(item).replace(/'/g, "\\'");
-        
-        // Nút tắt: Chốt Vắng mặt liền cho lẹ
-        if (item.TrangThaiDiemDanh === 'ChuaLam' && isPastStart) {
-            actionBtn = `<button class="btn-primary" style="background: #ef4444; border-color: #ef4444; padding: 6px 12px; font-size: 0.85rem; margin-right: 5px;" onclick='quickChotVangMat(${item.ID})'>Chốt Vắng</button>`;
+        const tenNV = (nv.HoTen || 'Nhân viên').replace(/'/g, "\\'");
+        const tenCa = (ca.TenCa || 'Ca làm việc').replace(/'/g, "\\'");
+
+        // Nút Chốt vắng nhanh (chỉ hiện khi ChuaLam và đã quá giờ bắt đầu ca) -> Mở Modal Xác Nhận
+        if (item.TrangThaiDiemDanh === 'ChuaLam') {
+            actionBtn += `
+                <button type="button" class="btn-outline-sm" style="color: #ef4444; border-color: #fecaca; background: #fef2f2; padding: 6px 12px; font-weight: 600; margin-right: 6px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fef2f2'" onclick="openChotVangConfirmModal(${item.ID}, '${tenNV}', '${tenCa}', '${timeStr}')">
+                    <i class="fa-solid fa-user-xmark"></i> Chốt vắng
+                </button>
+            `;
         }
         
         // Nút mở Modal để tuỳ chỉnh Đi/Nghỉ, Phạt, Thưởng
-        actionBtn += `<button class="btn-outline-sm" onclick='openModalChotCong(${itemJsonStr})'><i class="fa-solid fa-pen"></i> Chốt / Sửa công</button>`;
+        actionBtn += `<button type="button" class="btn-outline-sm" style="padding: 6px 12px; font-weight: 600; cursor: pointer;" onclick='openModalChotCong(${itemJsonStr})'><i class="fa-solid fa-pen"></i> Chốt / Sửa công</button>`;
 
         html += `
             <tr style="${trStyle}">
@@ -7797,13 +7804,80 @@ function renderAdminChamCongTable() {
     tbody.innerHTML = html;
 }
 
-// Gọi API nhanh để chốt Vắng mặt
+// 1. Mở Modal Xác nhận trước khi gọi quickChotVangMat
+window.openChotVangConfirmModal = function(id, tenNhanVien = 'Nhân viên', tenCa = 'Ca làm', timeStr = '') {
+    pendingQuickChotVangId = id;
+
+    let modal = document.getElementById('admin-chot-vang-confirm-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'admin-chot-vang-confirm-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 10000; align-items: center; justify-content: center;';
+        modal.onclick = function(e) {
+            if (e.target === modal) closeChotVangConfirmModal();
+        };
+        document.body.appendChild(modal);
+    }
+
+    const ngayChon = document.getElementById('admin-cc-date')?.value || '';
+    const dateDisplay = ngayChon ? ngayChon.split('-').reverse().join('/') : 'hôm nay';
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 420px; width: 92%; text-align: center; padding: 28px 24px; border-radius: 16px; background: #ffffff; box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2); border: 1px solid #fecaca;">
+            <div style="width: 66px; height: 66px; border-radius: 50%; background: #fef2f2; color: #ef4444; border: 2px solid #fecaca; display: inline-flex; align-items: center; justify-content: center; font-size: 1.9rem; margin-bottom: 14px;">
+                <i class="fa-solid fa-user-xmark"></i>
+            </div>
+            
+            <h3 style="margin: 0 0 10px 0; font-size: 1.28rem; font-weight: 800; color: #0f172a;">Xác nhận Chốt Vắng Mặt</h3>
+            
+            <p style="color: #475569; font-size: 0.92rem; line-height: 1.6; margin: 0 0 16px 0;">
+                Bạn có chắc chắn muốn chốt <strong style="color: #ef4444;">VẮNG MẶT</strong> đối với nhân viên <strong style="color: #0f172a;">${tenNhanVien}</strong> không?
+            </p>
+
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 14px; font-size: 0.85rem; color: #334155; text-align: left; margin-bottom: 22px; line-height: 1.6;">
+                <div><i class="fa-regular fa-clock" style="color: var(--primary); width: 18px;"></i> Ca làm việc: <strong>${tenCa}</strong> ${timeStr ? `(${timeStr})` : ''}</div>
+                <div><i class="fa-regular fa-calendar" style="color: var(--primary); width: 18px;"></i> Ngày làm: <strong>${dateDisplay}</strong></div>
+            </div>
+
+            <div style="display: flex; justify-content: center; gap: 12px;">
+                <button type="button" onclick="closeChotVangConfirmModal()" style="flex: 1; padding: 10px 18px; border-radius: 10px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-weight: 600; font-size: 0.92rem; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#f1f5f9'; this.style.color='#0f172a';" onmouseout="this.style.background='#ffffff'; this.style.color='#475569';">
+                    Hủy bỏ
+                </button>
+                <button type="button" id="btn-confirm-quick-vang" onclick="quickChotVangMat(pendingQuickChotVangId)" style="flex: 1; padding: 10px 18px; border-radius: 10px; border: 1px solid #ef4444; background: #ef4444; color: #ffffff; font-weight: 700; font-size: 0.92rem; cursor: pointer; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25); transition: all 0.2s;" onmouseover="this.style.background='#dc2626';" onmouseout="this.style.background='#ef4444';">
+                    <i class="fa-solid fa-check" style="margin-right: 6px;"></i> Đồng ý chốt
+                </button>
+            </div>
+        </div>
+    `;
+
+    modal.style.display = 'flex';
+};
+
+window.closeChotVangConfirmModal = function() {
+    const modal = document.getElementById('admin-chot-vang-confirm-modal');
+    if (modal) modal.style.display = 'none';
+    pendingQuickChotVangId = null;
+};
+
+// 2. Gọi API PUT /api/lich-lam-viec/{id}/chot-cong để chốt Vắng mặt sau khi xác nhận
 window.quickChotVangMat = async function(id) {
-    showSystemModal("Đang chốt...", "Hệ thống đang lưu dữ liệu.", "success");
+    if (!id) return;
+
+    const btn = document.getElementById('btn-confirm-quick-vang');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang chốt...';
+    }
+
     try {
         const response = await fetch(`${API_BASE_URL}/lich-lam-viec/${id}/chot-cong`, {
             method: 'PUT',
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` },
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}`
+            },
             body: JSON.stringify({
                 trang_thai_diem_danh: 'VangMat',
                 ly_do_dieu_chinh: 'Quản lý chốt vắng mặt do không nhận ca.',
@@ -7811,8 +7885,11 @@ window.quickChotVangMat = async function(id) {
             })
         });
         const data = await response.json();
+
+        closeChotVangConfirmModal();
+
         if (response.ok && data.success) {
-            document.getElementById('system-alert-modal').style.display='none';
+            showSystemModal("Thành công", "Đã chốt vắng mặt cho nhân viên.", "success");
             const itemIndex = currentChamCongData.findIndex(item => String(item.ID) === String(id));
             if (itemIndex > -1) {
                 currentChamCongData[itemIndex].TrangThaiDiemDanh = 'VangMat';
@@ -7822,12 +7899,13 @@ window.quickChotVangMat = async function(id) {
                 loadAdminChamCongData();
             }
         } else {
-            showSystemModal("Lỗi", data.message, "error");
+            showSystemModal("Lỗi", data.message || "Không thể chốt vắng mặt!", "error");
         }
     } catch(e) {
-        showSystemModal("Lỗi", "Lỗi kết nối", "error");
+        closeChotVangConfirmModal();
+        showSystemModal("Lỗi", "Lỗi kết nối máy chủ!", "error");
     }
-}
+};
 
 // Mở Modal Sửa Công chi tiết (Hộp thoại tuỳ chỉnh)
 window.openModalChotCong = function(item) {
@@ -7880,9 +7958,9 @@ window.openModalChotCong = function(item) {
                         <input type="text" id="cc-modal-lydo" class="form-control" placeholder="Ví dụ: Vắng không phép, Phục vụ khách tốt...">
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button class="btn-outline-sm" onclick="document.getElementById('modal-chot-cong').style.display='none'">Hủy</button>
-                    <button id="btn-save-cc" class="btn-primary" onclick="executeChotCong(event)">Lưu công</button>
+                <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" onclick="document.getElementById('modal-chot-cong').style.display='none'" style="padding: 9px 20px; border-radius: 8px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-weight: 600; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#ffffff'">Hủy</button>
+                    <button type="button" id="btn-save-cc" class="btn-primary" style="padding: 9px 22px; border-radius: 8px; font-weight: 600;" onclick="executeChotCong(event)">Lưu công</button>
                 </div>
             </div>
         `;
