@@ -24632,6 +24632,7 @@
 								"$ref": "AAAAAAGhVVffEPu4t70="
 							},
 							"name": "LoaiKeo",
+							"documentation": "TimDoi, TuyenQuan",
 							"length": 0
 						},
 						{
@@ -24710,7 +24711,7 @@
 								"$ref": "AAAAAAGhVVffEPu4t70="
 							},
 							"name": "TrangThai",
-							"documentation": "DangMo, ChoXacNhan, DaChot, DaHuy",
+							"documentation": "DangTim, DaGhep, DaHuy",
 							"length": 0
 						},
 						{

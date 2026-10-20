@@ -46,4 +46,17 @@ class DatSan extends Model
     {
         return $this->hasOne(DanhGia::class, 'ID_DatSan', 'ID');
     }
+
+    public function baiDangTimNguois()
+    {
+        return $this->hasMany(BaiDangTimNguoi::class, 'ID_DatSan', 'ID');
+    }
+
+    public function baiDangTimNguoi()
+    {
+        return $this->hasOne(BaiDangTimNguoi::class, 'ID_DatSan', 'ID')
+                    ->whereIn('TrangThai', ['DangTim', 'DaGhep'])
+                    ->orderByRaw("CASE WHEN TrangThai = 'DangTim' THEN 0 ELSE 1 END")
+                    ->latest('ID');
+    }
 }
