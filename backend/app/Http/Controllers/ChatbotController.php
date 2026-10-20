@@ -357,6 +357,7 @@ class ChatbotController extends Controller
                 'ID_PhienChat' => $idPhienChat,
                 'NguoiGui' => 'Bot',
                 'NoiDung' => $botReply,
+                'DuLieuBocThem' => $clientAction,
             ]);
 
             $phienChat->touch();
