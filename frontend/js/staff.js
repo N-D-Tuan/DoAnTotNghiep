@@ -1681,22 +1681,29 @@ function openStaffDSConfirmModal(id) {
         modal = document.createElement('div');
         modal.id = 'staff-ds-confirm-modal';
         modal.className = 'modal-overlay';
-        modal.style.cssText = 'display: none; z-index: 9999;';
-        
-        // Modal này đã BỎ ĐI nút "Hủy sân & Hoàn tiền" so với Admin
-        modal.innerHTML = `
-            <div class="modal-content" style="max-width: 450px; text-align: center; padding: 30px 20px;">
-                <h3 style="margin-bottom: 10px; font-size: 1.4rem; color: var(--text-dark);">Chốt trạng thái sân</h3>
-                <p style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5;">Vui lòng xác nhận trạng thái cho khách hàng này.</p>
-                <div style="display: flex; justify-content: center; gap: 12px;">
-                    <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="closeStaffDSConfirmModal()">Hủy bỏ</button>
-                    <button class="btn-outline" style="padding: 10px 15px; color: #ef4444; border-color: #fecaca; background: #fef2f2;" onclick="openStaffCancelConfirmModal()"><i class="fa-solid fa-ban"></i> Hủy sân & Hoàn tiền</button>
-                    <button class="btn-outline" style="width: auto; padding: 10px 24px; color: #64748b; border-color: #cbd5e1;" onclick="executeStaffCapNhatDatSan('KhongDen')"><i class="fa-solid fa-user-slash"></i> Không đến</button>
-                    <button class="btn-primary" style="width: auto; padding: 10px 24px; background-color: #10b981; border-color: #10b981;" onclick="executeStaffCapNhatDatSan('HoanThanh')"><i class="fa-solid fa-check"></i> Hoàn thành</button>
-                </div>
-            </div>`;
+        modal.style.cssText = 'display: none; z-index: 9999; align-items: center; justify-content: center;';
         document.body.appendChild(modal);
     }
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 640px; width: 94%; text-align: center; padding: 28px 24px; border-radius: 16px;">
+            <h3 style="margin-bottom: 8px; font-size: 1.35rem; font-weight: 800; color: #0f172a;">Chốt trạng thái sân</h3>
+            <p style="color: #64748b; margin-bottom: 24px; line-height: 1.5; font-size: 0.94rem;">Vui lòng xác nhận trạng thái cho khách hàng này.</p>
+            <div style="display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <button type="button" onclick="closeStaffDSConfirmModal()" style="padding: 10px 18px; border-radius: 10px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-weight: 600; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; transition: all 0.2s ease;" onmouseover="this.style.background='#f1f5f9'; this.style.borderColor='#94a3b8'; this.style.color='#0f172a';" onmouseout="this.style.background='#ffffff'; this.style.borderColor='#cbd5e1'; this.style.color='#475569';">
+                    Hủy bỏ
+                </button>
+                <button type="button" onclick="openStaffCancelConfirmModal()" style="padding: 10px 16px; border-radius: 10px; border: 1px solid #fecaca; background: #fef2f2; color: #ef4444; font-weight: 600; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; transition: all 0.2s ease;" onmouseover="this.style.background='#fee2e2'; this.style.borderColor='#fca5a5';" onmouseout="this.style.background='#fef2f2'; this.style.borderColor='#fecaca';">
+                    <i class="fa-solid fa-ban"></i> Hủy sân & Hoàn tiền
+                </button>
+                <button type="button" onclick="executeStaffCapNhatDatSan('KhongDen')" style="padding: 10px 16px; border-radius: 10px; border: 1px solid #cbd5e1; background: #f8fafc; color: #475569; font-weight: 600; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; transition: all 0.2s ease;" onmouseover="this.style.background='#e2e8f0'; this.style.color='#1e293b';" onmouseout="this.style.background='#f8fafc'; this.style.color='#475569';">
+                    <i class="fa-solid fa-user-slash"></i> Không đến
+                </button>
+                <button type="button" onclick="executeStaffCapNhatDatSan('HoanThanh')" style="padding: 10px 20px; border-radius: 10px; border: 1px solid #10b981; background: #10b981; color: #ffffff; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.25); transition: all 0.2s ease;" onmouseover="this.style.background='#059669'; this.style.borderColor='#059669';" onmouseout="this.style.background='#10b981'; this.style.borderColor='#10b981';">
+                    <i class="fa-solid fa-check"></i> Hoàn thành
+                </button>
+            </div>
+        </div>`;
     modal.style.display = 'flex';
 }
 
@@ -1728,48 +1735,54 @@ function openStaffCancelConfirmModal() {
     if (isMember) {
         // LUỒNG 1: KHÁCH HÀNG CÓ TÀI KHOẢN
         modal.innerHTML = `
-            <div class="modal-content" style="max-width: 400px; text-align: center; padding: 30px 20px;">
-                <div style="font-size: 3.5rem; color: #ef4444; margin-bottom: 15px;"><i class="fa-solid fa-triangle-exclamation"></i></div>
-                <h3 style="margin-bottom: 10px; font-size: 1.35rem;">Xác nhận Hủy Sân</h3>
-                <p style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5; font-size: 0.92rem;">
-                    Khách hàng thành viên: <strong>${item.nguoi_dung?.HoTen || 'N/A'}</strong>.<br>
-                    Hệ thống sẽ <strong>HỦY LỊCH</strong> và tự động <strong>HOÀN TRẢ 100% TIỀN CỌC (${Number(item.TienCoc).toLocaleString('vi-VN')}đ)</strong> vào ví khách hàng.
+            <div class="modal-content" style="max-width: 420px; width: 92%; text-align: center; padding: 30px 24px; border-radius: 16px;">
+                <div style="font-size: 3.5rem; color: #ef4444; margin-bottom: 14px;"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                <h3 style="margin-bottom: 10px; font-size: 1.35rem; font-weight: 800; color: #0f172a;">Xác nhận Hủy Sân</h3>
+                <p style="color: #64748b; margin-bottom: 26px; line-height: 1.6; font-size: 0.92rem;">
+                    Khách hàng thành viên: <strong style="color: #0f172a;">${item.nguoi_dung?.HoTen || 'N/A'}</strong>.<br>
+                    Hệ thống sẽ <strong style="color: #0f172a;">HỦY LỊCH</strong> và tự động <strong style="color: #0f172a;">HOÀN TRẢ 100% TIỀN CỌC (${Number(item.TienCoc).toLocaleString('vi-VN')}đ)</strong> vào ví khách hàng.
                 </p>
                 <div style="display: flex; justify-content: center; gap: 12px;">
-                    <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="closeStaffCancelConfirmModal()">Hủy bỏ</button>
-                    <button class="btn-primary" style="width: auto; padding: 10px 24px; background-color: #ef4444; border-color: #ef4444;" onclick="executeStaffCapNhatDatSan('DaHuy'); closeStaffCancelConfirmModal();"><i class="fa-solid fa-trash"></i> Đồng ý Hủy</button>
+                    <button type="button" onclick="closeStaffCancelConfirmModal()" style="padding: 10px 24px; border-radius: 10px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-weight: 600; font-size: 0.92rem; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f1f5f9'; this.style.borderColor='#94a3b8'; this.style.color='#0f172a';" onmouseout="this.style.background='#ffffff'; this.style.borderColor='#cbd5e1'; this.style.color='#475569';">
+                        Hủy bỏ
+                    </button>
+                    <button type="button" onclick="executeStaffCapNhatDatSan('DaHuy'); closeStaffCancelConfirmModal();" style="padding: 10px 24px; border-radius: 10px; border: 1px solid #ef4444; background: #ef4444; color: #ffffff; font-weight: 700; font-size: 0.92rem; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.25); transition: all 0.2s ease;" onmouseover="this.style.background='#dc2626'; this.style.borderColor='#dc2626';" onmouseout="this.style.background='#ef4444'; this.style.borderColor='#ef4444';">
+                        <i class="fa-solid fa-trash"></i> Đồng ý Hủy
+                    </button>
                 </div>
             </div>`;
     } else {
         // LUỒNG 2: KHÁCH VÃNG LAI (Xác thực OTP qua Email)
         modal.innerHTML = `
-            <div class="modal-content" style="max-width: 430px; padding: 24px; text-align: left; border-radius: 12px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid #e2e8f0;">
-                    <h3 style="margin: 0; font-size: 1.15rem; color: #0f172a;"><i class="fa-solid fa-user-check" style="color: #ef4444; margin-right: 6px;"></i> Hủy sân Khách vãng lai</h3>
-                    <i class="fa-solid fa-xmark" style="cursor: pointer; color: #64748b; font-size: 1.1rem;" onclick="closeStaffCancelConfirmModal()"></i>
+            <div class="modal-content" style="max-width: 440px; width: 92%; padding: 24px; text-align: left; border-radius: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;">
+                    <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #0f172a;"><i class="fa-solid fa-user-check" style="color: #ef4444; margin-right: 6px;"></i> Hủy sân Khách vãng lai</h3>
+                    <i class="fa-solid fa-xmark" style="cursor: pointer; color: #64748b; font-size: 1.15rem;" onclick="closeStaffCancelConfirmModal()"></i>
                 </div>
 
                 <div id="staff-guest-cancel-alert" class="modal-alert" style="display: none; margin: 0 0 12px 0;"></div>
 
-                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 0.88rem; line-height: 1.6;">
-                    <div>Khách vãng lai: <strong>${item.TenKhachVangLai || 'N/A'}</strong> (${item.SDTKhachVangLai || ''})</div>
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; font-size: 0.88rem; line-height: 1.65;">
+                    <div>Khách vãng lai: <strong style="color: #0f172a;">${item.TenKhachVangLai || 'N/A'}</strong> (${item.SDTKhachVangLai || ''})</div>
                     <div>Email nhận OTP: <strong style="color: #2563eb;">${item.EmailKhachVangLai || 'Chưa có'}</strong></div>
                     <div>Tiền cọc cần hoàn: <strong style="color: #ea580c;">${Number(item.TienCoc).toLocaleString('vi-VN')}đ</strong></div>
                 </div>
 
-                <div class="form-group" style="margin-bottom: 18px;">
-                    <label style="font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; display: block;">Mã xác thực OTP (gửi về Email khách) <span style="color: red;">*</span></label>
-                    <div style="display: flex; gap: 8px;">
-                        <input type="text" id="staff-guest-cancel-otp" class="form-control" placeholder="Nhập 6 số OTP..." maxlength="6" style="flex: 1; font-weight: 700; letter-spacing: 2px; text-align: center;">
-                        <button type="button" id="btn-staff-send-guest-otp" class="btn-outline" style="width: auto; padding: 0 14px; white-space: nowrap; font-size: 0.85rem; border-color: #3b82f6; color: #2563eb;" onclick="sendGuestCancelOtpStaff(${item.ID})">
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label style="font-size: 0.86rem; font-weight: 600; color: #1e293b; margin-bottom: 6px; display: block;">Mã xác thực OTP (gửi về Email khách) <span style="color: #ef4444;">*</span></label>
+                    <div style="display: flex; gap: 10px; align-items: stretch;">
+                        <input type="text" id="staff-guest-cancel-otp" class="form-control" placeholder="Nhập 6 số OTP..." maxlength="6" style="flex: 1; font-weight: 700; letter-spacing: 2px; text-align: center; border-radius: 10px;">
+                        <button type="button" id="btn-staff-send-guest-otp" onclick="sendGuestCancelOtpStaff(${item.ID})" style="width: auto; padding: 0 16px; border-radius: 10px; border: 1px solid #bfdbfe; background: #eff6ff; color: #2563eb; font-weight: 700; font-size: 0.86rem; white-space: nowrap; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s ease;" onmouseover="this.style.background='#dbeafe'; this.style.borderColor='#93c5fd';" onmouseout="this.style.background='#eff6ff'; this.style.borderColor='#bfdbfe';">
                             <i class="fa-solid fa-paper-plane"></i> Gửi OTP
                         </button>
                     </div>
                 </div>
 
                 <div style="display: flex; justify-content: flex-end; gap: 10px;">
-                    <button class="btn-outline" style="width: auto; padding: 9px 18px;" onclick="closeStaffCancelConfirmModal()">Đóng</button>
-                    <button id="btn-staff-confirm-guest-cancel" class="btn-primary" style="width: auto; padding: 9px 18px; background-color: #ef4444; border-color: #ef4444;" onclick="confirmGuestCancelStaff()">
+                    <button type="button" onclick="closeStaffCancelConfirmModal()" style="padding: 10px 20px; border-radius: 10px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-weight: 600; font-size: 0.9rem; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f1f5f9'; this.style.borderColor='#94a3b8'; this.style.color='#0f172a';" onmouseout="this.style.background='#ffffff'; this.style.borderColor='#cbd5e1'; this.style.color='#475569';">
+                        Đóng
+                    </button>
+                    <button type="button" id="btn-staff-confirm-guest-cancel" onclick="confirmGuestCancelStaff()" style="padding: 10px 20px; border-radius: 10px; border: 1px solid #ef4444; background: #ef4444; color: #ffffff; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.25); transition: all 0.2s ease;" onmouseover="this.style.background='#dc2626'; this.style.borderColor='#dc2626';" onmouseout="this.style.background='#ef4444'; this.style.borderColor='#ef4444';">
                         <i class="fa-solid fa-check"></i> Xác nhận Hủy & Hoàn cọc
                     </button>
                 </div>
