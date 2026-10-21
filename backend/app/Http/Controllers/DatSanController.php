@@ -14,7 +14,6 @@ use App\Models\GiaiDau;
 use App\Models\KhungGio;
 use App\Models\SanBong;
 use App\Models\ThongBao;
-use App\Models\BaiDangTimNguoi;
 
 class DatSanController extends Controller
 {
@@ -232,18 +231,7 @@ class DatSanController extends Controller
     {
         $user = NguoiDung::find(Auth::id() ?? $request->user()->ID);
 
-        $danhSach = DatSan::with([
-                            'sanBong.cumSan',
-                            'khungGio',
-                            'giaiDau',
-                            'danhGia',
-                            'baiDangTimNguoi',
-                            'baiDangTimNguois' => function ($q) {
-                                $q->whereIn('TrangThai', ['DangTim', 'DaGhep'])
-                                ->whereNotNull('ID_NguoiNhan')
-                                ->with('nguoiNhan:ID,HoTen,SoDienThoai');
-                            }
-                        ])
+        $danhSach = DatSan::with(['sanBong.cumSan', 'khungGio', 'giaiDau', 'danhGia'])
                         ->where('ID_NguoiDung', $user->ID)
                         ->orderBy('NgayDa', 'desc')
                         ->get();
@@ -255,7 +243,7 @@ class DatSanController extends Controller
     {
         $user = NguoiDung::find(Auth::id() ?? $request->user()->ID);
         
-        $datSan = DatSan::with('khungGio', 'sanBong.cumSan')->where('ID', $id)->where('ID_NguoiDung', $user->ID)->first();
+        $datSan = DatSan::with('khungGio', 'sanBong')->where('ID', $id)->where('ID_NguoiDung', $user->ID)->first();
 
         if (!$datSan) return response()->json(['success' => false, 'message' => 'Không tìm thấy lịch đặt!']);
         if ($datSan->ID_GiaiDau != null) return response()->json(['success' => false, 'message' => 'Đây là lịch đá giải. Vui lòng hủy theo toàn bộ giải đấu!']);
@@ -271,8 +259,6 @@ class DatSanController extends Controller
         try {
             $tienHoan = $datSan->TienCoc;
             $datSan->update(['TrangThai' => 'DaHuy']);
-
-            $this->huyKeoTheoDatSan($datSan, 'Chủ sân đã hủy lịch đặt sân');
 
             $soDuTruoc = $user->SoDuVi;
             $soDuSau = $soDuTruoc + $tienHoan;
@@ -503,10 +489,6 @@ class DatSanController extends Controller
                 'TrangThai'       => $request->trang_thai,
                 'ID_NhanVienXuLy' => $userDangNhap->ID
             ]);
-
-            if ($request->trang_thai === 'DaHuy') {
-                $this->huyKeoTheoDatSan($datSan, 'Lịch đặt sân đã được hủy tại quầy');
-            }
 
             // 2. KÍCH HOẠT AUTO-CHỐT GIẢI ĐẤU (Nếu có)
             if ($datSan->ID_GiaiDau != null) {
@@ -978,51 +960,6 @@ class DatSanController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect($frontendUrl . '?vnpay_status=error#fields-section');
-        }
-    }
-
-    /**
-     * Tự động hủy các bài đăng tìm đối/tuyển quân của vé bị hủy
-     * và gửi thông báo cho tất cả những người đã nhận kèo (kể cả khi SoLuongCan > 1)
-     */
-    private function huyKeoTheoDatSan($datSan, $lyDoText = 'Chủ sân đã hủy lịch đặt sân')
-    {
-        $cacBaiDang = BaiDangTimNguoi::where('ID_DatSan', $datSan->ID)
-            ->whereIn('TrangThai', ['DangTim', 'DaGhep'])
-            ->get();
-
-        if ($cacBaiDang->isEmpty()) {
-            return;
-        }
-
-        // Lấy danh sách tất cả ID người nhận kèo (loại bỏ null và trùng lặp)
-        $danhSachIdNguoiNhan = $cacBaiDang->pluck('ID_NguoiNhan')->filter()->unique();
-
-        // Chuyển toàn bộ bài đăng của vé này sang DaHuy
-        BaiDangTimNguoi::where('ID_DatSan', $datSan->ID)
-            ->whereIn('TrangThai', ['DangTim', 'DaGhep'])
-            ->update(['TrangThai' => 'DaHuy']);
-
-        if ($danhSachIdNguoiNhan->isNotEmpty()) {
-            $tenSan = $datSan->sanBong ? $datSan->sanBong->TenSan : 'Sân bóng';
-            $cumSan = ($datSan->sanBong && $datSan->sanBong->cumSan) ? $datSan->sanBong->cumSan->TenCumSan : '';
-            $gioDa  = $datSan->khungGio ? substr($datSan->khungGio->GioBatDau, 0, 5) . ' - ' . substr($datSan->khungGio->GioKetThuc, 0, 5) : '';
-            $ngayDa = Carbon::parse($datSan->NgayDa)->format('d/m/Y');
-
-            foreach ($danhSachIdNguoiNhan as $idNguoiNhan) {
-                ThongBao::create([
-                    'ID_NguoiDung' => $idNguoiNhan,
-                    'TieuDe'       => '⚠️ Kèo giao hữu đã bị hủy do hủy sân',
-                    'NoiDung'      => "Kèo bạn đã nhận tại {$tenSan} ({$cumSan}) lúc {$gioDa} ngày {$ngayDa} đã bị hủy ({$lyDoText}).",
-                    'LoaiThongBao' => 'DatSan',
-                    'DaDoc'        => 0,
-                    'NgayTao'      => Carbon::now('Asia/Ho_Chi_Minh')
-                ]);
-
-                try {
-                    broadcast(new \App\Events\UserDataUpdated($idNguoiNhan));
-                } catch (\Exception $e) {}
-            }
         }
     }
 }

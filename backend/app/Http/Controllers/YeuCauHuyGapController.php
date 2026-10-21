@@ -11,7 +11,6 @@ use App\Models\NguoiDung;
 use App\Models\GiaoDich;
 use App\Models\GiaiDau;
 use App\Models\ThongBao;
-use App\Models\BaiDangTimNguoi;
 
 class YeuCauHuyGapController extends Controller
 {
@@ -114,7 +113,7 @@ class YeuCauHuyGapController extends Controller
         
         DB::beginTransaction();
         try {
-            $yeuCau = YeuCauHuyGap::with(['datSan.sanBong.cumSan', 'datSan.khungGio'])->find($id);
+            $yeuCau = YeuCauHuyGap::with('datSan.sanBong')->find($id);
             if (!$yeuCau || $yeuCau->TrangThai !== 'ChoDuyet') {
                 return response()->json(['success' => false, 'message' => 'Yêu cầu không tồn tại hoặc đã được xử lý trước đó!']);
             }
@@ -178,38 +177,6 @@ class YeuCauHuyGapController extends Controller
                         'NoiDung'      => "Hoàn cọc hủy gấp: Sân " . $datSan->sanBong->TenSan . " (Admin phê duyệt)"
                     ]);
                     $user->update(['SoDuVi' => $soDuSau]);
-
-                    // Hủy bài đăng tìm người (nếu có) và thông báo cho tất cả người đã nhận kèo
-                    $cacBaiDang = BaiDangTimNguoi::where('ID_DatSan', $datSan->ID)
-                        ->whereIn('TrangThai', ['DangTim', 'DaGhep'])
-                        ->get();
-
-                    if ($cacBaiDang->isNotEmpty()) {
-                        $danhSachIdNguoiNhan = $cacBaiDang->pluck('ID_NguoiNhan')->filter()->unique();
-
-                        BaiDangTimNguoi::where('ID_DatSan', $datSan->ID)
-                            ->whereIn('TrangThai', ['DangTim', 'DaGhep'])
-                            ->update(['TrangThai' => 'DaHuy']);
-
-                        $tenSanHuy = $datSan->sanBong->TenSan ?? 'Sân bóng';
-                        $cumSanHuy = $datSan->sanBong->cumSan->TenCumSan ?? '';
-                        $gioDaHuy  = $datSan->khungGio ? substr($datSan->khungGio->GioBatDau, 0, 5) . ' - ' . substr($datSan->khungGio->GioKetThuc, 0, 5) : '';
-                        $ngayDaHuy = \Carbon\Carbon::parse($datSan->NgayDa)->format('d/m/Y');
-
-                        foreach ($danhSachIdNguoiNhan as $idNguoiNhan) {
-                            ThongBao::create([
-                                'ID_NguoiDung' => $idNguoiNhan,
-                                'TieuDe'       => '⚠️ Kèo giao hữu đã bị hủy do chủ sân hủy lịch gấp',
-                                'NoiDung'      => "Kèo bạn đã nhận tại {$tenSanHuy} ({$cumSanHuy}) lúc {$gioDaHuy} ngày {$ngayDaHuy} đã bị hủy vì chủ sân có việc đột xuất và đã hủy lịch đặt sân.",
-                                'LoaiThongBao' => 'DatSan',
-                                'DaDoc'        => 0,
-                                'NgayTao'      => \Carbon\Carbon::now('Asia/Ho_Chi_Minh')
-                            ]);
-                            try {
-                                broadcast(new \App\Events\UserDataUpdated($idNguoiNhan));
-                            } catch (\Exception $e) {}
-                        }
-                    }
                 }
 
                 $tieuDeTB = "Yêu cầu hủy sân được phê duyệt";

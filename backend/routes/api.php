@@ -24,7 +24,6 @@ use App\Http\Controllers\LichLamViecController;
 use App\Http\Controllers\BanGiaoCaController;
 use App\Http\Controllers\BangLuongController;
 use App\Http\Controllers\DanhGiaController;
-use App\Http\Controllers\BaiDangTimNguoiController;
 use App\Services\ChromaDBService;
 
 Route::get('/seed-chromadb', function (ChromaDBService $chroma) {
@@ -49,7 +48,6 @@ Route::get('/khung-gio', [KhungGioController::class, 'index']);
 Route::get('/dat-san/da-dat', [DatSanController::class, 'layDanhSachDaDat']);
 Route::get('/phuong', [PhuongController::class, 'index']);
 Route::get('/loai-san', [LoaiSanController::class, 'index']);
-Route::get('/cap-keo', [BaiDangTimNguoiController::class, 'danhSach']);
 Route::get('/vnpay-return', [VNPayController::class, 'vnpayReturn']);
 Route::post('/dat-san-guest/thanh-toan', [DatSanController::class, 'thanhToanGuest']);
 Route::get('/dat-san-guest/vnpay-return', [DatSanController::class, 'vnpayReturnGuest']);
@@ -76,10 +74,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/dat-san', [DatSanController::class, 'datSan']);
     Route::get('/dat-san/cua-toi', [DatSanController::class, 'layDanhSachCuaToi']);
     Route::put('/dat-san/{id}/huy', [DatSanController::class, 'huySanPhongTrao']);
-
-    Route::post('/cap-keo', [BaiDangTimNguoiController::class, 'taoBaiDang']);
-    Route::put('/cap-keo/{id}/nhan-keo', [BaiDangTimNguoiController::class, 'nhanKeo']);
-    Route::delete('/cap-keo/{id}', [BaiDangTimNguoiController::class, 'huyBaiDang']);
     
     Route::post('/yeu-cau-huy-gap', [YeuCauHuyGapController::class, 'taoYeuCau']);
     Route::get('/yeu-cau-huy-gap/cua-toi', [YeuCauHuyGapController::class, 'layDanhSachCuaToi']);
