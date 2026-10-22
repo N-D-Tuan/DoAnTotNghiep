@@ -23,99 +23,88 @@ class DashboardController extends Controller
         $today = Carbon::today();
         $userDangNhap = auth()->user();
         $isQuanLy = $userDangNhap->VaiTro === 'QuanLySan';
-        
-        $idCumSan = $isQuanLy ? $userDangNhap->ID_CumSan : ($request->id_cum_san ?? 'all');
+
+        $idCumSan = $isQuanLy ? $userDangNhap->MaCumSan : ($request->input('ma_cum_san', $request->input('id_cum_san', 'all')));
         $timeFilter = $request->time_filter ?? 'hom_nay';
 
-        // =========================================================
-        // 1. DOANH THU HÔM NAY (Đặt sân + Bán hàng + Phiếu Thu phát sinh trong ca)
-        // =========================================================
+        // 1. DOANH THU HÔM NAY (Chỉ tính các trận HoanThanh lấy TongTien, KhongDen lấy TienCoc; các trận DaHuy tự động bị loại trừ)
         $queryDatSansHomNay = DatSan::whereDate('NgayDa', $today)->whereIn('TrangThai', ['HoanThanh', 'KhongDen']);
         $queryBanHangHomNay = HoaDonBanHang::whereDate('NgayTao', $today);
         $queryPhieuThuHomNay = DB::table('ChiPhiPhatSinh')->whereDate('ThoiGian', $today)->where('SoTien', '<', 0);
-        
+
         if ($idCumSan !== 'all') {
-            $queryDatSansHomNay->whereHas('sanBong', function($q) use ($idCumSan) { $q->where('ID_CumSan', $idCumSan); });
-            $queryBanHangHomNay->where('ID_CumSan', $idCumSan);
-            $queryPhieuThuHomNay->whereIn('ID_BanGiaoCa', function($q) use ($idCumSan) {
-                $q->select('ID')->from('BanGiaoCa')->where('ID_CumSan', $idCumSan);
+            $queryDatSansHomNay->whereHas('sanBong', function($q) use ($idCumSan) { $q->where('MaCumSan', $idCumSan); });
+            $queryBanHangHomNay->where('MaCumSan', $idCumSan);
+            $queryPhieuThuHomNay->whereIn('MaBanGiaoCa', function($q) use ($idCumSan) {
+                $q->select('MaBanGiaoCa')->from('BanGiaoCa')->where('MaCumSan', $idCumSan);
             });
         }
-        
+
         $doanhThuHomNay = 0;
         foreach ($queryDatSansHomNay->get() as $ds) {
-            $doanhThuHomNay += ($ds->TrangThai === 'HoanThanh' || !is_null($ds->ID_GiaiDau)) ? $ds->TongTien : $ds->TienCoc;
+            $doanhThuHomNay += ($ds->TrangThai === 'HoanThanh') ? $ds->TongTien : $ds->TienCoc;
         }
         $doanhThuHomNay += $queryBanHangHomNay->sum('TongTien');
         $doanhThuHomNay += abs($queryPhieuThuHomNay->sum('SoTien'));
 
-        // =========================================================
         // 2. TỔNG BOOKING ĐÁ TRONG HÔM NAY
-        // =========================================================
         $queryBookingHoanThanh = DatSan::where('TrangThai', 'HoanThanh')->whereDate('NgayDa', $today);
         $queryBookingTong = DatSan::whereIn('TrangThai', ['HoanThanh', 'KhongDen'])->whereDate('NgayDa', $today);
 
         if ($idCumSan !== 'all') {
-            $queryBookingHoanThanh->whereHas('sanBong', function($q) use ($idCumSan) { $q->where('ID_CumSan', $idCumSan); });
-            $queryBookingTong->whereHas('sanBong', function($q) use ($idCumSan) { $q->where('ID_CumSan', $idCumSan); });
+            $queryBookingHoanThanh->whereHas('sanBong', function($q) use ($idCumSan) { $q->where('MaCumSan', $idCumSan); });
+            $queryBookingTong->whereHas('sanBong', function($q) use ($idCumSan) { $q->where('MaCumSan', $idCumSan); });
         }
 
         $bookingHoanThanhHomNay = $queryBookingHoanThanh->count();
         $bookingHomNay = $queryBookingTong->count();
 
-        // =========================================================
         // 3. TỔNG KHÁCH HÀNG
-        // =========================================================
         if ($isQuanLy) {
             $tongKhachHang = DatSan::whereHas('sanBong', function($q) use ($idCumSan) {
-                                        $q->where('ID_CumSan', $idCumSan);
+                                        $q->where('MaCumSan', $idCumSan);
                                     })
-                                    ->distinct('ID_NguoiDung')
-                                    ->count('ID_NguoiDung');
+                                    ->whereNotNull('MaNguoiDung')
+                                    ->distinct('MaNguoiDung')
+                                    ->count('MaNguoiDung');
         } else {
             $tongKhachHang = NguoiDung::where('VaiTro', 'KhachHang')->count();
         }
 
-        // =========================================================
-        // 4. SỐ YÊU CẦU ĐANG CHỜ DUYỆT (Giải đấu + Hủy sân + Lương chờ xử lý)
-        // =========================================================
+        // 4. SỐ YÊU CẦU ĐANG CHỜ DUYỆT
         $queryGiaiDau = GiaiDau::where('TrangThai', 'ChoDuyet');
         $queryHuyGap = YeuCauHuyGap::where('TrangThai', 'ChoDuyet');
         $queryBangLuongCho = BangLuong::whereIn('TrangThai', ['KhieuNai', 'ChoThanhToan']);
 
         if ($idCumSan !== 'all') {
-            $queryGiaiDau->where('ID_CumSan', $idCumSan);
+            $queryGiaiDau->where('MaCumSan', $idCumSan);
             $queryHuyGap->whereHas('datSan.sanBong', function($q) use ($idCumSan) {
-                $q->where('ID_CumSan', $idCumSan);
+                $q->where('MaCumSan', $idCumSan);
             });
             $queryBangLuongCho->whereHas('nhanVien', function($q) use ($idCumSan) {
-                $q->where('ID_CumSan', $idCumSan);
+                $q->where('MaCumSan', $idCumSan);
             });
         }
 
         $tongChoDuyet = $queryGiaiDau->count() + $queryHuyGap->count() + $queryBangLuongCho->count();
 
-        // =========================================================
         // 5. SỐ SÂN QUÊN CHỐT
-        // =========================================================
         $queryQuenChot = DatSan::where('TrangThai', 'DaCoc')->whereDate('NgayDa', '<', $today);
         if ($isQuanLy) {
-            $queryQuenChot->whereHas('sanBong', function($q) use ($idCumSan) { $q->where('ID_CumSan', $idCumSan); });
+            $queryQuenChot->whereHas('sanBong', function($q) use ($idCumSan) { $q->where('MaCumSan', $idCumSan); });
         }
         $soSanQuenChot = $queryQuenChot->count();
 
-        // =========================================================
-        // 6. BIỂU ĐỒ DOANH THU & CHI PHÍ (Đã gồm Nhập hàng + Thu/Chi ca + Lương NV)
-        // =========================================================
+        // 6. BIỂU ĐỒ DOANH THU & CHI PHÍ
         $doanhThuChart = [];
-        $chiPhiChart = []; 
-        
+        $chiPhiChart = [];
+
         if ($timeFilter === 'hom_nay' || $timeFilter === 'hom_truoc') {
             $targetDate = $timeFilter === 'hom_nay' ? Carbon::today() : Carbon::yesterday();
-            
+
             for ($i = 0; $i < 24; $i++) {
                 $timeKey = sprintf("%02d:00", $i);
-                $doanhThuChart[$timeKey] = 0; 
+                $doanhThuChart[$timeKey] = 0;
                 $chiPhiChart[$timeKey] = 0;
             }
 
@@ -126,21 +115,21 @@ class DashboardController extends Controller
             $queryBL = BangLuong::where('TrangThai', 'DaThanhToan')->whereDate('NgayThanhToan', $targetDate);
 
             if ($idCumSan !== 'all') {
-                $queryDS->whereHas('sanBong', function($q) use ($idCumSan) { $q->where('ID_CumSan', $idCumSan); });
-                $queryBH->where('ID_CumSan', $idCumSan);
-                $queryPN->where('ID_CumSan', $idCumSan);
-                $queryCP->whereIn('ID_BanGiaoCa', function($q) use ($idCumSan) {
-                    $q->select('ID')->from('BanGiaoCa')->where('ID_CumSan', $idCumSan);
+                $queryDS->whereHas('sanBong', function($q) use ($idCumSan) { $q->where('MaCumSan', $idCumSan); });
+                $queryBH->where('MaCumSan', $idCumSan);
+                $queryPN->where('MaCumSan', $idCumSan);
+                $queryCP->whereIn('MaBanGiaoCa', function($q) use ($idCumSan) {
+                    $q->select('MaBanGiaoCa')->from('BanGiaoCa')->where('MaCumSan', $idCumSan);
                 });
                 $queryBL->whereHas('nhanVien', function($q) use ($idCumSan) {
-                    $q->where('ID_CumSan', $idCumSan);
+                    $q->where('MaCumSan', $idCumSan);
                 });
             }
 
             foreach ($queryDS->get() as $ds) {
                 if ($ds->khungGio) {
                     $hour = substr($ds->khungGio->GioBatDau, 0, 2) . ':00';
-                    $dt = ($ds->TrangThai === 'HoanThanh' || !is_null($ds->ID_GiaiDau)) ? $ds->TongTien : $ds->TienCoc;
+                    $dt = ($ds->TrangThai === 'HoanThanh') ? $ds->TongTien : $ds->TienCoc;
                     if (isset($doanhThuChart[$hour])) $doanhThuChart[$hour] += $dt;
                 }
             }
@@ -160,10 +149,8 @@ class DashboardController extends Controller
                 if ($cp->ThoiGian) {
                     $hour = Carbon::parse($cp->ThoiGian)->format('H') . ':00';
                     if ($cp->SoTien < 0) {
-                        // Số âm là Phiếu Thu phát sinh -> Cộng vào Doanh thu
                         if (isset($doanhThuChart[$hour])) $doanhThuChart[$hour] += abs($cp->SoTien);
                     } else {
-                        // Số dương là Phiếu Chi phát sinh -> Cộng vào Chi phí
                         if (isset($chiPhiChart[$hour])) $chiPhiChart[$hour] += $cp->SoTien;
                     }
                 }
@@ -190,41 +177,41 @@ class DashboardController extends Controller
                 $queryPhieuThu = DB::table('ChiPhiPhatSinh')->whereYear('ThoiGian', $today->year)->whereMonth('ThoiGian', $i)->where('SoTien', '<', 0);
                 $queryPhieuChi = DB::table('ChiPhiPhatSinh')->whereYear('ThoiGian', $today->year)->whereMonth('ThoiGian', $i)->where('SoTien', '>', 0);
                 $queryBL = BangLuong::where('TrangThai', 'DaThanhToan')->whereYear('NgayThanhToan', $today->year)->whereMonth('NgayThanhToan', $i);
-                
+
                 if ($idCumSan !== 'all') {
-                    $queryDS->whereHas('sanBong', function($q) use ($idCumSan) { $q->where('ID_CumSan', $idCumSan); });
-                    $queryBH->where('ID_CumSan', $idCumSan);
-                    $queryPN->where('ID_CumSan', $idCumSan);
-                    $queryPhieuThu->whereIn('ID_BanGiaoCa', function($q) use ($idCumSan) {
-                        $q->select('ID')->from('BanGiaoCa')->where('ID_CumSan', $idCumSan);
+                    $queryDS->whereHas('sanBong', function($q) use ($idCumSan) { $q->where('MaCumSan', $idCumSan); });
+                    $queryBH->where('MaCumSan', $idCumSan);
+                    $queryPN->where('MaCumSan', $idCumSan);
+                    $queryPhieuThu->whereIn('MaBanGiaoCa', function($q) use ($idCumSan) {
+                        $q->select('MaBanGiaoCa')->from('BanGiaoCa')->where('MaCumSan', $idCumSan);
                     });
-                    $queryPhieuChi->whereIn('ID_BanGiaoCa', function($q) use ($idCumSan) {
-                        $q->select('ID')->from('BanGiaoCa')->where('ID_CumSan', $idCumSan);
+                    $queryPhieuChi->whereIn('MaBanGiaoCa', function($q) use ($idCumSan) {
+                        $q->select('MaBanGiaoCa')->from('BanGiaoCa')->where('MaCumSan', $idCumSan);
                     });
                     $queryBL->whereHas('nhanVien', function($q) use ($idCumSan) {
-                        $q->where('ID_CumSan', $idCumSan);
+                        $q->where('MaCumSan', $idCumSan);
                     });
                 }
 
                 $dt = 0;
                 foreach ($queryDS->get() as $ds) {
-                    $dt += ($ds->TrangThai === 'HoanThanh' || !is_null($ds->ID_GiaiDau)) ? $ds->TongTien : $ds->TienCoc;
+                    $dt += ($ds->TrangThai === 'HoanThanh') ? $ds->TongTien : $ds->TienCoc;
                 }
                 $dt += $queryBH->sum('TongTien') + abs($queryPhieuThu->sum('SoTien'));
-                
+
                 $chiLuong = 0;
                 foreach ($queryBL->get() as $bl) {
                     $chiLuong += max(0, $bl->TongTienLuong + $bl->TongTienThuong - $bl->TongTienPhat);
                 }
                 $cp = $queryPN->sum('TongTienThanhToan') + $queryPhieuChi->sum('SoTien') + $chiLuong;
-                
+
                 $doanhThuChart[] = ['ngay' => "Tháng $i", 'doanh_thu' => $dt, 'chi_phi' => $cp];
             }
         } else {
             $days = $timeFilter === '30_ngay' ? 30 : 7;
             for ($i = $days - 1; $i >= 0; $i--) {
                 $date = Carbon::today()->subDays($i);
-                
+
                 $queryDS = DatSan::whereDate('NgayDa', $date)->whereIn('TrangThai', ['HoanThanh', 'KhongDen']);
                 $queryBH = HoaDonBanHang::whereDate('NgayTao', $date);
                 $queryPN = DB::table('PhieuNhapHang')->whereDate('NgayNhap', $date);
@@ -233,77 +220,67 @@ class DashboardController extends Controller
                 $queryBL = BangLuong::where('TrangThai', 'DaThanhToan')->whereDate('NgayThanhToan', $date);
 
                 if ($idCumSan !== 'all') {
-                    $queryDS->whereHas('sanBong', function($q) use ($idCumSan) { $q->where('ID_CumSan', $idCumSan); });
-                    $queryBH->where('ID_CumSan', $idCumSan);
-                    $queryPN->where('ID_CumSan', $idCumSan);
-                    $queryPhieuThu->whereIn('ID_BanGiaoCa', function($q) use ($idCumSan) {
-                        $q->select('ID')->from('BanGiaoCa')->where('ID_CumSan', $idCumSan);
+                    $queryDS->whereHas('sanBong', function($q) use ($idCumSan) { $q->where('MaCumSan', $idCumSan); });
+                    $queryBH->where('MaCumSan', $idCumSan);
+                    $queryPN->where('MaCumSan', $idCumSan);
+                    $queryPhieuThu->whereIn('MaBanGiaoCa', function($q) use ($idCumSan) {
+                        $q->select('MaBanGiaoCa')->from('BanGiaoCa')->where('MaCumSan', $idCumSan);
                     });
-                    $queryPhieuChi->whereIn('ID_BanGiaoCa', function($q) use ($idCumSan) {
-                        $q->select('ID')->from('BanGiaoCa')->where('ID_CumSan', $idCumSan);
+                    $queryPhieuChi->whereIn('MaBanGiaoCa', function($q) use ($idCumSan) {
+                        $q->select('MaBanGiaoCa')->from('BanGiaoCa')->where('MaCumSan', $idCumSan);
                     });
                     $queryBL->whereHas('nhanVien', function($q) use ($idCumSan) {
-                        $q->where('ID_CumSan', $idCumSan);
+                        $q->where('MaCumSan', $idCumSan);
                     });
                 }
 
                 $dt = 0;
                 foreach ($queryDS->get() as $ds) {
-                    $dt += ($ds->TrangThai === 'HoanThanh' || !is_null($ds->ID_GiaiDau)) ? $ds->TongTien : $ds->TienCoc;
+                    $dt += ($ds->TrangThai === 'HoanThanh') ? $ds->TongTien : $ds->TienCoc;
                 }
                 $dt += $queryBH->sum('TongTien') + abs($queryPhieuThu->sum('SoTien'));
-                
+
                 $chiLuong = 0;
                 foreach ($queryBL->get() as $bl) {
                     $chiLuong += max(0, $bl->TongTienLuong + $bl->TongTienThuong - $bl->TongTienPhat);
                 }
                 $cp = $queryPN->sum('TongTienThanhToan') + $queryPhieuChi->sum('SoTien') + $chiLuong;
-                
+
                 $doanhThuChart[] = ['ngay' => $date->format('d/m'), 'doanh_thu' => $dt, 'chi_phi' => $cp];
             }
         }
 
-        // =========================================================
-        // 7. THỐNG KÊ HIỆU SUẤT NHÂN VIÊN CHỐT SÂN THEO NGÀY TRONG THÁNG
-        // (Chỉ tính VaiTro = 'NhanVien', có ID_NhanVienXuLy, TrangThai in ['HoanThanh', 'KhongDen'])
-        // =========================================================
-        $staffMonthYear = $request->staff_month ?? $today->format('m-Y'); // Định dạng MM-YYYY
+        // 7. THỐNG KÊ HIỆU SUẤT NHÂN VIÊN CHỐT SÂN
+        $staffMonthYear = $request->staff_month ?? $today->format('m-Y');
         $parts = explode('-', $staffMonthYear);
         $filterMonth = isset($parts[0]) ? (int) $parts[0] : $today->month;
         $filterYear  = isset($parts[1]) ? (int) $parts[1] : $today->year;
 
-        // Cụm sân lọc riêng cho bảng nhân viên (Quản lý luôn cố định theo cụm sân của mình)
-        $staffCumSan = $isQuanLy ? $userDangNhap->ID_CumSan : ($request->staff_cum_san ?? $idCumSan);
-
+        $staffCumSan = $isQuanLy ? $userDangNhap->MaCumSan : ($request->staff_cum_san ?? $idCumSan);
         $daysInMonth = Carbon::createFromDate($filterYear, $filterMonth, 1)->daysInMonth;
 
-        // 7.1. Lấy danh sách Nhân viên thuộc diện thống kê
-        $queryStaffs = NguoiDung::with('cumSan')
-            ->where('VaiTro', 'NhanVien');
-
+        $queryStaffs = NguoiDung::with('cumSan')->where('VaiTro', 'NhanVien');
         if ($staffCumSan !== 'all') {
-            $queryStaffs->where('ID_CumSan', $staffCumSan);
+            $queryStaffs->where('MaCumSan', $staffCumSan);
         }
-        $staffList = $queryStaffs->orderBy('ID_CumSan', 'asc')->orderBy('HoTen', 'asc')->get();
+        $staffList = $queryStaffs->orderBy('MaCumSan', 'asc')->orderBy('HoTen', 'asc')->get();
 
-        // 7.2. Lấy toàn bộ lượt đặt sân đã chốt (HoanThanh, KhongDen) trong tháng đó bởi Nhân viên
         $queryChotSan = DatSan::whereYear('NgayDa', $filterYear)
             ->whereMonth('NgayDa', $filterMonth)
             ->whereIn('TrangThai', ['HoanThanh', 'KhongDen'])
-            ->whereNotNull('ID_NhanVienXuLy')
+            ->whereNotNull('MaNhanVienXuLy')
             ->whereHas('nhanVienXuLy', function ($q) {
                 $q->where('VaiTro', 'NhanVien');
             });
 
         if ($staffCumSan !== 'all') {
             $queryChotSan->whereHas('sanBong', function ($q) use ($staffCumSan) {
-                $q->where('ID_CumSan', $staffCumSan);
+                $q->where('MaCumSan', $staffCumSan);
             });
         }
 
-        $chotSanRecords = $queryChotSan->get(['ID', 'ID_NhanVienXuLy', 'NgayDa', 'TrangThai']);
+        $chotSanRecords = $queryChotSan->get(['MaDatSan', 'MaNhanVienXuLy', 'NgayDa', 'TrangThai']);
 
-        // 7.3. Gom nhóm dữ liệu theo từng nhân viên và từng ngày trong tháng
         $thongKeNhanVien = [];
         foreach ($staffList as $nv) {
             $chiTietNgay = [];
@@ -315,8 +292,9 @@ class DashboardController extends Controller
                 ];
             }
 
-            $thongKeNhanVien[$nv->ID] = [
-                'id_nhan_vien'    => $nv->ID,
+            $thongKeNhanVien[$nv->MaNguoiDung] = [
+                'id_nhan_vien'    => $nv->MaNguoiDung,
+                'ma_nhan_vien'    => $nv->MaNguoiDung,
                 'ho_ten'          => $nv->HoTen,
                 'so_dien_thoai'   => $nv->SoDienThoai,
                 'ten_cum_san'     => $nv->cumSan ? $nv->cumSan->TenCumSan : 'Chưa phân bổ',
@@ -328,7 +306,7 @@ class DashboardController extends Controller
         }
 
         foreach ($chotSanRecords as $rec) {
-            $nvId = $rec->ID_NhanVienXuLy;
+            $nvId = $rec->MaNhanVienXuLy;
             if (!isset($thongKeNhanVien[$nvId])) continue;
 
             $dayNum = (int) Carbon::parse($rec->NgayDa)->format('j');
@@ -349,14 +327,14 @@ class DashboardController extends Controller
         return response()->json([
             'success' => true,
             'data' => [
-                'doanh_thu_hom_nay'         => $doanhThuHomNay,
-                'booking_hom_nay'           => $bookingHomNay,
-                'booking_hoan_thanh_hom_nay'=> $bookingHoanThanhHomNay,
-                'tong_khach_hang'           => $tongKhachHang,
-                'cho_duyet'                 => $tongChoDuyet,
-                'so_san_quen_chot'          => $soSanQuenChot,
-                'chart'                     => $doanhThuChart,
-                'staff_performance'         => [
+                'doanh_thu_hom_nay'          => $doanhThuHomNay,
+                'booking_hom_nay'            => $bookingHomNay,
+                'booking_hoan_thanh_hom_nay' => $bookingHoanThanhHomNay,
+                'tong_khach_hang'            => $tongKhachHang,
+                'cho_duyet'                  => $tongChoDuyet,
+                'so_san_quen_chot'           => $soSanQuenChot,
+                'chart'                      => $doanhThuChart,
+                'staff_performance'          => [
                     'thang_nam'     => sprintf('%02d-%04d', $filterMonth, $filterYear),
                     'days_in_month' => $daysInMonth,
                     'list'          => array_values($thongKeNhanVien)

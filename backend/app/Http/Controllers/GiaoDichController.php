@@ -13,16 +13,15 @@ class GiaoDichController extends Controller
 {
     public function layGiaoDichCuaToi(Request $request)
     {
-        $userId = Auth::id() ?? $request->user()->ID;
+        $userId = Auth::id() ?? $request->user()->MaNguoiDung;
 
-        // Lấy tất cả giao dịch, sắp xếp mới nhất lên đầu
-        $giaoDich = GiaoDich::where('ID_NguoiDung', $userId)
+        $giaoDich = GiaoDich::where('MaNguoiDung', $userId)
             ->orderBy('NgayTao', 'desc')
             ->get();
 
         return response()->json([
             'success' => true,
-            'data' => $giaoDich
+            'data'    => $giaoDich
         ]);
     }
 
@@ -31,8 +30,8 @@ class GiaoDichController extends Controller
         $request->validate([
             'so_tien'       => 'required|numeric|min:50000',
             'ngan_hang'     => 'required|string|max:100',
-            'so_tai_khoan'  => 'required|string|max:50',
-            'chu_tai_khoan' => 'required|string|max:100',
+            'so_tai_khoan'  => 'required|string|max:100',
+            'chu_tai_khoan' => 'required|string|max:50',
         ], [
             'so_tien.required'       => 'Vui lòng nhập số tiền cần rút!',
             'so_tien.min'            => 'Số tiền rút tối thiểu là 50.000đ!',
@@ -41,12 +40,11 @@ class GiaoDichController extends Controller
             'chu_tai_khoan.required' => 'Vui lòng nhập tên chủ tài khoản!',
         ]);
 
-        $userId = Auth::id() ?? $request->user()->ID;
+        $userId = Auth::id() ?? $request->user()->MaNguoiDung;
 
         DB::beginTransaction();
         try {
-            // Khóa dòng user để chống xung đột số dư
-            $user = NguoiDung::where('ID', $userId)->lockForUpdate()->first();
+            $user = NguoiDung::where('MaNguoiDung', $userId)->lockForUpdate()->first();
 
             if (!$user) {
                 DB::rollBack();
@@ -66,28 +64,33 @@ class GiaoDichController extends Controller
             $soDuTruoc = $user->SoDuVi;
             $soDuSau = $soDuTruoc - $soTienRut;
 
-            // 1. Trừ tiền trực tiếp trong ví
-            $user->update(['SoDuVi' => $soDuSau]);
-
             $nganHang = trim($request->ngan_hang);
             $stk = trim($request->so_tai_khoan);
             $chuTk = mb_strtoupper(trim($request->chu_tai_khoan), 'UTF-8');
 
+            // 1. Trừ tiền trực tiếp trong ví + Lưu thông tin ngân hàng mặc định cho user
+            $user->update([
+                'SoDuVi'      => $soDuSau,
+                'TenNganHang' => $nganHang,
+                'STKNganHang' => $stk,
+                'TenTaiKhoan' => $chuTk
+            ]);
+
             // 2. Tạo bản ghi Giao dịch
             GiaoDich::create([
-                'ID_NguoiDung'    => $user->ID,
-                'ID_NhanVienXuLy' => null,
-                'LoaiGiaoDich'    => 'RutTien',
-                'DongTien'        => 'Tru',
-                'SoTien'          => $soTienRut,
-                'SoDuTruoc'       => $soDuTruoc,
-                'SoDuSau'         => $soDuSau,
-                'NoiDung'         => "Rút tiền về {$nganHang} - STK: {$stk} ({$chuTk})"
+                'MaNguoiDung'    => $user->MaNguoiDung,
+                'MaNhanVienXuLy' => null,
+                'LoaiGiaoDich'   => 'RutTien',
+                'DongTien'       => 'Tru',
+                'SoTien'         => $soTienRut,
+                'SoDuTruoc'      => $soDuTruoc,
+                'SoDuSau'        => $soDuSau,
+                'NoiDung'        => "Rút tiền về {$nganHang} - STK: {$stk} ({$chuTk})"
             ]);
 
             // 3. Tạo thông báo cho khách hàng
             ThongBao::create([
-                'ID_NguoiDung' => $user->ID,
+                'MaNguoiDung'  => $user->MaNguoiDung,
                 'TieuDe'       => 'Rút tiền thành công',
                 'NoiDung'      => 'Bạn đã rút thành công ' . number_format($soTienRut, 0, ',', '.') . "đ từ ví về tài khoản {$nganHang} - {$stk}.",
                 'LoaiThongBao' => 'ViTien'
@@ -95,7 +98,7 @@ class GiaoDichController extends Controller
 
             DB::commit();
 
-            broadcast(new \App\Events\UserDataUpdated($user->ID))->toOthers();
+            broadcast(new \App\Events\UserDataUpdated($user->MaNguoiDung))->toOthers();
             broadcast(new \App\Events\AdminDataUpdated())->toOthers();
 
             return response()->json([

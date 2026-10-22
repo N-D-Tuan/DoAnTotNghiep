@@ -3,21 +3,29 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\GeneratesCustomId;
 
 class LoaiSan extends Model
 {
+    use GeneratesCustomId;
+
     protected $table = 'LoaiSan';
-    protected $primaryKey = 'ID';
+    protected $primaryKey = 'MaLoaiSan';
+    protected $idPrefix = 'LS';
     public $timestamps = false;
-    protected $fillable = ['TenLoaiSan'];
+
+    protected $fillable = [
+        'MaLoaiSan',
+        'TenLoaiSan'
+    ];
 
     public function sanBongs()
     {
-        return $this->hasMany(SanBong::class, 'ID_LoaiSan', 'ID');
+        return $this->hasMany(SanBong::class, 'MaLoaiSan', 'MaLoaiSan');
     }
 
     public function giaTiens()
     {
-        return $this->hasMany(GiaTien::class, 'ID_LoaiSan', 'ID');
+        return $this->hasMany(GiaTien::class, 'MaLoaiSan', 'MaLoaiSan');
     }
 }

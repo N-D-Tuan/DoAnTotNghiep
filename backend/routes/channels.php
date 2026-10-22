@@ -5,8 +5,9 @@ use Illuminate\Support\Facades\Broadcast;
 Broadcast::routes(['middleware' => ['auth:sanctum']]);
 
 Broadcast::channel('user.{id}', function ($user, $id) {
-    return (int) $user->ID === (int) $id; 
+    return (string) $user->MaNguoiDung === (string) $id;
 });
+
 Broadcast::channel('admin-notifications', function ($user) {
     return in_array($user->VaiTro, ['Admin', 'QuanLySan']);
 });

@@ -14,31 +14,35 @@ class CumSanController extends Controller
         $cumSans = CumSan::with('phuong')
             ->withCount('danhGias')
             ->withAvg('danhGias', 'SoSao')
-            ->withTrashed()
             ->get();
+
         return response()->json(['success' => true, 'data' => $cumSans]);
     }
 
     // 2. Thêm mới Cụm Sân
     public function store(Request $request)
     {
+        $maPhuong = $request->input('MaPhuong', $request->input('ID_Phuong'));
+        $request->merge(['MaPhuong' => $maPhuong]);
+
         $validated = $request->validate([
-            'ID_Phuong'  => 'required|exists:Phuong,ID',
+            'MaPhuong'   => 'required|exists:Phuong,MaPhuong',
             'TenCumSan'  => 'required|string|max:255',
             'DiaChi'     => 'required|string|max:255',
             'ViDo'       => 'required|numeric',
             'KinhDo'     => 'required|numeric',
             'GioMoCua'   => 'required|date_format:H:i',
             'GioDongCua' => 'required|date_format:H:i',
+            'TrangThai'  => 'nullable|in:HoatDong,BaoTri',
             'HinhAnh'    => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048'
         ]);
 
         if ($request->hasFile('HinhAnh')) {
-            // Lưu file vào public/cumsan
             $path = $request->file('HinhAnh')->store('cumsan', 'public');
-            // Cập nhật lại đường dẫn để lưu vào Database
-            $validated['HinhAnh'] = '/storage/' . $path; 
+            $validated['HinhAnh'] = '/storage/' . $path;
         }
+
+        $validated['TrangThai'] = $validated['TrangThai'] ?? 'HoatDong';
 
         $cumSan = CumSan::create($validated);
         return response()->json(['success' => true, 'message' => 'Thêm Cụm Sân thành công!', 'data' => $cumSan], 201);
@@ -47,37 +51,39 @@ class CumSanController extends Controller
     // 3. Cập nhật Cụm Sân
     public function update(Request $request, $id)
     {
-        $cumSan = CumSan::withTrashed()->find($id);;
+        $cumSan = CumSan::find($id);
         if (!$cumSan) {
             return response()->json(['success' => false, 'message' => 'Không tìm thấy cụm sân!'], 404);
         }
 
+        $maPhuong = $request->input('MaPhuong', $request->input('ID_Phuong'));
+        $request->merge(['MaPhuong' => $maPhuong]);
+
         $validated = $request->validate([
-            'ID_Phuong'  => 'required|exists:Phuong,ID',
+            'MaPhuong'   => 'required|exists:Phuong,MaPhuong',
             'TenCumSan'  => 'required|string|max:255',
             'DiaChi'     => 'required|string|max:255',
             'ViDo'       => 'required|numeric',
             'KinhDo'     => 'required|numeric',
             'GioMoCua'   => 'required|date_format:H:i',
             'GioDongCua' => 'required|date_format:H:i',
+            'TrangThai'  => 'nullable|in:HoatDong,BaoTri',
             'HinhAnh'    => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048'
         ]);
 
         if ($request->hasFile('HinhAnh')) {
-            // Lưu file vào public/cumsan
             $path = $request->file('HinhAnh')->store('cumsan', 'public');
-            // Cập nhật lại đường dẫn để lưu vào Database
-            $validated['HinhAnh'] = '/storage/' . $path; 
+            $validated['HinhAnh'] = '/storage/' . $path;
         }
 
         $cumSan->update($validated);
 
         broadcast(new \App\Events\SystemDataUpdated())->toOthers();
-        
+
         return response()->json(['success' => true, 'message' => 'Cập nhật thành công!', 'data' => $cumSan]);
     }
 
-    // 4. Xóa Cụm Sân
+    // 4. Chuyển Cụm Sân sang trạng thái Bảo Trì (Thay cho xóa mềm cũ)
     public function destroy($id)
     {
         $cumSan = CumSan::find($id);
@@ -85,11 +91,11 @@ class CumSanController extends Controller
             return response()->json(['success' => false, 'message' => 'Không tìm thấy cụm sân!'], 404);
         }
 
-        $cumSan->delete();
+        $cumSan->update(['TrangThai' => 'BaoTri']);
 
         broadcast(new \App\Events\SystemDataUpdated());
 
-        return response()->json(['success' => true, 'message' => 'Xóa Cụm Sân thành công!']);
+        return response()->json(['success' => true, 'message' => 'Đã chuyển Cụm Sân sang trạng thái Bảo trì!']);
     }
 
     public function show($id)
@@ -97,25 +103,25 @@ class CumSanController extends Controller
         $cumSan = CumSan::with('phuong')
             ->withCount('danhGias')
             ->withAvg('danhGias', 'SoSao')
-            ->withTrashed()
             ->find($id);
 
         if (!$cumSan) return response()->json(['success' => false, 'message' => 'Không tìm thấy!']);
-        
+
         return response()->json(['success' => true, 'data' => $cumSan]);
     }
 
+    // 5. Mở hoạt động lại Cụm Sân (Chuyển từ BaoTri -> HoatDong)
     public function restore($id)
     {
-        $cumSan = CumSan::withTrashed()->find($id);
+        $cumSan = CumSan::find($id);
         if (!$cumSan) {
             return response()->json(['success' => false, 'message' => 'Không tìm thấy cụm sân!'], 404);
         }
 
-        $cumSan->restore(); // Xóa giá trị trong cột deleted_at (trở về NULL)
+        $cumSan->update(['TrangThai' => 'HoatDong']);
 
         broadcast(new \App\Events\SystemDataUpdated());
-        
-        return response()->json(['success' => true, 'message' => 'Khôi phục Cụm Sân thành công!']);
+
+        return response()->json(['success' => true, 'message' => 'Đã kích hoạt Cụm Sân hoạt động trở lại!']);
     }
 }

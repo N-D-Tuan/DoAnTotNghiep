@@ -163,7 +163,6 @@ function validateForm(form) {
         if (input.offsetParent === null) return;
 
         const group = input.closest('.form-group');
-
         const errorText = group ? group.querySelector('.error-text') : null;
 
         // Không được để trống
@@ -174,11 +173,14 @@ function validateForm(form) {
         }
 
         // Kiểm tra Email
-        if (
-            input.type === 'email' &&
-            !validateEmail(input.value)
-        ) {
+        if (input.type === 'email' && !validateEmail(input.value)) {
             showError(group, errorText, 'Email không hợp lệ.');
+            isValid = false;
+        }
+
+        // Kiểm tra định dạng VNeID / CCCD (9 - 12 chữ số)
+        if (input.id === 'vneid' && !/^[0-9]{9,12}$/.test(input.value.trim())) {
+            showError(group, errorText, 'Số VNeID / CCCD phải gồm từ 9 đến 12 chữ số.');
             isValid = false;
         }
 
@@ -216,6 +218,10 @@ function getEmptyMessage(input) {
 
     if (input.id === 'fullname') {
         return 'Vui lòng nhập họ tên';
+    }
+
+    if (input.id === 'vneid') {
+        return 'Vui lòng nhập số định danh VNeID / CCCD';
     }
 
     if (input.id === 'password') {
@@ -337,6 +343,7 @@ async function handleRegister(form) {
     const fullName = document.getElementById('fullname').value.trim();
     const phone = document.getElementById('phone').value.trim();
     const email = document.getElementById('email').value.trim();
+    const vneid = document.getElementById('vneid')?.value.trim() || null;
     const password = document.getElementById('password').value;
 
     const response = await fetch(
@@ -351,6 +358,7 @@ async function handleRegister(form) {
                 ho_ten: fullName,
                 so_dien_thoai: phone,
                 email: email,
+                vneid: vneid,
                 mat_khau: password
             })
         }
@@ -494,6 +502,16 @@ function showApiErrors(form, data) {
                 errorText,
                 errors.mat_khau[0]
             );
+        }
+    }
+
+    // VNeID
+    if (errors.vneid) {
+        const input = form.querySelector('#vneid');
+        if (input) {
+            const group = input.closest('.form-group');
+            const errorText = group.querySelector('.error-text');
+            showError(group, errorText, errors.vneid[0]);
         }
     }
 }

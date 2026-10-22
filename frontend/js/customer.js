@@ -801,7 +801,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                             <div class="pitch-grid">`;
                                     data.pitches.forEach(sb => {
                                         newHtml += `
-                                            <div class="pitch-card" onclick="renderSchedule(${currentClusterId}, '${currentClusterName}', ${sb.ID}, '${sb.TenSan}', ${data.id}, '${loaiSanName}')">
+                                            <div class="pitch-card" onclick="renderSchedule('${currentClusterId}', '${currentClusterName}', '${sb.ID}', '${sb.TenSan}', '${data.id}', '${loaiSanName}')">
                                                 <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                                                     <div>
                                                         <div class="pitch-name">${sb.TenSan}</div>
@@ -944,7 +944,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                             const slotIdParts = slotEl.getAttribute('data-slot-id').split('-');
                                             const dateVal = slotIdParts[2];
                                             const timeVal = `${slotIdParts[3]}-${slotIdParts[4]}`;
-                                            slotEl.setAttribute('onclick', `toggleSlot(this, ${currentClusterId}, '${currentClusterName}', ${currentPitchId}, '${currentPitchName}', '${dateVal}', '${timeVal}', ${actualPrice})`);
+                                            slotEl.setAttribute('onclick', "toggleSlot(this, '${currentClusterId}', '${currentClusterName}', '${currentPitchId}', '${currentPitchName}', '${dateVal}', '${timeVal}', ${actualPrice})")
                                         }
                                     });
                                 }
@@ -1766,7 +1766,7 @@ function filterClusters() {
         const reviewText = `(${cluster.total_reviews} đánh giá)`;
 
         gridHtml += `
-            <div class="cluster-card" onclick="renderPitches(${cluster.ID}, '${cluster.TenCumSan}', '${cluster.DiaChi}', '${cluster.GioMoCua}', '${cluster.GioDongCua}')">
+            <div class="cluster-card" onclick="renderPitches('${cluster.ID}', '${cluster.TenCumSan.replace(/'/g, "\\'")}', '${cluster.DiaChi.replace(/'/g, "\\'")}', '${cluster.GioMoCua}', '${cluster.GioDongCua}')">
                 <div class="cluster-img-box">
                     <img src="${imgUrl}" alt="${cluster.TenCumSan}" class="cluster-img">
                     <span class="cluster-ward-tag"><i class="fa-solid fa-location-dot" style="margin-right: 5px; color: #4ade80;"></i>${tenPhuong}</span>
@@ -1774,7 +1774,7 @@ function filterClusters() {
                 <div class="cluster-info">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px;">
                         <div class="cluster-name" style="margin-bottom: 0;">${cluster.TenCumSan}</div>
-                        <button type="button" onclick="event.stopPropagation(); openClusterReviewsModal(${cluster.ID}, '${cluster.TenCumSan.replace(/'/g, "\\'")}')" style="background: #fffbeb; border: 1px solid #fde68a; color: #b45309; padding: 3px 8px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;" title="Nhấn để xem các đánh giá">
+                        <button type="button" onclick="event.stopPropagation(); openClusterReviewsModal('${cluster.ID}', '${cluster.TenCumSan.replace(/'/g, "\\'")}')" style="background: #fffbeb; border: 1px solid #fde68a; color: #b45309; padding: 3px 8px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;" title="Nhấn để xem các đánh giá">
                             <i class="fa-solid fa-star" style="color: #f59e0b;"></i> ${avgStar} <span style="font-weight: 500; color: #92400e;">${reviewText}</span>
                         </button>
                     </div>
@@ -1880,14 +1880,23 @@ async function renderPitches(clusterId, clusterName, clusterAddress, gioMo, gioD
                     </div>
                     <div class="pitch-grid">`;
             data.pitches.forEach(sb => {
+                const specHtml = (sb.KichThuoc || sb.DienTich)
+                    ? `<div style="font-size: 0.78rem; color: #475569; margin-top: 4px;"><i class="fa-solid fa-ruler-combined" style="color: var(--primary); margin-right: 4px;"></i>${sb.KichThuoc || ''}${sb.KichThuoc && sb.DienTich ? ' • ' : ''}${sb.DienTich ? Number(sb.DienTich) + 'm²' : ''}</div>`
+                    : '';
+                const descHtml = sb.MoTa
+                    ? `<div style="font-size: 0.76rem; color: #64748b; margin-top: 4px; line-height: 1.4;">${sb.MoTa}</div>`
+                    : '';
+
                 html += `
-                    <div class="pitch-card" onclick="renderSchedule(${clusterId}, '${clusterName}', ${sb.ID}, '${sb.TenSan}', ${data.id}, '${loaiSanName}')">
+                    <div class="pitch-card" onclick="renderSchedule('${clusterId}', '${clusterName.replace(/'/g, "\\'")}', '${sb.ID}', '${sb.TenSan.replace(/'/g, "\\'")}', '${data.id}', '${loaiSanName}')">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
                             <div>
                                 <div class="pitch-name">${sb.TenSan}</div>
                                 <div class="pitch-type"><i class="fa-solid fa-layer-group" style="color: #94a3b8;"></i> ${loaiSanName}</div>
+                                ${specHtml}
+                                ${descHtml}
                             </div>
-                            <span style="font-size: 0.74rem; color: #15803d; background: #dcfce7; border: 1px solid #bbf7d0; padding: 3px 9px; border-radius: 999px; font-weight: 700;">Hoạt động</span>
+                            <span style="font-size: 0.74rem; color: #15803d; background: #dcfce7; border: 1px solid #bbf7d0; padding: 3px 9px; border-radius: 999px; font-weight: 700; flex-shrink: 0;">Hoạt động</span>
                         </div>
                         <button class="btn-outline" style="width: 100%; padding: 9px; display: flex; align-items: center; justify-content: center; gap: 6px;">
                             <span>Xem lịch trống</span> <i class="fa-solid fa-calendar-Alt" style="font-size: 0.82rem;"></i>
@@ -1938,7 +1947,7 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
         if (availableTimeSlots.length === 0) {
             appContent.innerHTML = `
                 <div class="customer-breadcrumb">
-                    <div class="back-btn" onclick="renderPitches(${currentClusterId}, '${currentClusterName}', '${currentClusterAddress}', '${currentClusterGioMo}', '${currentClusterGioDong}')">
+                    <div class="back-btn" onclick="renderPitches('${currentClusterId}', '${currentClusterName}', '${currentClusterAddress}', '${currentClusterGioMo}', '${currentClusterGioDong}')">
                         <i class="fa-solid fa-arrow-left"></i> Quay lại ${clusterName}
                     </div>
                 </div>
@@ -1985,13 +1994,13 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
 
         let html = `
             <div class="customer-breadcrumb">
-                <div class="back-btn" onclick="renderPitches(${currentClusterId}, '${currentClusterName}', '${currentClusterAddress}', '${currentClusterGioMo}', '${currentClusterGioDong}')">
+                <div class="back-btn" onclick="renderPitches('${currentClusterId}', '${currentClusterName}', '${currentClusterAddress}', '${currentClusterGioMo}', '${currentClusterGioDong}')">
                     <i class="fa-solid fa-arrow-left"></i> Chọn sân khác thuộc ${currentClusterName}
                 </div>
                 <div class="breadcrumb-path">
                     <span class="bc-link" onclick="renderClusters()">Cụm sân</span>
                     <span>/</span>
-                    <span class="bc-link" onclick="renderPitches(${currentClusterId}, '${currentClusterName}', '${currentClusterAddress}', '${currentClusterGioMo}', '${currentClusterGioDong}')">${currentClusterName}</span>
+                    <span class="bc-link" onclick="renderPitches('${currentClusterId}', '${currentClusterName}', '${currentClusterAddress}', '${currentClusterGioMo}', '${currentClusterGioDong}')">${currentClusterName}</span>
                     <span>/</span>
                     <span class="bc-current">${pitchName} (${pitchType})</span>
                 </div>
@@ -2127,7 +2136,7 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                 html += `
                     <td style="border-bottom: 1px solid #f1f5f9; padding: 6px;">
                         <div class="slot ${statusClass}" data-slot-id="${slotId}"
-                            ${(!isBooked && !isPast) ? `onclick="toggleSlot(this, ${clusterId}, '${clusterName}',${pitchId}, '${pitchName}', '${date.full}', '${timeStr}',${priceValue})"` : ''}>
+                            ${(!isBooked && !isPast) ? `onclick="toggleSlot(this, '${clusterId}', '${clusterName.replace(/'/g, "\\'")}', '${pitchId}', '${pitchName.replace(/'/g, "\\'")}', '${date.full}', '${timeStr}', ${priceValue})"` : ''}>
                             ${statusText}
                         </div>
                     </td>
@@ -2372,8 +2381,8 @@ function applyBookingFiltersAndRender() {
             let ticketHint = '';
 
             if (item.TrangThai === 'DaCoc') {
-                actionHtml = `<button class="btn-outline-sm cancel-booking-btn" onclick="event.stopPropagation(); openCancelModal(${item.ID})"><i class="fa-solid fa-ban"></i><span>Hủy lịch đặt sân</span></button>`;
-                cardClick = `onclick="openTicketModal('phong_trao', ${item.ID})" title="Nhấn vào để xem Vé điện tử"`;
+                actionHtml = `<button class="btn-outline-sm cancel-booking-btn" onclick="event.stopPropagation(); openCancelModal('${item.ID}')"><i class="fa-solid fa-ban"></i><span>Hủy lịch đặt sân</span></button>`;
+                cardClick = `onclick="openTicketModal('phong_trao', '${item.ID}')" title="Nhấn vào để xem Vé điện tử"`;
                 cursorStyle = 'pointer';
                 ticketHint = `<div style="margin-top: 10px; text-align: center; font-size: 0.78rem; color: var(--primary); font-weight: 600;"><i class="fa-solid fa-qrcode"></i> Bấm vào thẻ để xem Vé Điện Tử (#PT-${item.ID})</div>`;
             } else if (item.TrangThai === 'HoanThanh') {
@@ -2390,7 +2399,7 @@ function applyBookingFiltersAndRender() {
                     const safeCumSan = (cumSan || 'Cụm sân').replace(/'/g, "\\'");
                     const safeSanBong = (sanBong || 'Sân bóng').replace(/'/g, "\\'");
                     actionHtml = `
-                        <button type="button" class="btn-primary" style="width: 100%; margin-top: 12px; padding: 10px 14px; border-radius: 10px; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); border: none; color: #fff; font-weight: 700; font-size: 0.88rem; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);" onclick="event.stopPropagation(); openCustomerReviewModal(${item.ID}, '${safeCumSan}', '${safeSanBong}', '${formatDate(item.NgayDa)}')">
+                        <button type="button" class="btn-primary" style="width: 100%; margin-top: 12px; padding: 10px 14px; border-radius: 10px; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); border: none; color: #fff; font-weight: 700; font-size: 0.88rem; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);" onclick="event.stopPropagation(); onclick="event.stopPropagation(); openCustomerReviewModal('${item.ID}', '${safeCumSan}', '${safeSanBong}', '${formatDate(item.NgayDa)}')">
                             <i class="fa-solid fa-star"></i> Đánh giá cụm sân
                         </button>
                     `;
@@ -2497,8 +2506,8 @@ function applyBookingFiltersAndRender() {
             const representativeMatch = gd.matches.find(m => m.TrangThai === 'HoanThanh') || firstMatch;
 
             if (gd.canCancel) {
-                actionTourHtml = `<button class="btn-cancel-tour" onclick="event.stopPropagation(); openCancelTourModal(${gd.idGiaiDau})"><i class="fa-solid fa-ban"></i><span>Hủy toàn bộ giải</span></button>`;
-                cardClick = `onclick="openTicketModal('giai_dau', ${gd.idGiaiDau})" title="Nhấn vào để xem Vé Tổng Giải Đấu"`;
+                actionTourHtml = `<button class="btn-cancel-tour" onclick="event.stopPropagation(); openCancelTourModal('${gd.idGiaiDau}')"><i class="fa-solid fa-ban"></i><span>Hủy toàn bộ giải</span></button>`;
+                cardClick = `onclick="openTicketModal('giai_dau', '${gd.idGiaiDau}')" title="Nhấn vào để xem Vé Tổng Giải Đấu"`;
                 cursorStyle = 'pointer';
             } else if (existingTourReview) {
                 // Nếu giải đấu đã được đánh giá -> Hiển thị số sao đã đánh giá
@@ -2515,7 +2524,7 @@ function applyBookingFiltersAndRender() {
                 const safeTenGiai = (`Giải đấu: ${gd.tenGiaiDau}`).replace(/'/g, "\\'");
                 const rangeDateStr = (gd.ngayBatDau && gd.ngayKetThuc) ? `${formatDate(gd.ngayBatDau)} - ${formatDate(gd.ngayKetThuc)}` : '';
                 actionTourHtml = `
-                    <button type="button" class="btn-primary" style="padding: 9px 16px; border-radius: 10px; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); border: none; color: #fff; font-weight: 700; font-size: 0.88rem; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);" onclick="event.stopPropagation(); openCustomerReviewModal(${representativeMatch.ID}, '${safeCumSan}', '${safeTenGiai}', '${rangeDateStr}')">
+                    <button type="button" class="btn-primary" style="padding: 9px 16px; border-radius: 10px; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); border: none; color: #fff; font-weight: 700; font-size: 0.88rem; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);" onclick="event.stopPropagation(); openCustomerReviewModal('${representativeMatch.ID}', '${safeCumSan}', '${safeTenGiai}', '${rangeDateStr}')">
                         <i class="fa-solid fa-star"></i> Đánh giá cụm sân
                     </button>
                 `;
@@ -2576,7 +2585,7 @@ function applyBookingFiltersAndRender() {
             if (gd.matches.length > 4) {
                 toggleBtnHtml = `
                 <div style="text-align: center; padding: 12px; background: #f8fafc; border-top: 1px dashed var(--border);">
-                    <button type="button" class="btn-outline-sm" data-expanded="false" onclick="event.stopPropagation(); toggleTourMatches(${gd.idGiaiDau}, this)" style="border-radius: 20px; padding: 6px 16px; font-size: 0.85rem; background: white;">
+                    <button type="button" class="btn-outline-sm" data-expanded="false" onclick="event.stopPropagation(); toggleTourMatches('${gd.idGiaiDau}', this)" style="border-radius: 20px; padding: 6px 16px; font-size: 0.85rem; background: white;">
                         Hiển thị tất cả (${gd.matches.length} trận) <i class="fa-solid fa-chevron-down" style="margin-left: 4px;"></i>
                     </button>
                 </div>
@@ -2782,6 +2791,33 @@ function showProfileAlert(message, isSuccess) {
     }, 2000);
 }
 
+function updateCustomerBankWarningUI() {
+    let warnBox = document.getElementById('prof-bank-warning');
+    const bankInput = document.getElementById('prof-bank-name');
+    if (!bankInput) return;
+
+    if (!warnBox) {
+        warnBox = document.createElement('div');
+        warnBox.id = 'prof-bank-warning';
+        warnBox.style.cssText = 'background: #fffbeb; border: 1px solid #fde68a; border-left: 4px solid #f59e0b; color: #92400e; padding: 10px 14px; border-radius: 8px; font-size: 0.84rem; margin-bottom: 12px; display: none; align-items: center; gap: 10px; line-height: 1.5;';
+        const sectionContainer = bankInput.closest('div[style*="border-top"]');
+        if (sectionContainer) {
+            sectionContainer.insertBefore(warnBox, sectionContainer.firstChild);
+        }
+    }
+
+    const bank = document.getElementById('prof-bank-name')?.value.trim() || '';
+    const stk = document.getElementById('prof-bank-stk')?.value.trim() || '';
+    const owner = document.getElementById('prof-bank-owner')?.value.trim() || '';
+
+    if (!bank || !stk || !owner) {
+        warnBox.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #f59e0b; font-size: 1.1rem; flex-shrink: 0;"></i> <div><strong>Chưa đầy đủ thông tin ngân hàng!</strong> Vui lòng bổ sung Tên ngân hàng, Số tài khoản và Tên chủ tài khoản để thuận tiện khi rút tiền từ ví.</div>`;
+        warnBox.style.display = 'flex';
+    } else {
+        warnBox.style.display = 'none';
+    }
+}
+
 function openProfileModal() {
     document.getElementById('profile-alert').style.display = 'none';
 
@@ -2791,7 +2827,13 @@ function openProfileModal() {
     document.getElementById('prof-hoten').value = user.HoTen || '';
     document.getElementById('prof-sdt').value = user.SoDienThoai || '';
     document.getElementById('prof-email').value = user.Email || '';
+    if (document.getElementById('prof-vneid')) document.getElementById('prof-vneid').value = user.Vneid || '';
+    if (document.getElementById('prof-bank-name')) document.getElementById('prof-bank-name').value = user.TenNganHang || '';
+    if (document.getElementById('prof-bank-stk')) document.getElementById('prof-bank-stk').value = user.STKNganHang || '';
+    if (document.getElementById('prof-bank-owner')) document.getElementById('prof-bank-owner').value = user.TenTaiKhoan || '';
     
+    updateCustomerBankWarningUI();
+
     document.getElementById('btn-save-profile').disabled = true;
     document.getElementById('btn-save-profile').classList.add('btn-disabled');
     document.getElementById('profile-modal').style.display = 'flex';
@@ -2802,14 +2844,19 @@ function closeProfileModal() {
     document.getElementById('profile-modal').style.display = 'none';
 }
 
-// Lắng nghe sự kiện thay đổi input để bật nút Lưu
-['prof-hoten', 'prof-sdt', 'prof-email'].forEach(id => {
-    document.getElementById(id).addEventListener('input', () => {
+['prof-hoten', 'prof-sdt', 'prof-email', 'prof-vneid', 'prof-bank-name', 'prof-bank-stk', 'prof-bank-owner'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', () => {
         const user = JSON.parse(sessionStorage.getItem('dn_football_user'));
         const isChanged = 
             document.getElementById('prof-hoten').value !== (user.HoTen || '') ||
             document.getElementById('prof-sdt').value !== (user.SoDienThoai || '') ||
-            document.getElementById('prof-email').value !== (user.Email || '');
+            document.getElementById('prof-email').value !== (user.Email || '') ||
+            (document.getElementById('prof-vneid') && document.getElementById('prof-vneid').value !== (user.Vneid || '')) ||
+            (document.getElementById('prof-bank-name') && document.getElementById('prof-bank-name').value !== (user.TenNganHang || '')) ||
+            (document.getElementById('prof-bank-stk') && document.getElementById('prof-bank-stk').value !== (user.STKNganHang || '')) ||
+            (document.getElementById('prof-bank-owner') && document.getElementById('prof-bank-owner').value !== (user.TenTaiKhoan || ''));
             
         const btnSave = document.getElementById('btn-save-profile');
         if (isChanged) {
@@ -2830,16 +2877,17 @@ async function saveProfile() {
     const payload = {
         ho_ten: document.getElementById('prof-hoten').value,
         so_dien_thoai: document.getElementById('prof-sdt').value,
-        email: document.getElementById('prof-email').value
+        email: document.getElementById('prof-email').value,
+        vneid: document.getElementById('prof-vneid')?.value.trim() || null,
+        ten_ngan_hang: document.getElementById('prof-bank-name')?.value.trim() || null,
+        stk_ngan_hang: document.getElementById('prof-bank-stk')?.value.trim() || null,
+        ten_tai_khoan: document.getElementById('prof-bank-owner')?.value.trim().toUpperCase() || null
     };
 
     try {
         const response = await fetch(`${API_BASE_URL}/cap-nhat-profile`, {
             method: 'PUT',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
 
@@ -2852,30 +2900,21 @@ async function saveProfile() {
             return;
         }
 
-        // Cập nhật Session Storage
         sessionStorage.setItem('dn_football_user', JSON.stringify(data.user));
-        
-        // Cập nhật lại UI Header
         loadCustomerInfo(); 
-
         showProfileAlert('Cập nhật thông tin thành công!', true);
         
         setTimeout(() => {
             closeProfileModal();
             btnSave.textContent = 'Lưu thay đổi';
-        }, 2000);
+        }, 1500);
 
     } catch (error) {
-        console.error('Lỗi:', error);
         showProfileAlert('Không thể kết nối đến máy chủ!', false);
         btnSave.disabled = false;
         btnSave.textContent = 'Lưu thay đổi';
     }
 }
-
-// ======================================================
-// MODULE: ĐỔI MẬT KHẨU
-// ======================================================
 
 // ======================================================
 // MODULE: ĐỔI MẬT KHẨU
@@ -3581,11 +3620,12 @@ function showWithdrawAlert(message, isSuccess) {
 }
 
 function openWithdrawModal() {
+    const user = JSON.parse(sessionStorage.getItem('dn_football_user')) || {};
     document.getElementById('withdraw-alert').style.display = 'none';
     document.getElementById('withdraw-amount').value = '';
-    document.getElementById('withdraw-bank').value = '';
-    document.getElementById('withdraw-stk').value = '';
-    document.getElementById('withdraw-owner').value = '';
+    document.getElementById('withdraw-bank').value = user.TenNganHang || '';
+    document.getElementById('withdraw-stk').value = user.STKNganHang || '';
+    document.getElementById('withdraw-owner').value = user.TenTaiKhoan || '';
     document.getElementById('withdraw-modal').style.display = 'flex';
 }
 
@@ -3709,7 +3749,7 @@ async function loadNotifications() {
             const timeStr = `${pad(d.getHours())}:${pad(d.getMinutes())} - ${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
 
             html += `
-                <div onclick="markAsRead(${item.ID}, this)" style="${bgClass} padding: 12px 16px; border-bottom: 1px solid #f1f5f9; display: flex; gap: 12px; transition: 0.2s;">
+                <div onclick="markAsRead('${item.ID}', this)" style="${bgClass} padding: 12px 16px; border-bottom: 1px solid #f1f5f9; display: flex; gap: 12px; transition: 0.2s;">
                     <div style="width: 40px; height: 40px; border-radius: 50%; background: ${bgIcon}; color: ${iconColor}; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 1.1rem;">
                         <i class="fa-solid ${icon}"></i>
                     </div>
@@ -4323,15 +4363,15 @@ async function loadChatSessions() {
                 if (tieuDe.length > 30) tieuDe = tieuDe.substring(0, 30) + '...';
 
                 html += `
-                    <div style="padding: 12px; margin-bottom: 8px; border-radius: 8px; cursor: pointer; transition: 0.2s; position: relative; ${isActive}" onclick="loadChatDetails(${phien.ID})">
+                    <div style="padding: 12px; margin-bottom: 8px; border-radius: 8px; cursor: pointer; transition: 0.2s; position: relative; ${isActive}" onclick="loadChatDetails('${phien.ID}')">
                         <div style="font-weight: 600; font-size: 0.95rem; color: var(--text-dark); margin-bottom: 4px; padding-right: 20px;">${tieuDe}</div>
                         
                         <!-- Nút 3 chấm (Dropdown thao tác) -->
                         <div class="chat-action-menu" style="position: absolute; right: 10px; top: 12px;" onclick="event.stopPropagation()">
-                            <i class="fa-solid fa-ellipsis-vertical" style="color: var(--text-muted); padding: 4px 8px; cursor: pointer;" onclick="toggleChatDropdown(${phien.ID})"></i>
+                            <i class="fa-solid fa-ellipsis-vertical" style="color: var(--text-muted); padding: 4px 8px; cursor: pointer;" onclick="toggleChatDropdown('${phien.ID}')"></i>
                             <div id="chat-dropdown-${phien.ID}" style="display: none; position: absolute; right: 0; top: 25px; background: white; border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.1); border-radius: 8px; width: 120px; z-index: 10;">
-                                <div style="padding: 8px 12px; font-size: 0.85rem; cursor: pointer; border-bottom: 1px solid #f1f5f9; color: var(--text-dark);" onclick="openRenameChatModal(${phien.ID}, '${tieuDe.replace(/'/g, "\\'")}')"><i class="fa-solid fa-pen" style="margin-right: 6px;"></i> Đổi tên</div>
-                                <div style="padding: 8px 12px; font-size: 0.85rem; cursor: pointer; color: #ef4444;" onclick="openDeleteChatModal(${phien.ID})"><i class="fa-solid fa-trash-can" style="margin-right: 6px;"></i> Xóa</div>
+                                <div style="padding: 8px 12px; font-size: 0.85rem; cursor: pointer; border-bottom: 1px solid #f1f5f9; color: var(--text-dark);" onclick="openRenameChatModal('${phien.ID}', '${tieuDe.replace(/'/g, "\\'")}')"><i class="fa-solid fa-pen" style="margin-right: 6px;"></i> Đổi tên</div>
+                                <div style="padding: 8px 12px; font-size: 0.85rem; cursor: pointer; color: #ef4444;" onclick="openDeleteChatModal('${phien.ID}')"><i class="fa-solid fa-trash-can" style="margin-right: 6px;"></i> Xóa</div>
                             </div>
                         </div>
                     </div>

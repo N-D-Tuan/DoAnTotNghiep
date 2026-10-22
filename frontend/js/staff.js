@@ -356,7 +356,7 @@ async function loadNotifications() {
             const timeStr = `${pad(d.getHours())}:${pad(d.getMinutes())} - ${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
 
             html += `
-                <div onclick="markAsRead(${item.ID}, this)" style="${bgClass} padding: 12px 16px; border-bottom: 1px solid #f1f5f9; display: flex; gap: 12px; transition: 0.2s;">
+                <div onclick="markAsRead('${item.ID}', this)" style="${bgClass} padding: 12px 16px; border-bottom: 1px solid #f1f5f9; display: flex; gap: 12px; transition: 0.2s;">
                     <div style="width: 40px; height: 40px; border-radius: 50%; background: ${bgIcon}; color: ${iconColor}; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 1.1rem;">
                         <i class="fa-solid ${icon}"></i>
                     </div>
@@ -450,17 +450,40 @@ function renderStaffProfile() {
     const user = JSON.parse(sessionStorage.getItem('dn_football_user'));
     if (!user) return;
 
-    // Reset Menu Active
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
     const profileLink = Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('TRANG CÁ NHÂN'));
     if (profileLink) profileLink.classList.add('active');
+
+    const isMissingBank = !user.TenNganHang || !user.STKNganHang || !user.TenTaiKhoan;
+    const bankStr = !isMissingBank
+        ? `${user.TenNganHang} - ${user.STKNganHang} (${user.TenTaiKhoan})`
+        : '<span style="color: #d97706; font-weight: 600;"><i class="fa-solid fa-circle-exclamation"></i> Chưa cập nhật đầy đủ</span>';
+
+    const bankWarningBanner = isMissingBank ? `
+        <div style="background: #fffbeb; border: 1px solid #fde68a; border-left: 5px solid #f59e0b; border-radius: 12px; padding: 16px 20px; margin-bottom: 22px; display: flex; justify-content: space-between; align-items: center; gap: 15px; flex-wrap: wrap; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.1);">
+            <div style="display: flex; align-items: center; gap: 14px;">
+                <div style="width: 42px; height: 42px; border-radius: 50%; background: #fef3c7; color: #d97706; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; flex-shrink: 0;">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <div>
+                    <div style="font-weight: 700; color: #92400e; font-size: 0.98rem; margin-bottom: 2px;">Chưa cập nhật đầy đủ thông tin tài khoản ngân hàng!</div>
+                    <div style="color: #b45309; font-size: 0.86rem;">Vui lòng bổ sung Tên ngân hàng, Số tài khoản và Tên chủ tài khoản để Quản lý chuyển khoản lương hàng tháng cho bạn.</div>
+                </div>
+            </div>
+            <button class="btn-primary" style="background: #f59e0b; border-color: #f59e0b; color: #fff; padding: 8px 16px; font-size: 0.86rem; white-space: nowrap;" onclick="openProfileModal()">
+                <i class="fa-solid fa-pen-to-square"></i> Bổ sung ngay
+            </button>
+        </div>
+    ` : '';
 
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
         <div class="page-header" style="margin-bottom: 24px;">
             <h1 class="page-title">Trang cá nhân</h1>
-            <p class="text-muted">Quản lý thông tin tài khoản nhân viên của bạn</p>
+            <p class="text-muted">Quản lý thông tin tài khoản nhân viên của bạn (Mã: <strong>${user.MaNguoiDung || user.ID}</strong>)</p>
         </div>
+
+        ${bankWarningBanner}
         
         <div class="profile-card">
             <div class="profile-avatar-large"><i class="fa-solid fa-user"></i></div>
@@ -485,6 +508,14 @@ function renderStaffProfile() {
                     <label>Email</label>
                     <div>${user.Email || 'Chưa cập nhật'}</div>
                 </div>
+                <div class="detail-item">
+                    <label>Số định danh VNeID</label>
+                    <div>${user.Vneid || 'Chưa cập nhật'}</div>
+                </div>
+                <div class="detail-item">
+                    <label>Tài khoản ngân hàng nhận lương</label>
+                    <div>${bankStr}</div>
+                </div>
                 <div class="text-right">
                     <button class="btn-outline-sm" onclick="openProfileModal()">Chỉnh sửa</button>
                 </div>
@@ -508,6 +539,10 @@ function openProfileModal() {
     document.getElementById('prof-hoten').value = user.HoTen || '';
     document.getElementById('prof-sdt').value = user.SoDienThoai || '';
     document.getElementById('prof-email').value = user.Email || '';
+    if (document.getElementById('prof-vneid')) document.getElementById('prof-vneid').value = user.Vneid || '';
+    if (document.getElementById('prof-bank-name')) document.getElementById('prof-bank-name').value = user.TenNganHang || '';
+    if (document.getElementById('prof-bank-stk')) document.getElementById('prof-bank-stk').value = user.STKNganHang || '';
+    if (document.getElementById('prof-bank-owner')) document.getElementById('prof-bank-owner').value = user.TenTaiKhoan || '';
     
     document.getElementById('btn-save-profile').disabled = true;
     document.getElementById('btn-save-profile').classList.add('btn-disabled');
@@ -516,14 +551,19 @@ function openProfileModal() {
 
 function closeProfileModal() { document.getElementById('profile-modal').style.display = 'none'; }
 
-// Lắng nghe sự thay đổi trên form
-['prof-hoten', 'prof-sdt', 'prof-email'].forEach(id => {
-    document.getElementById(id).addEventListener('input', () => {
+['prof-hoten', 'prof-sdt', 'prof-email', 'prof-vneid', 'prof-bank-name', 'prof-bank-stk', 'prof-bank-owner'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', () => {
         const user = JSON.parse(sessionStorage.getItem('dn_football_user'));
         const isChanged = 
             document.getElementById('prof-hoten').value !== (user.HoTen || '') ||
             document.getElementById('prof-sdt').value !== (user.SoDienThoai || '') ||
-            document.getElementById('prof-email').value !== (user.Email || '');
+            document.getElementById('prof-email').value !== (user.Email || '') ||
+            (document.getElementById('prof-vneid') && document.getElementById('prof-vneid').value !== (user.Vneid || '')) ||
+            (document.getElementById('prof-bank-name') && document.getElementById('prof-bank-name').value !== (user.TenNganHang || '')) ||
+            (document.getElementById('prof-bank-stk') && document.getElementById('prof-bank-stk').value !== (user.STKNganHang || '')) ||
+            (document.getElementById('prof-bank-owner') && document.getElementById('prof-bank-owner').value !== (user.TenTaiKhoan || ''));
             
         const btnSave = document.getElementById('btn-save-profile');
         if (isChanged) {
@@ -544,7 +584,11 @@ async function saveStaffProfile() {
     const payload = {
         ho_ten: document.getElementById('prof-hoten').value,
         so_dien_thoai: document.getElementById('prof-sdt').value,
-        email: document.getElementById('prof-email').value
+        email: document.getElementById('prof-email').value,
+        vneid: document.getElementById('prof-vneid')?.value.trim() || null,
+        ten_ngan_hang: document.getElementById('prof-bank-name')?.value.trim() || null,
+        stk_ngan_hang: document.getElementById('prof-bank-stk')?.value.trim() || null,
+        ten_tai_khoan: document.getElementById('prof-bank-owner')?.value.trim().toUpperCase() || null
     };
 
     try {
@@ -577,10 +621,6 @@ async function saveStaffProfile() {
         btnSave.disabled = false; btnSave.textContent = 'Lưu thay đổi';
     }
 }
-
-// ======================================================
-// MODULE: ĐỔI MẬT KHẨU
-// ======================================================
 
 // ======================================================
 // MODULE: ĐỔI MẬT KHẨU
@@ -741,10 +781,10 @@ async function renderManHinhThuNgan() {
 
                 sanBongCards += `
                     <div class="pitch-select-card" 
-                         style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; cursor: pointer; transition: all 0.2s ease; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);"
-                         onclick="loadStaffSchedule(${cumSanId}, '${sb.TenSan}', ${sb.ID}, ${sb.ID_LoaiSan})"
-                         onmouseover="this.style.borderColor='${colorTheme}'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.08)';"
-                         onmouseout="this.style.borderColor='#e2e8f0'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.02)';">
+                        style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; cursor: pointer; transition: all 0.2s ease; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);"
+                        onclick="loadStaffSchedule('${cumSanId}', '${sb.TenSan}', '${sb.ID}', '${sb.ID_LoaiSan}')"
+                        onmouseover="this.style.borderColor='${colorTheme}'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.08)';"
+                        onmouseout="this.style.borderColor='#e2e8f0'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.02)';">
                         
                         <div style="width: 50px; height: 50px; border-radius: 50%; background: ${bgTheme}; color: ${colorTheme}; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
                             <i class="fa-solid ${iconClass}"></i>
@@ -769,7 +809,7 @@ async function renderManHinhThuNgan() {
                     <h1 class="page-title">Màn hình Thu Ngân - ${cs.TenCumSan}</h1>
                     <p class="text-muted">Tổng quan ca làm việc và thao tác xử lý lịch đặt sân.</p>
                 </div>
-                <button type="button" onclick="openStaffClusterReviewsModal(${cumSanId}, '${cs.TenCumSan.replace(/'/g, "\\'")}')" style="background: #fffbeb; border: 1.5px solid #fcd34d; color: #b45309; padding: 10px 18px; border-radius: 12px; font-weight: 700; font-size: 0.92rem; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 2px 6px rgba(245, 158, 11, 0.15);">
+                <button type="button" onclick="openStaffClusterReviewsModal('${cumSanId}', '${cs.TenCumSan.replace(/'/g, "\\'")}')" style="background: #fffbeb; border: 1.5px solid #fcd34d; color: #b45309; padding: 10px 18px; border-radius: 12px; font-weight: 700; font-size: 0.92rem; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 2px 6px rgba(245, 158, 11, 0.15);">
                     <i class="fa-solid fa-star" style="color: #f59e0b; font-size: 1.1rem;"></i>
                     <span>Đánh giá cơ sở: <strong>${avgStarStaff}</strong> (${countStarStaff} đánh giá)</span>
                 </button>
@@ -1074,7 +1114,7 @@ async function loadStaffSchedule(clusterId, pitchName, pitchId, loaiSanId) {
                 
                 let statusClass = 'available', statusText = 'CÒN TRỐNG';
                 
-                const slotDataStr = `${pitchId}, ${kg.ID}, '${date.dbFormat}', '${date.displayFormat}', '${timeStr}', ${priceValue}`;
+                const slotDataStr = `'${pitchId}', '${kg.ID}', '${date.dbFormat}', '${date.displayFormat}', '${timeStr}', ${priceValue}`;
                 let onClickAttr = `data-slot-data="${slotDataStr}" onclick="toggleOfflineSlot(this, ${slotDataStr})"`;
                 
                 if (isPast) {
@@ -1480,7 +1520,7 @@ function renderStaffDSTable(data) {
         // Thêm event.stopPropagation() vào nút Chốt sân để không mở đè Modal chi tiết khi bấm nút
         let actionHtml = '';
         if (item.TrangThai === 'DaCoc') {
-            actionHtml = `<button class="btn-primary" style="padding: 6px 12px; font-size: 0.85rem;" onclick="event.stopPropagation(); openStaffDSConfirmModal(${item.ID})">Chốt sân</button>`;
+            actionHtml = `<button class="btn-primary" style="padding: 6px 12px; font-size: 0.85rem;" onclick="event.stopPropagation(); openStaffDSConfirmModal('${item.ID}')">Chốt sân</button>`;
         } else {
             actionHtml = `<span style="color: var(--text-muted); font-size: 0.85rem;">Đã xử lý</span>`;
         }
@@ -1488,7 +1528,7 @@ function renderStaffDSTable(data) {
         const tenKhachHienThi = item.ID_NguoiDung ? (item.nguoi_dung?.HoTen || 'N/A') : (item.TenKhachVangLai || 'N/A');
         const sdtKhachHienThi = item.ID_NguoiDung ? (item.nguoi_dung?.SoDienThoai || '') : (item.SDTKhachVangLai || '');
 
-        return `<tr onclick="openBookingDetailModalStaff(${item.ID})" style="cursor: pointer; transition: background-color 0.15s;" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor=''">
+        return `<tr onclick="openBookingDetailModalStaff('${item.ID}')" style="cursor: pointer; transition: background-color 0.15s;" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor=''">
             <td style="text-align: center;"><span style="padding: 6px 12px; border-radius: 8px; font-weight: 700; font-family: monospace; font-size: 0.95rem; display: inline-block; white-space: nowrap; ${badgeClassVe}">${maVeDisplay}</span></td>
             <td><strong>${tenKhachHienThi}</strong><br><span style="font-size: 0.85rem; color: var(--text-muted);">${sdtKhachHienThi}</span></td>
             <td><strong style="color: var(--text-dark);">${item.san_bong ? item.san_bong.TenSan : 'N/A'}</strong> ${tagLoai}</td>
@@ -1772,7 +1812,7 @@ function openStaffCancelConfirmModal() {
                     <label style="font-size: 0.86rem; font-weight: 600; color: #1e293b; margin-bottom: 6px; display: block;">Mã xác thực OTP (gửi về Email khách) <span style="color: #ef4444;">*</span></label>
                     <div style="display: flex; gap: 10px; align-items: stretch;">
                         <input type="text" id="staff-guest-cancel-otp" class="form-control" placeholder="Nhập 6 số OTP..." maxlength="6" style="flex: 1; font-weight: 700; letter-spacing: 2px; text-align: center; border-radius: 10px;">
-                        <button type="button" id="btn-staff-send-guest-otp" onclick="sendGuestCancelOtpStaff(${item.ID})" style="width: auto; padding: 0 16px; border-radius: 10px; border: 1px solid #bfdbfe; background: #eff6ff; color: #2563eb; font-weight: 700; font-size: 0.86rem; white-space: nowrap; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s ease;" onmouseover="this.style.background='#dbeafe'; this.style.borderColor='#93c5fd';" onmouseout="this.style.background='#eff6ff'; this.style.borderColor='#bfdbfe';">
+                        <button type="button" id="btn-staff-send-guest-otp" onclick="sendGuestCancelOtpStaff('${item.ID}')" style="width: auto; padding: 0 16px; border-radius: 10px; border: 1px solid #bfdbfe; background: #eff6ff; color: #2563eb; font-weight: 700; font-size: 0.86rem; white-space: nowrap; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s ease;" onmouseover="this.style.background='#dbeafe'; this.style.borderColor='#93c5fd';" onmouseout="this.style.background='#eff6ff'; this.style.borderColor='#bfdbfe';">
                             <i class="fa-solid fa-paper-plane"></i> Gửi OTP
                         </button>
                     </div>
@@ -1990,15 +2030,15 @@ function handleStaffQrResult(rawText) {
     closeStaffQrScannerModal();
     const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
     const cleaned = String(rawText || '').trim().toUpperCase().replace(/^#/, '');
-    const match = cleaned.match(/(PT|GD)-(\d+)/);
+    const match = cleaned.match(/^(PT|GD)-([A-Z0-9]+)$/);
 
     if (!match) {
         return showStaffDSAlert(`Mã QR "${rawText}" không đúng định dạng vé DN Football (PT-... hoặc GD-...)!`, false);
     }
 
     const prefix = match[1];
-    const idNum = Number(match[2]);
-    const codeStr = `${prefix}-${idNum}`;
+    const targetId = match[2];
+    const codeStr = `${prefix}-${targetId}`;
 
     staffDSDate = '';
     staffDSFilter = 'All';
@@ -2011,22 +2051,24 @@ function handleStaffQrResult(rawText) {
 
     applyStaffDSFiltersAndRender();
 
+    const myCumSan = currentUser.MaCumSan || currentUser.ID_CumSan;
+
     if (prefix === 'PT') {
         const booking = staffDatSanData.find(b => 
-            b.ID_GiaiDau === null && 
-            Number(b.ID) === idNum && 
-            b.san_bong && Number(b.san_bong.ID_CumSan) === Number(currentUser.ID_CumSan)
+            !b.MaGiaiDau && !b.ID_GiaiDau && 
+            String(b.MaDatSan || b.ID).toUpperCase() === targetId && 
+            b.san_bong && String(b.san_bong.MaCumSan || b.san_bong.ID_CumSan) === String(myCumSan)
         );
         if (booking) {
             showStaffDSAlert(`Đã quét thành công vé phong trào #${codeStr}!`, true);
-            openBookingDetailModalStaff(booking.ID);
+            openBookingDetailModalStaff(booking.MaDatSan || booking.ID);
         } else {
             showStaffDSAlert(`Không tìm thấy vé #${codeStr} tại cơ sở của bạn!`, false);
         }
     } else {
         const tourMatches = staffDatSanData.filter(b => 
-            Number(b.ID_GiaiDau) === idNum && 
-            b.san_bong && Number(b.san_bong.ID_CumSan) === Number(currentUser.ID_CumSan)
+            String(b.MaGiaiDau || b.ID_GiaiDau || '').toUpperCase() === targetId && 
+            b.san_bong && String(b.san_bong.MaCumSan || b.san_bong.ID_CumSan) === String(myCumSan)
         );
         if (tourMatches.length > 0) {
             showStaffDSAlert(`Đã quét Thẻ Giải Đấu #${codeStr} (Tìm thấy ${tourMatches.length} trận đấu)!`, true);
@@ -2193,7 +2235,7 @@ function renderPosProductGrid(products) {
         
         const hoverLogic = isOutOfStock 
             ? '' 
-            : `onmouseover="this.style.borderColor='var(--primary)'; this.style.transform='translateY(-2px)';" onmouseout="this.style.borderColor='#e2e8f0'; this.style.transform='translateY(0)';" onclick="addToPosCart(${p.ID}, '${p.TenSanPham.replace(/'/g, "\\'")}', ${p.GiaBan})"`;
+            : `onmouseover="this.style.borderColor='var(--primary)'; this.style.transform='translateY(-2px)';" onmouseout="this.style.borderColor='#e2e8f0'; this.style.transform='translateY(0)';" onclick="addToPosCart('${p.ID}', '${p.TenSanPham.replace(/'/g, "\\'")}', ${p.GiaBan})"`;
 
         const outOfStockBadge = isOutOfStock ? `<div style="position: absolute; top: 10px; right: 10px; background: #ef4444; color: white; font-size: 0.7rem; font-weight: bold; padding: 2px 6px; border-radius: 4px;">Hết hàng</div>` : '';
 
@@ -2281,9 +2323,9 @@ function updatePosCartUI() {
                 </div>
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <div style="display: flex; align-items: center; background: #f1f5f9; border-radius: 6px; overflow: hidden; border: 1px solid #cbd5e1;">
-                        <button onclick="changePosQty(${item.id}, -1)" style="border: none; background: transparent; padding: 4px 10px; cursor: pointer; color: #475569;"><i class="fa-solid fa-minus" style="font-size: 0.8rem;"></i></button>
+                        <button onclick="changePosQty('${item.id}', -1)" style="border: none; background: transparent; padding: 4px 10px; cursor: pointer; color: #475569;"><i class="fa-solid fa-minus" style="font-size: 0.8rem;"></i></button>
                         <span style="font-weight: bold; width: 20px; text-align: center;">${item.qty}</span>
-                        <button onclick="changePosQty(${item.id}, 1)" style="border: none; background: transparent; padding: 4px 10px; cursor: pointer; color: #475569;"><i class="fa-solid fa-plus" style="font-size: 0.8rem;"></i></button>
+                        <button onclick="changePosQty('${item.id}', 1)" style="border: none; background: transparent; padding: 4px 10px; cursor: pointer; color: #475569;"><i class="fa-solid fa-plus" style="font-size: 0.8rem;"></i></button>
                     </div>
                 </div>
             </div>
@@ -2811,7 +2853,7 @@ async function loadStaffCalendarData(weekOffset, containerId) {
                 const currentNote = myShift ? (myShift.GhiChu || '') : '';
                 // Cho phép click để mở modal nạp dữ liệu cũ
                 const clickEvent = isClickable 
-                    ? `onclick="openStaffRegisterModal(${ca.ID}, '${ca.TenCa}', '${date.dbDate}', '${date.display}', '${currentNote}', ${myShift !== undefined}, '${timeStr}', ${Number(ca.LuongThuNgan || 0)}, ${Number(ca.LuongPhucVu || 0)})"` 
+                    ? `onclick="openStaffRegisterModal('${ca.ID}', '${ca.TenCa}', '${date.dbDate}', '${date.display}', '${currentNote}', ${myShift !== undefined}, '${timeStr}', ${Number(ca.LuongThuNgan || 0)}, ${Number(ca.LuongPhucVu || 0)})"` 
                     : '';
 
                 html += `
@@ -3134,7 +3176,7 @@ async function loadDanhSachCaHomNay() {
                 if (shift.TrangThaiDiemDanh === 'ChuaLam') {
                     borderStyle = 'border-top: 4px solid #f59e0b;';
                     statusHtml = `<span style="background: #fef3c7; color: #b45309; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">Chưa điểm danh</span>`;
-                    actionHtml = `<button class="btn-primary" style="width: 100%; margin-top: 15px; padding: 12px; font-size: 1rem;" onclick="executeDiemDanh(${shift.ID}, event)"><i class="fa-solid fa-fingerprint" style="margin-right: 8px;"></i> ĐIỂM DANH ĐẦU CA</button>`;
+                    actionHtml = `<button class="btn-primary" style="width: 100%; margin-top: 15px; padding: 12px; font-size: 1rem;" onclick="executeDiemDanh('${shift.ID}', event)"><i class="fa-solid fa-fingerprint" style="margin-right: 8px;"></i> ĐIỂM DANH ĐẦU CA</button>`;
                 } 
                 // BƯỚC N: ĐÃ ĐIỂM DANH -> XỬ LÝ THEO CHỨC VỤ THỰC TẾ TRONG CA
                 else if (shift.TrangThaiDiemDanh === 'DaLam') {
@@ -3147,7 +3189,7 @@ async function loadDanhSachCaHomNay() {
                             // BƯỚC 2: Đã điểm danh nhưng CHƯA CÓ PHIẾU NHẬN CA
                             borderStyle = 'border-top: 4px solid #3b82f6;';
                             statusHtml = `<span style="background: #eff6ff; color: #1d4ed8; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;"><i class="fa-solid fa-clipboard"></i> Chờ đếm tiền đầu ca</span>`;
-                            actionHtml = `<button class="btn-primary" style="width: 100%; margin-top: 15px; padding: 12px; font-size: 1rem; background: #3b82f6; border-color: #3b82f6;" onclick="openNhanCaModal(${ca.ID}, '${ca.TenCa}')"><i class="fa-solid fa-file-invoice-dollar" style="margin-right: 8px;"></i> TẠO PHIẾU NHẬN CA</button>`;
+                            actionHtml = `<button class="btn-primary" style="width: 100%; margin-top: 15px; padding: 12px; font-size: 1rem; background: #3b82f6; border-color: #3b82f6;" onclick="openNhanCaModal('${ca.ID}', '${ca.TenCa}')"><i class="fa-solid fa-file-invoice-dollar" style="margin-right: 8px;"></i> TẠO PHIẾU NHẬN CA</button>`;
                         } else if (bgc.TrangThai === 'DangTrongCa') {
                             // BƯỚC 3: Đã lập phiếu nhận, đang trong thời gian làm việc
                             borderStyle = 'border-top: 4px solid #10b981;';
@@ -3155,10 +3197,10 @@ async function loadDanhSachCaHomNay() {
                             statusHtml = `<div style="text-align: right;"><span style="background: #d1fae5; color: #047857; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;"><i class="fa-solid fa-user-clock"></i> Đang trong ca</span>${treHtml}</div>`;
                             actionHtml = `
                                 <div style="display: flex; gap: 10px; margin-top: 15px;">
-                                    <button class="btn-outline-sm" style="flex: 1; color: #3b82f6; border-color: #bfdbfe; background: #eff6ff;" onclick="openDanhSachPhieuChiModal(${bgc.ID})"><i class="fa-solid fa-list-ul"></i> Lịch sử Thu/Chi</button>
-                                    <button class="btn-outline-sm" style="flex: 1; color: #ef4444; border-color: #fecaca; background: #fef2f2;" onclick="openLapPhieuChiModal(${bgc.ID})"><i class="fa-solid fa-money-bill-transfer"></i> Lập phiếu mới</button>
+                                    <button class="btn-outline-sm" style="flex: 1; color: #3b82f6; border-color: #bfdbfe; background: #eff6ff;" onclick="openDanhSachPhieuChiModal('${bgc.ID}')"><i class="fa-solid fa-list-ul"></i> Lịch sử Thu/Chi</button>
+                                    <button class="btn-outline-sm" style="flex: 1; color: #ef4444; border-color: #fecaca; background: #fef2f2;" onclick="openLapPhieuChiModal('${bgc.ID}')"><i class="fa-solid fa-money-bill-transfer"></i> Lập phiếu mới</button>
                                 </div>
-                                <button class="btn-primary" style="width: 100%; margin-top: 10px; padding: 12px; font-size: 1rem; background: #10b981; border-color: #10b981;" onclick="openGiaoCaModal(${bgc.ID}, '${ca.TenCa}', '${ca.GioKetThuc}')"><i class="fa-solid fa-arrow-right-arrow-left" style="margin-right: 8px;"></i> Bàn giao & Chốt ca</button>
+                                <button class="btn-primary" style="width: 100%; margin-top: 10px; padding: 12px; font-size: 1rem; background: #10b981; border-color: #10b981;" onclick="openGiaoCaModal('${bgc.ID}', '${ca.TenCa}', '${ca.GioKetThuc}')"><i class="fa-solid fa-arrow-right-arrow-left" style="margin-right: 8px;"></i> Bàn giao & Chốt ca</button>
                             `;
                         } else { 
                             // BƯỚC 4: CA ĐÃ ĐƯỢC CHỐT (DaChot hoặc ChotCuongChe)
@@ -3369,7 +3411,7 @@ window.openDanhSachPhieuChiModal = async function(bgcId) {
                         </div>
                         <div style="display: flex; align-items: center; gap: 12px;">
                             <div style="font-weight: bold; font-size: 1.05rem; color: ${color};">${sign}${val.toLocaleString('vi-VN')}đ</div>
-                            <i class="fa-solid fa-trash-can" style="color: #cbd5e1; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#cbd5e1'" onclick="executeXoaPhieuChi(${p.ID}, ${bgcId})"></i>
+                            <i class="fa-solid fa-trash-can" style="color: #cbd5e1; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#cbd5e1'" onclick="executeXoaPhieuChi('${p.ID}', '${bgcId}')"></i>
                         </div>
                     </div>
                 `;
@@ -3758,8 +3800,8 @@ async function loadBangLuongStaffData() {
                         badgeHtml = `<span style="background: #fef3c7; color: #b45309; padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;"><i class="fa-solid fa-bell fa-shake"></i> Chờ Xác Nhận</span>`;
                         actionHtml = btnDetail + `
                             <div style="display: flex; gap: 8px; justify-content: center; margin-top: 5px;">
-                                <button class="btn-primary" style="background: #10b981; border-color: #10b981; padding: 6px 12px; font-size: 0.8rem;" onclick="staffMoXacNhanLuong(${item.ID})"><i class="fa-solid fa-check"></i> Xác nhận đúng</button>
-                                <button class="btn-outline-sm" style="background: #fef2f2; border-color: #fecaca; color: #ef4444; padding: 6px 12px; font-size: 0.8rem;" onclick="staffMoKhieuNai(${item.ID})"><i class="fa-solid fa-triangle-exclamation"></i> Báo sai</button>
+                                <button class="btn-primary" style="background: #10b981; border-color: #10b981; padding: 6px 12px; font-size: 0.8rem;" onclick="staffMoXacNhanLuong('${item.ID}')"><i class="fa-solid fa-check"></i> Xác nhận đúng</button>
+                                <button class="btn-outline-sm" style="background: #fef2f2; border-color: #fecaca; color: #ef4444; padding: 6px 12px; font-size: 0.8rem;" onclick="staffMoKhieuNai('${item.ID}')"><i class="fa-solid fa-triangle-exclamation"></i> Báo sai</button>
                             </div>
                         `;
                     } 
@@ -3818,11 +3860,11 @@ async function loadBangLuongStaffData() {
 // ---- LOGIC XÁC NHẬN VÀ NHẬP STK ----
 function staffMoXacNhanLuong(id) {
     document.getElementById('staff-luong-id-to-confirm').value = id;
-    
-    // Reset Form
-    document.getElementById('staff-luong-bank-name').value = '';
-    document.getElementById('staff-luong-stk').value = '';
-    document.getElementById('staff-luong-owner').value = '';
+    const user = JSON.parse(sessionStorage.getItem('dn_football_user')) || {};
+
+    document.getElementById('staff-luong-bank-name').value = user.TenNganHang || '';
+    document.getElementById('staff-luong-stk').value = user.STKNganHang || '';
+    document.getElementById('staff-luong-owner').value = user.TenTaiKhoan || '';
 
     document.getElementById('staff-xac-nhan-luong-modal').style.display = 'flex';
 }
@@ -3831,13 +3873,13 @@ async function executeStaffXacNhanLuong() {
     const id = document.getElementById('staff-luong-id-to-confirm').value;
     const bank = document.getElementById('staff-luong-bank-name').value.trim();
     const stk = document.getElementById('staff-luong-stk').value.trim();
-    const owner = document.getElementById('staff-luong-owner').value.trim();
+    const owner = document.getElementById('staff-luong-owner').value.trim().toUpperCase();
 
     if (!bank || !stk || !owner) {
         return showSystemModal("Thiếu thông tin", "Vui lòng nhập đầy đủ Tên Ngân Hàng, STK và Tên người nhận để kế toán chuyển khoản chính xác.", "error");
     }
 
-    const chuoiGop = `${bank} - ${stk} - ${owner.toUpperCase()}`;
+    const chuoiGop = `${bank} - ${stk} - ${owner}`;
 
     const btn = document.getElementById('btn-submit-xac-nhan-luong');
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang gửi...';
@@ -3847,14 +3889,26 @@ async function executeStaffXacNhanLuong() {
         const response = await fetch(`${API_BASE_URL}/nhan-vien/bang-luong/${id}/xac-nhan`, {
             method: 'PUT',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` },
-            body: JSON.stringify({ thong_tin_ngan_hang: chuoiGop })
+            body: JSON.stringify({
+                thong_tin_ngan_hang: chuoiGop,
+                ten_ngan_hang: bank,
+                stk_ngan_hang: stk,
+                ten_tai_khoan: owner
+            })
         });
         const data = await response.json();
-        
+
         if (response.ok && data.success) {
+            // Cập nhật luôn thông tin ngân hàng vào sessionStorage của nhân viên
+            const user = JSON.parse(sessionStorage.getItem('dn_football_user')) || {};
+            user.TenNganHang = bank;
+            user.STKNganHang = stk;
+            user.TenTaiKhoan = owner;
+            sessionStorage.setItem('dn_football_user', JSON.stringify(user));
+
             document.getElementById('staff-xac-nhan-luong-modal').style.display = 'none';
             showSystemModal("Thành công", data.message, "success");
-            loadBangLuongStaffData(); // Tải lại lưới
+            loadBangLuongStaffData();
         } else {
             showSystemModal("Lỗi", data.message, "error");
         }

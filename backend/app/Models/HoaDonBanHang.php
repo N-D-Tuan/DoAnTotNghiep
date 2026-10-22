@@ -3,35 +3,40 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\GeneratesCustomId;
 
 class HoaDonBanHang extends Model
 {
+    use GeneratesCustomId;
+
     protected $table = 'HoaDonBanHang';
-    protected $primaryKey = 'ID';
-    
-    // Bật timestamps nhưng tùy chỉnh lại
+    protected $primaryKey = 'MaHoaDonBanHang';
+    protected $idPrefix = 'HDBH';
+
     public $timestamps = false;
-    
-    // Gán cột created_at của Laravel thành NgayTao
     const CREATED_AT = 'NgayTao';
-    
-    // Vô hiệu hóa updated_at, giữ lại created_at (đóng vai trò là NgayTao)
     const UPDATED_AT = null;
 
-    protected $fillable = ['ID_NhanVien', 'ID_CumSan', 'TongTien', 'NgayTao'];
+    protected $fillable = [
+        'MaHoaDonBanHang',
+        'MaNhanVien',
+        'MaCumSan',
+        'TongTien',
+        'NgayTao'
+    ];
 
     public function nhanVien()
     {
-        return $this->belongsTo(NguoiDung::class, 'ID_NhanVien', 'ID');
+        return $this->belongsTo(NguoiDung::class, 'MaNhanVien', 'MaNguoiDung');
     }
 
     public function cumSan()
     {
-        return $this->belongsTo(CumSan::class, 'ID_CumSan', 'ID');
+        return $this->belongsTo(CumSan::class, 'MaCumSan', 'MaCumSan');
     }
 
     public function chiTietHoaDons()
     {
-        return $this->hasMany(ChiTietHoaDon::class, 'ID_HoaDon', 'ID');
+        return $this->hasMany(ChiTietHoaDon::class, 'MaHoaDon', 'MaHoaDonBanHang');
     }
 }

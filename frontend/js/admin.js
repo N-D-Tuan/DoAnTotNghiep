@@ -440,17 +440,11 @@ function renderAdminProfile() {
     const user = JSON.parse(sessionStorage.getItem('dn_football_user'));
     if (!user) return;
 
-    // 1. Xóa class active ở tất cả menu
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
-    
-    // 2. Tìm đúng thẻ a của menu TRANG CÁ NHÂN để active (Thay thế cho event.currentTarget)
     const profileLink = Array.from(document.querySelectorAll('.sidebar-nav a'))
                              .find(a => a.textContent.includes('TRANG CÁ NHÂN'));
-    if (profileLink) {
-        profileLink.classList.add('active');
-    }
+    if (profileLink) profileLink.classList.add('active');
 
-    // XỬ LÝ ĐỘNG TÊN VAI TRÒ HIỂN THỊ
     let roleDisplay = '';
     if (user.VaiTro === 'Admin') {
         roleDisplay = '<i class="fa-solid fa-chess-king" style="color: #4338ca; margin-right: 5px;"></i> Admin';
@@ -460,13 +454,39 @@ function renderAdminProfile() {
         roleDisplay = 'Người dùng';
     }
 
-    // 3. Render giao diện
+    const isMissingBank = !user.TenNganHang || !user.STKNganHang || !user.TenTaiKhoan;
+    const bankStr = !isMissingBank
+        ? `${user.TenNganHang} - ${user.STKNganHang} (${user.TenTaiKhoan})`
+        : (user.VaiTro === 'QuanLySan' 
+            ? '<span style="color: #d97706; font-weight: 600;"><i class="fa-solid fa-circle-exclamation"></i> Chưa cập nhật đầy đủ</span>' 
+            : 'Chưa cập nhật');
+
+    // Chỉ hiển thị cảnh báo màu vàng nếu là Quản lý sân (QuanLySan) và chưa đủ thông tin ngân hàng
+    const bankWarningBanner = (user.VaiTro === 'QuanLySan' && isMissingBank) ? `
+        <div style="background: #fffbeb; border: 1px solid #fde68a; border-left: 5px solid #f59e0b; border-radius: 12px; padding: 16px 20px; margin-bottom: 22px; display: flex; justify-content: space-between; align-items: center; gap: 15px; flex-wrap: wrap; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.1);">
+            <div style="display: flex; align-items: center; gap: 14px;">
+                <div style="width: 42px; height: 42px; border-radius: 50%; background: #fef3c7; color: #d97706; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; flex-shrink: 0;">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <div>
+                    <div style="font-weight: 700; color: #92400e; font-size: 0.98rem; margin-bottom: 2px;">Chưa cập nhật đầy đủ thông tin tài khoản ngân hàng!</div>
+                    <div style="color: #b45309; font-size: 0.86rem;">Vui lòng bổ sung Tên ngân hàng, Số tài khoản và Tên chủ tài khoản trong hồ sơ cá nhân của bạn.</div>
+                </div>
+            </div>
+            <button class="btn-primary" style="background: #f59e0b; border-color: #f59e0b; color: #fff; padding: 8px 16px; font-size: 0.86rem; white-space: nowrap;" onclick="openProfileModal()">
+                <i class="fa-solid fa-pen-to-square"></i> Bổ sung ngay
+            </button>
+        </div>
+    ` : '';
+
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
         <div class="page-header" style="margin-bottom: 24px;">
             <h1 class="page-title">Trang cá nhân</h1>
-            <p class="text-muted">Quản lý thông tin tài khoản của bạn</p>
+            <p class="text-muted">Quản lý thông tin tài khoản của bạn (Mã: <strong>${user.MaNguoiDung || user.ID}</strong>)</p>
         </div>
+
+        ${bankWarningBanner}
         
         <div class="profile-card">
             <div class="profile-avatar-large"><i class="fa-solid fa-user"></i></div>
@@ -491,6 +511,15 @@ function renderAdminProfile() {
                     <label>Email</label>
                     <div>${user.Email || 'Chưa cập nhật'}</div>
                 </div>
+                <div class="detail-item">
+                    <label>Số định danh VNeID</label>
+                    <div>${user.Vneid || 'Chưa cập nhật'}</div>
+                </div>
+                ${user.VaiTro === 'Admin' ? '' : `
+                <div class="detail-item">
+                    <label>Tài khoản ngân hàng</label>
+                    <div>${bankStr}</div>
+                </div>`}
                 <div class="text-right">
                     <button class="btn-outline-sm" onclick="openProfileModal()">Chỉnh sửa</button>
                 </div>
@@ -504,11 +533,7 @@ function showProfileAlert(message, isSuccess) {
     alertBox.textContent = message;
     alertBox.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
     alertBox.style.display = 'block';
-
-    // Tự động ẩn sau 2 giây
-    setTimeout(() => {
-        alertBox.style.display = 'none';
-    }, 2000);
+    setTimeout(() => { alertBox.style.display = 'none'; }, 2000);
 }
 
 function openProfileModal() {
@@ -518,6 +543,10 @@ function openProfileModal() {
     document.getElementById('prof-hoten').value = user.HoTen || '';
     document.getElementById('prof-sdt').value = user.SoDienThoai || '';
     document.getElementById('prof-email').value = user.Email || '';
+    if (document.getElementById('prof-vneid')) document.getElementById('prof-vneid').value = user.Vneid || '';
+    if (document.getElementById('prof-bank-name')) document.getElementById('prof-bank-name').value = user.TenNganHang || '';
+    if (document.getElementById('prof-bank-stk')) document.getElementById('prof-bank-stk').value = user.STKNganHang || '';
+    if (document.getElementById('prof-bank-owner')) document.getElementById('prof-bank-owner').value = user.TenTaiKhoan || '';
     
     document.getElementById('btn-save-profile').disabled = true;
     document.getElementById('btn-save-profile').classList.add('btn-disabled');
@@ -528,13 +557,19 @@ function closeProfileModal() {
     document.getElementById('profile-modal').style.display = 'none';
 }
 
-['prof-hoten', 'prof-sdt', 'prof-email'].forEach(id => {
-    document.getElementById(id).addEventListener('input', () => {
+['prof-hoten', 'prof-sdt', 'prof-email', 'prof-vneid', 'prof-bank-name', 'prof-bank-stk', 'prof-bank-owner'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', () => {
         const user = JSON.parse(sessionStorage.getItem('dn_football_user'));
         const isChanged = 
             document.getElementById('prof-hoten').value !== (user.HoTen || '') ||
             document.getElementById('prof-sdt').value !== (user.SoDienThoai || '') ||
-            document.getElementById('prof-email').value !== (user.Email || '');
+            document.getElementById('prof-email').value !== (user.Email || '') ||
+            (document.getElementById('prof-vneid') && document.getElementById('prof-vneid').value !== (user.Vneid || '')) ||
+            (document.getElementById('prof-bank-name') && document.getElementById('prof-bank-name').value !== (user.TenNganHang || '')) ||
+            (document.getElementById('prof-bank-stk') && document.getElementById('prof-bank-stk').value !== (user.STKNganHang || '')) ||
+            (document.getElementById('prof-bank-owner') && document.getElementById('prof-bank-owner').value !== (user.TenTaiKhoan || ''));
             
         const btnSave = document.getElementById('btn-save-profile');
         if (isChanged) {
@@ -549,62 +584,51 @@ function closeProfileModal() {
 
 async function saveAdminProfile() {
     const btnSave = document.getElementById('btn-save-profile');
-    
-    // Khóa nút để tránh click nhiều lần
     btnSave.disabled = true;
     btnSave.textContent = 'Đang lưu...';
 
     const payload = {
         ho_ten: document.getElementById('prof-hoten').value,
         so_dien_thoai: document.getElementById('prof-sdt').value,
-        email: document.getElementById('prof-email').value
+        email: document.getElementById('prof-email').value,
+        vneid: document.getElementById('prof-vneid')?.value.trim() || null,
+        ten_ngan_hang: document.getElementById('prof-bank-name')?.value.trim() || null,
+        stk_ngan_hang: document.getElementById('prof-bank-stk')?.value.trim() || null,
+        ten_tai_khoan: document.getElementById('prof-bank-owner')?.value.trim().toUpperCase() || null
     };
 
     try {
         const response = await fetch(`${API_BASE_URL}/cap-nhat-profile`, {
             method: 'PUT',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
 
         const data = await response.json();
 
         if (!response.ok) {
-            // Hiển thị lỗi từ backend (ví dụ: Trùng email/sđt)
             showProfileAlert(data.message || 'Có lỗi xảy ra khi cập nhật!', false);
             btnSave.disabled = false;
             btnSave.textContent = 'Lưu thay đổi';
             return;
         }
 
-        // 1. Cập nhật đè dữ liệu mới vào Session Storage
         sessionStorage.setItem('dn_football_user', JSON.stringify(data.user));
-        
-        // 2. Cập nhật UI
         document.getElementById('admin-user-name').textContent = data.user.HoTen; 
-
         showProfileAlert('Cập nhật thông tin thành công!', true);
 
         setTimeout(() => {
             closeProfileModal();
             renderAdminProfile(); 
             btnSave.textContent = 'Lưu thay đổi';
-        }, 2000);
+        }, 1500);
 
     } catch (error) {
-        console.error('Lỗi:', error);
         showProfileAlert('Không thể kết nối đến máy chủ!', false);
         btnSave.disabled = false;
         btnSave.textContent = 'Lưu thay đổi';
     }
 }
-
-// ======================================================
-// MODULE: ĐỔI MẬT KHẨU
-// ======================================================
 
 // ======================================================
 // MODULE: ĐỔI MẬT KHẨU
@@ -766,21 +790,22 @@ async function loadCumSanCards() {
         }
 
         grid.innerHTML = res.data.map(cs => {
-            const isDeleted = cs.deleted_at !== null;
+            const maCS = cs.MaCumSan || cs.ID;
+            const isBaoTri = cs.TrangThai === 'BaoTri';
             const imgBaseUrl = 'http://127.0.0.1:8000';
             const bgStyle = cs.HinhAnh ? `background-image: url('${imgBaseUrl}${cs.HinhAnh}'); background-size: cover; background-position: center;` : '';
             const iconHtml = cs.HinhAnh ? '' : '<i class="fa-solid fa-map-location-dot"></i>';
             
-            const r = ratingMap[cs.ID];
+            const r = ratingMap[maCS];
             const countStar = r ? Number(r.tong_danh_gia) : Number(cs.danh_gias_count || 0);
             const rawAvg = r ? Number(r.trung_binh_sao) : Number(cs.danh_gias_avg_so_sao || 0);
             const avgStar = countStar > 0 ? rawAvg.toFixed(1) : '0.0';
 
-            const cardStyle = isDeleted ? 'opacity: 0.6; filter: grayscale(1); border-color: #ef4444;' : '';
-            const badgeHtml = isDeleted ? '<div style="position:absolute; top:12px; left:12px; background:#ef4444; color:white; padding:4px 10px; border-radius:4px; font-size:0.8rem; font-weight:bold;">Đã tạm ngưng</div>' : '';
+            const cardStyle = isBaoTri ? 'opacity: 0.6; filter: grayscale(1); border-color: #ef4444;' : '';
+            const badgeHtml = isBaoTri ? '<div style="position:absolute; top:12px; left:12px; background:#ef4444; color:white; padding:4px 10px; border-radius:4px; font-size:0.8rem; font-weight:bold;">Đang bảo trì</div>' : '';
 
             return `
-            <div class="cumsan-card" style="${cardStyle}" onclick="renderCumSanDetail(${cs.ID}, '${cs.TenCumSan}')">
+            <div class="cumsan-card" style="${cardStyle}" onclick="renderCumSanDetail('${maCS}', '${cs.TenCumSan.replace(/'/g, "\\'")}')">
                 ${badgeHtml}
                 <div class="cumsan-card-img" style="${bgStyle}">${iconHtml}</div>
                 <div class="cumsan-card-body">
@@ -801,15 +826,12 @@ async function loadCumSanCards() {
     }
 }
 
-// 3. Render giao diện Chi tiết Cụm Sân (Khi click vào 1 thẻ)
 let currentCumSanId = null;
 
-// Hàm mở chi tiết Cụm Sân
 async function renderCumSanDetail(cumSanId) {
     currentCumSanId = cumSanId;
     const contentArea = document.querySelector('.admin-content');
     
-    // 1. Tự động set trạng thái Active màu xanh cho Menu Sidebar
     const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
     if (currentUser && currentUser.VaiTro === 'QuanLySan') {
@@ -820,16 +842,13 @@ async function renderCumSanDetail(cumSanId) {
         if (menuLink) menuLink.classList.add('active');
     }
 
-    // Khung loading
     contentArea.innerHTML = `<div style="text-align:center; margin-top:50px;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải dữ liệu...</div>`;
 
     try {
-        // Fetch dữ liệu Cụm Sân chi tiết từ API
         const response = await fetch(`${API_BASE_URL}/cum-san/${cumSanId}`);
         const res = await response.json();
 
         if (!res.success) {
-            // Khắc phục nút quay lại khi lỗi
             const backAction = currentUser.VaiTro === 'Admin' ? 'renderQuanLySan()' : 'renderTongQuan()';
             contentArea.innerHTML = `<button class="btn-back" onclick="${backAction}"><i class="fa-solid fa-arrow-left"></i> Quay lại</button>
                                      <div class="modal-alert error" style="display:block;">Không tìm thấy cụm sân.</div>`;
@@ -837,30 +856,24 @@ async function renderCumSanDetail(cumSanId) {
         }
 
         const cs = res.data;
+        const maCS = cs.MaCumSan || cs.ID;
         window.currentClusterNameAdmin = cs.TenCumSan;
-        const isDeleted = cs.deleted_at !== null;
+        const isBaoTri = cs.TrangThai === 'BaoTri';
 
-        // Nút Sửa luôn hiển thị
         const btnEdit = `<button class="btn-outline-sm" onclick='openEditCumSanModal(${JSON.stringify(cs).replace(/'/g, "\\'")})'><i class="fa-solid fa-pen"></i> Sửa Cụm Sân</button>`;
         
-        // Nút Xóa hoặc Khôi phục đổi theo trạng thái
-        const btnDeleteOrRestore = isDeleted 
-            ? `<button class="btn-outline-sm" style="color: #16A34A; border-color: #bbf7d0;" onclick="restoreCumSan(${cs.ID})"><i class="fa-solid fa-rotate-left"></i> Khôi phục</button>`
-            : `<button class="btn-outline-sm" style="color: #ef4444; border-color: #fecaca;" onclick="deleteCumSan(${cs.ID})"><i class="fa-solid fa-trash"></i> Xóa</button>`;
+        const btnDeleteOrRestore = isBaoTri 
+            ? `<button class="btn-outline-sm" style="color: #16A34A; border-color: #bbf7d0;" onclick="restoreCumSan('${maCS}')"><i class="fa-solid fa-rotate-left"></i> Mở hoạt động lại</button>`
+            : `<button class="btn-outline-sm" style="color: #ef4444; border-color: #fecaca;" onclick="deleteCumSan('${maCS}')"><i class="fa-solid fa-screwdriver-wrench"></i> Bảo trì cụm sân</button>`;
 
-        // Nhãn trạng thái hiển thị kế bên Tên cụm sân
-        const statusBadge = isDeleted ? `<span class="badge badge-warning" style="margin-left: 10px; font-size: 0.9rem;">Đã tạm ngưng</span>` : '';
+        const statusBadge = isBaoTri ? `<span class="badge badge-warning" style="margin-left: 10px; font-size: 0.9rem;">Đang bảo trì</span>` : '';
 
-        // =======================================================
-        // 2. Ẩn nút "Quay lại" đối với Quản lý sân
-        // =======================================================
         const backBtnHtml = currentUser.VaiTro === 'QuanLySan' 
-            ? '' // Trống (Không cho phép quay lại danh sách tổng)
+            ? ''
             : `<button class="btn-back" onclick="renderQuanLySan()"><i class="fa-solid fa-arrow-left"></i> Quay lại Danh sách Cụm Sân</button>`;
 
-        // Render HTML
         contentArea.innerHTML = `
-            ${backBtnHtml} <!-- Chèn biến html đã xử lý ở trên vào đây -->
+            ${backBtnHtml}
             
             <div class="page-header" style="margin-bottom: 24px; padding: 20px 24px; display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; border-radius: 14px; background: linear-gradient(135deg, #0b5d3b 0%, #087f4f 100%); box-shadow: 0 6px 18px rgba(0, 93, 59, 0.18); border-left: 5px solid #f5c542;"> 
                 <div> 
@@ -884,22 +897,22 @@ async function renderCumSanDetail(cumSanId) {
             </div>
 
             <div id="tab-sanbong" class="tab-pane active panel">
-                <div class="panel-header">Danh sách Sân con <button class="btn-primary" onclick="openSanBongModal()" ${isDeleted?'disabled':''}>+ Thêm Sân Con</button></div>
+                <div class="panel-header">Danh sách Sân con <button class="btn-primary" onclick="openSanBongModal()" ${isBaoTri?'disabled':''}>+ Thêm Sân Con</button></div>
                 
-                <!-- Thêm max-height và overflow-y vào thẻ bọc ngoài -->
-                <div class="table-responsive" style="max-height: 320px; overflow-y: auto;">
+                <div class="table-responsive" style="max-height: 360px; overflow-y: auto;">
                     <table class="admin-table" style="position: relative;">
-                        <!-- Thêm position: sticky để ghim tiêu đề cột khi cuộn chuột -->
                         <thead style="position: sticky; top: 0; background: #F8FAFC; z-index: 1; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
                             <tr>
                                 <th>Tên Sân</th>
                                 <th>Loại Sân</th>
+                                <th>Kích thước / Diện tích</th>
+                                <th>Mô tả</th>
                                 <th>Trạng Thái</th>
                                 <th style="text-align:center;">Hành động</th>
                             </tr>
                         </thead>
                         <tbody id="sanbong-table-body">
-                            <tr><td colspan="4" class="text-center" style="text-align: center;">Đang tải...</td></tr>
+                            <tr><td colspan="6" class="text-center" style="text-align: center;">Đang tải...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -909,7 +922,6 @@ async function renderCumSanDetail(cumSanId) {
                 <div id="price-container">Đang tải cấu hình...</div>
             </div>
             
-            <!-- KHU VỰC XEM ĐÁNH GIÁ CỦA CỤM SÂN (CHO ADMIN & QUẢN LÝ SÂN) -->
             <div class="panel" style="margin-top: 24px;">
                 <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
                     <div>
@@ -936,9 +948,9 @@ async function renderCumSanDetail(cumSanId) {
             </div>
         `;
 
-        loadSanBongTheoCum(cs.ID);
+        loadSanBongTheoCum(maCS);
         loadGiaTienTheoCum(cs);
-        loadDanhGiaTheoCumAdmin(cs.ID);
+        loadDanhGiaTheoCumAdmin(maCS);
 
     } catch (error) {
         console.error("Lỗi:", error);
@@ -952,18 +964,25 @@ async function loadSanBongTheoCum(cumSanId) {
         
         const tbody = document.getElementById('sanbong-table-body');
         if (!res.success || res.data.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted" style="text-align: center;">Chưa có sân con nào.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="text-align: center;">Chưa có sân con nào.</td></tr>`;
             return;
         }
 
-        tbody.innerHTML = res.data.map(sb => `
+        tbody.innerHTML = res.data.map(sb => {
+            const maSB = sb.MaSanBong || sb.ID;
+            const maLS = sb.MaLoaiSan || sb.ID_LoaiSan;
+            const ktStr = sb.KichThuoc || '--';
+            const dtStr = sb.DienTich ? `${Number(sb.DienTich)} m²` : '--';
+            return `
             <tr>
-                <td><strong>${sb.TenSan}</strong></td>
+                <td><strong>${sb.TenSan}</strong> <span style="font-size:0.75rem; color:#64748b;">(${maSB})</span></td>
                 <td>${sb.loaiSan?.TenLoaiSan || sb.loai_san?.TenLoaiSan || '<span style="color:red">Lỗi dữ liệu</span>'}</td>
+                <td><span style="font-weight: 600; color: #334155;">${ktStr}</span> <span style="color: #64748b; font-size: 0.82rem;">(${dtStr})</span></td>
+                <td style="max-width: 220px; font-size: 0.85rem; color: #475569;">${sb.MoTa || '<span style="color:#94a3b8; font-style:italic;">Chưa có mô tả</span>'}</td>
                 <td><span class="badge ${sb.TrangThai === 'HoatDong' ? 'badge-success' : 'badge-warning'}">${sb.TrangThai === 'HoatDong' ? 'Hoạt động' : 'Bảo trì'}</span></td>
                 <td>
                     <div style="display: flex; gap: 8px; justify-content: center;">
-                        <button class="action-btn" style="background:#f0fdf4; color:#16a34a; border-color:#bbf7d0;" onclick="renderAdminSchedule(${cumSanId}, '${sb.TenSan}', ${sb.ID}, ${sb.ID_LoaiSan})">
+                        <button class="action-btn" style="background:#f0fdf4; color:#16a34a; border-color:#bbf7d0;" onclick="renderAdminSchedule('${cumSanId}', '${sb.TenSan.replace(/'/g, "\\'")}', '${maSB}', '${maLS}')">
                             <i class="fa-regular fa-calendar"></i> Xem lịch
                         </button>
                         <button class="action-btn" onclick='openSanBongModal(${JSON.stringify(sb).replace(/'/g, "\\'")})'>
@@ -972,27 +991,36 @@ async function loadSanBongTheoCum(cumSanId) {
                     </div>
                 </td>
             </tr>
-        `).join('');
+        `}).join('');
     } catch (e) { console.error(e); }
 }
 
 async function openSanBongModal(sb = null) {
     const res = await fetch(`${API_BASE_URL}/loai-san`);
     const loaiSans = (await res.json()).data;
-    document.getElementById('sb-loaisan').innerHTML = loaiSans.map(ls => `<option value="${ls.ID}">${ls.TenLoaiSan}</option>`).join('');
+    document.getElementById('sb-loaisan').innerHTML = loaiSans.map(ls => {
+        const maLS = ls.MaLoaiSan || ls.ID;
+        return `<option value="${maLS}">${ls.TenLoaiSan}</option>`;
+    }).join('');
 
     if (sb) {
         document.getElementById('sanbong-modal-title').textContent = 'Chỉnh sửa Sân Con';
-        document.getElementById('sb-id').value = sb.ID;
+        document.getElementById('sb-id').value = sb.MaSanBong || sb.ID;
         document.getElementById('sb-ten').value = sb.TenSan;
-        document.getElementById('sb-loaisan').value = sb.ID_LoaiSan;
+        document.getElementById('sb-loaisan').value = sb.MaLoaiSan || sb.ID_LoaiSan;
+        if (document.getElementById('sb-dientich')) document.getElementById('sb-dientich').value = sb.DienTich || '';
+        if (document.getElementById('sb-kichthuoc')) document.getElementById('sb-kichthuoc').value = sb.KichThuoc || '';
+        if (document.getElementById('sb-mota')) document.getElementById('sb-mota').value = sb.MoTa || '';
         document.getElementById('sb-trangthai').value = sb.TrangThai;
-        document.getElementById('group-trangthai').style.display = 'block'; // Sửa thì mới cho đổi trạng thái
+        document.getElementById('group-trangthai').style.display = 'block';
     } else {
         document.getElementById('sanbong-modal-title').textContent = 'Thêm Sân Con';
         document.getElementById('sb-id').value = '';
         document.getElementById('sb-ten').value = '';
-        document.getElementById('group-trangthai').style.display = 'none'; // Thêm mới mặc định là HoatDong
+        if (document.getElementById('sb-dientich')) document.getElementById('sb-dientich').value = '';
+        if (document.getElementById('sb-kichthuoc')) document.getElementById('sb-kichthuoc').value = '';
+        if (document.getElementById('sb-mota')) document.getElementById('sb-mota').value = '';
+        document.getElementById('group-trangthai').style.display = 'none';
     }
     document.getElementById('sanbong-modal').style.display = 'flex';
 }
@@ -1006,6 +1034,9 @@ async function saveSanBong() {
     const sbId = document.getElementById('sb-id').value;
     const tenSan = document.getElementById('sb-ten').value.trim();
     const idLoaiSan = document.getElementById('sb-loaisan').value;
+    const dienTich = document.getElementById('sb-dientich')?.value || null;
+    const kichThuoc = document.getElementById('sb-kichthuoc')?.value.trim() || null;
+    const moTa = document.getElementById('sb-mota')?.value.trim() || null;
     const trangThai = sbId ? document.getElementById('sb-trangthai').value : 'HoatDong';
 
     if (!tenSan || !idLoaiSan) {
@@ -1017,9 +1048,12 @@ async function saveSanBong() {
     btn.textContent = 'Đang lưu...';
 
     const payload = {
-        ID_CumSan: currentCumSanId,
-        ID_LoaiSan: idLoaiSan,
+        MaCumSan: currentCumSanId,
+        MaLoaiSan: idLoaiSan,
         TenSan: tenSan,
+        DienTich: dienTich !== '' ? dienTich : null,
+        KichThuoc: kichThuoc,
+        MoTa: moTa,
         TrangThai: trangThai
     };
 
@@ -1036,7 +1070,7 @@ async function saveSanBong() {
 
         if (response.ok && data.success) {
             closeSanBongModal();
-            loadSanBongTheoCum(currentCumSanId); // Load lại bảng ngay lập tức
+            loadSanBongTheoCum(currentCumSanId);
         } else {
             alert(data.message || 'Có lỗi xảy ra');
         }
@@ -1050,18 +1084,17 @@ async function saveSanBong() {
 
 async function loadGiaTienTheoCum(cs) {
     try {
-        // Fetch song song Danh mục và Dữ liệu giá hiện tại
+        const maCS = cs.MaCumSan || cs.ID;
         const [lsRes, kgRes, gtRes] = await Promise.all([
             fetch(`${API_BASE_URL}/loai-san`),
             fetch(`${API_BASE_URL}/khung-gio`),
-            fetch(`${API_BASE_URL}/gia-tien?cum_san_id=${cs.ID}`)
+            fetch(`${API_BASE_URL}/gia-tien?cum_san_id=${maCS}`)
         ]);
         
         const loaiSans = (await lsRes.json()).data;
         let allKhungGio = (await kgRes.json()).data;
         const currentPrices = (await gtRes.json()).data || [];
 
-        // NGHIỆP VỤ: Chỉ lọc ra các khung giờ nằm TRONG thời gian hoạt động của Cụm sân
         const validKhungGio = allKhungGio.filter(kg => kg.GioBatDau >= cs.GioMoCua && kg.GioKetThuc <= cs.GioDongCua);
 
         const container = document.getElementById('price-container');
@@ -1072,26 +1105,28 @@ async function loadGiaTienTheoCum(cs) {
 
         let html = '';
         loaiSans.forEach(ls => {
+            const maLS = ls.MaLoaiSan || ls.ID;
             html += `
             <div class="section-loaisan">
                 <div class="section-loaisan-header">
                     <div class="section-loaisan-title"><i class="fa-solid fa-futbol" style="color:var(--primary)"></i> ${ls.TenLoaiSan}</div>
-                    <button id="btn-save-price-${ls.ID}" class="btn-primary" onclick="saveGiaTien(${cs.ID}, ${ls.ID}, '${ls.TenLoaiSan}')" disabled style="opacity: 0.5; cursor: not-allowed;"><i class="fa-solid fa-save"></i> Lưu giá ${ls.TenLoaiSan}</button>
+                    <button id="btn-save-price-${maLS}" class="btn-primary" onclick="saveGiaTien('${maCS}', '${maLS}', '${ls.TenLoaiSan}')" disabled style="opacity: 0.5; cursor: not-allowed;"><i class="fa-solid fa-save"></i> Lưu giá ${ls.TenLoaiSan}</button>
                 </div>
                 <div class="price-grid">`;
 
             validKhungGio.forEach(kg => {
-                const existPrice = currentPrices.find(p => p.ID_LoaiSan == ls.ID && p.ID_KhungGio == kg.ID);
+                const maKG = kg.MaKhungGio || kg.ID;
+                const existPrice = currentPrices.find(p => (p.MaLoaiSan || p.ID_LoaiSan) == maLS && (p.MaKhungGio || p.ID_KhungGio) == maKG);
                 const val = existPrice ? existPrice.SoTien : '';
 
                 html += `
                     <div class="price-card">
                         <div class="time-label">${kg.GioBatDau.substring(0,5)} - ${kg.GioKetThuc.substring(0,5)}</div>
-                        <input type="number" class="form-control price-input input-price-${ls.ID}" 
-                               data-khunggio="${kg.ID}" 
+                        <input type="number" class="form-control price-input input-price-${maLS}" 
+                               data-khunggio="${maKG}" 
                                data-original="${val}" 
                                value="${val}" 
-                               oninput="checkPriceChanges(${ls.ID})" 
+                               oninput="checkPriceChanges('${maLS}')" 
                                placeholder="Bỏ trống = Đóng sân">
                     </div>`;
             });
@@ -1571,7 +1606,7 @@ function openCSConfirmModal(id, action) {
     
     document.getElementById('cs-confirm-title').innerText = isDelete ? 'Tạm Ngưng Cụm Sân' : 'Khôi Phục Cụm Sân';
     document.getElementById('cs-confirm-msg').innerHTML = isDelete 
-        ? 'Bạn có chắc chắn muốn <strong style="color: #ef4444;">XÓA (Tạm ngưng)</strong> hoạt động của Cụm Sân này không?' 
+        ? 'Bạn có chắc chắn muốn <strong style="color: #ef4444;">Tạm ngưng</strong> hoạt động của Cụm Sân này không?' 
         : 'Bạn muốn <strong style="color: #16A34A;">KHÔI PHỤC</strong> hoạt động cho Cụm Sân này?';
     
     const btnConfirm = document.getElementById('cs-confirm-btn');
@@ -1848,10 +1883,10 @@ function renderGDTable(data) {
         let actionHtml = '';
         if (item.TrangThai === 'ChoDuyet') {
             actionHtml = `
-                <button class="btn-outline-sm" style="color: #2563eb; border-color: #bfdbfe; background: #eff6ff; margin-right: 5px; margin-bottom: 5px; text-align: center; width: 95%;" onclick="openMaTranLichModal(${item.ID})"><i class="fa-regular fa-calendar-days"></i> Kiểm tra Lịch</button>
+                <button class="btn-outline-sm" style="color: #2563eb; border-color: #bfdbfe; background: #eff6ff; margin-right: 5px; margin-bottom: 5px; text-align: center; width: 95%;" onclick="openMaTranLichModal('${item.ID}')"><i class="fa-regular fa-calendar-days"></i> Kiểm tra Lịch</button>
                 <br>
-                <button class="btn-outline-sm" style="color: #047857; border-color: #047857;" onclick="openGDConfirmModal(${item.ID}, 'DaDuyet')"><i class="fa-solid fa-check"></i> Duyệt</button>
-                <button class="btn-outline-sm" style="color: #b91c1c; border-color: #b91c1c; margin-left: 5px;" onclick="openGDConfirmModal(${item.ID}, 'TuChoi')"><i class="fa-solid fa-xmark"></i> Từ chối</button>
+                <button class="btn-outline-sm" style="color: #047857; border-color: #047857;" onclick="openGDConfirmModal('${item.ID}', 'DaDuyet')"><i class="fa-solid fa-check"></i> Duyệt</button>
+                <button class="btn-outline-sm" style="color: #b91c1c; border-color: #b91c1c; margin-left: 5px;" onclick="openGDConfirmModal('${item.ID}', 'TuChoi')"><i class="fa-solid fa-xmark"></i> Từ chối</button>
             `;
         } else {
             actionHtml = `<span style="color: var(--text-muted); font-size: 0.85rem;">Không có hành động</span>`;
@@ -2145,233 +2180,6 @@ function renderMaTranTab(dateDbFormat, btnElement) {
 }
 
 // ======================================================
-// MODULE: QUẢN LÝ YÊU CẦU RÚT TIỀN
-// ======================================================
-let allRutTienData = []; 
-let currentRTPage = 1;
-const itemsPerRTPage = 5; 
-let currentRTFilter = 'All';
-let currentRTSearch = '';
-let currentRTDate = '';
-let pendingRTId = null;
-let pendingRTStatus = null;
-
-function renderQuanLyRutTien() {
-    currentRTPage = 1; currentRTFilter = 'All'; currentRTSearch = ''; currentRTDate = '';
-    document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
-    Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('RÚT TIỀN')).classList.add('active');
-
-    const contentArea = document.querySelector('.admin-content');
-    contentArea.innerHTML = `
-        <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-            <div>
-                <h1 class="page-title">Quản lý Yêu cầu Rút tiền</h1>
-                <p class="text-muted">Có <strong id="rt-pending-count" style="color: #ea580c; font-size: 1.1rem;">0</strong> đơn đang chờ phê duyệt</p>
-            </div>
-        </div>
-        <div id="ruttien-alert" class="modal-alert" style="display: none; margin-bottom: 16px;"></div>
-
-        <div class="panel">
-            <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
-                <div style="position: relative; flex: 1; min-width: 250px;">
-                    <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
-                    <input type="text" class="form-control" style="padding-left: 35px;" placeholder="Tìm tên khách hàng..." oninput="handleRTSearch(this.value)">
-                </div>
-                <input type="date" class="form-control" style="width: 150px;" onchange="handleRTDate(this.value)">
-                <select class="form-control" style="width: 200px;" onchange="handleRTFilter(this.value)">
-                    <option value="All">Tất cả trạng thái</option>
-                    <option value="ChoDuyet">Chờ duyệt</option>
-                    <option value="DaDuyet">Đã duyệt</option>
-                    <option value="TuChoi">Từ chối</option>
-                </select>
-            </div>
-
-            <div class="table-responsive" style="min-height: 350px;">
-                <table class="admin-table">
-                    <thead style="background: #F8FAFC;">
-                        <tr>
-                            <th>Khách Hàng</th>
-                            <th>Số tiền</th>
-                            <th>Thông tin NH</th>
-                            <th>Ngày nộp</th>
-                            <th>Trạng thái</th>
-                            <th>Hành động</th>
-                        </tr>
-                    </thead>
-                    <tbody id="ruttien-table-body">
-                        <tr><td colspan="6" class="text-center" style="text-align: center;">Đang tải dữ liệu...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-            <div id="rt-pagination" style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 15px; margin-bottom: 15px; padding-top: 15px; border-top: 1px solid var(--border);"></div>
-        </div>
-
-        <!-- Modal Xác nhận RT -->
-        <div id="rt-confirm-modal" class="modal-overlay" style="display: none; z-index: 9999;">
-            <div class="modal-content" style="max-width: 400px; text-align: center; padding: 30px 20px;">
-                <div style="font-size: 3.5rem; color: #f59e0b; margin-bottom: 15px;"><i class="fa-solid fa-circle-exclamation"></i></div>
-                <h3 id="rt-confirm-title" style="margin-bottom: 10px; font-size: 1.4rem;">Xác nhận</h3>
-                <p id="rt-confirm-msg" style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5;"></p>
-
-                <div id="rt-reason-container" style="display: none; margin-bottom: 20px; text-align: left;">
-                    <label style="font-size: 0.9rem; font-weight: 600; color: var(--text-dark); margin-bottom: 8px; display: block;">Lý do từ chối <span style="color: red;">*</span></label>
-                    <textarea id="rt-reject-reason" class="form-control" rows="3" placeholder="Nhập lý do từ chối giao dịch này..." style="width: 100%; resize: none;" oninput="document.getElementById('rt-reason-error').style.display='none'"></textarea>
-                    <div id="rt-reason-error" style="color: #ef4444; font-size: 0.85rem; margin-top: 8px; display: none;"><i class="fa-solid fa-circle-exclamation"></i> Vui lòng nhập lý do từ chối!</div>
-                </div>
-
-                <div style="display: flex; justify-content: center; gap: 12px;">
-                    <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="closeRTConfirmModal()">Hủy bỏ</button>
-                    <button id="rt-confirm-btn" class="btn-primary" style="width: auto; padding: 10px 24px;" onclick="executeCapNhatTrangThaiRT()">Đồng ý</button>
-                </div>
-            </div>
-        </div>
-    `;
-    loadDanhSachRutTienAdmin();
-}
-
-function showRTAlert(message, isSuccess) {
-    const alertBox = document.getElementById('ruttien-alert');
-    alertBox.textContent = message; alertBox.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
-    alertBox.style.display = 'block'; setTimeout(() => alertBox.style.display = 'none', 3000);
-}
-
-function handleRTSearch(val) { currentRTSearch = val.toLowerCase().trim(); currentRTPage = 1; applyRTFiltersAndRender(); }
-function handleRTDate(val) { currentRTDate = val; currentRTPage = 1; applyRTFiltersAndRender(); }
-function handleRTFilter(val) { currentRTFilter = val; currentRTPage = 1; applyRTFiltersAndRender(); }
-
-async function loadDanhSachRutTienAdmin() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/admin/yeu-cau-rut-tien`);
-        const res = await response.json();
-        if (res.success) { allRutTienData = res.data || []; applyRTFiltersAndRender(); }
-    } catch (error) { showRTAlert('Lỗi kết nối.', false); }
-}
-
-function applyRTFiltersAndRender() {
-    document.getElementById('rt-pending-count').innerText = allRutTienData.filter(i => i.TrangThai === 'ChoDuyet').length;
-
-    let filteredData = allRutTienData.filter(item => {
-        const matchStatus = (currentRTFilter === 'All' || item.TrangThai === currentRTFilter);
-        const tenKhach = item.nguoi_dung ? item.nguoi_dung.HoTen.toLowerCase() : '';
-        const matchSearch = tenKhach.includes(currentRTSearch);
-        const txDate = item.NgayTao ? item.NgayTao.substring(0, 10) : '';
-        const matchDate = currentRTDate ? (txDate === currentRTDate) : true;
-        return matchStatus && matchSearch && matchDate;
-    });
-
-    const totalPages = Math.ceil(filteredData.length / itemsPerRTPage) || 1;
-    if (currentRTPage > totalPages) currentRTPage = totalPages;
-    const startIdx = (currentRTPage - 1) * itemsPerRTPage;
-    
-    renderRTTable(filteredData.slice(startIdx, startIdx + itemsPerRTPage));
-    renderRTPagination(totalPages);
-}
-
-function renderRTTable(data) {
-    const tbody = document.getElementById('ruttien-table-body');
-    if (data.length === 0) return tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="text-align: center; padding: 40px;">Không có dữ liệu.</td></tr>`;
-
-    tbody.innerHTML = data.map(item => {
-        let badgeClass = 'badge-warning', viStatus = 'Chờ duyệt', actionHtml = '';
-        if(item.TrangThai === 'DaDuyet') { badgeClass = 'badge-success'; viStatus = 'Đã duyệt'; }
-        if(item.TrangThai === 'TuChoi') { badgeClass = 'badge-danger'; viStatus = 'Từ chối'; }
-
-        if (item.TrangThai === 'ChoDuyet') {
-            actionHtml = `<button class="btn-outline-sm" style="color: #047857; border-color: #047857;" onclick="openRTConfirmModal(${item.ID}, 'DaDuyet')"><i class="fa-solid fa-check"></i> Duyệt</button>
-                          <button class="btn-outline-sm" style="color: #b91c1c; border-color: #b91c1c; margin-left: 5px;" onclick="openRTConfirmModal(${item.ID}, 'TuChoi')"><i class="fa-solid fa-xmark"></i> Từ chối</button>`;
-        } else {
-            actionHtml = `<span style="color: var(--text-muted); font-size: 0.85rem;">(Ngày duyệt: ${item.NgayDuyet.substring(0,10)})</span>`;
-        }
-
-        return `<tr>
-            <td><strong>${item.nguoi_dung?.HoTen || 'N/A'}</strong><br><span style="font-size: 0.85rem;">Số dư ví: ${Number(item.nguoi_dung?.SoDuVi || 0).toLocaleString('vi-VN')}đ</span></td>
-            <td><strong style="color: var(--danger);">${Number(item.SoTien).toLocaleString('vi-VN')}đ</strong></td>
-            <td><span style="font-size: 0.85rem; white-space: pre-line;">${item.NoiDung}</span></td>
-            <td>${item.NgayTao ? item.NgayTao.substring(0,10) : ''}</td>
-            <td><span class="badge ${badgeClass}">${viStatus}</span></td>
-            <td>${actionHtml}</td>
-        </tr>`;
-    }).join('');
-}
-
-function renderRTPagination(totalPages) {
-    const div = document.getElementById('rt-pagination');
-    if (totalPages <= 1) return div.innerHTML = '';
-    
-    let html = `<button class="btn-outline-sm" ${currentRTPage === 1 ? 'disabled style="opacity:0.5;"' : ''} onclick="currentRTPage--; applyRTFiltersAndRender()"><i class="fa-solid fa-chevron-left"></i></button>`;
-    
-    const getPages = (current, total) => {
-        if (total <= 6) return Array.from({length: total}, (_, i) => i + 1);
-        if (current <= 3) return [1, 2, 3, 4, '...', total];
-        if (current >= total - 2) return [1, '...', total - 3, total - 2, total - 1, total];
-        return [1, '...', current - 1, current, current + 1, '...', total];
-    };
-
-    getPages(currentRTPage, totalPages).forEach(i => {
-        if (i === '...') {
-            html += `<span style="padding: 6px 10px; color: var(--text-muted); font-weight: bold;">...</span>`;
-        } else {
-            html += `<button class="${i === currentRTPage ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="currentRTPage=${i}; applyRTFiltersAndRender()">${i}</button>`;
-        }
-    });
-
-    html += `<button class="btn-outline-sm" ${currentRTPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="currentRTPage++; applyRTFiltersAndRender()"><i class="fa-solid fa-chevron-right"></i></button>`;
-    div.innerHTML = html;
-}
-
-function openRTConfirmModal(id, status) {
-    pendingRTId = id; pendingRTStatus = status;
-    const isApprove = (status === 'DaDuyet');
-    document.getElementById('rt-confirm-title').innerText = isApprove ? 'Duyệt Rút Tiền' : 'Từ Chối Rút Tiền';
-    document.getElementById('rt-confirm-msg').innerHTML = isApprove ? 'Hệ thống sẽ <strong>TRỪ</strong> tiền trong ví khách hàng. Xác nhận?' : 'Xác nhận <strong>TỪ CHỐI</strong>?';
-    
-    const btn = document.getElementById('rt-confirm-btn');
-    btn.style.backgroundColor = isApprove ? 'var(--primary)' : '#ef4444';
-    btn.style.borderColor = isApprove ? 'var(--primary)' : '#ef4444';
-
-    document.getElementById('rt-reason-container').style.display = isApprove ? 'none' : 'block';
-    document.getElementById('rt-reject-reason').value = '';
-    document.getElementById('rt-reason-error').style.display = 'none';
-    document.getElementById('rt-confirm-modal').style.display = 'flex';
-}
-
-function closeRTConfirmModal() { document.getElementById('rt-confirm-modal').style.display = 'none'; }
-
-async function executeCapNhatTrangThaiRT() {
-    let lyDoHuy = null;
-    if (pendingRTStatus === 'TuChoi') {
-        lyDoHuy = document.getElementById('rt-reject-reason').value.trim();
-        if (!lyDoHuy) {
-            document.getElementById('rt-reason-error').style.display = 'block';
-            document.getElementById('rt-reject-reason').focus();
-            return;
-        }
-    }
-
-    const btn = document.getElementById('rt-confirm-btn');
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...'; btn.disabled = true;
-
-    try {
-        const response = await fetch(`${API_BASE_URL}/admin/yeu-cau-rut-tien/${pendingRTId}/xu-ly`, {
-            method: 'PUT', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-            body: JSON.stringify({ trang_thai: pendingRTStatus, ly_do_huy: lyDoHuy })
-        });
-        const data = await response.json();
-        if (response.ok && data.success) {
-            showRTAlert('Xử lý thành công!', true);
-            closeRTConfirmModal(); loadDanhSachRutTienAdmin();
-        } else { showRTAlert(data.message, false); closeRTConfirmModal(); }
-    } catch (e) { showRTAlert('Lỗi mạng!', false); closeRTConfirmModal(); }
-    finally { btn.innerHTML = 'Đồng ý'; btn.disabled = false; }
-}
-
-// Đóng dropdown khi click ra ngoài màn hình
-document.addEventListener('click', () => {
-    const notifDropdown = document.getElementById('notif-dropdown');
-    if(notifDropdown) notifDropdown.style.display = 'none';
-});
-
-// ======================================================
 // MODULE: THÔNG BÁO (NOTIFICATIONS)
 // ======================================================
 
@@ -2427,7 +2235,7 @@ async function loadNotifications() {
             const timeStr = `${pad(d.getHours())}:${pad(d.getMinutes())} - ${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
 
             html += `
-                <div onclick="markAsRead(${item.ID}, this)" style="${bgClass} padding: 12px 16px; border-bottom: 1px solid #f1f5f9; display: flex; gap: 12px; transition: 0.2s;">
+                <div onclick="markAsRead('${item.ID}', this)" style="${bgClass} padding: 12px 16px; border-bottom: 1px solid #f1f5f9; display: flex; gap: 12px; transition: 0.2s;">
                     <div style="width: 40px; height: 40px; border-radius: 50%; background: ${bgIcon}; color: ${iconColor}; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 1.1rem;">
                         <i class="fa-solid ${icon}"></i>
                     </div>
@@ -2675,7 +2483,7 @@ function renderDSTable(data) {
         // Nút hành động (Thêm event.stopPropagation() để không bị kích hoạt sự kiện click của dòng)
         let actionHtml = '';
         if (item.TrangThai === 'DaCoc') {
-            actionHtml = `<button class="btn-primary" style="padding: 6px 12px; font-size: 0.85rem;" onclick="event.stopPropagation(); openDSConfirmModal(${item.ID})">Chốt sân</button>`;
+            actionHtml = `<button class="btn-primary" style="padding: 6px 12px; font-size: 0.85rem;" onclick="event.stopPropagation(); openDSConfirmModal('${item.ID}')">Chốt sân</button>`;
         } else {
             actionHtml = `<span style="color: var(--text-muted); font-size: 0.85rem;">Đã xử lý</span>`;
         }
@@ -2683,7 +2491,7 @@ function renderDSTable(data) {
         const tenKhachHienThi = item.ID_NguoiDung ? (item.nguoi_dung?.HoTen || 'N/A') : (item.TenKhachVangLai || 'N/A');
         const sdtKhachHienThi = item.ID_NguoiDung ? (item.nguoi_dung?.SoDienThoai || '') : (item.SDTKhachVangLai || '');
 
-        return `<tr onclick="openBookingDetailModalAdmin(${item.ID})" style="cursor: pointer; transition: background-color 0.15s;" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor=''">
+        return `<tr onclick="openBookingDetailModalAdmin('${item.ID}')" style="cursor: pointer; transition: background-color 0.15s;" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor=''">
             <td style="text-align: center;">
                 <span style="padding: 6px 12px; border-radius: 8px; font-weight: 700; font-family: 'Courier New', Courier, monospace; font-size: 0.95rem; display: inline-block; white-space: nowrap; letter-spacing: 1px; ${badgeClassVe}">
                     ${maVeDisplay}
@@ -2978,7 +2786,7 @@ function openAdminCancelConfirmModal() {
                     <label style="font-size: 0.86rem; font-weight: 600; color: #1e293b; margin-bottom: 6px; display: block;">Mã xác thực OTP (gửi về Email khách) <span style="color: #ef4444;">*</span></label>
                     <div style="display: flex; gap: 10px; align-items: stretch;">
                         <input type="text" id="admin-guest-cancel-otp" class="form-control" placeholder="Nhập 6 số OTP..." maxlength="6" style="flex: 1; font-weight: 700; letter-spacing: 2px; text-align: center; border-radius: 10px;">
-                        <button type="button" id="btn-admin-send-guest-otp" onclick="sendGuestCancelOtpAdmin(${item.ID})" style="width: auto; padding: 0 16px; border-radius: 10px; border: 1px solid #bfdbfe; background: #eff6ff; color: #2563eb; font-weight: 700; font-size: 0.86rem; white-space: nowrap; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s ease;" onmouseover="this.style.background='#dbeafe'; this.style.borderColor='#93c5fd';" onmouseout="this.style.background='#eff6ff'; this.style.borderColor='#bfdbfe';">
+                        <button type="button" id="btn-admin-send-guest-otp" onclick="sendGuestCancelOtpAdmin('${item.ID}')" style="width: auto; padding: 0 16px; border-radius: 10px; border: 1px solid #bfdbfe; background: #eff6ff; color: #2563eb; font-weight: 700; font-size: 0.86rem; white-space: nowrap; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s ease;" onmouseover="this.style.background='#dbeafe'; this.style.borderColor='#93c5fd';" onmouseout="this.style.background='#eff6ff'; this.style.borderColor='#bfdbfe';">
                             <i class="fa-solid fa-paper-plane"></i> Gửi OTP
                         </button>
                     </div>
@@ -3195,17 +3003,16 @@ window.closeAdminQrScannerModal = async function() {
 function handleAdminQrResult(rawText) {
     closeAdminQrScannerModal();
     const cleaned = String(rawText || '').trim().toUpperCase().replace(/^#/, '');
-    const match = cleaned.match(/(PT|GD)-(\d+)/);
+    const match = cleaned.match(/^(PT|GD)-([A-Z0-9]+)$/);
 
     if (!match) {
         return showDSAlert(`Mã QR "${rawText}" không đúng định dạng vé DN Football (PT-... hoặc GD-...)!`, false);
     }
 
     const prefix = match[1];
-    const idNum = Number(match[2]);
-    const codeStr = `${prefix}-${idNum}`;
+    const targetId = match[2]; // Ví dụ: 'DS001' hoặc 'GDAU001'
+    const codeStr = `${prefix}-${targetId}`;
 
-    // Mở rộng bộ lọc sang Tất cả ngày & Tất cả trạng thái để luôn tìm thấy vé
     currentDSDate = '';
     currentDSFilter = 'All';
     currentDSSearch = codeStr.toLowerCase();
@@ -3218,15 +3025,15 @@ function handleAdminQrResult(rawText) {
     applyDSFiltersAndRender();
 
     if (prefix === 'PT') {
-        const booking = allDatSanData.find(b => b.ID_GiaiDau === null && Number(b.ID) === idNum);
+        const booking = allDatSanData.find(b => !b.MaGiaiDau && !b.ID_GiaiDau && String(b.MaDatSan || b.ID).toUpperCase() === targetId);
         if (booking) {
             showDSAlert(`Đã quét thành công vé phong trào #${codeStr}!`, true);
-            openBookingDetailModalAdmin(booking.ID);
+            openBookingDetailModalAdmin(booking.MaDatSan || booking.ID);
         } else {
             showDSAlert(`Không tìm thấy vé #${codeStr} thuộc cụm sân của bạn!`, false);
         }
     } else {
-        const tourMatches = allDatSanData.filter(b => Number(b.ID_GiaiDau) === idNum);
+        const tourMatches = allDatSanData.filter(b => String(b.MaGiaiDau || b.ID_GiaiDau || '').toUpperCase() === targetId);
         if (tourMatches.length > 0) {
             showDSAlert(`Đã quét Thẻ Giải Đấu #${codeStr} (Tìm thấy ${tourMatches.length} trận đấu)!`, true);
         } else {
@@ -3367,10 +3174,10 @@ function renderUCTable(data) {
         if (item.TrangThai === 'ChoDuyet') {
             actionHtml = `
                 <div style="display: flex; gap: 8px; justify-content: flex-start;">
-                    <button class="btn-outline-sm" style="color: #047857; border-color: #047857; padding: 6px 12px; white-space: nowrap;" onclick="openUCConfirmModal(${item.ID}, 'DaDuyet')">
+                    <button class="btn-outline-sm" style="color: #047857; border-color: #047857; padding: 6px 12px; white-space: nowrap;" onclick="openUCConfirmModal('${item.ID}', 'DaDuyet')">
                         <i class="fa-solid fa-check"></i> Duyệt
                     </button>
-                    <button class="btn-outline-sm" style="color: #b91c1c; border-color: #b91c1c; padding: 6px 12px; white-space: nowrap;" onclick="openUCConfirmModal(${item.ID}, 'TuChoi')">
+                    <button class="btn-outline-sm" style="color: #b91c1c; border-color: #b91c1c; padding: 6px 12px; white-space: nowrap;" onclick="openUCConfirmModal('${item.ID}', 'TuChoi')">
                         <i class="fa-solid fa-xmark"></i> Từ chối
                     </button>
                 </div>
@@ -3574,7 +3381,7 @@ function renderQuanLyKhachHang() {
     // UI TABS: Phân quyền hiển thị Tab
     let tabsHtml = '';
     if (isAdmin) {
-        const isAdminToiCao = Number(currentUser.ID) === 1;
+        const isAdminToiCao = (currentUser.MaNguoiDung === 'ND001' || String(currentUser.ID) === 'ND001' || Number(currentUser.ID) === 1);
 
         tabsHtml = `
             <div style="display: flex; gap: 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px; padding: 0 20px;">
@@ -3722,7 +3529,6 @@ function handleUserCumSanFilter(value) {
 }
 
 function filterAndRenderUsers() {
-    // 1. Lọc theo Tab và Search
     const filtered = allUsersData.filter(user => {
         const matchTab = user.VaiTro === currentRoleTab;
 
@@ -3734,12 +3540,12 @@ function filterAndRenderUsers() {
         const matchSearch = 
             user.HoTen.toLowerCase().includes(userSearchTerm) || 
             user.SoDienThoai.includes(userSearchTerm) || 
-            (user.Email && user.Email.toLowerCase().includes(userSearchTerm));
+            (user.Email && user.Email.toLowerCase().includes(userSearchTerm)) ||
+            (user.Vneid && String(user.Vneid).includes(userSearchTerm));
         
         return matchTab && matchCumSan && matchSearch;
     });
 
-    // 2. Render Header (Tùy theo Tab)
     const thead = document.getElementById('user-table-head');
     if (currentRoleTab === 'KhachHang') {
         thead.innerHTML = `
@@ -3753,7 +3559,6 @@ function filterAndRenderUsers() {
             </tr>
         `;
     } else {
-        // Giao diện cột chuẩn xác cho nhân sự hệ thống
         thead.innerHTML = `
             <tr>
                 <th>Tài khoản Nội bộ</th>
@@ -3765,7 +3570,6 @@ function filterAndRenderUsers() {
         `;
     }
 
-    // 3. XỬ LÝ PHÂN TRANG (PAGINATION)
     const totalItems = filtered.length;
     const totalPages = Math.ceil(totalItems / itemsPerUserPage) || 1;
     if (currentUserPage > totalPages) currentUserPage = totalPages;
@@ -3773,7 +3577,6 @@ function filterAndRenderUsers() {
     const startIdx = (currentUserPage - 1) * itemsPerUserPage;
     const pageData = filtered.slice(startIdx, startIdx + itemsPerUserPage);
 
-    // 4. Render Body
     const tbody = document.getElementById('user-table-body');
     if (pageData.length === 0) {
         tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="padding: 40px; text-align: center;">Không tìm thấy dữ liệu.</td></tr>`;
@@ -3786,9 +3589,7 @@ function filterAndRenderUsers() {
             ? `<span class="badge badge-danger"><i class="fa-solid fa-lock"></i> Bị khóa</span>` 
             : `<span class="badge badge-success"><i class="fa-solid fa-check-circle"></i> Hoạt động</span>`;
         
-        // ==========================================
-        // UI CHO KHÁCH HÀNG
-        // ==========================================
+        // 1. UI CHO KHÁCH HÀNG
         if (currentRoleTab === 'KhachHang') {
             let tyLeBungHtml = `<span style="color: #64748b; font-size: 0.85rem;">Chưa có dữ liệu</span>`;
             if (u.tong_tran_da_chot > 0) {
@@ -3808,7 +3609,7 @@ function filterAndRenderUsers() {
                             <div style="width: 40px; height: 40px; border-radius: 50%; background: #e2e8f0; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #64748b;">${u.HoTen.charAt(0).toUpperCase()}</div>
                             <div>
                                 <strong style="color: var(--text-dark);">${u.HoTen}</strong><br>
-                                <span style="font-size: 0.8rem; color: var(--text-muted);">ID: KH-${u.ID}</span>
+                                <span style="font-size: 0.8rem; color: var(--text-muted);">Mã: ${u.MaNguoiDung || u.ID}</span>
                             </div>
                         </div>
                     </td>
@@ -3819,13 +3620,11 @@ function filterAndRenderUsers() {
                     <td style="text-align: center;"><strong style="color: #047857; font-size: 1.05rem;">${Number(u.SoDuVi).toLocaleString('vi-VN')}đ</strong></td>
                     <td style="text-align: center;">${tyLeBungHtml}</td>
                     <td style="text-align: center;">${statusBadge}</td>
-                    <td style="text-align: center;"><button class="btn-outline-sm" onclick="renderChiTietKhachHang(${u.ID})"><i class="fa-solid fa-eye"></i> Chi tiết</button></td>
+                    <td style="text-align: center;"><button class="btn-outline-sm" onclick="renderChiTietKhachHang('${u.ID}')"><i class="fa-solid fa-eye"></i> Chi tiết</button></td>
                 </tr>
             `;
         } 
-        // ==========================================
-        // UI CHO ADMIN / QUẢN LÝ SÂN / NHÂN VIÊN
-        // ==========================================
+        // 2. UI CHO NHÂN VIÊN / QUẢN LÝ SÂN / ADMIN (Click vào dòng hoặc nút Chi tiết sẽ mở Modal thông tin chi tiết)
         else {
             let roleBadge = '';
             if (u.VaiTro === 'Admin') roleBadge = `<span style="font-size: 0.75rem; background: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: 4px;"><i class="fa-solid fa-chess-king"></i> Admin</span>`;
@@ -3836,21 +3635,28 @@ function filterAndRenderUsers() {
                 ? `<div style="color: var(--primary); font-weight: 600;"><i class="fa-solid fa-building-flag"></i> ${u.cum_san.TenCumSan}</div><div style="font-size: 0.8rem; color: var(--text-muted);">${u.cum_san.DiaChi}</div>` 
                 : `<div style="color: var(--text-muted); font-weight: 600;"><i class="fa-solid fa-globe"></i> Toàn hệ thống</div>`;
 
-            let actionBtn = '';
-            if (Number(u.ID) === 1) {
-                actionBtn = `<button class="btn-outline-sm" style="color: #94a3b8; border-color: #e2e8f0; background: #f8fafc; width: 130px; cursor: not-allowed; opacity: 0.8;" title="Tài khoản tối cao không thể bị khóa" disabled><i class="fa-solid fa-shield"></i> Bảo vệ</button>`;
+            let lockBtn = '';
+            if (u.MaNguoiDung === 'ND001' || String(u.ID) === 'ND001' || Number(u.ID) === 1) {
+                lockBtn = `<button class="btn-outline-sm" style="color: #94a3b8; border-color: #e2e8f0; background: #f8fafc; width: 115px; cursor: not-allowed; opacity: 0.8;" title="Tài khoản tối cao không thể bị khóa" disabled><i class="fa-solid fa-shield"></i> Bảo vệ</button>`;
             } else {
-                actionBtn = u.TrangThaiKhoa
-                    ? `<button class="btn-outline-sm" style="color: #16a34a; border-color: #bbf7d0; background: #f0fdf4; width: 130px;" onclick="openKhoaKhachHangModal(${u.ID}, true)"><i class="fa-solid fa-unlock"></i> Mở quyền</button>`
-                    : `<button class="btn-outline-sm" style="color: #ef4444; border-color: #fecaca; background: #fef2f2; width: 130px; white-space: nowrap;" onclick="openKhoaKhachHangModal(${u.ID}, false)"><i class="fa-solid fa-lock"></i> Khóa tài khoản</button>`;
+                lockBtn = u.TrangThaiKhoa
+                    ? `<button class="btn-outline-sm" style="color: #16a34a; border-color: #bbf7d0; background: #f0fdf4; width: 115px;" onclick="event.stopPropagation(); openKhoaKhachHangModal('${u.ID}', true)"><i class="fa-solid fa-unlock"></i> Mở quyền</button>`
+                    : `<button class="btn-outline-sm" style="color: #ef4444; border-color: #fecaca; background: #fef2f2; width: 115px; white-space: nowrap;" onclick="event.stopPropagation(); openKhoaKhachHangModal('${u.ID}', false)"><i class="fa-solid fa-lock"></i> Khóa TK</button>`;
             }
+
+            const isClickableInternal = (u.VaiTro === 'NhanVien' || u.VaiTro === 'QuanLySan');
+            const rowClickAttr = isClickableInternal
+                ? `onclick="openInternalUserDetailModal('${u.ID}')" style="cursor: pointer; transition: background-color 0.15s;" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor=''" title="Nhấn để xem thông tin chi tiết"`
+                : '';
+
             return `
-                <tr>
+                <tr ${rowClickAttr}>
                     <td>
                         <div style="display: flex; align-items: center; gap: 12px;">
                             <div style="width: 40px; height: 40px; border-radius: 50%; background: #eff6ff; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #3b82f6; font-size: 1.2rem;"><i class="fa-solid fa-user-shield"></i></div>
                             <div>
-                                <strong style="color: var(--text-dark);">${u.HoTen}</strong><br>
+                                <strong style="color: var(--text-dark);">${u.HoTen}</strong>
+                                <span style="font-size: 0.75rem; color: #64748b; margin-left: 4px;">(${u.MaNguoiDung || u.ID})</span><br>
                                 ${roleBadge}
                             </div>
                         </div>
@@ -3861,15 +3667,140 @@ function filterAndRenderUsers() {
                     </td>
                     <td>${coSoStr}</td>
                     <td style="text-align: center;">${statusBadge}</td>
-                    <td style="text-align: center;">${actionBtn}</td>
+                    <td style="text-align: center; white-space: nowrap;">
+                        <div style="display: inline-flex; gap: 6px; align-items: center;">
+                            ${isClickableInternal ? `<button class="btn-outline-sm" onclick="event.stopPropagation(); openInternalUserDetailModal('${u.ID}')"><i class="fa-solid fa-eye"></i> Chi tiết</button>` : ''}
+                            ${lockBtn}
+                        </div>
+                    </td>
                 </tr>
             `;
         }
     }).join('');
 
-    // 5. Render Nút Phân Trang
     renderUserPagination(totalPages);
 }
+
+// MODAL HIỂN THỊ THÔNG TIN CHI TIẾT NHÂN VIÊN / QUẢN LÝ SÂN
+window.openInternalUserDetailModal = function(userId) {
+    const u = allUsersData.find(item => String(item.ID) === String(userId) || String(item.MaNguoiDung) === String(userId));
+    if (!u) return;
+
+    let modal = document.getElementById('internal-user-detail-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'internal-user-detail-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 10000; align-items: center; justify-content: center;';
+        modal.onclick = function(e) {
+            if (e.target === modal) modal.style.display = 'none';
+        };
+        document.body.appendChild(modal);
+    }
+
+    const maND = u.MaNguoiDung || u.ID;
+    const roleLabel = u.VaiTro === 'QuanLySan'
+        ? '<span style="background: #fef3c7; color: #b45309; border: 1px solid #fde68a; padding: 4px 10px; border-radius: 999px; font-size: 0.8rem; font-weight: 700;"><i class="fa-solid fa-user-tie"></i> Quản lý Cụm Sân</span>'
+        : '<span style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; padding: 4px 10px; border-radius: 999px; font-size: 0.8rem; font-weight: 700;"><i class="fa-solid fa-user-gear"></i> Nhân viên cơ sở</span>';
+
+    const statusBadge = u.TrangThaiKhoa
+        ? '<span class="badge badge-danger"><i class="fa-solid fa-lock"></i> Đang bị khóa</span>'
+        : '<span class="badge badge-success"><i class="fa-solid fa-check-circle"></i> Đang hoạt động</span>';
+
+    const coSoName = u.cum_san ? u.cum_san.TenCumSan : 'Chưa gán cơ sở';
+    const coSoAddress = u.cum_san ? u.cum_san.DiaChi : '';
+
+    const hasBank = u.TenNganHang && u.STKNganHang && u.TenTaiKhoan;
+    const bankBoxHtml = hasBank ? `
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 12px 14px; font-size: 0.88rem; line-height: 1.6;">
+            <div style="display: flex; justify-content: space-between;">
+                <span style="color: #64748b;">Ngân hàng:</span>
+                <strong style="color: #0f172a;">${u.TenNganHang}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+                <span style="color: #64748b;">Số tài khoản:</span>
+                <strong style="color: #047857; font-family: monospace; font-size: 0.95rem;">${u.STKNganHang}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+                <span style="color: #64748b;">Chủ tài khoản:</span>
+                <strong style="color: #0f172a;">${u.TenTaiKhoan}</strong>
+            </div>
+        </div>
+    ` : `
+        <div style="background: #fffbeb; border: 1px dashed #fcd34d; border-radius: 10px; padding: 12px 14px; color: #b45309; font-size: 0.86rem; display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-triangle-exclamation" style="color: #f59e0b;"></i>
+            <span>Nhân sự này chưa cập nhật đầy đủ thông tin tài khoản ngân hàng.</span>
+        </div>
+    `;
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 480px; width: 92%; padding: 0; border-radius: 16px; overflow: hidden; background: #fff; box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);">
+            <div style="padding: 18px 22px; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #fff; display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <i class="fa-solid fa-id-card-clip" style="font-size: 1.25rem; color: #38bdf8;"></i>
+                    <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700;">Hồ sơ chi tiết nhân sự</h3>
+                </div>
+                <i class="fa-solid fa-xmark" style="cursor: pointer; font-size: 1.2rem; color: #94a3b8;" onclick="document.getElementById('internal-user-detail-modal').style.display='none'"></i>
+            </div>
+
+            <div style="padding: 22px;">
+                <!-- Avatar & Tên -->
+                <div style="display: flex; align-items: center; gap: 16px; padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid #e2e8f0;">
+                    <div style="width: 58px; height: 58px; border-radius: 50%; background: #eff6ff; color: #2563eb; border: 2px solid #bfdbfe; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 800; flex-shrink: 0;">
+                        ${u.HoTen ? u.HoTen.charAt(0).toUpperCase() : 'U'}
+                    </div>
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+                            <h4 style="margin: 0; font-size: 1.18rem; color: #0f172a; font-weight: 800;">${u.HoTen}</h4>
+                            <span style="font-family: monospace; font-size: 0.82rem; font-weight: 700; background: #f1f5f9; color: #334155; padding: 3px 8px; border-radius: 6px; border: 1px solid #cbd5e1;">Mã: ${maND}</span>
+                        </div>
+                        <div style="margin-top: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            ${roleLabel}
+                            ${statusBadge}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Thông tin định danh & Liên hệ -->
+                <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.9rem; margin-bottom: 18px;">
+                    <div style="display: flex; justify-content: space-between; padding: 8px 12px; background: #f8fafc; border-radius: 8px;">
+                        <span style="color: #64748b;"><i class="fa-solid fa-id-card" style="width: 20px; color: #3b82f6;"></i>Số định danh VNeID:</span>
+                        <strong style="color: #0f172a; font-family: monospace; font-size: 0.95rem;">${u.Vneid || '<span style="color:#94a3b8; font-family:sans-serif; font-style:italic;">Chưa cập nhật</span>'}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; padding: 8px 12px; background: #f8fafc; border-radius: 8px;">
+                        <span style="color: #64748b;"><i class="fa-solid fa-phone" style="width: 20px; color: #10b981;"></i>Số điện thoại:</span>
+                        <strong style="color: #0f172a;">${u.SoDienThoai || 'N/A'}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; padding: 8px 12px; background: #f8fafc; border-radius: 8px;">
+                        <span style="color: #64748b;"><i class="fa-solid fa-envelope" style="width: 20px; color: #f59e0b;"></i>Email:</span>
+                        <strong style="color: #0f172a;">${u.Email || 'Chưa cập nhật'}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; padding: 8px 12px; background: #f8fafc; border-radius: 8px;">
+                        <span style="color: #64748b; white-space: nowrap;"><i class="fa-solid fa-building-flag" style="width: 20px; color: var(--primary);"></i>Cơ sở trực thuộc:</span>
+                        <div style="text-align: right;">
+                            <strong style="color: var(--primary);">${coSoName}</strong>
+                            ${coSoAddress ? `<div style="font-size: 0.78rem; color: #64748b; margin-top: 2px;">${coSoAddress}</div>` : ''}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Thông tin ngân hàng -->
+                <div>
+                    <div style="font-size: 0.82rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
+                        <i class="fa-solid fa-building-columns" style="color: var(--primary); margin-right: 5px;"></i>Tài khoản ngân hàng nhận lương
+                    </div>
+                    ${bankBoxHtml}
+                </div>
+            </div>
+
+            <div style="padding: 14px 22px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn-primary" style="padding: 9px 24px; border-radius: 8px;" onclick="document.getElementById('internal-user-detail-modal').style.display='none'">Đóng</button>
+            </div>
+        </div>
+    `;
+
+    modal.style.display = 'flex';
+};
 
 function renderUserPagination(totalPages) {
     const div = document.getElementById('user-pagination');
@@ -3940,8 +3871,8 @@ async function renderChiTietKhachHang(id) {
 
         // Nút Khóa/Mở Khóa
         const lockBtnHtml = kh.TrangThaiKhoa 
-            ? `<button class="btn-primary" style="background: #16a34a; border-color: #16a34a;" onclick="openKhoaKhachHangModal(${kh.ID}, true)"><i class="fa-solid fa-unlock"></i> Mở khóa tài khoản</button>`
-            : `<button class="btn-primary" style="background: #ef4444; border-color: #ef4444;" onclick="openKhoaKhachHangModal(${kh.ID}, false)"><i class="fa-solid fa-lock"></i> Khóa tài khoản</button>`;
+            ? `<button class="btn-primary" style="background: #16a34a; border-color: #16a34a;" onclick="openKhoaKhachHangModal('${kh.ID}', true)"><i class="fa-solid fa-unlock"></i> Mở khóa tài khoản</button>`
+            : `<button class="btn-primary" style="background: #ef4444; border-color: #ef4444;" onclick="openKhoaKhachHangModal('${kh.ID}', false)"><i class="fa-solid fa-lock"></i> Khóa tài khoản</button>`;
 
         const isQuanLySan = currentUser.VaiTro === 'QuanLySan';
 
@@ -4691,14 +4622,14 @@ async function loadAdminChatSessions() {
                 if (tieuDe.length > 25) tieuDe = tieuDe.substring(0, 25) + '...';
 
                 html += `
-                    <div style="padding: 12px; margin-bottom: 8px; border-radius: 8px; cursor: pointer; transition: 0.2s; position: relative; ${isActive}" onclick="loadAdminChatDetails(${phien.ID})">
+                    <div style="padding: 12px; margin-bottom: 8px; border-radius: 8px; cursor: pointer; transition: 0.2s; position: relative; ${isActive}" onclick="loadAdminChatDetails('${phien.ID}')">
                         <div style="font-weight: 600; font-size: 0.9rem; color: #334155; padding-right: 20px;">${tieuDe}</div>
                         
                         <div class="chat-action-menu" style="position: absolute; right: 10px; top: 10px;" onclick="event.stopPropagation()">
-                            <i class="fa-solid fa-ellipsis-vertical" style="color: #94a3b8; padding: 4px 8px; cursor: pointer;" onclick="toggleAdminChatDropdown(${phien.ID})"></i>
+                            <i class="fa-solid fa-ellipsis-vertical" style="color: #94a3b8; padding: 4px 8px; cursor: pointer;" onclick="toggleAdminChatDropdown('${phien.ID}')"></i>
                             <div id="admin-chat-dropdown-${phien.ID}" style="display: none; position: absolute; right: 0; top: 25px; background: white; border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.1); border-radius: 8px; width: 120px; z-index: 10;">
-                                <div style="padding: 8px 12px; font-size: 0.85rem; cursor: pointer; border-bottom: 1px solid #f1f5f9; color: var(--text-dark);" onclick="openAdminRenameChatModal(${phien.ID}, '${tieuDe.replace(/'/g, "\\'")}')"><i class="fa-solid fa-pen" style="margin-right: 6px;"></i> Đổi tên</div>
-                                <div style="padding: 8px 12px; font-size: 0.85rem; cursor: pointer; color: #ef4444;" onclick="openAdminDeleteChatModal(${phien.ID})"><i class="fa-solid fa-trash-can" style="margin-right: 6px;"></i> Xóa</div>
+                                <div style="padding: 8px 12px; font-size: 0.85rem; cursor: pointer; border-bottom: 1px solid #f1f5f9; color: var(--text-dark);" onclick="openAdminRenameChatModal('${phien.ID}', '${tieuDe.replace(/'/g, "\\'")}')"><i class="fa-solid fa-pen" style="margin-right: 6px;"></i> Đổi tên</div>
+                                <div style="padding: 8px 12px; font-size: 0.85rem; cursor: pointer; color: #ef4444;" onclick="openAdminDeleteChatModal('${phien.ID}')"><i class="fa-solid fa-trash-can" style="margin-right: 6px;"></i> Xóa</div>
                             </div>
                         </div>
                     </div>
@@ -5025,16 +4956,13 @@ async function executeAdminDeleteChat() {
 // MODULE: ADMIN - CẤP TÀI KHOẢN (ADMIN)
 // ======================================================
 function renderCapTaiKhoan() {
-    // 1. Lấy thông tin người dùng đang đăng nhập
     const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
     const isAdmin = currentUser.VaiTro === 'Admin';
 
-    // 2. Active thẻ Menu tương ứng
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
     const menuLink = Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('CẤP TÀI KHOẢN'));
     if (menuLink) menuLink.classList.add('active');
 
-    // 3. Xử lý ô Dropdown Vai Trò dựa trên quyền
     let vaiTroOptions = '';
     if (isAdmin) {
         vaiTroOptions = `
@@ -5043,11 +4971,9 @@ function renderCapTaiKhoan() {
             <option value="Admin">Admin (Toàn quyền)</option>
         `;
     } else {
-        // Quản lý sân chỉ được cấp quyền Nhân viên
         vaiTroOptions = `<option value="NhanVien" selected>Nhân viên Thu ngân/Phục vụ</option>`;
     }
 
-    // 4. Xử lý ô Dropdown Cơ sở Quản lý
     let cumSanHtml = '';
     if (isAdmin) {
         cumSanHtml = `
@@ -5059,16 +4985,14 @@ function renderCapTaiKhoan() {
             </div>
         `;
     } else {
-        // Quản lý sân không được chọn cơ sở, hệ thống sẽ tự ẩn
         cumSanHtml = `<input type="hidden" id="tk-cumsan" value="">`;
     }
 
-    // 5. Render toàn bộ Giao diện
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
         <div class="page-header" style="margin-bottom: 24px;">
             <h1 class="page-title">Cấp tài khoản Nội bộ</h1>
-            <p class="text-muted">Tạo tài khoản quản trị phân quyền cho Ban quản lý hoặc Admin</p>
+            <p class="text-muted">Tạo tài khoản quản trị phân quyền cho Ban quản lý, Nhân viên hoặc Admin</p>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 350px; gap: 24px; align-items: start;">
@@ -5078,7 +5002,7 @@ function renderCapTaiKhoan() {
                     <div style="width: 45px; height: 45px; border-radius: 10px; background: #eff6ff; color: #3b82f6; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;"><i class="fa-solid fa-user-shield"></i></div>
                     <div>
                         <h3 style="margin: 0; font-size: 1.1rem; color: var(--text-dark);">Thông tin định danh</h3>
-                        <span style="font-size: 0.85rem; color: var(--text-muted);">Điền thông tin bắt buộc để khởi tạo tài khoản</span>
+                        <span style="font-size: 0.85rem; color: var(--text-muted);">Điền đầy đủ thông tin bắt buộc để khởi tạo tài khoản</span>
                     </div>
                 </div>
 
@@ -5089,13 +5013,17 @@ function renderCapTaiKhoan() {
                     </div>
                     <div class="form-group">
                         <label style="font-weight: 600;">Số điện thoại <span style="color: red;">*</span></label>
-                        <input type="text" id="tk-sdt" class="form-control" placeholder="Dùng để đăng nhập">
+                        <input type="text" id="tk-sdt" class="form-control" placeholder="Dùng để đăng nhập" maxlength="15">
                     </div>
                     <div class="form-group">
                         <label style="font-weight: 600;">Email <span style="color: red;">*</span></label>
                         <input type="email" id="tk-email" class="form-control" placeholder="Dùng để nhận thông báo">
                     </div>
                     <div class="form-group">
+                        <label style="font-weight: 600;">Số định danh VNeID / CCCD <span style="color: red;">*</span></label>
+                        <input type="text" id="tk-vneid" class="form-control" placeholder="Nhập 12 chữ số định danh" maxlength="12">
+                    </div>
+                    <div class="form-group" style="grid-column: 1 / -1;">
                         <label style="font-weight: 600;">Mật khẩu khởi tạo <span style="color: red;">*</span></label>
                         <input type="text" id="tk-matkhau" class="form-control" value="123456" placeholder="Ít nhất 6 ký tự">
                     </div>
@@ -5103,15 +5031,12 @@ function renderCapTaiKhoan() {
 
                 <div style="margin-top: 15px; border-top: 1px dashed var(--border); padding-top: 20px;">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                        <!-- Dropdown Vai Trò (Đã được điều chỉnh động) -->
                         <div class="form-group">
                             <label style="font-weight: 600;">Vai trò phân quyền <span style="color: red;">*</span></label>
                             <select id="tk-vaitro" class="form-control" style="border-color: #3b82f6; background: #f8fafc;" onchange="toggleCumSanSelect(this.value)">
                                 ${vaiTroOptions}
                             </select>
                         </div>
-                        
-                        <!-- Dropdown Cơ Sở (Đã được điều chỉnh động) -->
                         ${cumSanHtml}
                     </div>
                 </div>
@@ -5127,16 +5052,14 @@ function renderCapTaiKhoan() {
             <div class="panel" style="padding: 25px; background: linear-gradient(to bottom, #f8fafc, #ffffff);">
                 <h4 style="margin: 0 0 15px 0; color: var(--primary);"><i class="fa-solid fa-circle-info"></i> Hướng dẫn phân quyền</h4>
                 <ul style="padding-left: 20px; color: var(--text-muted); font-size: 0.9rem; line-height: 1.7;">
-                    <li style="margin-bottom: 10px;"><strong style="color: var(--text-dark);">Admin:</strong> Có toàn quyền xem báo cáo doanh thu tổng, duyệt yêu cầu rút tiền và quản lý hệ thống. Không thuộc cụm sân nào.</li>
-                    <li><strong style="color: var(--text-dark);">Quản lý sân:</strong> Chỉ được phép quản lý lịch đặt, khách hàng và cấu hình giá của Cụm sân được chỉ định. Dữ liệu tài chính bị cách ly hoàn toàn.</li>
-                     <!-- Thêm hướng dẫn cho Nhân viên -->
-                    <li><strong style="color: var(--text-dark);">Nhân viên:</strong> Chịu trách nhiệm thực hiện các nghiệp vụ như bàn giao ca, xử lý đặt sân, thu tiền tại cụm sân được chỉ định.</li>
+                    <li style="margin-bottom: 10px;"><strong style="color: var(--text-dark);">Admin:</strong> Có toàn quyền xem báo cáo doanh thu tổng và quản lý hệ thống. Không thuộc cụm sân nào.</li>
+                    <li style="margin-bottom: 10px;"><strong style="color: var(--text-dark);">Quản lý sân:</strong> Quản lý lịch đặt, nhân viên, kho hàng và cấu hình giá của Cụm sân được chỉ định.</li>
+                    <li><strong style="color: var(--text-dark);">Nhân viên:</strong> Thực hiện các nghiệp vụ bàn giao ca, xử lý đặt sân, thu tiền và bán hàng tại cụm sân được chỉ định.</li>
                 </ul>
             </div>
         </div>
     `;
 
-    // 6. Tải danh sách cụm sân (chỉ chạy nếu là Admin)
     if (isAdmin) {
         loadCumSanForDropdown();
     }
@@ -5172,17 +5095,22 @@ async function executeTaoTaiKhoan() {
     const ho_ten = document.getElementById('tk-hoten').value.trim();
     const so_dien_thoai = document.getElementById('tk-sdt').value.trim();
     const email = document.getElementById('tk-email').value.trim();
+    const vneid = document.getElementById('tk-vneid').value.trim();
     const mat_khau = document.getElementById('tk-matkhau').value;
     const vai_tro = document.getElementById('tk-vaitro').value;
     const id_cum_san = document.getElementById('tk-cumsan').value;
 
-    if (!ho_ten || !so_dien_thoai || !email || !mat_khau) {
-        return showSystemModal('Thiếu thông tin', 'Vui lòng điền đầy đủ các trường bắt buộc có dấu (*).', 'error');
+    if (!ho_ten || !so_dien_thoai || !email || !vneid || !mat_khau) {
+        return showSystemModal('Thiếu thông tin', 'Vui lòng điền đầy đủ Họ tên, SĐT, Email, Số VNeID và Mật khẩu (*).', 'error');
+    }
+
+    if (!/^[0-9]{9,12}$/.test(vneid)) {
+        return showSystemModal('VNeID không hợp lệ', 'Số định danh VNeID / CCCD phải gồm từ 9 đến 12 chữ số!', 'error');
     }
 
     const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
     if (currentUser.VaiTro === 'Admin' && (vai_tro === 'QuanLySan' || vai_tro === 'NhanVien') && !id_cum_san) {
-        return showSystemModal('Chưa chọn cơ sở', 'Vui lòng chọn Cụm Sân.', 'error');
+        return showSystemModal('Chưa chọn cơ sở', 'Vui lòng chọn Cụm Sân trực thuộc.', 'error');
     }
 
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right: 8px;"></i> Đang tạo...';
@@ -5192,17 +5120,17 @@ async function executeTaoTaiKhoan() {
         const response = await fetch(`${API_BASE_URL}/admin/cap-tai-khoan`, {
             method: 'POST',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ho_ten, so_dien_thoai, email, mat_khau, vai_tro, id_cum_san })
+            body: JSON.stringify({ ho_ten, so_dien_thoai, email, vneid, mat_khau, vai_tro, id_cum_san })
         });
         const data = await response.json();
         
         if (response.ok && data.user) {
             showSystemModal('Thành công!', 'Tài khoản nội bộ đã được khởi tạo thành công.', 'success');
             
-            // Xóa rỗng form nhưng giữ lại mật khẩu mặc định
             document.getElementById('tk-hoten').value = '';
             document.getElementById('tk-sdt').value = '';
             document.getElementById('tk-email').value = '';
+            document.getElementById('tk-vneid').value = '';
             document.getElementById('tk-matkhau').value = '123456';
         } else {
             const errorMsg = data.errors ? data.errors[Object.keys(data.errors)[0]][0] : data.message;
@@ -5304,7 +5232,7 @@ async function renderAdminSchedule(clusterId, pitchName, pitchId, loaiSanId) {
         }
 
         let html = `
-            <button class="btn-back" onclick="renderCumSanDetail(${clusterId})"><i class="fa-solid fa-arrow-left"></i> Quay lại cấu hình sân</button>
+            <button class="btn-back" onclick="renderCumSanDetail('${clusterId}')"><i class="fa-solid fa-arrow-left"></i> Quay lại cấu hình sân</button>
             <div class="page-header" style="margin-top: 10px; margin-bottom: 20px;">
                 <h1 class="page-title">Lịch trống: ${pitchName}</h1>
                 <p class="text-muted">Bấm vào ô CÒN TRỐNG để chọn nhiều khung giờ giữ sân.</p>
@@ -5353,7 +5281,7 @@ async function renderAdminSchedule(clusterId, pitchName, pitchId, loaiSanId) {
                 let statusClass = 'available', statusText = 'CÒN TRỐNG';
                 
                 // Nén data vào chuỗi để đẩy vào hàm onclick
-                const slotDataStr = `${pitchId}, ${kg.ID}, '${date.dbFormat}', '${date.displayFormat}', '${timeStr}', ${priceValue}`;
+                const slotDataStr = `'${pitchId}', '${kg.ID}', '${date.dbFormat}', '${date.displayFormat}', '${timeStr}', ${priceValue}`;
                 let onClickAttr = `data-slot-data="${slotDataStr}" onclick="toggleOfflineSlot(this, ${slotDataStr})"`;
                 
                 if (isPast) {
@@ -6934,8 +6862,8 @@ async function loadAdminCalendarData(weekOffset, containerId) {
                     if (showRemoveBtn) {
                         const isTuChoiTuanSau = (weekOffset === 1 && s.TrangThaiXepLich === 'DaDuyet' && !isLocal);
                         const clickAction = (isLocal || isTuChoiTuanSau)
-                            ? `window.removePendingAssignment(${ca.ID}, '${date.dbDate}', ${s.ID_NhanVien}, ${isTuChoiTuanSau})` 
-                            : `window.executeRemoveApprovedShift(${s.ID_CaLamViec}, '${s.NgayLam}', ${s.ID_NhanVien}, ${weekOffset})`;
+                            ? `window.removePendingAssignment('${ca.ID}', '${date.dbDate}', '${s.ID_NhanVien}', ${isTuChoiTuanSau})` 
+                            : `window.executeRemoveApprovedShift('${s.ID_CaLamViec}', '${s.NgayLam}', '${s.ID_NhanVien}', ${weekOffset})`;
                             
                         removeBtn = `<i class="fa-solid fa-circle-xmark" style="color: #ef4444; cursor: pointer; margin-left: 6px; font-size: 1rem;" title="Xóa phân công" onclick="event.stopPropagation(); ${clickAction}"></i>`;
                     }
@@ -6984,12 +6912,12 @@ async function loadAdminCalendarData(weekOffset, containerId) {
 
                 if (weekOffset === 1 && (!isNextWeekLocked || pendingManagerAssignments.length > 0)) {
                     pointerStyle = 'cursor: pointer; transition: 0.2s;';
-                    clickEvent = `onmouseover="this.style.filter='brightness(0.95)'" onmouseout="this.style.filter='brightness(1)'" onclick="openManagerShiftModal(${ca.ID}, '${ca.TenCa}', '${date.dbDate}', '${date.display}', '${cacheKey}', 1)"`;
+                    clickEvent = `onmouseover="this.style.filter='brightness(0.95)'" onmouseout="this.style.filter='brightness(1)'" onclick="openManagerShiftModal('${ca.ID}', '${ca.TenCa}', '${date.dbDate}', '${date.display}', '${cacheKey}', 1)"`;
                 } else if (weekOffset === 0 && isEditModeCurrentWeek) {
                     if (!isPastDate) {
                         // Chỉ cho phép click & hiện viền nét đứt cam với ca TRONG NGÀY hoặc CHƯA ĐẾN NGÀY
                         pointerStyle = 'cursor: pointer; outline: 2px dashed #f59e0b; outline-offset: -2px; transition: 0.2s;';
-                        clickEvent = `onmouseover="this.style.filter='brightness(0.95)'" onmouseout="this.style.filter='brightness(1)'" onclick="openManagerShiftModal(${ca.ID}, '${ca.TenCa}', '${date.dbDate}', '${date.display}', '${cacheKey}', 0)"`;
+                        clickEvent = `onmouseover="this.style.filter='brightness(0.95)'" onmouseout="this.style.filter='brightness(1)'" onclick="openManagerShiftModal('${ca.ID}', '${ca.TenCa}', '${date.dbDate}', '${date.display}', '${cacheKey}', 0)"`;
                     } else {
                         // Các ngày đã qua: Làm mờ nhẹ, khóa con trỏ chuột và không gắn onclick
                         pointerStyle = 'cursor: not-allowed; opacity: 0.68;';
@@ -7148,7 +7076,7 @@ async function loadStaffRegistrationStatus() {
                 } else {
                     // Chủ nhật & Chưa mở quyền -> Cho phép click
                     emergencyBtnHtml = `
-                        <button type="button" onclick="grantEmergencyScheduleAccess(${staff.ID}, '${staff.HoTen.replace(/'/g, "\\'")}')" title="Cho phép nhân viên này đăng ký / sửa lịch khẩn cấp 1 lần trong hôm nay (Chủ Nhật)" style="padding: 3px 8px; font-size: 0.72rem; border-radius: 6px; border: 1px solid #bfdbfe; background: #eff6ff; color: #2563eb; font-weight: 600; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'">
+                        <button type="button" onclick="grantEmergencyScheduleAccess('${staff.ID}', '${staff.HoTen.replace(/'/g, "\\'")}')" title="Cho phép nhân viên này đăng ký / sửa lịch khẩn cấp 1 lần trong hôm nay (Chủ Nhật)" style="padding: 3px 8px; font-size: 0.72rem; border-radius: 6px; border: 1px solid #bfdbfe; background: #eff6ff; color: #2563eb; font-weight: 600; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'">
                             <i class="fa-solid fa-unlock-keyhole"></i> Mở ĐK (1 lần)
                         </button>`;
                 }
@@ -8013,7 +7941,7 @@ function renderAdminChamCongTable() {
         // Nút Chốt vắng nhanh (chỉ hiện khi ChuaLam và đã quá giờ bắt đầu ca) -> Mở Modal Xác Nhận
         if (item.TrangThaiDiemDanh === 'ChuaLam') {
             actionBtn += `
-                <button type="button" class="btn-outline-sm" style="color: #ef4444; border-color: #fecaca; background: #fef2f2; padding: 6px 12px; font-weight: 600; margin-right: 6px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fef2f2'" onclick="openChotVangConfirmModal(${item.ID}, '${tenNV}', '${tenCa}', '${timeStr}')">
+                <button type="button" class="btn-outline-sm" style="color: #ef4444; border-color: #fecaca; background: #fef2f2; padding: 6px 12px; font-weight: 600; margin-right: 6px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fef2f2'" onclick="openChotVangConfirmModal('${item.ID}', '${tenNV}', '${tenCa}', '${timeStr}')">
                     <i class="fa-solid fa-user-xmark"></i> Chốt vắng
                 </button>
             `;
@@ -8344,10 +8272,10 @@ function renderAdminLichSuGiaoCa(data) {
         // Ghi chú
         const noteStr = item.GhiChuGiao ? `<div style="font-size: 0.8rem; color: var(--text-muted); font-style: italic; margin-top: 4px;"><i class="fa-regular fa-comment"></i> ${item.GhiChuGiao}</div>` : '';
 
-        let actionBtn = `<button class="btn-outline-sm" onclick="adminOpenPhieuChiModal(${item.ID})"><i class="fa-solid fa-list-ul"></i> Lịch sử Thu/Chi</button>`;
-        
+        let actionBtn = `<button class="btn-outline-sm" onclick="adminOpenPhieuChiModal('${item.ID}')"><i class="fa-solid fa-list-ul"></i> Lịch sử Thu/Chi</button>`;
+
         if (item.TrangThai === 'DangTrongCa') {
-            actionBtn += `<br><button class="btn-primary" style="margin-top: 5px; width: 100%; background: #ef4444; border-color: #ef4444; padding: 4px 8px; font-size: 0.8rem;" onclick="executeAdminChotCuongChe(${item.ID})"><i class="fa-solid fa-lock"></i> Chốt Cưỡng Chế</button>`;
+            actionBtn += `<br><button class="btn-primary" style="margin-top: 5px; width: 100%; background: #ef4444; border-color: #ef4444; padding: 4px 8px; font-size: 0.8rem;" onclick="executeAdminChotCuongChe('${item.ID}')"><i class="fa-solid fa-lock"></i> Chốt Cưỡng Chế</button>`;
         }
 
         html += `
@@ -8800,7 +8728,7 @@ function applyBLFiltersAndRender() {
         const safeTenNV = (item.ten_nhan_vien || '').replace(/'/g, "\\'");
         const safeLyDo = (item.ly_do_khieu_nai || '').replace(/'/g, "\\'").replace(/\n/g, ' ');
         let actionHtml = `
-            <button class="btn-outline-sm" style="padding: 5px 10px; font-size: 0.82rem; border-color: #cbd5e1; color: #334155;" onclick="openLuoiLichLuongModal(${item.id_nhan_vien}, '${currentBLThangNam}', '${safeTenNV}')">
+            <button class="btn-outline-sm" style="padding: 5px 10px; font-size: 0.82rem; border-color: #cbd5e1; color: #334155;" onclick="openLuoiLichLuongModal('${item.id_nhan_vien}', '${currentBLThangNam}', '${safeTenNV}')">
                 <i class="fa-solid fa-calendar-days"></i> Bảng công
             </button>
         `;
@@ -8809,20 +8737,20 @@ function applyBLFiltersAndRender() {
         if (!isAdmin) {
             if (item.trang_thai === 'ChuaChot') {
                 actionHtml += `
-                    <button class="btn-primary" style="padding: 5px 10px; font-size: 0.82rem; margin-left: 5px;" onclick="openConfirmChotLuongModal(${item.id_nhan_vien}, '${safeTenNV}', ${item.thuc_lanh})">
+                    <button class="btn-primary" style="padding: 5px 10px; font-size: 0.82rem; margin-left: 5px;" onclick="openConfirmChotLuongModal('${item.id_nhan_vien}', '${safeTenNV}', ${item.thuc_lanh})">
                         <i class="fa-solid fa-lock"></i> Chốt lương
                     </button>
                 `;
             } else if (item.trang_thai === 'KhieuNai') {
                 actionHtml += `
-                    <button class="btn-primary" style="padding: 5px 10px; font-size: 0.82rem; margin-left: 5px; background: #ef4444; border-color: #ef4444;" onclick="openXuLyKhieuNaiModal(${item.id_nhan_vien}, '${currentBLThangNam}', '${safeLyDo}')">
+                    <button class="btn-primary" style="padding: 5px 10px; font-size: 0.82rem; margin-left: 5px; background: #ef4444; border-color: #ef4444;" onclick="openXuLyKhieuNaiModal('${item.id_nhan_vien}', '${currentBLThangNam}', '${safeLyDo}')">
                         <i class="fa-solid fa-wrench"></i> Xử lý
                     </button>
                 `;
             } else if (item.trang_thai === 'ChoThanhToan') {
                 const safeBank = (item.thong_tin_ngan_hang || 'Chưa cung cấp').replace(/'/g, "\\'");
                 actionHtml += `
-                    <button class="btn-primary" style="padding: 5px 10px; font-size: 0.82rem; margin-left: 5px; background: #10b981; border-color: #10b981;" onclick="openConfirmThanhToanLuongModal(${item.bang_luong_id}, '${safeTenNV}', ${item.thuc_lanh}, '${safeBank}')">
+                    <button class="btn-primary" style="padding: 5px 10px; font-size: 0.82rem; margin-left: 5px; background: #10b981; border-color: #10b981;" onclick="openConfirmThanhToanLuongModal('${item.bang_luong_id}', '${safeTenNV}', ${item.thuc_lanh}, '${safeBank}')">
                         <i class="fa-solid fa-check"></i> Đã chuyển khoản
                     </button>
                 `;

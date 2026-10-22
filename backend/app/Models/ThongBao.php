@@ -4,25 +4,23 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\GeneratesCustomId;
 
 class ThongBao extends Model
 {
-    use HasFactory;
+    use HasFactory, GeneratesCustomId;
 
     protected $table = 'ThongBao';
-    protected $primaryKey = 'ID';
+    protected $primaryKey = 'MaThongBao';
+    protected $idPrefix = 'TB';
 
-    // Bật timestamps nhưng tùy chỉnh lại
     public $timestamps = true;
-    
-    // Gán cột created_at của Laravel thành NgayTao
     const CREATED_AT = 'NgayTao';
-    
-    // Tắt hoàn toàn cột updated_at
     const UPDATED_AT = null;
 
     protected $fillable = [
-        'ID_NguoiDung',
+        'MaThongBao',
+        'MaNguoiDung',
         'TieuDe',
         'NoiDung',
         'LoaiThongBao',
@@ -30,9 +28,8 @@ class ThongBao extends Model
         'NgayTao'
     ];
 
-    // Quan hệ với bảng NguoiDung
     public function nguoiDung()
     {
-        return $this->belongsTo(NguoiDung::class, 'ID_NguoiDung', 'ID');
+        return $this->belongsTo(NguoiDung::class, 'MaNguoiDung', 'MaNguoiDung');
     }
 }

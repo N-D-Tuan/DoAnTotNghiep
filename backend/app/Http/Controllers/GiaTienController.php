@@ -9,34 +9,42 @@ class GiaTienController extends Controller
 {
     public function index(Request $request)
     {
-        $cumSanId = $request->query('cum_san_id');
-        $giaTien = GiaTien::where('ID_CumSan', $cumSanId)->get();
-        
+        $cumSanId = $request->query('ma_cum_san', $request->query('cum_san_id'));
+        $giaTien = GiaTien::where('MaCumSan', $cumSanId)->get();
+
         return response()->json(['success' => true, 'data' => $giaTien]);
     }
 
     public function saveBulk(Request $request)
     {
+        $maCumSan  = $request->input('MaCumSan', $request->input('ID_CumSan'));
+        $maLoaiSan = $request->input('MaLoaiSan', $request->input('ID_LoaiSan'));
+        $request->merge([
+            'MaCumSan'  => $maCumSan,
+            'MaLoaiSan' => $maLoaiSan,
+        ]);
+
         $request->validate([
-            'ID_CumSan' => 'required',
-            'ID_LoaiSan' => 'required',
-            'prices' => 'required|array'
+            'MaCumSan'  => 'required|string',
+            'MaLoaiSan' => 'required|string',
+            'prices'    => 'required|array'
         ]);
 
         foreach ($request->prices as $price) {
+            $maKhungGio = $price['MaKhungGio'] ?? $price['ID_KhungGio'] ?? null;
+            if (!$maKhungGio) continue;
+
             if (empty($price['SoTien'])) {
-                // Nếu xóa trống ô input -> Xóa record trong Database (Đóng sân giờ đó)
-                GiaTien::where('ID_CumSan', $request->ID_CumSan)
-                    ->where('ID_LoaiSan', $request->ID_LoaiSan)
-                    ->where('ID_KhungGio', $price['ID_KhungGio'])
+                GiaTien::where('MaCumSan', $maCumSan)
+                    ->where('MaLoaiSan', $maLoaiSan)
+                    ->where('MaKhungGio', $maKhungGio)
                     ->delete();
             } else {
-                // updateOrCreate: Nếu có rồi thì Cập nhật, chưa có thì Thêm mới
                 GiaTien::updateOrCreate(
                     [
-                        'ID_CumSan' => $request->ID_CumSan,
-                        'ID_LoaiSan' => $request->ID_LoaiSan,
-                        'ID_KhungGio' => $price['ID_KhungGio']
+                        'MaCumSan'   => $maCumSan,
+                        'MaLoaiSan'  => $maLoaiSan,
+                        'MaKhungGio' => $maKhungGio
                     ],
                     [
                         'SoTien' => $price['SoTien']
@@ -46,7 +54,7 @@ class GiaTienController extends Controller
         }
 
         broadcast(new \App\Events\SystemDataUpdated());
-        
+
         return response()->json(['success' => true, 'message' => 'Lưu bảng giá thành công']);
     }
 }

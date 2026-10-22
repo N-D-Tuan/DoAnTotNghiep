@@ -14,40 +14,42 @@ class PosController extends Controller
     // ====================================================
     // MODULE 1: QUẢN LÝ SẢN PHẨM (Dùng chung cho Quản lý & Staff)
     // ====================================================
-    
+
     public function getSanPham(Request $request)
     {
-        $request->validate([
-            'id_cum_san' => 'required|integer'
-        ]);
+        $maCumSan = $request->query('ma_cum_san', $request->query('id_cum_san'));
+        if (!$maCumSan) {
+            return response()->json(['success' => false, 'message' => 'Thiếu mã cụm sân!'], 422);
+        }
 
-        $sanPhams = SanPham::where('ID_CumSan', $request->id_cum_san)->get();
+        $sanPhams = SanPham::where('MaCumSan', $maCumSan)->get();
         return response()->json(['success' => true, 'data' => $sanPhams]);
     }
 
     public function storeSanPham(Request $request)
     {
-       // 1. Cập nhật Validate cho phép nhận file ảnh
+        $maCumSan = $request->input('MaCumSan', $request->input('ID_CumSan'));
+        $request->merge(['MaCumSan' => $maCumSan]);
+
         $request->validate([
-            'ID_CumSan' => 'required|integer',
+            'MaCumSan'   => 'required|string',
             'TenSanPham' => 'required|string|max:255',
-            'GiaBan' => 'required|integer|min:0',
-            'HinhAnh' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048'
+            'GiaBan'     => 'required|numeric|min:0',
+            'HinhAnh'    => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048'
         ]);
 
-        // 2. Xử lý lưu file ảnh tương tự CumSan
         $hinhAnhPath = null;
         if ($request->hasFile('HinhAnh')) {
             $path = $request->file('HinhAnh')->store('sanpham', 'public');
-            $hinhAnhPath = '/storage/' . $path; 
+            $hinhAnhPath = '/storage/' . $path;
         }
 
         $sanPham = SanPham::create([
-            'ID_CumSan' => $request->ID_CumSan,
+            'MaCumSan'   => $maCumSan,
             'TenSanPham' => $request->TenSanPham,
-            'GiaBan' => $request->GiaBan,
-            'SoLuongTon' => 0, // Mới tạo mặc định là 0, phải nhập hàng mới có
-            'HinhAnh' => $hinhAnhPath
+            'GiaBan'     => $request->GiaBan,
+            'SoLuongTon' => 0,
+            'HinhAnh'    => $hinhAnhPath
         ]);
 
         broadcast(new \App\Events\SystemDataUpdated())->toOthers();
@@ -60,22 +62,20 @@ class PosController extends Controller
         $sanPham = SanPham::find($id);
         if (!$sanPham) return response()->json(['success' => false, 'message' => 'Không tìm thấy sản phẩm'], 404);
 
-        // 1. Validate form update
         $request->validate([
             'TenSanPham' => 'required|string|max:255',
-            'GiaBan' => 'required|integer|min:0',
-            'HinhAnh' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048'
+            'GiaBan'     => 'required|numeric|min:0',
+            'HinhAnh'    => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048'
         ]);
 
         $updateData = [
             'TenSanPham' => $request->TenSanPham,
-            'GiaBan' => $request->GiaBan,
+            'GiaBan'     => $request->GiaBan,
         ];
 
-        // 2. Nếu có ảnh mới upload lên thì mới ghi đè
         if ($request->hasFile('HinhAnh')) {
             $path = $request->file('HinhAnh')->store('sanpham', 'public');
-            $updateData['HinhAnh'] = '/storage/' . $path; 
+            $updateData['HinhAnh'] = '/storage/' . $path;
         }
 
         $sanPham->update($updateData);
@@ -91,14 +91,13 @@ class PosController extends Controller
 
     public function getPhieuNhap(Request $request)
     {
-        $request->validate(['id_cum_san' => 'nullable|integer']);
-        
-        $query = PhieuNhapHang::with(['nhanVien:ID,HoTen', 'cumSan:ID,TenCumSan'])
+        $maCumSan = $request->query('ma_cum_san', $request->query('id_cum_san'));
+
+        $query = PhieuNhapHang::with(['nhanVien:MaNguoiDung,HoTen', 'cumSan:MaCumSan,TenCumSan'])
             ->orderBy('NgayNhap', 'desc');
 
-        // Nếu có truyền id_cum_san thì lọc, không thì lấy tất cả
-        if ($request->filled('id_cum_san')) {
-            $query->where('ID_CumSan', $request->id_cum_san);
+        if (!empty($maCumSan)) {
+            $query->where('MaCumSan', $maCumSan);
         }
 
         return response()->json(['success' => true, 'data' => $query->get()]);
@@ -106,34 +105,42 @@ class PosController extends Controller
 
     public function storePhieuNhap(Request $request)
     {
+        $maCumSan   = $request->input('MaCumSan', $request->input('ID_CumSan'));
+        $maNhanVien = $request->input('MaNhanVien', $request->input('ID_NhanVien'));
+        $request->merge([
+            'MaCumSan'   => $maCumSan,
+            'MaNhanVien' => $maNhanVien,
+        ]);
+
         $request->validate([
-            'ID_CumSan' => 'required|integer',
-            'ID_NhanVien' => 'required|integer',
-            'TongTienThanhToan' => 'required|integer',
-            'ChiTietNhap' => 'required|array'
+            'MaCumSan'          => 'required|string',
+            'MaNhanVien'        => 'required|string',
+            'TongTienThanhToan' => 'required|numeric',
+            'ChiTietNhap'       => 'required|array'
         ]);
 
         DB::beginTransaction();
         try {
-            // 1. Tạo Phiếu Nhập
             $phieuNhap = PhieuNhapHang::create([
-                'ID_CumSan' => $request->ID_CumSan,
-                'ID_NhanVien' => $request->ID_NhanVien,
+                'MaCumSan'          => $maCumSan,
+                'MaNhanVien'        => $maNhanVien,
                 'TongTienThanhToan' => $request->TongTienThanhToan,
-                'ChiTietNhap' => $request->ChiTietNhap,
-                'NgayNhap' => now()
+                'ChiTietNhap'       => $request->ChiTietNhap,
+                'NgayNhap'          => now()
             ]);
 
-            // 2. Cập nhật Số lượng tồn kho cho từng sản phẩm
             foreach ($request->ChiTietNhap as $item) {
-                SanPham::where('ID', $item['id_san_pham'])->increment('SoLuongTon', $item['so_luong']);
+                $maSP = $item['ma_san_pham'] ?? $item['id_san_pham'] ?? null;
+                if ($maSP) {
+                    SanPham::where('MaSanPham', $maSP)->increment('SoLuongTon', $item['so_luong']);
+                }
             }
 
             DB::commit();
 
             broadcast(new \App\Events\SystemDataUpdated())->toOthers();
 
-            return response()->json(['success' => true, 'message' => 'Nhập hàng thành công']);
+            return response()->json(['success' => true, 'message' => 'Nhập hàng thành công', 'data' => $phieuNhap]);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['success' => false, 'message' => 'Lỗi hệ thống: ' . $e->getMessage()], 500);
@@ -146,42 +153,47 @@ class PosController extends Controller
 
     public function storeHoaDonBanHang(Request $request)
     {
+        $maCumSan   = $request->input('MaCumSan', $request->input('ID_CumSan'));
+        $maNhanVien = $request->input('MaNhanVien', $request->input('ID_NhanVien'));
+        $request->merge([
+            'MaCumSan'   => $maCumSan,
+            'MaNhanVien' => $maNhanVien,
+        ]);
+
         $request->validate([
-            'ID_CumSan' => 'required|integer',
-            'ID_NhanVien' => 'required|integer',
-            'TongTien' => 'required|integer',
+            'MaCumSan'      => 'required|string',
+            'MaNhanVien'    => 'required|string',
+            'TongTien'      => 'required|numeric',
             'ChiTietHoaDon' => 'required|array'
         ]);
 
         DB::beginTransaction();
         try {
-            // 1. Kiểm tra tồn kho trước khi xuất bill để chống lỗi âm kho
             foreach ($request->ChiTietHoaDon as $item) {
-                $sp = SanPham::lockForUpdate()->find($item['id_san_pham']);
+                $maSP = $item['ma_san_pham'] ?? $item['id_san_pham'] ?? null;
+                $sp = SanPham::lockForUpdate()->find($maSP);
                 if (!$sp || $sp->SoLuongTon < $item['so_luong']) {
                     throw new \Exception("Sản phẩm {$item['ten_san_pham']} không đủ số lượng tồn kho.");
                 }
             }
 
-            // 2. Tạo Hóa Đơn
             $hoaDon = HoaDonBanHang::create([
-                'ID_CumSan' => $request->ID_CumSan,
-                'ID_NhanVien' => $request->ID_NhanVien,
-                'TongTien' => $request->TongTien,
-                'NgayTao' => now()
+                'MaCumSan'   => $maCumSan,
+                'MaNhanVien' => $maNhanVien,
+                'TongTien'   => $request->TongTien,
+                'NgayTao'    => now()
             ]);
 
-            // 3. Tạo Chi Tiết Hóa Đơn và Trừ Kho
             foreach ($request->ChiTietHoaDon as $item) {
+                $maSP = $item['ma_san_pham'] ?? $item['id_san_pham'] ?? null;
                 ChiTietHoaDon::create([
-                    'ID_HoaDon' => $hoaDon->ID,
-                    'ID_SanPham' => $item['id_san_pham'],
-                    'SoLuong' => $item['so_luong'],
-                    'DonGia' => $item['don_gia']
+                    'MaHoaDon'  => $hoaDon->MaHoaDonBanHang,
+                    'MaSanPham' => $maSP,
+                    'SoLuong'   => $item['so_luong'],
+                    'DonGia'    => $item['don_gia']
                 ]);
 
-                // Trừ tồn kho
-                SanPham::where('ID', $item['id_san_pham'])->decrement('SoLuongTon', $item['so_luong']);
+                SanPham::where('MaSanPham', $maSP)->decrement('SoLuongTon', $item['so_luong']);
             }
 
             DB::commit();
@@ -197,13 +209,13 @@ class PosController extends Controller
 
     public function getHoaDonBanHang(Request $request)
     {
-        $request->validate(['id_cum_san' => 'nullable|integer']);
-        
-        $query = HoaDonBanHang::with(['nhanVien:ID,HoTen', 'chiTietHoaDons.sanPham', 'cumSan:ID,TenCumSan'])
+        $maCumSan = $request->query('ma_cum_san', $request->query('id_cum_san'));
+
+        $query = HoaDonBanHang::with(['nhanVien:MaNguoiDung,HoTen', 'chiTietHoaDons.sanPham', 'cumSan:MaCumSan,TenCumSan'])
             ->orderBy('NgayTao', 'desc');
 
-        if ($request->filled('id_cum_san')) {
-            $query->where('ID_CumSan', $request->id_cum_san);
+        if (!empty($maCumSan)) {
+            $query->where('MaCumSan', $maCumSan);
         }
 
         return response()->json(['success' => true, 'data' => $query->get()]);

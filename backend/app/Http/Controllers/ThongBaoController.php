@@ -8,30 +8,25 @@ use Illuminate\Support\Facades\Auth;
 
 class ThongBaoController extends Controller
 {
-    // 1. Lấy danh sách thông báo của khách hàng đang đăng nhập
     public function layDanhSachCuaToi(Request $request)
     {
-        // Lấy ID người dùng từ Session hoặc Token
-        $userId = Auth::id() ?? $request->user()->ID;
+        $userId = Auth::id() ?? $request->user()->MaNguoiDung;
 
-        // Lấy toàn bộ thông báo, sắp xếp mới nhất lên đầu
-        $danhSach = ThongBao::where('ID_NguoiDung', $userId)
+        $danhSach = ThongBao::where('MaNguoiDung', $userId)
             ->orderBy('NgayTao', 'desc')
             ->get();
 
         return response()->json([
             'success' => true,
-            'data' => $danhSach
+            'data'    => $danhSach
         ], 200);
     }
 
-    // 2. Chuyển tất cả thông báo chưa đọc (0) thành đã đọc (1)
     public function danhDauDaDocTatCa(Request $request)
     {
-        $userId = Auth::id() ?? $request->user()->ID;
+        $userId = Auth::id() ?? $request->user()->MaNguoiDung;
 
-        // Chỉ update những thông báo chưa đọc để tối ưu hiệu suất Database
-        ThongBao::where('ID_NguoiDung', $userId)
+        ThongBao::where('MaNguoiDung', $userId)
             ->where('DaDoc', 0)
             ->update(['DaDoc' => 1]);
 
@@ -41,13 +36,12 @@ class ThongBaoController extends Controller
         ], 200);
     }
 
-    // 3. Chuyển trạng thái 1 thông báo cụ thể thành đã đọc (1)
     public function danhDauDaDocTheoId(Request $request, $id)
     {
-        $userId = Auth::id() ?? $request->user()->ID;
+        $userId = Auth::id() ?? $request->user()->MaNguoiDung;
 
-        $thongBao = ThongBao::where('ID', $id)
-            ->where('ID_NguoiDung', $userId)
+        $thongBao = ThongBao::where('MaThongBao', $id)
+            ->where('MaNguoiDung', $userId)
             ->first();
 
         if ($thongBao) {

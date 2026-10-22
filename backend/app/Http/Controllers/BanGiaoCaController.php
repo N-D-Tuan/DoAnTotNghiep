@@ -8,40 +8,40 @@ use App\Models\ThongBao;
 use App\Models\BanGiaoCa;
 use App\Models\ChiPhiPhatSinh;
 use App\Models\CaLamViec;
-use App\Models\LichLamViec;
 use App\Models\DatSan;
 use App\Models\HoaDonBanHang;
 use Carbon\Carbon;
 
 class BanGiaoCaController extends Controller
 {
-    // 1. Lấy danh sách Phiếu Giao Ca trong ngày
     public function layDanhSachTrongNgay(Request $request)
     {
         $user = $request->user();
         $ngay = $request->query('ngay', Carbon::now()->toDateString());
-        
-        $data = BanGiaoCa::where('ID_CumSan', $user->ID_CumSan)
+
+        $data = BanGiaoCa::where('MaCumSan', $user->MaCumSan)
             ->where('Ngay', $ngay)
             ->get();
-            
+
         return response()->json(['success' => true, 'data' => $data]);
     }
 
-    // 2. Tạo Phiếu Nhận Ca
     public function nhanCa(Request $request)
     {
         $user = $request->user();
+        $maCaLamViec = $request->input('ma_ca_lam_viec', $request->input('id_ca_lam_viec'));
+        $request->merge(['ma_ca_lam_viec_check' => $maCaLamViec]);
+
         $request->validate([
-            'id_ca_lam_viec' => 'required',
-            'ngay' => 'required|date',
-            'tien_nhan' => 'required|numeric|min:0',
-            'ghi_chu_nhan' => 'nullable|string'
+            'ma_ca_lam_viec_check' => 'required|string',
+            'ngay'                 => 'required|date',
+            'tien_nhan'            => 'required|numeric|min:0',
+            'ghi_chu_nhan'         => 'nullable|string'
         ]);
 
-        $exist = BanGiaoCa::where('ID_CaLamViec', $request->id_ca_lam_viec)
+        $exist = BanGiaoCa::where('MaCaLamViec', $maCaLamViec)
             ->where('Ngay', $request->ngay)
-            ->where('ID_CumSan', $user->ID_CumSan)
+            ->where('MaCumSan', $user->MaCumSan)
             ->first();
 
         if ($exist) {
@@ -49,15 +49,15 @@ class BanGiaoCaController extends Controller
         }
 
         $bgc = BanGiaoCa::create([
-            'ID_CumSan' => $user->ID_CumSan,
-            'ID_CaLamViec' => $request->id_ca_lam_viec,
-            'Ngay' => $request->ngay,
-            'ID_NhanVienNhan' => $user->ID,
-            'ThoiGianNhan' => Carbon::now(),
-            'TienNhan' => $request->tien_nhan,
-            'TienHeThong' => $request->tien_nhan,
-            'GhiChuNhan' => $request->ghi_chu_nhan,
-            'TrangThai' => 'DangTrongCa'
+            'MaCumSan'       => $user->MaCumSan,
+            'MaCaLamViec'    => $maCaLamViec,
+            'Ngay'           => $request->ngay,
+            'MaNhanVienNhan' => $user->MaNguoiDung,
+            'ThoiGianNhan'   => Carbon::now(),
+            'TienNhan'       => $request->tien_nhan,
+            'TienHeThong'    => $request->tien_nhan,
+            'GhiChuNhan'     => $request->ghi_chu_nhan,
+            'TrangThai'      => 'DangTrongCa'
         ]);
 
         broadcast(new \App\Events\SystemDataUpdated())->toOthers();
@@ -65,39 +65,29 @@ class BanGiaoCaController extends Controller
         return response()->json(['success' => true, 'message' => 'Tạo phiếu nhận ca thành công!', 'data' => $bgc]);
     }
 
-    // 3. Lấy thông tin chốt ca (Tính tổng chi, doanh thu)
     public function thongTinChotCa(Request $request, $id)
     {
         $bgc = BanGiaoCa::find($id);
         if (!$bgc) return response()->json(['success' => false, 'message' => 'Không tìm thấy phiếu.']);
 
-        // ==========================================
-        // 1. LẤY THÔNG TIN CA LÀM VIỆC ĐỂ XÁC ĐỊNH MỐC THỜI GIAN
-        // ==========================================
-        $caLamViec = CaLamViec::find($bgc->ID_CaLamViec);
+        $caLamViec = CaLamViec::find($bgc->MaCaLamViec);
         if (!$caLamViec) return response()->json(['success' => false, 'message' => 'Không tìm thấy thông tin Ca làm.']);
 
-        $ngayCaLam = $bgc->Ngay; // Ví dụ: '2026-10-11'
-        
+        $ngayCaLam = $bgc->Ngay;
+
         $thoiGianBatDauCa = Carbon::parse($ngayCaLam . ' ' . $caLamViec->GioBatDau);
         $thoiGianKetThucCa = Carbon::parse($ngayCaLam . ' ' . $caLamViec->GioKetThuc);
 
-        // Xử lý ca qua đêm (ví dụ Ca Tối: 15:00 -> 05:00 hôm sau)
         if ($thoiGianKetThucCa->lessThan($thoiGianBatDauCa)) {
             $thoiGianKetThucCa->addDay();
         }
 
-        // ==========================================
-        // 2. TÍNH DOANH THU ĐẶT SÂN THEO KHUNG GIỜ CỦA CA
-        // ==========================================
-        // Join với bảng KhungGio để lấy GioBatDau và SanBong để lọc theo CumSan
-        $datSans = DatSan::join('KhungGio', 'DatSan.ID_KhungGio', '=', 'KhungGio.ID')
-            ->join('SanBong', 'DatSan.ID_SanBong', '=', 'SanBong.ID')
-            ->where('SanBong.ID_CumSan', $bgc->ID_CumSan)
+        $datSans = DatSan::join('KhungGio', 'DatSan.MaKhungGio', '=', 'KhungGio.MaKhungGio')
+            ->join('SanBong', 'DatSan.MaSanBong', '=', 'SanBong.MaSanBong')
+            ->where('SanBong.MaCumSan', $bgc->MaCumSan)
             ->whereIn('DatSan.TrangThai', ['HoanThanh', 'KhongDen'])
-            // Khoanh vùng ngày để tối ưu Query
             ->whereBetween('DatSan.NgayDa', [
-                $thoiGianBatDauCa->copy()->subDay()->toDateString(), 
+                $thoiGianBatDauCa->copy()->subDay()->toDateString(),
                 $thoiGianKetThucCa->copy()->addDay()->toDateString()
             ])
             ->select('DatSan.*', 'KhungGio.GioBatDau as KhungGio_GioBatDau')
@@ -107,78 +97,55 @@ class BanGiaoCaController extends Controller
         $tienThuKhongDen = 0;
 
         foreach ($datSans as $ds) {
-            // Lấy thời gian bắt đầu của trận đấu
             $thoiGianBatDauTran = Carbon::parse($ds->NgayDa . ' ' . $ds->KhungGio_GioBatDau);
 
             if ($thoiGianBatDauTran->greaterThanOrEqualTo($thoiGianBatDauCa) && $thoiGianBatDauTran->lessThan($thoiGianKetThucCa)) {
-                
-                // Nếu trận đấu thuộc Giải đấu (!empty ID_GiaiDau), dù HoanThanh hay KhongDen đều tính thu đủ tiền dư
-                if (!empty($ds->ID_GiaiDau)) {
+                if ($ds->TrangThai === 'HoanThanh') {
+                    // Khách đến nhận sân và đá hoàn tất -> Thu ngân thu nốt phần tiền mặt còn lại tại sân
                     $tienThuSan += ($ds->TongTien - ($ds->TienCoc ?? 0));
-                } 
-                // Nếu là đá phong trào (Khách lẻ) thì áp dụng quy tắc cũ
-                else {
-                    if ($ds->TrangThai === 'HoanThanh') {
-                        $tienThuSan += ($ds->TongTien - ($ds->TienCoc ?? 0));
-                    } elseif ($ds->TrangThai === 'KhongDen') {
-                        $tienThuKhongDen += ($ds->TienCoc ?? 0);
-                    }
                 }
-                
             }
         }
 
-        // ==========================================
-        // 3. TÍNH CHI PHÍ PHÁT SINH (Lấy theo ID_BanGiaoCa)
-        // ==========================================
-        $tongPhiChi = ChiPhiPhatSinh::where('ID_BanGiaoCa', $id)->sum('SoTien');
+        $tongPhiChi = ChiPhiPhatSinh::where('MaBanGiaoCa', $id)->sum('SoTien');
 
-        // ==========================================
-        // 4. TÍNH DOANH THU BÁN NƯỚC (POS)
-        // ==========================================
-        // Tiền bán nước xuất hóa đơn lúc nào lấy lúc đó (Từ lúc nhận ca đến lúc bàn giao ca)
-        $tienBanNuoc = HoaDonBanHang::where('ID_CumSan', $bgc->ID_CumSan)
+        $tienBanNuoc = HoaDonBanHang::where('MaCumSan', $bgc->MaCumSan)
             ->whereBetween('NgayTao', [
-                $thoiGianBatDauCa->format('Y-m-d H:i:s'), 
+                $thoiGianBatDauCa->format('Y-m-d H:i:s'),
                 $thoiGianKetThucCa->format('Y-m-d H:i:s')
             ])
             ->sum('TongTien');
 
-        // ==========================================
-        // 5. TỔNG HỢP LẠI (Tồn cuối = Tồn đầu + Thu - Chi)
-        // ==========================================
         $doanhThuTienMat = $tienThuSan + $tienThuKhongDen + $tienBanNuoc;
         $tienHeThong = $bgc->TienNhan + $doanhThuTienMat - $tongPhiChi;
 
         return response()->json([
-            'success' => true, 
-            'tien_nhan' => $bgc->TienNhan,
+            'success'            => true,
+            'tien_nhan'          => $bgc->TienNhan,
             'doanh_thu_tien_mat' => $doanhThuTienMat,
-            'tong_chi' => $tongPhiChi,
-            'tien_he_thong' => $tienHeThong
+            'tong_chi'           => $tongPhiChi,
+            'tien_he_thong'      => $tienHeThong
         ]);
     }
 
-    // 4. Bàn giao ca (Kết thúc ca)
     public function giaoCa(Request $request, $id)
     {
         $user = $request->user();
         $request->validate([
-            'tien_giao' => 'required|numeric|min:0',
+            'tien_giao'          => 'required|numeric|min:0',
             'tien_nop_doanh_thu' => 'required|numeric|min:0',
-            'tien_he_thong' => 'required|numeric',
-            'ghi_chu_giao' => 'nullable|string'
+            'tien_he_thong'      => 'required|numeric',
+            'ghi_chu_giao'       => 'nullable|string'
         ]);
 
         $bgc = BanGiaoCa::find($id);
         if (!$bgc) return response()->json(['success' => false, 'message' => 'Không tìm thấy phiếu.']);
 
-        $caLamViec = CaLamViec::find($bgc->ID_CaLamViec);
+        $caLamViec = CaLamViec::find($bgc->MaCaLamViec);
         if ($caLamViec) {
             $now = Carbon::now();
             $gioKetThucCa = Carbon::parse($bgc->Ngay . ' ' . $caLamViec->GioKetThuc);
-            
-            // Nếu là ca qua ngày hôm sau (Ví dụ: 15h đến 05h sáng hôm sau)
+
             if ($gioKetThucCa->lessThan(Carbon::parse($bgc->Ngay . ' ' . $caLamViec->GioBatDau))) {
                 $gioKetThucCa->addDay();
             }
@@ -187,13 +154,13 @@ class BanGiaoCaController extends Controller
 
             if ($now->lessThan($thoiGianChoPhepChot)) {
                 return response()->json([
-                    'success' => false, 
+                    'success' => false,
                     'message' => 'Bạn không được chốt ca quá sớm! Vui lòng chờ đến ' . $thoiGianChoPhepChot->format('H:i') . ' mới có thể bàn giao.'
                 ]);
             }
         }
 
-        $bgc->ID_NhanVienGiao = $user->ID;
+        $bgc->MaNhanVienGiao = $user->MaNguoiDung;
         $bgc->ThoiGianGiao = Carbon::now();
         $bgc->TienGiao = $request->tien_giao;
         $bgc->TienNopDoanhThu = $request->tien_nop_doanh_thu;
@@ -203,23 +170,21 @@ class BanGiaoCaController extends Controller
         $bgc->save();
 
         if ($request->tien_nop_doanh_thu > 0) {
-            // Lấy danh sách Quản lý của cụm sân này
             $managers = NguoiDung::where('VaiTro', 'QuanLySan')
-                ->where('ID_CumSan', $bgc->ID_CumSan)
+                ->where('MaCumSan', $bgc->MaCumSan)
                 ->get();
 
             $formattedTienNop = number_format($request->tien_nop_doanh_thu, 0, ',', '.');
-            
+
             foreach ($managers as $mgr) {
                 ThongBao::create([
-                    'ID_NguoiDung' => $mgr->ID,
-                    'TieuDe' => 'Báo cáo chốt két cuối ngày',
-                    'NoiDung' => "Thu ngân {$user->HoTen} vừa chốt ca và báo nộp {$formattedTienNop}đ doanh thu tiền mặt. Vui lòng đối soát két!",
+                    'MaNguoiDung'  => $mgr->MaNguoiDung,
+                    'TieuDe'       => 'Báo cáo chốt két cuối ngày',
+                    'NoiDung'      => "Thu ngân {$user->HoTen} vừa chốt ca và báo nộp {$formattedTienNop}đ doanh thu tiền mặt. Vui lòng đối soát két!",
                     'LoaiThongBao' => 'HeThong'
                 ]);
-                
-                // Gắn realtime để rung chuông phía Quản lý ngay lập tức
-                broadcast(new \App\Events\UserDataUpdated($mgr->ID))->toOthers();
+
+                broadcast(new \App\Events\UserDataUpdated($mgr->MaNguoiDung))->toOthers();
             }
         }
 
@@ -228,29 +193,30 @@ class BanGiaoCaController extends Controller
         return response()->json(['success' => true, 'message' => 'Đã chốt và bàn giao ca thành công!']);
     }
 
-    // 5. Lập phiếu chi (Phát sinh)
     public function taoPhieuChi(Request $request)
     {
+        $maBanGiaoCa = $request->input('ma_ban_giao_ca', $request->input('id_ban_giao_ca'));
+        $request->merge(['ma_ban_giao_ca_check' => $maBanGiaoCa]);
+
         $request->validate([
-            'id_ban_giao_ca' => 'required|exists:BanGiaoCa,ID',
-            'loai_phieu' => 'required|in:Thu,Chi',
-            'so_tien' => 'required|numeric|min:1000',
-            'noi_dung' => 'required|string|max:255'
+            'ma_ban_giao_ca_check' => 'required|exists:BanGiaoCa,MaBanGiaoCa',
+            'loai_phieu'           => 'required|in:Thu,Chi',
+            'so_tien'              => 'required|numeric|min:1000',
+            'noi_dung'             => 'required|string|max:255'
         ]);
 
-        $bgc = BanGiaoCa::find($request->id_ban_giao_ca);
+        $bgc = BanGiaoCa::find($maBanGiaoCa);
         if ($bgc->TrangThai !== 'DangTrongCa') {
             return response()->json(['success' => false, 'message' => 'Ca này đã chốt, không thể lập phiếu.']);
         }
 
-        // THỦ THUẬT: Thu thì lưu số Âm, Chi thì lưu số Dương
         $soTienLuu = $request->loai_phieu === 'Thu' ? -$request->so_tien : $request->so_tien;
 
-        $chi = ChiPhiPhatSinh::create([
-            'ID_BanGiaoCa' => $request->id_ban_giao_ca,
-            'SoTien' => $soTienLuu,
-            'NoiDung' => $request->noi_dung,
-            'ThoiGian' => Carbon::now()
+        ChiPhiPhatSinh::create([
+            'MaBanGiaoCa' => $maBanGiaoCa,
+            'SoTien'      => $soTienLuu,
+            'NoiDung'     => $request->noi_dung,
+            'ThoiGian'    => Carbon::now()
         ]);
 
         broadcast(new \App\Events\SystemDataUpdated())->toOthers();
@@ -259,7 +225,6 @@ class BanGiaoCaController extends Controller
         return response()->json(['success' => true, 'message' => $msg]);
     }
 
-    // 6. Lấy danh sách phiếu Thu/Chi phát sinh của ca đó
     public function layDanhSachPhieuChi($id)
     {
         $bgc = BanGiaoCa::find($id);
@@ -267,33 +232,29 @@ class BanGiaoCaController extends Controller
             return response()->json(['success' => false, 'message' => 'Không tìm thấy ca làm việc.']);
         }
 
-        // Lấy toàn bộ phiếu phát sinh xếp theo thời gian mới nhất lên đầu
-        $danhSach = ChiPhiPhatSinh::where('ID_BanGiaoCa', $id)
+        $danhSach = ChiPhiPhatSinh::where('MaBanGiaoCa', $id)
             ->orderBy('ThoiGian', 'desc')
             ->get();
 
         return response()->json(['success' => true, 'data' => $danhSach]);
     }
 
-    // 7. Chốt cưỡng chế (Admin)
     public function chotCuongChe(Request $request, $id)
     {
         $user = $request->user();
-        
+
         $bgc = BanGiaoCa::find($id);
         if (!$bgc || $bgc->TrangThai !== 'DangTrongCa') {
             return response()->json(['success' => false, 'message' => 'Phiếu không hợp lệ hoặc đã chốt.']);
         }
 
-        // Tái sử dụng lại logic hàm thongTinChotCa để lấy Tiền Hệ Thống
         $req = new Request();
         $thongTin = $this->thongTinChotCa($req, $id)->getData();
         if (!$thongTin->success) return response()->json(['success' => false, 'message' => 'Lỗi tính toán.']);
-        
+
         $tienHeThong = $thongTin->tien_he_thong;
-        $caLamViec = CaLamViec::find($bgc->ID_CaLamViec);
-        
-        // Phân biệt Ca Sáng / Ca Tối dựa vào Giờ bắt đầu (Ví dụ: trước 14:00 là Ca Sáng)
+        $caLamViec = CaLamViec::find($bgc->MaCaLamViec);
+
         $isCaToi = Carbon::parse($caLamViec->GioBatDau)->hour >= 14;
 
         if ($isCaToi) {
@@ -305,7 +266,7 @@ class BanGiaoCaController extends Controller
             $tienGiao = $tienHeThong;
         }
 
-        $bgc->ID_NhanVienGiao = $user->ID;
+        $bgc->MaNhanVienGiao = $user->MaNguoiDung;
         $bgc->ThoiGianGiao = Carbon::now();
         $bgc->TienGiao = $tienGiao;
         $bgc->TienNopDoanhThu = $tienNop;
@@ -319,13 +280,12 @@ class BanGiaoCaController extends Controller
         return response()->json(['success' => true, 'message' => 'Đã chốt cưỡng chế thành công!']);
     }
 
-    // 8. Xóa phiếu Thu/Chi phát sinh
     public function xoaPhieuChi($id)
     {
         $phieu = ChiPhiPhatSinh::find($id);
         if (!$phieu) return response()->json(['success' => false, 'message' => 'Không tìm thấy phiếu.']);
 
-        $bgc = BanGiaoCa::find($phieu->ID_BanGiaoCa);
+        $bgc = BanGiaoCa::find($phieu->MaBanGiaoCa);
         if ($bgc->TrangThai !== 'DangTrongCa') {
             return response()->json(['success' => false, 'message' => 'Ca làm việc đã chốt, không thể xóa phiếu!']);
         }

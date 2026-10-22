@@ -12,7 +12,6 @@ use App\Models\ThongBao;
 
 class VNPayController extends Controller
 {
-    // 1. TẠO URL THANH TOÁN
     public function createPayment(Request $request)
     {
         $request->validate([
@@ -24,37 +23,34 @@ class VNPayController extends Controller
         $vnp_Url = config('vnpay.url');
         $vnp_Returnurl = config('vnpay.return_url');
 
-        // Tạo mã giao dịch duy nhất
-        $userId = Auth::id() ?? $request->user()->ID;
-        $vnp_TxnRef = $userId . '_' . time(); 
+        $userId = Auth::id() ?? $request->user()->MaNguoiDung;
+        $vnp_TxnRef = $userId . '_' . time();
         $vnp_OrderInfo = "Nạp tiền vào ví điện tử DN FOOTBALL";
-        $vnp_OrderType = 'billpayment'; // Thay đổi thành billpayment cho chuẩn
+        $vnp_OrderType = 'billpayment';
         $vnp_Amount = $request->so_tien * 100;
         $vnp_Locale = 'vn';
         $vnp_IpAddr = $request->ip();
 
-        // Tạo mảng dữ liệu theo đúng cấu trúc vnpay_php
         $inputData = array(
-            "vnp_Version" => "2.1.0",
-            "vnp_TmnCode" => $vnp_TmnCode,
-            "vnp_Amount" => $vnp_Amount,
-            "vnp_Command" => "pay",
+            "vnp_Version"    => "2.1.0",
+            "vnp_TmnCode"    => $vnp_TmnCode,
+            "vnp_Amount"     => $vnp_Amount,
+            "vnp_Command"    => "pay",
             "vnp_CreateDate" => date('YmdHis'),
-            "vnp_CurrCode" => "VND",
-            "vnp_IpAddr" => $vnp_IpAddr,
-            "vnp_Locale" => $vnp_Locale,
-            "vnp_OrderInfo" => $vnp_OrderInfo,
-            "vnp_OrderType" => $vnp_OrderType,
-            "vnp_ReturnUrl" => $vnp_Returnurl,
-            "vnp_TxnRef" => $vnp_TxnRef,
+            "vnp_CurrCode"   => "VND",
+            "vnp_IpAddr"     => $vnp_IpAddr,
+            "vnp_Locale"     => $vnp_Locale,
+            "vnp_OrderInfo"  => $vnp_OrderInfo,
+            "vnp_OrderType"  => $vnp_OrderType,
+            "vnp_ReturnUrl"  => $vnp_Returnurl,
+            "vnp_TxnRef"     => $vnp_TxnRef,
         );
 
-        // Sort dữ liệu chuẩn bị tạo chữ ký
         ksort($inputData);
         $query = "";
         $i = 0;
         $hashdata = "";
-        
+
         foreach ($inputData as $key => $value) {
             if ($i == 1) {
                 $hashdata .= '&' . urlencode($key) . "=" . urlencode($value);
@@ -66,38 +62,35 @@ class VNPayController extends Controller
         }
 
         $vnp_Url = $vnp_Url . "?" . $query;
-        
-        // Sinh mã hash bảo mật
+
         if (isset($vnp_HashSecret)) {
-            // Chú ý: VNPay yêu cầu hash_hmac sha512
-            $vnpSecureHash =   hash_hmac('sha512', $hashdata, $vnp_HashSecret);
+            $vnpSecureHash = hash_hmac('sha512', $hashdata, $vnp_HashSecret);
             $vnp_Url .= 'vnp_SecureHash=' . $vnpSecureHash;
         }
 
         return response()->json([
             'success' => true,
-            'url' => $vnp_Url
+            'url'     => $vnp_Url
         ]);
     }
 
-    // 2. HỨNG KẾT QUẢ TRẢ VỀ TỪ VNPAY
     public function vnpayReturn(Request $request)
     {
         $vnp_HashSecret = config('vnpay.hash_secret');
         $inputData = array();
-        
+
         foreach ($request->all() as $key => $value) {
             if (substr($key, 0, 4) == "vnp_") {
                 $inputData[$key] = $value;
             }
         }
-        
-        $vnp_SecureHash = $inputData['vnp_SecureHash'];
+
+        $vnp_SecureHash = $inputData['vnp_SecureHash'] ?? '';
         unset($inputData['vnp_SecureHash']);
         ksort($inputData);
         $i = 0;
         $hashData = "";
-        
+
         foreach ($inputData as $key => $value) {
             if ($i == 1) {
                 $hashData = $hashData . '&' . urlencode($key) . "=" . urlencode($value);
@@ -108,9 +101,7 @@ class VNPayController extends Controller
         }
 
         $secureHash = hash_hmac('sha512', $hashData, $vnp_HashSecret);
-        
-        // URL Frontend để redirect về
-        $frontendUrl = 'http://127.0.0.1:5500/html/customer.html'; // Cập nhật đúng đường dẫn theo ảnh của bạn
+        $frontendUrl = 'http://127.0.0.1:5500/html/customer.html';
 
         if ($secureHash == $vnp_SecureHash) {
             if ($request->vnp_ResponseCode == '00') {
@@ -118,22 +109,20 @@ class VNPayController extends Controller
                 try {
                     $parts = explode('_', $request->vnp_TxnRef);
                     $userId = $parts[0];
-                    
+
                     $nguoiDung = NguoiDung::find($userId);
                     if ($nguoiDung) {
                         $soTienNap = $request->vnp_Amount / 100;
                         $soDuTruoc = $nguoiDung->SoDuVi;
                         $soDuSau = $soDuTruoc + $soTienNap;
-                        
-                        // Chống cập nhật lặp
+
                         $isProcessed = GiaoDich::where('NoiDung', 'LIKE', "%{$request->vnp_TxnRef}%")->exists();
-                        
+
                         if (!$isProcessed) {
                             $nguoiDung->update(['SoDuVi' => $soDuSau]);
-                            
+
                             GiaoDich::create([
-                                'ID_NguoiDung' => $nguoiDung->ID,
-                                'ID_DatSan'    => null, 
+                                'MaNguoiDung'  => $nguoiDung->MaNguoiDung,
                                 'LoaiGiaoDich' => 'NapTien',
                                 'DongTien'     => 'Cong',
                                 'SoTien'       => $soTienNap,
@@ -142,11 +131,8 @@ class VNPayController extends Controller
                                 'NoiDung'      => 'Nạp tiền VNPay (Mã GD: ' . $request->vnp_TxnRef . ')'
                             ]);
 
-                            // -----------------------------------------
-                            // TẠO THÔNG BÁO NẠP TIỀN
-                            // -----------------------------------------
                             ThongBao::create([
-                                'ID_NguoiDung' => $nguoiDung->ID,
+                                'MaNguoiDung'  => $nguoiDung->MaNguoiDung,
                                 'TieuDe'       => 'Nạp tiền thành công',
                                 'NoiDung'      => 'Bạn đã nạp thành công ' . number_format($soTienNap) . 'đ vào ví điện tử từ VNPay.',
                                 'LoaiThongBao' => 'ViTien'

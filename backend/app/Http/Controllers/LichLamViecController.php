@@ -12,63 +12,59 @@ use Carbon\Carbon;
 
 class LichLamViecController extends Controller
 {
-    // 1. API GET dùng chung để lấy dữ liệu vẽ lưới Calendar
     public function layLichLamViec(Request $request)
     {
-        $idCumSan = $request->user()->ID_CumSan;
-        
+        $maCumSan = $request->user()->MaCumSan;
+
         $tuNgay = $request->query('tu_ngay', Carbon::now()->startOfWeek()->toDateString());
         $denNgay = $request->query('den_ngay', Carbon::now()->endOfWeek()->toDateString());
 
-        $lichLamViec = LichLamViec::with(['nhanVien:ID,HoTen,VaiTro', 'caLamViec'])
-            ->whereHas('caLamViec', function($q) use ($idCumSan) {
-                $q->where('ID_CumSan', $idCumSan);
+        $lichLamViec = LichLamViec::with(['nhanVien:MaNguoiDung,HoTen,VaiTro', 'caLamViec'])
+            ->whereHas('caLamViec', function($q) use ($maCumSan) {
+                $q->where('MaCumSan', $maCumSan);
             })
             ->whereBetween('NgayLam', [$tuNgay, $denNgay])
             ->get();
 
-        // Kiểm tra quyền mở đăng ký khẩn cấp (1 lần) trong ngày Chủ Nhật hiện tại
         $todayStr = Carbon::now()->toDateString();
         $user = $request->user();
-        $quyenKhanCapCuaToi = Cache::get("emergency_reg_{$user->ID}_{$todayStr}", false);
+        $quyenKhanCapCuaToi = Cache::get("emergency_reg_{$user->MaNguoiDung}_{$todayStr}", false);
 
         return response()->json([
-            'success' => true,
-            'data' => $lichLamViec,
+            'success'        => true,
+            'data'           => $lichLamViec,
             'quyen_khan_cap' => (bool) $quyenKhanCapCuaToi
         ]);
     }
 
-    // 2. NHÂN VIÊN ĐĂNG KÝ CA (Mặc định TrangThaiXepLich = 'DangKy')
     public function nhanVienDangKyCa(Request $request)
     {
         $user = $request->user();
-        
+        $maCaLamViec = $request->input('ma_ca_lam_viec', $request->input('id_ca_lam_viec'));
+        $request->merge(['ma_ca_lam_viec_check' => $maCaLamViec]);
+
         $request->validate([
-            'id_ca_lam_viec' => 'required|exists:CaLamViec,ID',
-            'ngay_lam' => 'required|date',
-            'ghi_chu' => 'nullable|string|max:255'
+            'ma_ca_lam_viec_check' => 'required|exists:CaLamViec,MaCaLamViec',
+            'ngay_lam'             => 'required|date',
+            'ghi_chu'              => 'nullable|string|max:255'
         ]);
 
-        // Kiểm tra xem nhân viên này đã đăng ký ca này vào ngày này chưa
-        $lich = LichLamViec::where('ID_NhanVien', $user->ID)
-                           ->where('ID_CaLamViec', $request->id_ca_lam_viec)
+        $lich = LichLamViec::where('MaNhanVien', $user->MaNguoiDung)
+                           ->where('MaCaLamViec', $maCaLamViec)
                            ->where('NgayLam', $request->ngay_lam)
                            ->first();
 
         if ($lich) {
-            // NẾU ĐÃ TỒN TẠI (Đang chờ duyệt hoặc Đã duyệt) -> Chỉ Cập nhật ghi chú
             $lich->GhiChu = $request->ghi_chu;
             $lich->save();
         } else {
-            // NẾU CHƯA TỒN TẠI -> Khởi tạo lịch làm việc mới
             $lich = LichLamViec::create([
-                'ID_CaLamViec' => $request->id_ca_lam_viec,
-                'ID_NhanVien' => $user->ID,
-                'NgayLam' => $request->ngay_lam,
-                'CongViec' => null,
+                'MaCaLamViec'       => $maCaLamViec,
+                'MaNhanVien'        => $user->MaNguoiDung,
+                'NgayLam'           => $request->ngay_lam,
+                'CongViec'          => null,
                 'GhiChu'            => $request->ghi_chu,
-                'TrangThaiXepLich' => 'DangKy',
+                'TrangThaiXepLich'  => 'DangKy',
                 'TrangThaiDiemDanh' => 'ChuaLam'
             ]);
         }
@@ -78,15 +74,21 @@ class LichLamViecController extends Controller
         return response()->json(['success' => true, 'message' => 'Đăng ký ca thành công! Vui lòng chờ duyệt.', 'data' => $lich]);
     }
 
-    // 4. QUẢN LÝ TRỰC TIẾP XẾP CA
     public function quanLyTrucTiepXepCa(Request $request)
     {
+        $maCaLamViec = $request->input('ma_ca_lam_viec', $request->input('id_ca_lam_viec'));
+        $maNhanVien  = $request->input('ma_nhan_vien', $request->input('id_nhan_vien'));
+        $request->merge([
+            'ma_ca_lam_viec_check' => $maCaLamViec,
+            'ma_nhan_vien_check'   => $maNhanVien,
+        ]);
+
         $request->validate([
-            'id_ca_lam_viec' => 'required|exists:CaLamViec,ID',
-            'ngay_lam' => 'required|date',
-            'id_nhan_vien' => 'required|exists:NguoiDung,ID',
-            'cong_viec' => 'required|in:ThuNgan,PhucVu',
-            'thong_bao_thay_doi' => 'nullable|boolean'
+            'ma_ca_lam_viec_check' => 'required|exists:CaLamViec,MaCaLamViec',
+            'ngay_lam'             => 'required|date',
+            'ma_nhan_vien_check'   => 'required|exists:NguoiDung,MaNguoiDung',
+            'cong_viec'            => 'required|in:ThuNgan,PhucVu',
+            'thong_bao_thay_doi'   => 'nullable|boolean'
         ]);
 
         $todayStr = Carbon::now()->toDateString();
@@ -99,28 +101,27 @@ class LichLamViecController extends Controller
 
         $lich = LichLamViec::updateOrCreate(
             [
-                'ID_CaLamViec' => $request->id_ca_lam_viec,
-                'ID_NhanVien' => $request->id_nhan_vien,
-                'NgayLam' => $request->ngay_lam
+                'MaCaLamViec' => $maCaLamViec,
+                'MaNhanVien'  => $maNhanVien,
+                'NgayLam'     => $request->ngay_lam
             ],
             [
-                'CongViec' => $request->cong_viec,
-                'TrangThaiXepLich' => 'DaDuyet',
+                'CongViec'          => $request->cong_viec,
+                'TrangThaiXepLich'  => 'DaDuyet',
                 'TrangThaiDiemDanh' => 'ChuaLam'
             ]
         );
 
-        // Phát thông báo nếu là hành động "Chỉnh sửa đột xuất" và người bị thay/được thay không phải là Quản lý
         if ($request->thong_bao_thay_doi) {
-            $quanLyId = $request->user()->ID;
-            if ($request->id_nhan_vien != $quanLyId) {
+            $quanLyId = $request->user()->MaNguoiDung;
+            if ($maNhanVien != $quanLyId) {
                 ThongBao::create([
-                    'ID_NguoiDung' => $request->id_nhan_vien,
-                    'TieuDe' => 'Cập nhật lịch làm việc đột xuất',
-                    'NoiDung' => 'Quản lý vừa xếp bạn vào ca ' . $request->cong_viec . ' ngày ' . $request->ngay_lam,
+                    'MaNguoiDung'  => $maNhanVien,
+                    'TieuDe'       => 'Cập nhật lịch làm việc đột xuất',
+                    'NoiDung'      => 'Quản lý vừa xếp bạn vào ca ' . $request->cong_viec . ' ngày ' . $request->ngay_lam,
                     'LoaiThongBao' => 'HeThong'
                 ]);
-                broadcast(new \App\Events\UserDataUpdated($request->id_nhan_vien))->toOthers();
+                broadcast(new \App\Events\UserDataUpdated($maNhanVien))->toOthers();
             }
         }
 
@@ -129,32 +130,30 @@ class LichLamViecController extends Controller
         return response()->json(['success' => true, 'message' => 'Đã xếp nhân viên vào lịch thành công!', 'data' => $lich]);
     }
 
-    // 5. CHỐT LỊCH TUẦN SAU (GỬI THÔNG BÁO CHO NHÂN VIÊN)
     public function chotLichTuan(Request $request)
     {
         $request->validate([
-            'tu_ngay' => 'required|date',
+            'tu_ngay'  => 'required|date',
             'den_ngay' => 'required|date'
         ]);
 
-        $idCumSan = $request->user()->ID_CumSan;
+        $maCumSan = $request->user()->MaCumSan;
 
-        // Lấy danh sách ID nhân viên đã được duyệt trong tuần đó
-        $nhanVienIds = LichLamViec::whereHas('caLamViec', function($q) use ($idCumSan) {
-                $q->where('ID_CumSan', $idCumSan);
+        $nhanVienIds = LichLamViec::whereHas('caLamViec', function($q) use ($maCumSan) {
+                $q->where('MaCumSan', $maCumSan);
             })
             ->whereBetween('NgayLam', [$request->tu_ngay, $request->den_ngay])
             ->where('TrangThaiXepLich', 'DaDuyet')
-            ->pluck('ID_NhanVien')
+            ->pluck('MaNhanVien')
             ->unique();
 
         $count = 0;
         foreach ($nhanVienIds as $nvId) {
-            if ($nvId != $request->user()->ID) { // Không tự thông báo cho quản lý
+            if ($nvId != $request->user()->MaNguoiDung) {
                 ThongBao::create([
-                    'ID_NguoiDung' => $nvId,
-                    'TieuDe' => 'Lịch làm việc tuần mới đã chốt',
-                    'NoiDung' => 'Quản lý đã chốt lịch tuần từ ' . date('d/m', strtotime($request->tu_ngay)) . '. Vui lòng kiểm tra ca làm của bạn!',
+                    'MaNguoiDung'  => $nvId,
+                    'TieuDe'       => 'Lịch làm việc tuần mới đã chốt',
+                    'NoiDung'      => 'Quản lý đã chốt lịch tuần từ ' . date('d/m', strtotime($request->tu_ngay)) . '. Vui lòng kiểm tra ca làm của bạn!',
                     'LoaiThongBao' => 'HeThong'
                 ]);
                 broadcast(new \App\Events\UserDataUpdated($nvId))->toOthers();
@@ -162,9 +161,8 @@ class LichLamViecController extends Controller
             }
         }
 
-        // Tùy chọn: Từ chối tất cả các đơn 'DangKy' còn sót lại trong tuần đó
-        LichLamViec::whereHas('caLamViec', function($q) use ($idCumSan) {
-            $q->where('ID_CumSan', $idCumSan);
+        LichLamViec::whereHas('caLamViec', function($q) use ($maCumSan) {
+            $q->where('MaCumSan', $maCumSan);
         })
         ->whereBetween('NgayLam', [$request->tu_ngay, $request->den_ngay])
         ->where('TrangThaiXepLich', 'DangKy')
@@ -175,48 +173,47 @@ class LichLamViecController extends Controller
         return response()->json(['success' => true, 'message' => "Đã chốt lịch và thông báo cho $count nhân viên."]);
     }
 
-    // 6. NHÂN VIÊN HỦY ĐĂNG KÝ CA (Chỉ hủy được khi đang chờ duyệt)
     public function nhanVienHuyDangKyCa(Request $request)
     {
         $user = $request->user();
-        
+        $maCaLamViec = $request->input('ma_ca_lam_viec', $request->input('id_ca_lam_viec'));
+        $maNhanVien  = $request->input('ma_nhan_vien', $request->input('id_nhan_vien'));
+        $request->merge(['ma_ca_lam_viec_check' => $maCaLamViec]);
+
         $request->validate([
-            'id_ca_lam_viec' => 'required|exists:CaLamViec,ID',
-            'ngay_lam' => 'required|date'
+            'ma_ca_lam_viec_check' => 'required|exists:CaLamViec,MaCaLamViec',
+            'ngay_lam'             => 'required|date'
         ]);
 
-        // Nếu là Quản lý hoặc Admin xóa ca của nhân viên (Nhận ID từ Frontend truyền lên)
-        if (in_array($user->VaiTro, ['Admin', 'QuanLySan']) && $request->has('id_nhan_vien')) {
+        if (in_array($user->VaiTro, ['Admin', 'QuanLySan']) && !empty($maNhanVien)) {
             if ($request->ngay_lam < Carbon::now()->toDateString()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Ca làm việc đã qua ngày, không thể gỡ nhân sự!'
                 ], 422);
             }
-            $lich = LichLamViec::where('ID_NhanVien', $request->id_nhan_vien)
-                               ->where('ID_CaLamViec', $request->id_ca_lam_viec)
+            $lich = LichLamViec::where('MaNhanVien', $maNhanVien)
+                               ->where('MaCaLamViec', $maCaLamViec)
                                ->where('NgayLam', $request->ngay_lam)
                                ->first();
         } else {
-            // Nhân viên tự hủy ca (Chỉ được hủy khi đang chờ duyệt)
-            $lich = LichLamViec::where('ID_NhanVien', $user->ID)
-                               ->where('ID_CaLamViec', $request->id_ca_lam_viec)
+            $lich = LichLamViec::where('MaNhanVien', $user->MaNguoiDung)
+                               ->where('MaCaLamViec', $maCaLamViec)
                                ->where('NgayLam', $request->ngay_lam)
                                ->where('TrangThaiXepLich', 'DangKy')
                                ->first();
         }
 
         if ($lich) {
-            // Quản lý xóa ca thì update trạng thái thành TuChoi. Nhân viên tự xóa thì delete khỏi DB.
-            if (in_array($user->VaiTro, ['Admin', 'QuanLySan']) && $request->has('id_nhan_vien')) {
+            if (in_array($user->VaiTro, ['Admin', 'QuanLySan']) && !empty($maNhanVien)) {
                 $lich->TrangThaiXepLich = 'TuChoi';
-                $lich->CongViec = null; // Xóa vị trí công việc
+                $lich->CongViec = null;
                 $lich->save();
-                
+
                 broadcast(new \App\Events\SystemDataUpdated())->toOthers();
                 return response()->json(['success' => true, 'message' => 'Đã gỡ nhân sự khỏi ca làm việc!']);
             } else {
-                $lich->delete(); // Nhân viên tự hủy ca
+                $lich->delete();
                 broadcast(new \App\Events\SystemDataUpdated())->toOthers();
                 return response()->json(['success' => true, 'message' => 'Đã hủy đăng ký ca làm việc!']);
             }
@@ -225,14 +222,13 @@ class LichLamViecController extends Controller
         return response()->json(['success' => false, 'message' => 'Không tìm thấy ca làm việc để hủy!']);
     }
 
-    // 7. NHÂN VIÊN TỰ ĐIỂM DANH (CHECK-IN)
     public function nhanVienDiemDanh(Request $request, $id)
     {
         $user = $request->user();
-        
+
         $lich = LichLamViec::with('caLamViec')
-            ->where('ID', $id)
-            ->where('ID_NhanVien', $user->ID)
+            ->where('MaLichLamViec', $id)
+            ->where('MaNhanVien', $user->MaNguoiDung)
             ->where('TrangThaiXepLich', 'DaDuyet')
             ->first();
 
@@ -246,31 +242,27 @@ class LichLamViecController extends Controller
 
         $now = Carbon::now();
         $ngayLam = Carbon::parse($lich->NgayLam);
-        
-        // Kiểm tra đúng ngày mới cho điểm danh
+
         if (!$now->isSameDay($ngayLam)) {
             return response()->json(['success' => false, 'message' => 'Chỉ có thể điểm danh trong đúng ngày làm việc.']);
         }
 
         $gioBatDau = Carbon::parse($lich->NgayLam . ' ' . $lich->caLamViec->GioBatDau);
         $gioKetThuc = Carbon::parse($lich->NgayLam . ' ' . $lich->caLamViec->GioKetThuc);
-        
+
         if ($gioKetThuc->lessThan($gioBatDau)) {
-            $gioKetThuc->addDay(); // Qua ngày mới
+            $gioKetThuc->addDay();
         }
 
-        // Không cho điểm danh sớm hơn 30 phút
         $thoiGianChoPhepDiemDanh = $gioBatDau->copy()->subMinutes(30);
         if ($now->lessThan($thoiGianChoPhepDiemDanh)) {
             return response()->json(['success' => false, 'message' => 'Chưa đến giờ nhận ca (Chỉ được nhận ca trước 30 phút).']);
         }
 
-        // Không cho điểm danh nếu đã hết ca
         if ($now->greaterThan($gioKetThuc)) {
             return response()->json(['success' => false, 'message' => 'Ca làm việc đã kết thúc, không thể tự điểm danh.']);
         }
 
-        // Tính số phút đi muộn (nếu check-in sau giờ bắt đầu)
         $soPhutDiMuon = 0;
         if ($now->greaterThan($gioBatDau)) {
             $soPhutDiMuon = $gioBatDau->diffInMinutes($now);
@@ -283,21 +275,20 @@ class LichLamViecController extends Controller
         broadcast(new \App\Events\SystemDataUpdated())->toOthers();
 
         return response()->json([
-            'success' => true, 
-            'message' => 'Điểm danh nhận ca thành công!', 
+            'success'         => true,
+            'message'         => 'Điểm danh nhận ca thành công!',
             'so_phut_di_muon' => $soPhutDiMuon
         ]);
     }
 
-    // 8. QUẢN LÝ CHỐT CÔNG / SỬA CÔNG THỦ CÔNG
     public function quanLyChotCong(Request $request, $id)
     {
         $request->validate([
             'trang_thai_diem_danh' => 'required|in:ChuaLam,DaLam,VangMat',
-            'so_phut_di_muon' => 'nullable|integer|min:0',
-            'tien_phat' => 'nullable|numeric|min:0',
-            'tien_thuong' => 'nullable|numeric|min:0',
-            'ly_do_dieu_chinh' => 'nullable|string|max:255'
+            'so_phut_di_muon'      => 'nullable|integer|min:0',
+            'tien_phat'            => 'nullable|numeric|min:0',
+            'tien_thuong'          => 'nullable|numeric|min:0',
+            'ly_do_dieu_chinh'     => 'nullable|string|max:255'
         ]);
 
         $lich = LichLamViec::find($id);
@@ -313,15 +304,14 @@ class LichLamViecController extends Controller
         $lich->LyDoDieuChinh = $request->ly_do_dieu_chinh;
         $lich->save();
 
-        // Phát thông báo cho nhân viên nếu Quản lý ép Vắng Mặt hoặc có áp dụng tiền phạt/thưởng
         if ($request->trang_thai_diem_danh === 'VangMat' || $request->tien_phat > 0 || $request->tien_thuong > 0) {
             ThongBao::create([
-                'ID_NguoiDung' => $lich->ID_NhanVien,
-                'TieuDe' => 'Cập nhật chấm công',
-                'NoiDung' => 'Quản lý vừa cập nhật trạng thái chấm công ca ' . date('d/m/Y', strtotime($lich->NgayLam)) . ' của bạn.',
+                'MaNguoiDung'  => $lich->MaNhanVien,
+                'TieuDe'       => 'Cập nhật chấm công',
+                'NoiDung'      => 'Quản lý vừa cập nhật trạng thái chấm công ca ' . date('d/m/Y', strtotime($lich->NgayLam)) . ' của bạn.',
                 'LoaiThongBao' => 'HeThong'
             ]);
-            broadcast(new \App\Events\UserDataUpdated($lich->ID_NhanVien))->toOthers();
+            broadcast(new \App\Events\UserDataUpdated($lich->MaNhanVien))->toOthers();
         }
 
         broadcast(new \App\Events\SystemDataUpdated())->toOthers();
@@ -329,14 +319,15 @@ class LichLamViecController extends Controller
         return response()->json(['success' => true, 'message' => 'Đã cập nhật trạng thái điểm danh.']);
     }
 
-    // 9. QUẢN LÝ CẤP QUYỀN MỞ ĐĂNG KÝ KHẨN CẤP (1 LẦN) VÀO CHỦ NHẬT
     public function moDangKyKhanCap(Request $request)
     {
+        $maNhanVien = $request->input('ma_nhan_vien', $request->input('id_nhan_vien'));
+        $request->merge(['ma_nhan_vien_check' => $maNhanVien]);
+
         $request->validate([
-            'id_nhan_vien' => 'required|exists:NguoiDung,ID'
+            'ma_nhan_vien_check' => 'required|exists:NguoiDung,MaNguoiDung'
         ]);
 
-        // Kiểm tra hôm nay có phải Chủ Nhật không (0 = Chủ Nhật trong Carbon dayOfWeek)
         if (Carbon::now()->dayOfWeek !== Carbon::SUNDAY) {
             return response()->json([
                 'success' => false,
@@ -344,21 +335,18 @@ class LichLamViecController extends Controller
             ]);
         }
 
-        $idNhanVien = $request->id_nhan_vien;
         $todayStr = Carbon::now()->toDateString();
 
-        // Lưu quyền mở khẩn cấp có hiệu lực đến hết ngày Chủ Nhật hôm nay
-        Cache::put("emergency_reg_{$idNhanVien}_{$todayStr}", true, Carbon::now()->endOfDay());
+        Cache::put("emergency_reg_{$maNhanVien}_{$todayStr}", true, Carbon::now()->endOfDay());
 
-        // Gửi thông báo cho nhân viên
         ThongBao::create([
-            'ID_NguoiDung' => $idNhanVien,
+            'MaNguoiDung'  => $maNhanVien,
             'TieuDe'       => 'Được mở đăng ký lịch khẩn cấp (1 lần)',
             'NoiDung'      => 'Quản lý vừa mở khóa cho phép bạn đăng ký/chỉnh sửa lịch làm việc tuần sau (1 lượt gửi duy nhất trong hôm nay).',
             'LoaiThongBao' => 'HeThong'
         ]);
 
-        broadcast(new \App\Events\UserDataUpdated($idNhanVien))->toOthers();
+        broadcast(new \App\Events\UserDataUpdated($maNhanVien))->toOthers();
         broadcast(new \App\Events\SystemDataUpdated())->toOthers();
 
         return response()->json([
@@ -367,28 +355,26 @@ class LichLamViecController extends Controller
         ]);
     }
 
-    // 10. THU HỒI QUYỀN KHẨN CẤP SAU KHI NHÂN VIÊN BẤM GỬI LỊCH XONG (DÙNG 1 LẦN)
     public function hoanTatGuiLichKhanCap(Request $request)
     {
         $user = $request->user();
         $todayStr = Carbon::now()->toDateString();
-        $cacheKey = "emergency_reg_{$user->ID}_{$todayStr}";
+        $cacheKey = "emergency_reg_{$user->MaNguoiDung}_{$todayStr}";
 
         if (Cache::has($cacheKey)) {
             Cache::forget($cacheKey);
 
-            // Báo cho Quản lý biết nhân viên đã gửi lịch khẩn cấp xong
             $managers = NguoiDung::where('VaiTro', 'QuanLySan')
-                ->where('ID_CumSan', $user->ID_CumSan)
+                ->where('MaCumSan', $user->MaCumSan)
                 ->get();
             foreach ($managers as $mgr) {
                 ThongBao::create([
-                    'ID_NguoiDung' => $mgr->ID,
+                    'MaNguoiDung'  => $mgr->MaNguoiDung,
                     'TieuDe'       => 'Nhân viên đã gửi lịch bổ sung',
                     'NoiDung'      => "Nhân viên {$user->HoTen} đã hoàn tất gửi lịch làm việc tuần sau từ lượt mở khẩn cấp.",
                     'LoaiThongBao' => 'HeThong'
                 ]);
-                broadcast(new \App\Events\UserDataUpdated($mgr->ID))->toOthers();
+                broadcast(new \App\Events\UserDataUpdated($mgr->MaNguoiDung))->toOthers();
             }
         }
 
@@ -397,15 +383,14 @@ class LichLamViecController extends Controller
         return response()->json(['success' => true]);
     }
 
-    // 11. KIỂM TRA TRẠNG THÁI QUYỀN KHẨN CẤP CỦA DANH SÁCH NHÂN VIÊN (CHO QUẢN LÝ)
     public function trangThaiKhanCapTuanSau(Request $request)
     {
-        $idCumSan = $request->user()->ID_CumSan;
+        $maCumSan = $request->user()->MaCumSan;
         $todayStr = Carbon::now()->toDateString();
 
-        $staffIds = NguoiDung::where('ID_CumSan', $idCumSan)
+        $staffIds = NguoiDung::where('MaCumSan', $maCumSan)
             ->where('VaiTro', 'NhanVien')
-            ->pluck('ID');
+            ->pluck('MaNguoiDung');
 
         $unlockedIds = [];
         foreach ($staffIds as $id) {
