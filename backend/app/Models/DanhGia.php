@@ -4,41 +4,41 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\GeneratesCustomId;
 
 class DanhGia extends Model
 {
-    use HasFactory;
+    use HasFactory, GeneratesCustomId;
 
     protected $table = 'DanhGia';
-    protected $primaryKey = 'ID';
+    protected $primaryKey = 'MaDanhGia';
+    protected $idPrefix = 'DG';
 
     const CREATED_AT = 'NgayTao';
-    const UPDATED_AT = null; // Bỏ cột updated_at
+    const UPDATED_AT = null;
 
     protected $fillable = [
-        'ID_DatSan',
-        'ID_CumSan',
-        'ID_NguoiDung',
+        'MaDanhGia',
+        'MaDatSan',
+        'MaCumSan',
+        'MaNguoiDung',
         'SoSao',
         'NoiDung',
         'NgayTao',
     ];
 
-    // Quan hệ: Thuộc về 1 đơn Đặt sân
     public function datSan()
     {
-        return $this->belongsTo(DatSan::class, 'ID_DatSan', 'ID');
+        return $this->belongsTo(DatSan::class, 'MaDatSan', 'MaDatSan');
     }
 
-    // Quan hệ: Thuộc về 1 Cụm sân
     public function cumSan()
     {
-        return $this->belongsTo(CumSan::class, 'ID_CumSan', 'ID');
+        return $this->belongsTo(CumSan::class, 'MaCumSan', 'MaCumSan');
     }
 
-    // Quan hệ: Thuộc về 1 Người dùng (Khách hàng)
     public function nguoiDung()
     {
-        return $this->belongsTo(NguoiDung::class, 'ID_NguoiDung', 'ID');
+        return $this->belongsTo(NguoiDung::class, 'MaNguoiDung', 'MaNguoiDung');
     }
 }

@@ -4,46 +4,71 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\GeneratesCustomId;
 
 class DatSan extends Model
 {
-    use HasFactory;
+    use HasFactory, GeneratesCustomId;
 
     protected $table = 'DatSan';
-    protected $primaryKey = 'ID';
-    
-    // Tắt hoàn toàn tự động timestamps của Laravel
+    protected $primaryKey = 'MaDatSan';
+    protected $idPrefix = 'DS';
     public $timestamps = false;
 
     protected $fillable = [
-        'ID_NguoiDung',
+        'MaDatSan',
+        'MaNguoiDung',
         'TenKhachVangLai',
         'SDTKhachVangLai',
         'EmailKhachVangLai',
-        'ID_SanBong',
-        'ID_KhungGio',
-        'ID_GiaiDau',
-        'ID_GiaoDich',
-        'ID_NhanVienXuLy', 
-        'NgayDa', 
-        'TongTien', 
-        'TienCoc', 
+        'MaSanBong',
+        'MaKhungGio',
+        'MaGiaiDau',
+        'MaHoaDonDatSan',
+        'MaNhanVienXuLy',
+        'NgayDa',
+        'TongTien',
+        'TienCoc',
         'TrangThai'
     ];
 
-    public function nguoiDung() { return $this->belongsTo(NguoiDung::class, 'ID_NguoiDung', 'ID'); }
-    public function sanBong() { return $this->belongsTo(SanBong::class, 'ID_SanBong', 'ID'); }
-    public function khungGio() { return $this->belongsTo(KhungGio::class, 'ID_KhungGio', 'ID'); }
-    public function giaiDau() { return $this->belongsTo(GiaiDau::class, 'ID_GiaiDau', 'ID'); }
-    public function yeuCauHuyGaps() { return $this->hasMany(YeuCauHuyGap::class, 'ID_DatSan', 'ID'); }
-    public function giaoDich() { return $this->belongsTo(GiaoDich::class, 'ID_GiaoDich', 'ID'); }
+    public function nguoiDung()
+    {
+        return $this->belongsTo(NguoiDung::class, 'MaNguoiDung', 'MaNguoiDung');
+    }
+
+    public function sanBong()
+    {
+        return $this->belongsTo(SanBong::class, 'MaSanBong', 'MaSanBong');
+    }
+
+    public function khungGio()
+    {
+        return $this->belongsTo(KhungGio::class, 'MaKhungGio', 'MaKhungGio');
+    }
+
+    public function giaiDau()
+    {
+        return $this->belongsTo(GiaiDau::class, 'MaGiaiDau', 'MaGiaiDau');
+    }
+
+    public function hoaDonDatSan()
+    {
+        return $this->belongsTo(HoaDonDatSan::class, 'MaHoaDonDatSan', 'MaHoaDonDatSan');
+    }
+
+    public function yeuCauHuyGaps()
+    {
+        return $this->hasMany(YeuCauHuyGap::class, 'MaDatSan', 'MaDatSan');
+    }
+
     public function nhanVienXuLy()
     {
-        return $this->belongsTo(NguoiDung::class, 'ID_NhanVienXuLy', 'ID');
+        return $this->belongsTo(NguoiDung::class, 'MaNhanVienXuLy', 'MaNguoiDung');
     }
-    // Mỗi lịch đặt sân có tối đa 1 đánh giá
+
     public function danhGia()
     {
-        return $this->hasOne(DanhGia::class, 'ID_DatSan', 'ID');
+        return $this->hasOne(DanhGia::class, 'MaDatSan', 'MaDatSan');
     }
 }

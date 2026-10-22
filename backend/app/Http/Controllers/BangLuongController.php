@@ -12,9 +12,14 @@ use Carbon\Carbon;
 
 class BangLuongController extends Controller
 {
-    // ==========================================
-    // MODULE 1: DÀNH CHO QUẢN LÝ / ADMIN
-    // ==========================================
+    private function formatNganHang(NguoiDung $nv): ?string
+    {
+        if (!$nv->TenNganHang && !$nv->STKNganHang) {
+            return null;
+        }
+        $parts = array_filter([$nv->TenNganHang, $nv->STKNganHang, $nv->TenTaiKhoan]);
+        return implode(' - ', $parts);
+    }
 
     // 1. Quản lý / Admin xem danh sách tổng quát lương của nhân viên theo tháng
     public function layDanhSachLuongQuanLy(Request $request)
@@ -29,36 +34,36 @@ class BangLuongController extends Controller
         $thang = $parts[0];
         $nam = $parts[1];
 
+        $maCumSanFilter = $request->query('ma_cum_san', $request->query('id_cum_san'));
+
         $queryNhanVien = NguoiDung::with('cumSan')->whereIn('VaiTro', ['NhanVien']);
         if ($user->VaiTro === 'QuanLySan') {
-            $queryNhanVien->where('ID_CumSan', $user->ID_CumSan);
-        } elseif ($request->filled('id_cum_san') && $request->query('id_cum_san') !== 'All') {
-            $queryNhanVien->where('ID_CumSan', $request->query('id_cum_san'));
+            $queryNhanVien->where('MaCumSan', $user->MaCumSan);
+        } elseif (!empty($maCumSanFilter) && $maCumSanFilter !== 'All') {
+            $queryNhanVien->where('MaCumSan', $maCumSanFilter);
         }
 
-        $nhanViens = $queryNhanVien->orderBy('ID_CumSan', 'asc')->orderBy('ID', 'asc')->get();
+        $nhanViens = $queryNhanVien->orderBy('MaCumSan', 'asc')->orderBy('MaNguoiDung', 'asc')->get();
         $danhSach = [];
 
         foreach ($nhanViens as $nv) {
-            $bangLuongChot = BangLuong::where('ID_NhanVien', $nv->ID)
+            $bangLuongChot = BangLuong::where('MaNhanVien', $nv->MaNguoiDung)
                 ->where('ThangNam', $thangNam)
                 ->first();
 
             $tenCumSan = $nv->cumSan ? $nv->cumSan->TenCumSan : 'Chưa phân cơ sở';
+            $thongTinNH = $this->formatNganHang($nv);
 
-            // NẾU ĐÃ CÓ BẢNG LƯƠNG (Bất kể trạng thái ChoXacNhan, KhieuNai, ChoThanhToan, DaThanhToan)
-            // -> LUÔN GIỮ NGUYÊN TongTienLuong ĐÃ CHỐT TRONG BẢNG LƯƠNG
             if ($bangLuongChot) {
                 if ($bangLuongChot->TrangThai === 'KhieuNai') {
-                    // Khi đang Khiếu nại: Giữ nguyên Lương cơ bản lúc chốt, chỉ cập nhật lại Thưởng/Phạt nếu Quản lý vừa sửa công
-                    $lichLamThang = LichLamViec::where('ID_NhanVien', $nv->ID)
+                    $lichLamThang = LichLamViec::where('MaNhanVien', $nv->MaNguoiDung)
                         ->where('TrangThaiXepLich', 'DaDuyet')
                         ->whereMonth('NgayLam', $thang)
                         ->whereYear('NgayLam', $nam)
                         ->get();
 
                     $tongCa = $lichLamThang->where('TrangThaiDiemDanh', 'DaLam')->count();
-                    $tongLuong = (int) $bangLuongChot->TongTienLuong; // CỐ ĐỊNH LƯƠNG CƠ BẢN ĐÃ CHỐT
+                    $tongLuong = (int) $bangLuongChot->TongTienLuong;
                     $tongThuong = (int) $lichLamThang->sum('TienThuong');
                     $tongPhat = (int) $lichLamThang->sum('TienPhat');
                     $thucLanh = max(0, $tongLuong + $tongThuong - $tongPhat);
@@ -71,19 +76,25 @@ class BangLuongController extends Controller
                 }
 
                 $danhSach[] = [
-                    'id_nhan_vien'        => $nv->ID,
+                    'id_nhan_vien'        => $nv->MaNguoiDung,
+                    'ma_nhan_vien'        => $nv->MaNguoiDung,
                     'ten_nhan_vien'       => $nv->HoTen,
                     'so_dien_thoai'       => $nv->SoDienThoai,
-                    'id_cum_san'          => $nv->ID_CumSan,
+                    'id_cum_san'          => $nv->MaCumSan,
+                    'ma_cum_san'          => $nv->MaCumSan,
                     'ten_cum_san'         => $tenCumSan,
-                    'bang_luong_id'       => $bangLuongChot->ID,
+                    'bang_luong_id'       => $bangLuongChot->MaBangLuong,
+                    'ma_bang_luong'       => $bangLuongChot->MaBangLuong,
                     'tong_ca_lam'         => $tongCa,
                     'tong_luong'          => $tongLuong,
                     'tong_thuong'         => $tongThuong,
                     'tong_phat'           => $tongPhat,
                     'thuc_lanh'           => $thucLanh,
                     'trang_thai'          => $bangLuongChot->TrangThai,
-                    'thong_tin_ngan_hang' => $bangLuongChot->ThongTinNganHang,
+                    'thong_tin_ngan_hang' => $thongTinNH,
+                    'ten_ngan_hang'       => $nv->TenNganHang,
+                    'stk_ngan_hang'       => $nv->STKNganHang,
+                    'ten_tai_khoan'       => $nv->TenTaiKhoan,
                     'ly_do_khieu_nai'     => $bangLuongChot->LyDoKhieuNai,
                     'ngay_chot'           => $bangLuongChot->NgayChot,
                     'ngay_xac_nhan'       => $bangLuongChot->NgayXacNhan,
@@ -91,9 +102,8 @@ class BangLuongController extends Controller
                     'is_chot'             => ($bangLuongChot->TrangThai !== 'KhieuNai')
                 ];
             } else {
-                // CHƯA CÓ BẢNG LƯƠNG (ChuaChot): Tính động theo cấu hình CaLamViec hiện tại
-                $lichLamThang = LichLamViec::join('CaLamViec', 'LichLamViec.ID_CaLamViec', '=', 'CaLamViec.ID')
-                    ->where('LichLamViec.ID_NhanVien', $nv->ID)
+                $lichLamThang = LichLamViec::join('CaLamViec', 'LichLamViec.MaCaLamViec', '=', 'CaLamViec.MaCaLamViec')
+                    ->where('LichLamViec.MaNhanVien', $nv->MaNguoiDung)
                     ->where('LichLamViec.TrangThaiXepLich', 'DaDuyet')
                     ->whereMonth('LichLamViec.NgayLam', $thang)
                     ->whereYear('LichLamViec.NgayLam', $nam)
@@ -117,19 +127,25 @@ class BangLuongController extends Controller
                 $thucLanh = max(0, $tongLuong + $tongThuong - $tongPhat);
 
                 $danhSach[] = [
-                    'id_nhan_vien'        => $nv->ID,
+                    'id_nhan_vien'        => $nv->MaNguoiDung,
+                    'ma_nhan_vien'        => $nv->MaNguoiDung,
                     'ten_nhan_vien'       => $nv->HoTen,
                     'so_dien_thoai'       => $nv->SoDienThoai,
-                    'id_cum_san'          => $nv->ID_CumSan,
+                    'id_cum_san'          => $nv->MaCumSan,
+                    'ma_cum_san'          => $nv->MaCumSan,
                     'ten_cum_san'         => $tenCumSan,
                     'bang_luong_id'       => null,
+                    'ma_bang_luong'       => null,
                     'tong_ca_lam'         => $tongCa,
                     'tong_luong'          => $tongLuong,
                     'tong_thuong'         => $tongThuong,
                     'tong_phat'           => $tongPhat,
                     'thuc_lanh'           => $thucLanh,
                     'trang_thai'          => 'ChuaChot',
-                    'thong_tin_ngan_hang' => null,
+                    'thong_tin_ngan_hang' => $thongTinNH,
+                    'ten_ngan_hang'       => $nv->TenNganHang,
+                    'stk_ngan_hang'       => $nv->STKNganHang,
+                    'ten_tai_khoan'       => $nv->TenTaiKhoan,
                     'ly_do_khieu_nai'     => null,
                     'ngay_chot'           => null,
                     'ngay_xac_nhan'       => null,
@@ -145,15 +161,17 @@ class BangLuongController extends Controller
     // 2. Quản lý Chốt Lương
     public function chotLuong(Request $request)
     {
+        $maNhanVien = $request->input('ma_nhan_vien', $request->input('id_nhan_vien'));
+        $request->merge(['ma_nhan_vien_check' => $maNhanVien]);
+
         $request->validate([
-            'id_nhan_vien' => 'required',
-            'thang_nam' => 'required'
+            'ma_nhan_vien_check' => 'required|string',
+            'thang_nam'          => 'required|string'
         ]);
 
         $thangNam = $request->thang_nam;
-        $idNhanVien = $request->id_nhan_vien;
 
-        $exist = BangLuong::where('ID_NhanVien', $idNhanVien)->where('ThangNam', $thangNam)->first();
+        $exist = BangLuong::where('MaNhanVien', $maNhanVien)->where('ThangNam', $thangNam)->first();
         if ($exist && $exist->TrangThai !== 'KhieuNai') {
             return response()->json(['success' => false, 'message' => 'Lương tháng này đã được chốt.']);
         }
@@ -161,16 +179,15 @@ class BangLuongController extends Controller
         $parts = explode('-', $thangNam);
         $thang = $parts[0]; $nam = $parts[1];
 
-        $lichLamThang = LichLamViec::join('CaLamViec', 'LichLamViec.ID_CaLamViec', '=', 'CaLamViec.ID')
-            ->where('LichLamViec.ID_NhanVien', $idNhanVien)
+        $lichLamThang = LichLamViec::join('CaLamViec', 'LichLamViec.MaCaLamViec', '=', 'CaLamViec.MaCaLamViec')
+            ->where('LichLamViec.MaNhanVien', $maNhanVien)
             ->where('LichLamViec.TrangThaiXepLich', 'DaDuyet')
             ->whereMonth('LichLamViec.NgayLam', $thang)
             ->whereYear('LichLamViec.NgayLam', $nam)
             ->select('LichLamViec.*', 'CaLamViec.LuongThuNgan', 'CaLamViec.LuongPhucVu')
             ->get();
 
-        // Key lưu Snapshot mức lương cơ bản của từng ca lúc chốt
-        $snapshotKey = "salary_snapshot_{$idNhanVien}_{$thangNam}";
+        $snapshotKey = "salary_snapshot_{$maNhanVien}_{$thangNam}";
         $existingSnapshot = Cache::get($snapshotKey, []);
         $newSnapshot = $existingSnapshot;
 
@@ -180,13 +197,12 @@ class BangLuongController extends Controller
         foreach ($lichLamThang as $lich) {
             if ($lich->TrangThaiDiemDanh === 'DaLam') {
                 $tongCa++;
-                // Nếu ca này đã từng được lưu mức lương lúc chốt lần đầu (trường hợp chốt lại sau Khiếu nại) -> Giữ nguyên mức lương cũ
-                // Nếu là ca mới được chấm công bổ sung -> Lấy mức lương tại thời điểm chốt này và khóa lại
-                if (isset($existingSnapshot[$lich->ID])) {
-                    $mucLuongCa = (int) $existingSnapshot[$lich->ID];
+                $maLLV = $lich->MaLichLamViec;
+                if (isset($existingSnapshot[$maLLV])) {
+                    $mucLuongCa = (int) $existingSnapshot[$maLLV];
                 } else {
                     $mucLuongCa = (int) (($lich->CongViec === 'ThuNgan') ? $lich->LuongThuNgan : $lich->LuongPhucVu);
-                    $newSnapshot[$lich->ID] = $mucLuongCa;
+                    $newSnapshot[$maLLV] = $mucLuongCa;
                 }
                 $tongLuong += $mucLuongCa;
             }
@@ -194,7 +210,6 @@ class BangLuongController extends Controller
             $tongPhat += ($lich->TienPhat ?? 0);
         }
 
-        // Lưu cứng bảng giá từng ca vào Cache vĩnh viễn
         Cache::forever($snapshotKey, $newSnapshot);
 
         $ngayHienTai = Carbon::now()->toDateTimeString();
@@ -204,32 +219,30 @@ class BangLuongController extends Controller
             $exist->TongTienLuong = $tongLuong;
             $exist->TongTienThuong = $tongThuong;
             $exist->TongTienPhat = $tongPhat;
-            $exist->ThucLanh = max(0, $tongLuong + $tongThuong - $tongPhat);
             $exist->TrangThai = 'ChoXacNhan';
             $exist->NgayChot = $ngayHienTai;
             $exist->save();
         } else {
             BangLuong::create([
-                'ID_NhanVien'    => $idNhanVien,
+                'MaNhanVien'     => $maNhanVien,
                 'ThangNam'       => $thangNam,
                 'TongCaLam'      => $tongCa,
                 'TongTienLuong'  => $tongLuong,
                 'TongTienThuong' => $tongThuong,
                 'TongTienPhat'   => $tongPhat,
-                'ThucLanh'       => max(0, $tongLuong + $tongThuong - $tongPhat),
                 'TrangThai'      => 'ChoXacNhan',
                 'NgayChot'       => $ngayHienTai
             ]);
         }
 
         ThongBao::create([
-            'ID_NguoiDung' => $idNhanVien,
+            'MaNguoiDung'  => $maNhanVien,
             'TieuDe'       => 'Quản lý đã chốt bảng lương',
             'NoiDung'      => "Bảng lương tháng {$thangNam} của bạn đã được chốt. Vui lòng vào kiểm tra và xác nhận thanh toán.",
             'LoaiThongBao' => 'HeThong'
         ]);
 
-        broadcast(new \App\Events\UserDataUpdated($idNhanVien))->toOthers();
+        broadcast(new \App\Events\UserDataUpdated($maNhanVien))->toOthers();
         broadcast(new \App\Events\SystemDataUpdated())->toOthers();
 
         return response()->json(['success' => true, 'message' => 'Đã chốt và gửi bảng lương cho nhân viên.']);
@@ -239,7 +252,7 @@ class BangLuongController extends Controller
     public function thanhToan(Request $request, $id)
     {
         $bg = BangLuong::find($id);
-        if (!$bg || $bg->TrangThai !== 'ChoThanhToan') {
+        if (!$bg || !in_array($bg->TrangThai, ['ChoThanhToan', 'DaXacNhan'])) {
             return response()->json(['success' => false, 'message' => 'Lỗi trạng thái! Nhân viên chưa xác nhận.']);
         }
 
@@ -248,48 +261,54 @@ class BangLuongController extends Controller
         $bg->save();
 
         ThongBao::create([
-            'ID_NguoiDung' => $bg->ID_NhanVien,
+            'MaNguoiDung'  => $bg->MaNhanVien,
             'TieuDe'       => 'Đã chuyển khoản tiền lương',
             'NoiDung'      => "Lương tháng {$bg->ThangNam} đã được thanh toán. Vui lòng kiểm tra tài khoản ngân hàng.",
             'LoaiThongBao' => 'ViTien'
         ]);
 
-        broadcast(new \App\Events\UserDataUpdated($bg->ID_NhanVien))->toOthers();
+        broadcast(new \App\Events\UserDataUpdated($bg->MaNhanVien))->toOthers();
         broadcast(new \App\Events\SystemDataUpdated())->toOthers();
 
         return response()->json(['success' => true, 'message' => 'Xác nhận thanh toán thành công.']);
     }
 
-    // ==========================================
-    // MODULE 2: DÀNH CHO NHÂN VIÊN
-    // ==========================================
-
     // 4. Nhân viên lấy Lịch sử các tháng
     public function lichSuLuongNhanVien(Request $request)
     {
         $user = $request->user();
-        
-        $history = BangLuong::where('ID_NhanVien', $user->ID)
-            ->orderBy('ID', 'desc')
-            ->get();
+        $thongTinNH = $this->formatNganHang($user);
+
+        $history = BangLuong::where('MaNhanVien', $user->MaNguoiDung)
+            ->orderBy('MaBangLuong', 'desc')
+            ->get()
+            ->map(function ($item) use ($thongTinNH, $user) {
+                $item->ThongTinNganHang = $thongTinNH;
+                $item->TenNganHang = $user->TenNganHang;
+                $item->STKNganHang = $user->STKNganHang;
+                $item->TenTaiKhoan = $user->TenTaiKhoan;
+                return $item;
+            });
 
         return response()->json(['success' => true, 'data' => $history]);
     }
 
-    // 5. Nhân viên/Quản lý/Admin Xem chi tiết 1 tháng
+    // 5. Xem chi tiết 1 tháng
     public function xemChiTietThang(Request $request)
     {
-        $id = $request->query('bang_luong_id');
+        $id = $request->query('ma_bang_luong', $request->query('bang_luong_id'));
         $thangNam = $request->query('thang_nam');
-        $idNhanVien = $request->query('id_nhan_vien', $request->user()->ID);
+        $maNhanVien = $request->query('ma_nhan_vien', $request->query('id_nhan_vien', $request->user()->MaNguoiDung));
 
         $bangLuong = null;
         if ($id) {
             $bangLuong = BangLuong::find($id);
-            $thangNam = $bangLuong->ThangNam;
-            $idNhanVien = $bangLuong->ID_NhanVien;
+            if ($bangLuong) {
+                $thangNam = $bangLuong->ThangNam;
+                $maNhanVien = $bangLuong->MaNhanVien;
+            }
         } elseif ($thangNam) {
-            $bangLuong = BangLuong::where('ID_NhanVien', $idNhanVien)->where('ThangNam', $thangNam)->first();
+            $bangLuong = BangLuong::where('MaNhanVien', $maNhanVien)->where('ThangNam', $thangNam)->first();
         }
 
         if (!$thangNam) return response()->json(['success' => false, 'message' => 'Thiếu tham số.']);
@@ -298,15 +317,14 @@ class BangLuongController extends Controller
         $thang = $parts[0]; $nam = $parts[1];
 
         $lichLamViec = LichLamViec::with('caLamViec')
-            ->where('ID_NhanVien', $idNhanVien)
+            ->where('MaNhanVien', $maNhanVien)
             ->where('TrangThaiXepLich', 'DaDuyet')
             ->whereMonth('NgayLam', $thang)
             ->whereYear('NgayLam', $nam)
             ->orderBy('NgayLam', 'asc')
             ->get();
 
-        // Lấy Snapshot lương từng ca nếu tháng này đã có Bảng lương
-        $snapshotKey = "salary_snapshot_{$idNhanVien}_{$thangNam}";
+        $snapshotKey = "salary_snapshot_{$maNhanVien}_{$thangNam}";
         $snapshot = $bangLuong ? Cache::get($snapshotKey, []) : [];
 
         $lichThang = $lichLamViec->map(function($lich) use ($bangLuong, $snapshot) {
@@ -317,16 +335,15 @@ class BangLuongController extends Controller
                     : (int) $lich->caLamViec->LuongPhucVu;
             }
 
-            // Nếu đã có Bảng lương và có lưu Snapshot của ca này -> Lấy đúng số tiền nguyên bản lúc chốt (VD: 150.000đ, 170.000đ)
-            if ($bangLuong && isset($snapshot[$lich->ID])) {
-                $luongHienThi = (int) $snapshot[$lich->ID];
+            if ($bangLuong && isset($snapshot[$lich->MaLichLamViec])) {
+                $luongHienThi = (int) $snapshot[$lich->MaLichLamViec];
             }
 
             return [
                 'ngay_lam'             => $lich->NgayLam,
                 'ten_ca'               => $lich->caLamViec ? $lich->caLamViec->TenCa : 'N/A',
                 'cong_viec'            => $lich->CongViec,
-                'trang_thai_diem_danh' => $lich->TrangThaiDiemDanh, 
+                'trang_thai_diem_danh' => $lich->TrangThaiDiemDanh,
                 'luong_co_ban'         => (int) $luongHienThi,
                 'tien_thuong'          => (int) ($lich->TienThuong ?? 0),
                 'tien_phat'            => (int) ($lich->TienPhat ?? 0),
@@ -344,21 +361,26 @@ class BangLuongController extends Controller
             $tongPhat += $l['tien_phat'];
         }
 
+        $nvInfo = NguoiDung::find($maNhanVien);
+        $thongTinNH = $nvInfo ? $this->formatNganHang($nvInfo) : null;
+
         if (!$bangLuong) {
             $thucLanh = max(0, $tongLuong + $tongThuong - $tongPhat);
             $tongTin = [
-                'is_chot'        => false,
-                'ThangNam'       => $thangNam,
-                'TongCaLam'      => $tongCa,
-                'TongTienLuong'  => $tongLuong,
-                'TongTienThuong' => $tongThuong,
-                'TongTienPhat'   => $tongPhat,
-                'ThucLanh'       => $thucLanh,
-                'TrangThai'      => 'ChuaChot'
+                'is_chot'          => false,
+                'ThangNam'         => $thangNam,
+                'TongCaLam'        => $tongCa,
+                'TongTienLuong'    => $tongLuong,
+                'TongTienThuong'   => $tongThuong,
+                'TongTienPhat'     => $tongPhat,
+                'ThucLanh'         => $thucLanh,
+                'ThongTinNganHang' => $thongTinNH,
+                'TrangThai'        => 'ChuaChot'
             ];
         } else {
             $tongTin = clone $bangLuong;
             $tongTin->is_chot = true;
+            $tongTin->ThongTinNganHang = $thongTinNH;
             $tongTin->TongTienLuong = (int) $bangLuong->TongTienLuong;
             if ($bangLuong->TrangThai === 'KhieuNai') {
                 $tongTin->TongCaLam = $tongCa;
@@ -371,38 +393,49 @@ class BangLuongController extends Controller
         return response()->json([
             'success'    => true,
             'tong_quan'  => $tongTin,
-            'lich_thang' => $lichThang 
+            'lich_thang' => $lichThang
         ]);
     }
 
-    // 6. Nhân viên xác nhận đồng ý
+    // 6. Nhân viên xác nhận đồng ý (Cập nhật luôn thông tin Ngân hàng vào bảng NguoiDung)
     public function xacNhan(Request $request, $id)
     {
         $user = $request->user();
-        $request->validate([
-            'thong_tin_ngan_hang' => 'required|string'
-        ]);
 
-        $bg = BangLuong::where('ID', $id)->where('ID_NhanVien', $user->ID)->first();
+        $bg = BangLuong::where('MaBangLuong', $id)->where('MaNhanVien', $user->MaNguoiDung)->first();
         if (!$bg || $bg->TrangThai !== 'ChoXacNhan') {
             return response()->json(['success' => false, 'message' => 'Dữ liệu không hợp lệ.']);
         }
 
-        $bg->ThongTinNganHang = $request->thong_tin_ngan_hang;
+        // Hỗ trợ nhận 3 cột riêng (ten_ngan_hang, stk_ngan_hang, ten_tai_khoan) hoặc tách từ chuỗi thong_tin_ngan_hang
+        if ($request->filled('ten_ngan_hang') || $request->filled('stk_ngan_hang')) {
+            $user->TenNganHang = trim($request->input('ten_ngan_hang', $user->TenNganHang));
+            $user->STKNganHang = trim($request->input('stk_ngan_hang', $user->STKNganHang));
+            $user->TenTaiKhoan = trim($request->input('ten_tai_khoan', $user->TenTaiKhoan ?? $user->HoTen));
+            $user->save();
+        } elseif ($request->filled('thong_tin_ngan_hang')) {
+            $raw = trim($request->thong_tin_ngan_hang);
+            $parts = array_map('trim', explode('-', $raw));
+            $user->TenNganHang = $parts[0] ?? $raw;
+            $user->STKNganHang = $parts[1] ?? ($user->STKNganHang ?? '');
+            $user->TenTaiKhoan = $parts[2] ?? ($user->TenTaiKhoan ?? mb_strtoupper($user->HoTen, 'UTF-8'));
+            $user->save();
+        }
+
         $bg->NgayXacNhan = Carbon::now()->toDateTimeString();
         $bg->TrangThai = 'ChoThanhToan';
         $bg->LyDoKhieuNai = null;
         $bg->save();
 
-        $managers = NguoiDung::where('VaiTro', 'QuanLySan')->where('ID_CumSan', $user->ID_CumSan)->get();
+        $managers = NguoiDung::where('VaiTro', 'QuanLySan')->where('MaCumSan', $user->MaCumSan)->get();
         foreach ($managers as $mgr) {
             ThongBao::create([
-                'ID_NguoiDung' => $mgr->ID,
+                'MaNguoiDung'  => $mgr->MaNguoiDung,
                 'TieuDe'       => 'Nhân viên đã xác nhận lương',
                 'NoiDung'      => "Nhân viên {$user->HoTen} đã xác nhận bảng lương tháng {$bg->ThangNam}. Vui lòng kiểm tra và tiến hành thanh toán.",
                 'LoaiThongBao' => 'HeThong'
             ]);
-            broadcast(new \App\Events\UserDataUpdated($mgr->ID))->toOthers();
+            broadcast(new \App\Events\UserDataUpdated($mgr->MaNguoiDung))->toOthers();
         }
 
         broadcast(new \App\Events\SystemDataUpdated())->toOthers();
@@ -418,7 +451,7 @@ class BangLuongController extends Controller
             'ly_do' => 'required|string'
         ]);
 
-        $bg = BangLuong::where('ID', $id)->where('ID_NhanVien', $user->ID)->first();
+        $bg = BangLuong::where('MaBangLuong', $id)->where('MaNhanVien', $user->MaNguoiDung)->first();
         if (!$bg || $bg->TrangThai !== 'ChoXacNhan') {
             return response()->json(['success' => false, 'message' => 'Dữ liệu không hợp lệ.']);
         }
@@ -427,15 +460,15 @@ class BangLuongController extends Controller
         $bg->LyDoKhieuNai = $request->ly_do;
         $bg->save();
 
-        $managers = NguoiDung::where('VaiTro', 'QuanLySan')->where('ID_CumSan', $user->ID_CumSan)->get();
+        $managers = NguoiDung::where('VaiTro', 'QuanLySan')->where('MaCumSan', $user->MaCumSan)->get();
         foreach ($managers as $mgr) {
             ThongBao::create([
-                'ID_NguoiDung' => $mgr->ID,
+                'MaNguoiDung'  => $mgr->MaNguoiDung,
                 'TieuDe'       => 'Khiếu nại bảng lương',
                 'NoiDung'      => "Nhân viên {$user->HoTen} vừa báo cáo sai sót bảng lương tháng {$bg->ThangNam}. Vui lòng kiểm tra lại bảng công.",
                 'LoaiThongBao' => 'HeThong'
             ]);
-            broadcast(new \App\Events\UserDataUpdated($mgr->ID))->toOthers();
+            broadcast(new \App\Events\UserDataUpdated($mgr->MaNguoiDung))->toOthers();
         }
 
         broadcast(new \App\Events\SystemDataUpdated())->toOthers();

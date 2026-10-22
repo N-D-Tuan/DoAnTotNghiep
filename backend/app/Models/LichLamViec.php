@@ -3,26 +3,39 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\GeneratesCustomId;
 
 class LichLamViec extends Model
 {
+    use GeneratesCustomId;
+
     protected $table = 'LichLamViec';
-    protected $primaryKey = 'ID';
+    protected $primaryKey = 'MaLichLamViec';
+    protected $idPrefix = 'LLV';
     public $timestamps = false;
 
     protected $fillable = [
-        'ID_CaLamViec', 'NgayLam', 'ID_NhanVien', 'GhiChu', 'CongViec',
-        'TrangThaiXepLich', 'TrangThaiDiemDanh', 'SoPhutDiMuon', 
-        'TienPhat', 'TienThuong', 'LyDoDieuChinh'
+        'MaLichLamViec',
+        'MaCaLamViec',
+        'NgayLam',
+        'MaNhanVien',
+        'GhiChu',
+        'CongViec',
+        'TrangThaiXepLich',
+        'TrangThaiDiemDanh',
+        'SoPhutDiMuon',
+        'TienPhat',
+        'TienThuong',
+        'LyDoDieuChinh'
     ];
 
     public function caLamViec()
     {
-        return $this->belongsTo(CaLamViec::class, 'ID_CaLamViec', 'ID');
+        return $this->belongsTo(CaLamViec::class, 'MaCaLamViec', 'MaCaLamViec');
     }
 
     public function nhanVien()
     {
-        return $this->belongsTo(NguoiDung::class, 'ID_NhanVien', 'ID');
+        return $this->belongsTo(NguoiDung::class, 'MaNhanVien', 'MaNguoiDung');
     }
 }

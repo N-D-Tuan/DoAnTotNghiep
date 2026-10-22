@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use App\Models\YeuCauHuyGap;
 use App\Models\DatSan;
+use App\Models\HoaDonDatSan;
 use App\Models\NguoiDung;
 use App\Models\GiaoDich;
 use App\Models\GiaiDau;
@@ -14,47 +15,44 @@ use App\Models\ThongBao;
 
 class YeuCauHuyGapController extends Controller
 {
-    // =========================================================
-    // 1. KHÁCH HÀNG TẠO YÊU CẦU HỦY GẤP
-    // =========================================================
     public function taoYeuCau(Request $request)
     {
-        $user = NguoiDung::find(Auth::id() ?? $request->user()->ID);
+        $user = NguoiDung::find(Auth::id() ?? $request->user()->MaNguoiDung);
+        $maDatSan = $request->input('ma_dat_san', $request->input('id_dat_san'));
+        $request->merge(['ma_dat_san_check' => $maDatSan]);
+
         $request->validate([
-            'id_dat_san' => 'required|exists:DatSan,ID',
-            'noi_dung'   => 'required|string|max:500'
+            'ma_dat_san_check' => 'required|exists:DatSan,MaDatSan',
+            'noi_dung'         => 'required|string|max:500'
         ]);
 
-        $datSan = DatSan::with('sanBong')->find($request->id_dat_san);
+        $datSan = DatSan::with('sanBong')->find($maDatSan);
 
-        if ($datSan->ID_NguoiDung !== $user->ID) {
+        if ($datSan->MaNguoiDung !== $user->MaNguoiDung) {
             return response()->json(['success' => false, 'message' => 'Bạn không có quyền thao tác trên lịch đặt này!']);
         }
         if ($datSan->TrangThai !== 'DaCoc') {
             return response()->json(['success' => false, 'message' => 'Chỉ có thể tạo yêu cầu hủy gấp đối với sân đang ở trạng thái Đã cọc!']);
         }
 
-        // Kiểm tra xem đã có yêu cầu nào đang chờ duyệt chưa
-        if ($datSan->ID_GiaiDau != null) {
-            // TRƯỜNG HỢP GIẢI ĐẤU: Kiểm tra xem có bất kỳ khung giờ nào thuộc giải này đang xin hủy không
+        if ($datSan->MaGiaiDau != null) {
             $daTonTaiGiaiDau = YeuCauHuyGap::whereHas('datSan', function ($query) use ($datSan) {
-                $query->where('ID_GiaiDau', $datSan->ID_GiaiDau);
+                $query->where('MaGiaiDau', $datSan->MaGiaiDau);
             })->where('TrangThai', 'ChoDuyet')->exists();
 
             if ($daTonTaiGiaiDau) {
                 return response()->json([
-                    'success' => false, 
+                    'success' => false,
                     'message' => 'Giải đấu này đang có yêu cầu hủy chờ xử lý! Vui lòng không gửi thêm yêu cầu trùng lặp.'
                 ]);
             }
         } else {
-            // TRƯỜNG HỢP PHONG TRÀO: Chỉ kiểm tra chính xác ID_DatSan này
-            $daTonTai = YeuCauHuyGap::where('ID_DatSan', $datSan->ID)
+            $daTonTai = YeuCauHuyGap::where('MaDatSan', $datSan->MaDatSan)
                                     ->where('TrangThai', 'ChoDuyet')
                                     ->exists();
             if ($daTonTai) {
                 return response()->json([
-                    'success' => false, 
+                    'success' => false,
                     'message' => 'Sân này đã có yêu cầu hủy đang chờ xử lý!'
                 ]);
             }
@@ -62,34 +60,31 @@ class YeuCauHuyGapController extends Controller
 
         DB::beginTransaction();
         try {
-            // Tạo yêu cầu mới
             YeuCauHuyGap::create([
-                'ID_NguoiDung' => $user->ID,
-                'ID_DatSan'    => $datSan->ID,
-                'NoiDung'      => $request->noi_dung,
-                'TrangThai'    => 'ChoDuyet'
+                'MaNguoiDung' => $user->MaNguoiDung,
+                'MaDatSan'    => $datSan->MaDatSan,
+                'NoiDung'     => $request->noi_dung,
+                'TrangThai'   => 'ChoDuyet'
             ]);
 
-            $idCumSanTuongUng = $datSan->sanBong->ID_CumSan;
+            $maCumSanTuongUng = $datSan->sanBong->MaCumSan;
             $nguoiNhanThongBao = NguoiDung::where('VaiTro', 'QuanLySan')
-                                   ->where('ID_CumSan', $idCumSanTuongUng)
+                                   ->where('MaCumSan', $maCumSanTuongUng)
                                    ->get();
 
             foreach ($nguoiNhanThongBao as $nhanSu) {
                 ThongBao::create([
-                    'ID_NguoiDung' => $nhanSu->ID,
+                    'MaNguoiDung'  => $nhanSu->MaNguoiDung,
                     'TieuDe'       => 'Yêu cầu hủy sân gấp mới',
                     'NoiDung'      => "Khách hàng {$user->HoTen} vừa gửi 1 yêu cầu hủy sân gấp.",
                     'LoaiThongBao' => 'DatSan'
                 ]);
 
-                // Bắn trực tiếp vào kênh cá nhân
-                broadcast(new \App\Events\UserDataUpdated($nhanSu->ID))->toOthers();
+                broadcast(new \App\Events\UserDataUpdated($nhanSu->MaNguoiDung))->toOthers();
             }
 
             DB::commit();
 
-            // Phát tín hiệu làm mới bảng dữ liệu
             broadcast(new \App\Events\AdminDataUpdated())->toOthers();
 
             return response()->json(['success' => true, 'message' => 'Đã gửi yêu cầu hủy gấp thành công! Vui lòng chờ Admin phê duyệt.']);
@@ -99,9 +94,6 @@ class YeuCauHuyGapController extends Controller
         }
     }
 
-    // =========================================================
-    // 2. ADMIN XỬ LÝ YÊU CẦU HỦY GẤP
-    // =========================================================
     public function xuLyYeuCau(Request $request, $id)
     {
         $request->validate([
@@ -110,7 +102,7 @@ class YeuCauHuyGapController extends Controller
         ], [
             'ly_do_huy.required_if' => 'Vui lòng nhập lý do từ chối.'
         ]);
-        
+
         DB::beginTransaction();
         try {
             $yeuCau = YeuCauHuyGap::with('datSan.sanBong')->find($id);
@@ -118,7 +110,6 @@ class YeuCauHuyGapController extends Controller
                 return response()->json(['success' => false, 'message' => 'Yêu cầu không tồn tại hoặc đã được xử lý trước đó!']);
             }
 
-            // Lưu trạng thái, ngày duyệt và Lý do hủy
             $yeuCau->update([
                 'TrangThai' => $request->trang_thai,
                 'NgayDuyet' => now(),
@@ -126,31 +117,36 @@ class YeuCauHuyGapController extends Controller
             ]);
 
             $datSan = $yeuCau->datSan;
-            $user = NguoiDung::find($yeuCau->ID_NguoiDung);
-
-            $tieuDeTB = '';
-            $noiDungTB = '';
+            $user = NguoiDung::find($yeuCau->MaNguoiDung);
 
             if ($request->trang_thai === 'DaDuyet') {
-                // KIỂM TRA: LÀ SÂN PHONG TRÀO HAY SÂN GIẢI ĐẤU?
-                if ($datSan->ID_GiaiDau != null) {
-                    // XỬ LÝ GIẢI ĐẤU: Hủy toàn bộ trận đấu đang ở trạng thái DaCoc
-                    $danhSachDat = DatSan::where('ID_GiaiDau', $datSan->ID_GiaiDau)
+                if ($datSan->MaGiaiDau != null) {
+                    $danhSachDat = DatSan::where('MaGiaiDau', $datSan->MaGiaiDau)
                                          ->where('TrangThai', 'DaCoc')
                                          ->get();
                     $tongHoan = $danhSachDat->sum('TienCoc');
+                    $maHoaDonIds = $danhSachDat->pluck('MaHoaDonDatSan')->filter()->unique();
 
-                    DatSan::where('ID_GiaiDau', $datSan->ID_GiaiDau)
+                    DatSan::where('MaGiaiDau', $datSan->MaGiaiDau)
                           ->where('TrangThai', 'DaCoc')
                           ->update(['TrangThai' => 'DaHuy']);
-                    
-                    GiaiDau::where('ID', $datSan->ID_GiaiDau)->update(['TrangThai' => 'DaHuy']);
+
+                    $daCoTranHoanThanh = DatSan::where('MaGiaiDau', $datSan->MaGiaiDau)
+                                               ->where('TrangThai', 'HoanThanh')
+                                               ->exists();
+                    GiaiDau::where('MaGiaiDau', $datSan->MaGiaiDau)->update([
+                        'TrangThai' => $daCoTranHoanThanh ? 'HoanThanh' : 'DaHuy'
+                    ]);
+
+                    foreach ($maHoaDonIds as $maHD) {
+                        \App\Http\Controllers\DatSanController::dongBoHoaDonDatSan($maHD);
+                    }
 
                     if ($tongHoan > 0) {
                         $soDuSau = $user->SoDuVi + $tongHoan;
-                        
+
                         GiaoDich::create([
-                            'ID_NguoiDung' => $user->ID,
+                            'MaNguoiDung'  => $user->MaNguoiDung,
                             'LoaiGiaoDich' => 'HoanTienHuyGap',
                             'DongTien'     => 'Cong',
                             'SoTien'       => $tongHoan,
@@ -161,14 +157,17 @@ class YeuCauHuyGapController extends Controller
                         $user->update(['SoDuVi' => $soDuSau]);
                     }
                 } else {
-                    // XỬ LÝ PHONG TRÀO: Chỉ hủy 1 trận
                     $datSan->update(['TrangThai' => 'DaHuy']);
-                    $tienHoan = $datSan->TienCoc;
 
+                    if ($datSan->MaHoaDonDatSan) {
+                        \App\Http\Controllers\DatSanController::dongBoHoaDonDatSan($datSan->MaHoaDonDatSan);
+                    }
+
+                    $tienHoan = $datSan->TienCoc;
                     $soDuSau = $user->SoDuVi + $tienHoan;
 
                     GiaoDich::create([
-                        'ID_NguoiDung' => $user->ID,
+                        'MaNguoiDung'  => $user->MaNguoiDung,
                         'LoaiGiaoDich' => 'HoanTienHuyGap',
                         'DongTien'     => 'Cong',
                         'SoTien'       => $tienHoan,
@@ -182,14 +181,12 @@ class YeuCauHuyGapController extends Controller
                 $tieuDeTB = "Yêu cầu hủy sân được phê duyệt";
                 $noiDungTB = "Yêu cầu hủy sân gấp của bạn đã được Admin duyệt. Tiền cọc đã được cộng lại vào ví.";
             } else {
-                // TRƯỜNG HỢP TỪ CHỐI
                 $tieuDeTB = "Yêu cầu hủy sân bị từ chối";
                 $noiDungTB = "Yêu cầu hủy sân gấp của bạn không được Admin chấp thuận. Lý do: " . $request->ly_do_huy . ". Lịch đặt vẫn được giữ nguyên.";
             }
 
-            // Gửi thông báo cho Customer
             ThongBao::create([
-                'ID_NguoiDung' => $user->ID,
+                'MaNguoiDung'  => $user->MaNguoiDung,
                 'TieuDe'       => $tieuDeTB,
                 'NoiDung'      => $noiDungTB,
                 'LoaiThongBao' => 'DatSan'
@@ -197,8 +194,7 @@ class YeuCauHuyGapController extends Controller
 
             DB::commit();
 
-            // Phát tín hiệu cho Customer cập nhật UI ngầm
-            broadcast(new \App\Events\UserDataUpdated($user->ID))->toOthers();
+            broadcast(new \App\Events\UserDataUpdated($user->MaNguoiDung))->toOthers();
             broadcast(new \App\Events\SystemDataUpdated())->toOthers();
             broadcast(new \App\Events\AdminDataUpdated())->toOthers();
 
@@ -209,38 +205,30 @@ class YeuCauHuyGapController extends Controller
         }
     }
 
-    // =========================================================
-    // 3. LẤY DANH SÁCH YÊU CẦU HỦY GẤP CỦA KHÁCH HÀNG
-    // =========================================================
     public function layDanhSachCuaToi(Request $request)
     {
-        $user = NguoiDung::find(Auth::id() ?? $request->user()->ID);
+        $user = NguoiDung::find(Auth::id() ?? $request->user()->MaNguoiDung);
 
-        // Load kèm thông tin Sân, Cụm sân, Khung giờ và Giải đấu (nếu có) để Frontend dễ hiển thị
         $danhSach = YeuCauHuyGap::with(['datSan.sanBong.cumSan', 'datSan.khungGio', 'datSan.giaiDau'])
-            ->where('ID_NguoiDung', $user->ID)
+            ->where('MaNguoiDung', $user->MaNguoiDung)
             ->orderBy('NgayTao', 'desc')
             ->get();
 
         return response()->json([
             'success' => true,
-            'data' => $danhSach
+            'data'    => $danhSach
         ]);
     }
 
-    // =========================================================
-    // 4. LẤY TẤT CẢ YÊU CẦU HỦY GẤP CHO ADMIN
-    // =========================================================
     public function layDanhSachAdmin(Request $request)
     {
         $userDangNhap = auth()->user();
 
         $query = YeuCauHuyGap::with(['nguoiDung', 'datSan.sanBong.cumSan', 'datSan.khungGio', 'datSan.giaiDau']);
 
-        // CHÈN LOGIC CÁCH LY
         if ($userDangNhap->VaiTro === 'QuanLySan') {
             $query->whereHas('datSan.sanBong', function ($q) use ($userDangNhap) {
-                $q->where('ID_CumSan', $userDangNhap->ID_CumSan);
+                $q->where('MaCumSan', $userDangNhap->MaCumSan);
             });
         }
 

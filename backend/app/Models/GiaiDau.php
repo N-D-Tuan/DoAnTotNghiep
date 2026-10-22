@@ -4,22 +4,23 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\GeneratesCustomId;
 
 class GiaiDau extends Model
 {
-    use HasFactory;
+    use HasFactory, GeneratesCustomId;
 
-    protected $table = 'giaidau';
-    protected $primaryKey = 'ID';
+    protected $table = 'GiaiDau';
+    protected $primaryKey = 'MaGiaiDau';
+    protected $idPrefix = 'GDAU';
 
-    // Trỏ cột created_at mặc định sang NgayTao
     const CREATED_AT = 'NgayTao';
-    // Tắt tính năng tự động ghi updated_at
     const UPDATED_AT = null;
 
     protected $fillable = [
-        'ID_NguoiDung',
-        'ID_CumSan',
+        'MaGiaiDau',
+        'MaNguoiDung',
+        'MaCumSan',
         'TenGiaiDau',
         'NgayBatDau',
         'NgayKetThuc',
@@ -31,16 +32,16 @@ class GiaiDau extends Model
 
     public function nguoiDung()
     {
-        return $this->belongsTo(NguoiDung::class, 'ID_NguoiDung', 'ID');
+        return $this->belongsTo(NguoiDung::class, 'MaNguoiDung', 'MaNguoiDung');
     }
 
     public function cumSan()
     {
-        return $this->belongsTo(CumSan::class, 'ID_CumSan', 'ID');
+        return $this->belongsTo(CumSan::class, 'MaCumSan', 'MaCumSan');
     }
 
     public function datSans()
     {
-        return $this->hasMany(DatSan::class, 'ID_GiaiDau', 'ID');
+        return $this->hasMany(DatSan::class, 'MaGiaiDau', 'MaGiaiDau');
     }
 }

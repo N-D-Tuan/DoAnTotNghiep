@@ -20,8 +20,25 @@ body { font-family: var(--font-main); background-color: var(--bg-main); color: v
 a { text-decoration: none; color: inherit; }
 ul { list-style: none; }
 button { cursor: pointer; font-family: var(--font-main); border: none; }
-.btn-primary { background-color: var(--primary); color: white; padding: 10px 20px; border-radius: 6px; font-weight: 500; transition: background-color 0.2s; }
+.btn-primary { background-color: var(--primary); color: white; padding: 10px 20px; border-radius: 8px; font-weight: 600; transition: all 0.2s ease; }
 .btn-primary:hover { background-color: var(--primary-hover); }
+
+.btn-outline {
+    padding: 10px 24px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #475569;
+    font-weight: 600;
+    font-size: 0.92rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.btn-outline:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+    color: #0f172a;
+}
 
 /* ADMIN CSS */
 .admin-layout {

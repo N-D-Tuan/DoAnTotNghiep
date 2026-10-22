@@ -113,27 +113,21 @@ function initThreeScene() {
     const container = document.getElementById('canvas-container');
     if (!container) return;
 
-    // Kích thước container
     let width = container.clientWidth;
     let height = container.clientHeight;
 
-    // Scene, Camera, Renderer
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
-    camera.position.z = 8; // Đẩy camera ra xa một chút
+    camera.position.z = 8;
 
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-    // Tối ưu pixel ratio cho performance
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(width, height);
     container.appendChild(renderer.domElement);
 
-    // Group chính để chứa bóng và hiệu ứng
     const footballGroup = new THREE.Group();
     scene.add(footballGroup);
 
-    // 1. Tạo "Tech Football" bằng IcosahedronGeometry (Giống cấu trúc bóng đá)
-    // Lớp bên trong: Tối, hút sáng
     const innerGeo = new THREE.IcosahedronGeometry(2, 2);
     const innerMat = new THREE.MeshPhongMaterial({
         color: 0x0F172A,
@@ -145,10 +139,9 @@ function initThreeScene() {
     const innerBall = new THREE.Mesh(innerGeo, innerMat);
     footballGroup.add(innerBall);
 
-    // Lớp bên ngoài: Wireframe Neon
     const outerGeo = new THREE.IcosahedronGeometry(2.05, 2);
     const outerMat = new THREE.MeshBasicMaterial({
-        color: 0x39FF88, // Neon Green
+        color: 0x39FF88,
         wireframe: true,
         transparent: true,
         opacity: 0.4
@@ -156,20 +149,6 @@ function initThreeScene() {
     const outerBall = new THREE.Mesh(outerGeo, outerMat);
     footballGroup.add(outerBall);
 
-    // 2. Tạo vòng quỹ đạo (Orbit Ring)
-    // const ringGeo = new THREE.TorusGeometry(3.5, 0.02, 16, 100);
-    // const ringMat = new THREE.MeshBasicMaterial({
-    //     color: 0x22C55E,
-    //     transparent: true,
-    //     opacity: 0.3
-    // });
-    // const ring = new THREE.Mesh(ringGeo, ringMat);
-    // ring.rotation.x = Math.PI / 2;
-    // ring.rotation.y = Math.PI / 6;
-    // footballGroup.add(ring);
-
-    // 3. Tạo Particles (Điểm sáng lơ lửng)
-    // Tối ưu số lượng hạt dựa trên thiết bị (Mobile ít hơn)
     const isMobile = window.innerWidth <= 768;
     const particleCount = isMobile ? 200 : 500;
     
@@ -177,7 +156,6 @@ function initThreeScene() {
     const posArray = new Float32Array(particleCount * 3);
 
     for(let i = 0; i < particleCount * 3; i++) {
-        // Tạo particles trong phạm vi bán kính 10
         posArray[i] = (Math.random() - 0.5) * 15;
     }
     particlesGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
@@ -193,7 +171,6 @@ function initThreeScene() {
     const particleMesh = new THREE.Points(particlesGeo, particlesMat);
     scene.add(particleMesh);
 
-    // 4. Ánh sáng (Lights)
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
     scene.add(ambientLight);
 
@@ -205,7 +182,6 @@ function initThreeScene() {
     fillLight.position.set(5, 0, 5);
     scene.add(fillLight);
 
-    // 5. Tương tác chuột (Mouse Interaction)
     let mouseX = 0;
     let mouseY = 0;
     let targetX = 0;
@@ -218,7 +194,6 @@ function initThreeScene() {
         mouseY = (event.clientY - windowHalfY);
     });
 
-    // 6. Xử lý Resize
     window.addEventListener('resize', () => {
         width = container.clientWidth;
         height = container.clientHeight;
@@ -229,31 +204,23 @@ function initThreeScene() {
         renderer.setSize(width, height);
     });
 
-    // 7. Vòng lặp Animation (Animation Loop)
     const clock = new THREE.Clock();
 
     function animate() {
         requestAnimationFrame(animate);
         const elapsedTime = clock.getElapsedTime();
 
-        // Xoay trục bóng nhẹ nhàng
         footballGroup.rotation.y += 0.003;
         footballGroup.rotation.x += 0.002;
-        
-        // Hiệu ứng Floating (lên xuống)
         footballGroup.position.y = Math.sin(elapsedTime * 1.5) * 0.2;
-
-        // Xoay hệ thống hạt
         particleMesh.rotation.y = -elapsedTime * 0.05;
 
-        // Nội suy mượt mà tương tác chuột
         targetX = mouseX * 0.001;
         targetY = mouseY * 0.001;
 
         footballGroup.rotation.y += 0.05 * (targetX - footballGroup.rotation.y);
         footballGroup.rotation.x += 0.05 * (targetY - footballGroup.rotation.x);
         
-        // Parallax nhẹ cho camera dựa trên chuột
         camera.position.x += (mouseX * 0.002 - camera.position.x) * 0.05;
         camera.position.y += (-mouseY * 0.002 - camera.position.y) * 0.05;
         camera.lookAt(scene.position);
@@ -263,6 +230,10 @@ function initThreeScene() {
 
     animate();
 }
+
+/* ==========================================================================
+   GUEST BOOKING & CLUSTER / PITCH / SCHEDULE VIEW (ĐÃ CHUẨN HÓA MÃ VARCHAR)
+   ========================================================================== */
 
 const API_BASE_URL = 'http://127.0.0.1:8000/api';
 const appContent = document.getElementById('guest-app-content');
@@ -292,7 +263,6 @@ document.addEventListener('DOMContentLoaded', () => {
             disableStats: true
         });
 
-        // Tự động khôi phục kết nối & dữ liệu nếu trình duyệt rơi vào Back-Forward Cache (bfcache)
         window.addEventListener('pageshow', (event) => {
             if (event.persisted) {
                 if (window.Echo && window.Echo.connector && window.Echo.connector.pusher) {
@@ -302,7 +272,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // Lắng nghe kênh system-updates
         window.Echo.channel('system-updates')
             .listen('SystemDataUpdated', async (e) => {
                 console.log('⚡ Hệ thống có tín hiệu cập nhật dữ liệu (Guest View)...');
@@ -311,7 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // A. Nếu đang xem bảng lịch của 1 sân bóng -> Cập nhật các ô Đã đặt / Trống
                 if (appState.currentPitch !== null && document.querySelector('.schedule-table')) {
                     try {
-                        const currentPitchId = appState.currentPitch.ID;
+                        const currentPitchId = appState.currentPitch.MaSanBong || appState.currentPitch.ID;
                         const dsRes = await fetch(`${API_BASE_URL}/dat-san/da-dat?id_san_bong=${currentPitchId}&_t=${cacheBuster}`);
                         const bookedSlots = (await dsRes.json()).data || [];
 
@@ -328,7 +297,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         });
 
                         bookedSlots.forEach(booked => {
-                            const targetSlotId = `${currentPitchId}-${booked.NgayDa}-${booked.ID_KhungGio}`;
+                            const maKG = booked.MaKhungGio || booked.ID_KhungGio;
+                            const targetSlotId = `${currentPitchId}-${booked.NgayDa}-${maKG}`;
                             const slotEl = document.querySelector(`.schedule-table .slot-btn[data-slot-id="${targetSlotId}"]`);
                             
                             if (slotEl && !slotEl.classList.contains('booked')) {
@@ -355,7 +325,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
-                // B. Cập nhật ngầm số sao & tổng lượt đánh giá trên danh sách Cụm Sân (thêm _t để chống cache)
+                // B. Cập nhật ngầm số sao & tổng lượt đánh giá trên danh sách Cụm Sân
                 try {
                     const [res, ratingRes] = await Promise.all([
                         fetch(`${API_BASE_URL}/cum-san?_t=${cacheBuster}`),
@@ -364,8 +334,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     const data = await res.json();
                     const ratingMap = (await ratingRes.json()).data || {};
 
-                    appState.clusters = (data.data || []).filter(c => c.deleted_at === null).map(c => {
-                        const r = ratingMap[c.ID];
+                    appState.clusters = (data.data || []).filter(c => c.TrangThai === 'HoatDong' || (!c.TrangThai && c.deleted_at === null)).map(c => {
+                        const maCS = c.MaCumSan || c.ID;
+                        const r = ratingMap[maCS];
                         return {
                             ...c,
                             avg_rating: r ? Number(r.trung_binh_sao) : (c.danh_gias_avg_so_sao ? Math.round(c.danh_gias_avg_so_sao * 10) / 10 : 0),
@@ -373,7 +344,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         };
                     });
 
-                    // Nếu khách vãng lai đang đứng ở màn hình Danh sách Cụm Sân -> Vẽ lại ngay
                     if (!breadcrumbEl || breadcrumbEl.style.display === 'none' || document.querySelector('.cluster-grid')) {
                         renderClusters();
                     }
@@ -381,7 +351,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.error("Lỗi cập nhật ngầm đánh giá cụm sân Guest:", err);
                 }
 
-                // C. Nếu khách vãng lai đang mở Modal xem đánh giá của 1 cụm sân -> Cập nhật nội dung Modal ngay lập tức
+                // C. Nếu khách vãng lai đang mở Modal xem đánh giá của 1 cụm sân
                 const guestRevModal = document.getElementById('guest-reviews-modal');
                 if (guestRevModal && guestRevModal.style.display === 'flex' && typeof currentGuestViewedReviewClusterId !== 'undefined' && currentGuestViewedReviewClusterId) {
                     try {
@@ -410,11 +380,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// Hàm cuộn mượt về khu vực sân
-// function scrollToFields() {
-//     fieldsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-// }
-
 async function loadClusters() {
     appContent.innerHTML = '<div style="text-align:center; padding: 40px;"><i class="fa-solid fa-spinner fa-spin fa-2x" style="color:#10B981"></i></div>';
     try {
@@ -425,8 +390,9 @@ async function loadClusters() {
         const data = await res.json();
         const ratingMap = (await ratingRes.json()).data || {};
 
-        appState.clusters = (data.data || []).filter(c => c.deleted_at === null).map(c => {
-            const r = ratingMap[c.ID];
+        appState.clusters = (data.data || []).filter(c => c.TrangThai === 'HoatDong' || (!c.TrangThai && c.deleted_at === null)).map(c => {
+            const maCS = c.MaCumSan || c.ID;
+            const r = ratingMap[maCS];
             return {
                 ...c,
                 avg_rating: r ? Number(r.trung_binh_sao) : (c.danh_gias_avg_so_sao ? Math.round(c.danh_gias_avg_so_sao * 10) / 10 : 0),
@@ -449,18 +415,19 @@ function renderClusters() {
     `;
 
     appState.clusters.forEach(c => {
+        const maCS = c.MaCumSan || c.ID;
         const avgStar = c.total_reviews > 0 ? Number(c.avg_rating).toFixed(1) : '0.0';
         const reviewText = `(${c.total_reviews} đánh giá)`;
 
         html += `
-            <div class="cluster-card" onclick="loadPitches(${c.ID})">
+            <div class="cluster-card" onclick="loadPitches('${maCS}')">
                 <div class="cluster-img-box">
                     ${c.HinhAnh ? `<img src="http://127.0.0.1:8000${c.HinhAnh}" class="cluster-img">` : `<div style="display:flex; height:100%; align-items:center; justify-content:center; background:#E5E7EB;"><i class="fa-solid fa-futbol fa-3x" style="color:#9CA3AF"></i></div>`}
                 </div>
                 <div class="cluster-info">
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:6px;">
                         <h3 class="cluster-name" style="margin:0;">${c.TenCumSan}</h3>
-                        <button type="button" onclick="event.stopPropagation(); openGuestReviewsModal(${c.ID}, '${c.TenCumSan.replace(/'/g, "\\'")}')" style="background:rgba(245, 158, 11, 0.15); border:1px solid rgba(245, 158, 11, 0.4); color:#fbbf24; padding:4px 9px; border-radius:999px; font-size:0.78rem; font-weight:700; cursor:pointer; white-space:nowrap;">
+                        <button type="button" onclick="event.stopPropagation(); openGuestReviewsModal('${maCS}', '${c.TenCumSan.replace(/'/g, "\\'")}')" style="background:rgba(245, 158, 11, 0.15); border:1px solid rgba(245, 158, 11, 0.4); color:#fbbf24; padding:4px 9px; border-radius:999px; font-size:0.78rem; font-weight:700; cursor:pointer; white-space:nowrap;">
                             <i class="fa-solid fa-star"></i> ${avgStar} <span style="font-weight:400; opacity:0.9;">${reviewText}</span>
                         </button>
                     </div>
@@ -474,7 +441,7 @@ function renderClusters() {
 }
 
 async function loadPitches(clusterId) {
-    appState.currentCluster = appState.clusters.find(c => c.ID == clusterId);
+    appState.currentCluster = appState.clusters.find(c => (c.MaCumSan || c.ID) == clusterId);
     renderBreadcrumb('pitches');
     appContent.innerHTML = '<div style="text-align:center; padding: 40px;"><i class="fa-solid fa-spinner fa-spin fa-2x" style="color:#10B981"></i></div>';
 
@@ -484,7 +451,6 @@ async function loadPitches(clusterId) {
         const activePitches = (data.data || []).filter(sb => sb.TrangThai === 'HoatDong');
 
         const c = appState.currentCluster;
-        // Khung thông tin Cụm sân đang xem
         let headerHtml = `
             <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-left: 4px solid var(--primary); border-radius: 12px; padding: 20px 24px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
                 <div>
@@ -516,15 +482,23 @@ async function loadPitches(clusterId) {
 
         let html = headerHtml + '<div class="pitch-grid">';
         activePitches.forEach(sb => {
+            const maSB = sb.MaSanBong || sb.ID;
             const loaiName = sb.loaiSan?.TenLoaiSan || sb.loai_san?.TenLoaiSan || 'Khác';
+            const specInfo = (sb.KichThuoc || sb.DienTich) 
+                ? `<div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px;"><i class="fa-solid fa-ruler-combined" style="color: var(--primary); margin-right: 4px;"></i>${sb.KichThuoc ? sb.KichThuoc : ''}${sb.KichThuoc && sb.DienTich ? ' • ' : ''}${sb.DienTich ? Number(sb.DienTich) + 'm²' : ''}</div>` 
+                : '';
+            const moTaInfo = sb.MoTa ? `<div style="font-size: 0.76rem; color: var(--text-muted); margin-top: 4px; opacity: 0.85;">${sb.MoTa}</div>` : '';
+
             html += `
-                <div class="pitch-card" onclick="loadSchedule(${clusterId}, ${sb.ID})">
-                    <div style="padding: 20px; display: flex; justify-content: space-between; align-items: center;">
+                <div class="pitch-card" onclick="loadSchedule('${clusterId}', '${maSB}')">
+                    <div style="padding: 20px; display: flex; justify-content: space-between; align-items: center; gap: 12px;">
                         <div>
                             <div class="pitch-card-name">${sb.TenSan}</div>
                             <div class="pitch-card-type"><i class="fa-solid fa-layer-group" style="color: var(--accent);"></i> ${loaiName}</div>
+                            ${specInfo}
+                            ${moTaInfo}
                         </div>
-                        <span style="color: var(--accent); font-size: 0.85rem; font-weight: 600;">Xem lịch &rarr;</span>
+                        <span style="color: var(--accent); font-size: 0.85rem; font-weight: 600; flex-shrink: 0;">Xem lịch &rarr;</span>
                     </div>
                 </div>
             `;
@@ -551,20 +525,19 @@ async function loadSchedule(clusterId, pitchId) {
         const timeSlots = (await kgRes.json()).data || [];
         const booked = (await dsRes.json()).data || [];
 
-        const pitch = pitches.find(p => p.ID == pitchId);
+        const pitch = pitches.find(p => (p.MaSanBong || p.ID) == pitchId);
         appState.currentPitch = pitch;
         
-        // Gọi renderBreadcrumb sau khi đã gán appState.currentPitch để hiển thị đúng tên sân trên thanh điều hướng
         renderBreadcrumb('schedule');
 
         const c = appState.currentCluster;
         const loaiName = pitch.loaiSan?.TenLoaiSan || pitch.loai_san?.TenLoaiSan || 'Sân bóng';
+        const pitchLoaiId = pitch.MaLoaiSan || pitch.ID_LoaiSan;
 
-        const validPrices = prices.filter(gt => gt.ID_LoaiSan == pitch.ID_LoaiSan);
-        const validKhungGioIds = validPrices.map(gt => gt.ID_KhungGio);
-        const availableTimeSlots = timeSlots.filter(kg => validKhungGioIds.includes(kg.ID));
+        const validPrices = prices.filter(gt => (gt.MaLoaiSan || gt.ID_LoaiSan) == pitchLoaiId);
+        const validKhungGioIds = validPrices.map(gt => gt.MaKhungGio || gt.ID_KhungGio);
+        const availableTimeSlots = timeSlots.filter(kg => validKhungGioIds.includes(kg.MaKhungGio || kg.ID));
 
-        // Lấy ngày hôm nay và 6 ngày tới
         const dateArray = [];
         const today = new Date();
         for (let i = 0; i < 7; i++) {
@@ -578,7 +551,6 @@ async function loadSchedule(clusterId, pitchId) {
             });
         }
 
-        // Khung thông tin Sân bóng & Cụm sân đang xem trên bảng lịch
         let html = `
             <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-left: 4px solid var(--accent); border-radius: 12px; padding: 18px 24px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
                 <div>
@@ -601,14 +573,12 @@ async function loadSchedule(clusterId, pitchId) {
                 </div>
             </div>
             
-            <!-- Thanh công cụ: Quy định đặt sân phong trào cho Khách vãng lai -->
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px;">
                 <div style="position: relative; display: inline-block;">
                     <button type="button" onclick="toggleGuestRuleDropdown(event)" style="background-color: var(--bg-secondary); color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 14px; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px;">
                         <i class="fa-solid fa-circle-info" style="background-color: #f59e0b; color: #ffffff; border-radius: 50%; padding: 4px; font-size: 0.75rem;"></i> Quy định đặt & hủy sân
                     </button>
 
-                    <!-- Hộp nội dung quy định dành riêng cho đặt sân phong trào -->
                     <div id="guest-rule-dropdown-box" style="display: none; position: absolute; top: 115%; left: 0; width: 680px; max-width: 90vw; background-color: #1e293b; border: 1px solid #f59e0b; border-radius: 10px; padding: 18px 22px; box-shadow: 0 10px 25px rgba(0,0,0,0.4); z-index: 99;">
                         <h4 style="color: #fbbf24; margin: 0 0 10px 0; font-size: 0.98rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">
                             <i class="fa-solid fa-circle-info"></i> Quy định đặt sân phong trào
@@ -626,17 +596,12 @@ async function loadSchedule(clusterId, pitchId) {
                 <table class="schedule-table" style="width: 100%; border-collapse: separate; border-spacing: 0; min-width: 900px; table-layout: auto;">
                     <thead>
                         <tr>
-                            <!-- CỘT KHUNG GIỜ (TIÊU ĐỀ) -->
                             <th style="width: 120px; min-width: 120px; padding: 14px 10px; border-bottom: 1px solid var(--border-color); background: var(--bg-tertiary); position: sticky; top: 80px; left: 0; z-index: 50; box-shadow: 0 3px 8px rgba(0,0,0,0.2); text-align: center; color: var(--text-main);">
                                 Khung giờ
                             </th>
-
-                            <!-- CỘT GIÁ TIỀN (TIÊU ĐỀ) -->
                             <th style="width: 100px; min-width: 100px; padding: 14px 10px; border-bottom: 1px solid var(--border-color); background: var(--bg-tertiary); position: sticky; top: 80px; left: 120px; z-index: 49; box-shadow: 4px 0 6px -2px rgba(0,0,0,0.2), 0 3px 8px rgba(0,0,0,0.2); text-align: center; color: var(--text-main);">
                                 Giá tiền
                             </th>
-
-                            <!-- CÁC NGÀY (TIÊU ĐỀ) -->
                             ${dateArray.map((d, i) => `
                                 <th style="min-width: 105px; padding: 14px 10px; text-align: center; white-space: nowrap; border-bottom: 1px solid var(--border-color); background: var(--bg-tertiary); position: sticky; top: 80px; z-index: 40; box-shadow: 0 3px 8px rgba(0,0,0,0.2); color: var(--text-main);">
                                     ${i === 0 ? 'Hôm nay' : d.short}
@@ -647,31 +612,31 @@ async function loadSchedule(clusterId, pitchId) {
                     <tbody>
         `;
 
+        const maPitch = pitch.MaSanBong || pitch.ID;
+
         availableTimeSlots.forEach(kg => {
-            const priceInfo = validPrices.find(p => p.ID_KhungGio == kg.ID);
+            const maKG = kg.MaKhungGio || kg.ID;
+            const priceInfo = validPrices.find(p => (p.MaKhungGio || p.ID_KhungGio) == maKG);
             const priceVal = priceInfo ? Number(priceInfo.SoTien).toLocaleString('vi-VN') + 'đ' : '0đ';
             const timeStr = `${kg.GioBatDau.substring(0,5)} - ${kg.GioKetThuc.substring(0,5)}`;
             
             html += `
                 <tr>
-                    <!-- CỘT KHUNG GIỜ (NỘI DUNG) -->
                     <td style="width: 120px; min-width: 120px; background: var(--bg-secondary); position: sticky; left: 0; z-index: 15; border-right: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); text-align: center; padding: 12px 10px; white-space: nowrap;">
                         <strong>${timeStr}</strong>
                     </td>
-
-                    <!-- CỘT GIÁ TIỀN (NỘI DUNG) -->
                     <td style="width: 100px; min-width: 100px; background: var(--bg-secondary); position: sticky; left: 120px; z-index: 14; color: var(--accent); font-weight: 600; border-right: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); box-shadow: 4px 0 6px -2px rgba(0,0,0,0.2); text-align: center; padding: 12px 10px;">
                         ${priceVal}
                     </td>
             `;
             
             dateArray.forEach(date => {
-                const isBooked = booked.some(b => b.NgayDa === date.dbDate && b.ID_KhungGio === kg.ID);
+                const isBooked = booked.some(b => b.NgayDa === date.dbDate && (b.MaKhungGio || b.ID_KhungGio) === maKG);
                 const isPast = new Date(date.rawDate.getFullYear(), date.rawDate.getMonth(), date.rawDate.getDate(), kg.GioBatDau.split(':')[0], kg.GioBatDau.split(':')[1]) <= new Date();
 
-                const slotId = `${pitch.ID}-${date.dbDate}-${kg.ID}`;
+                const slotId = `${maPitch}-${date.dbDate}-${maKG}`;
                 const isSelected = guestSelectedSlots.some(s => s.id === slotId);
-                const slotDataStr = `'${timeStr}', '${priceVal}', '${date.short}', ${kg.ID}`;
+                const slotDataStr = `'${timeStr}', '${priceVal}', '${date.short}', '${maKG}'`;
 
                 if (isPast) {
                     html += `<td style="text-align:center; border-bottom: 1px solid var(--border-color);"><button class="slot-btn past" data-slot-id="${slotId}" disabled>Quá giờ</button></td>`;
@@ -699,6 +664,8 @@ function renderBreadcrumb(view) {
     breadcrumbEl.style.flexWrap = 'wrap';
     breadcrumbEl.style.gap = '12px';
 
+    const maCS = appState.currentCluster?.MaCumSan || appState.currentCluster?.ID || '';
+
     if (view === 'pitches') {
         breadcrumbEl.innerHTML = `
             <span class="breadcrumb-item" onclick="renderClusters()">
@@ -710,12 +677,12 @@ function renderBreadcrumb(view) {
         `;
     } else if (view === 'schedule') {
         breadcrumbEl.innerHTML = `
-            <span class="breadcrumb-item" onclick="loadPitches(${appState.currentCluster.ID})">
+            <span class="breadcrumb-item" onclick="loadPitches('${maCS}')">
                 <i class="fa-solid fa-arrow-left"></i> Chọn sân khác thuộc ${appState.currentCluster.TenCumSan}
             </span>
             <div style="font-size: 0.9rem; color: var(--text-muted);">
                 <span style="cursor: pointer; text-decoration: underline;" onclick="renderClusters()">Cụm sân</span> &gt; 
-                <span style="cursor: pointer; text-decoration: underline;" onclick="loadPitches(${appState.currentCluster.ID})">${appState.currentCluster?.TenCumSan || ''}</span> &gt; 
+                <span style="cursor: pointer; text-decoration: underline;" onclick="loadPitches('${maCS}')">${appState.currentCluster?.TenCumSan || ''}</span> &gt; 
                 <strong style="color: var(--accent);">${appState.currentPitch?.TenSan || ''}</strong>
             </div>
         `;
@@ -724,14 +691,11 @@ function renderBreadcrumb(view) {
 
 function triggerModal(element, time, price, dateStr, kgId) {
     const priceNum = parseInt(price.replace(/\D/g, ''));
-    
-    // Gán dữ liệu vào hàm toggle
-    toggleGuestSlot(element, appState.currentCluster.ID, appState.currentCluster.TenCumSan, appState.currentPitch.ID, appState.currentPitch.TenSan, dateStr, time, priceNum, kgId);
+    const maCS = appState.currentCluster.MaCumSan || appState.currentCluster.ID;
+    const maSB = appState.currentPitch.MaSanBong || appState.currentPitch.ID;
+    toggleGuestSlot(element, maCS, appState.currentCluster.TenCumSan, maSB, appState.currentPitch.TenSan, dateStr, time, priceNum, kgId);
 }
 
-// ==========================================================================
-// MODULE: GIỎ HÀNG & ĐẶT SÂN CHO KHÁCH VÃNG LAI (GUEST BOOKING)
-// ==========================================================================
 let guestSelectedSlots = [];
 
 function toggleGuestSlot(element, clusterId, clusterName, pitchId, pitchName, dateDisplay, timeStr, price, kgId) {
@@ -773,7 +737,6 @@ function updateGuestFloatingCart() {
     if (!cartBar) return;
 
     if (guestSelectedSlots.length > 0) {
-        // LỖI 2: Đổi từ 'block' sang 'flex' để giỏ hàng không bị rớt dòng
         cartBar.style.display = 'block'; 
         document.getElementById('guest-cart-count').innerText = guestSelectedSlots.length;
         const total = guestSelectedSlots.reduce((sum, s) => sum + Number(s.price), 0);
@@ -784,7 +747,6 @@ function updateGuestFloatingCart() {
     }
 }
 
-// Chuyển toàn bộ các hàm thành Window Scope để gỡ LỖI 4
 window.clearGuestCart = function() {
     guestSelectedSlots = [];
     
@@ -795,7 +757,7 @@ window.clearGuestCart = function() {
     });
     
     updateGuestFloatingCart();
-}
+};
 
 window.openGuestCartModal = function() {
     document.getElementById('guest-cart-alert').style.display = 'none';
@@ -826,7 +788,7 @@ window.openGuestCartModal = function() {
     const modal = document.getElementById('guest-cart-modal');
     modal.style.display = 'flex';
     modal.classList.add('active');
-}
+};
 
 window.removeGuestSlotByIndex = function(index) {
     const slotToRemove = guestSelectedSlots[index];
@@ -844,20 +806,21 @@ window.removeGuestSlotByIndex = function(index) {
     
     if (guestSelectedSlots.length > 0) openGuestCartModal();
     else closeGuestCartModal();
-}
+};
 
 window.closeGuestCartModal = function() {
     const modal = document.getElementById('guest-cart-modal');
     if (modal) {
         modal.classList.remove('active');
     }
-}
+};
+
 window.showGuestAlert = function(message, isSuccess) {
     const alertBox = document.getElementById('guest-cart-alert');
     alertBox.textContent = message;
     alertBox.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
     alertBox.style.display = 'block';
-}
+};
 
 window.checkoutGuestBooking = async function() {
     const name = document.getElementById('guest-name').value.trim();
@@ -867,24 +830,20 @@ window.checkoutGuestBooking = async function() {
     
     alertBox.style.display = 'none';
 
-    // 1. Kiểm tra không được để trống
     if (!name || !phone || !email) {
         return showGuestAlert('Vui lòng điền đầy đủ Họ tên, Số điện thoại và Email!', false);
     }
 
-    // 2. Kiểm tra định dạng Họ và tên (Ít nhất 2 ký tự, chỉ chứa chữ cái và khoảng trắng)
     const nameRegex = /^[a-zA-ZÀ-ỹ\s]{2,100}$/;
     if (!nameRegex.test(name)) {
         return showGuestAlert('Họ và tên không hợp lệ (chỉ gồm chữ cái, tối thiểu 2 ký tự)!', false);
     }
 
-    // 3. Kiểm tra định dạng Số điện thoại Việt Nam (10 chữ số, bắt đầu bằng số 0)
     const phoneRegex = /^0[0-9]{9}$/;
     if (!phoneRegex.test(phone)) {
         return showGuestAlert('Số điện thoại không hợp lệ (phải gồm 10 chữ số và bắt đầu bằng số 0)!', false);
     }
 
-    // 4. Kiểm tra định dạng Email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
         return showGuestAlert('Địa chỉ Email không đúng định dạng (ví dụ: ten@gmail.com)!', false);
@@ -894,6 +853,7 @@ window.checkoutGuestBooking = async function() {
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right: 5px;"></i> Đang tạo mã thanh toán...';
     btn.disabled = true;
 
+    let data = null;
     try {
         const payload = {
             ho_ten: name,
@@ -908,7 +868,7 @@ window.checkoutGuestBooking = async function() {
             body: JSON.stringify(payload)
         });
 
-        const data = await response.json();
+        data = await response.json();
 
         if (response.ok && data.success && data.vnpay_url) {
             window.location.href = data.vnpay_url;
@@ -932,11 +892,8 @@ window.checkoutGuestBooking = async function() {
             btn.innerHTML = 'Thanh toán VNPay';
         }
     }
-}
+};
 
-// ==========================================================================
-// MODAL THÔNG BÁO KẾT QUẢ THANH TOÁN VNPAY CHO GUEST (TỰ ĐÓNG SAU 5 GIÂY)
-// ==========================================================================
 let guestResultTimer = null;
 let guestResultCountdown = null;
 
@@ -994,7 +951,6 @@ window.showGuestPaymentResultModal = function(status) {
     modal.style.display = 'flex';
     setTimeout(() => modal.classList.add('active'), 10);
 
-    // Xóa bộ đếm cũ (nếu có) và kích hoạt đếm ngược 5 giây tự đóng
     if (guestResultTimer) clearTimeout(guestResultTimer);
     if (guestResultCountdown) clearInterval(guestResultCountdown);
 
@@ -1163,9 +1119,10 @@ function renderGuestModalReviewsList() {
         const stars = '★'.repeat(Number(r.SoSao)) + '☆'.repeat(5 - Number(r.SoSao));
         const d = r.NgayTao ? new Date(r.NgayTao) : null;
         const dateStr = d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` : '';
-        const isGiaiDau = Boolean(r.dat_san?.ID_GiaiDau || r.dat_san?.giai_dau);
+        const maGiai = r.dat_san?.MaGiaiDau || r.dat_san?.ID_GiaiDau || r.dat_san?.giai_dau?.MaGiaiDau || r.dat_san?.giai_dau?.ID || null;
+        const isGiaiDau = Boolean(maGiai);
         const subTag = isGiaiDau
-            ? `<span style="font-size:0.75rem; background:rgba(99,102,241,0.2); color:#a5b4fc; padding:2px 7px; border-radius:6px; margin-left:6px;"><i class="fa-solid fa-trophy"></i> Giải đấu: ${r.dat_san?.giai_dau?.TenGiaiDau || ('#GD-' + r.dat_san.ID_GiaiDau)}</span>`
+            ? `<span style="font-size:0.75rem; background:rgba(99,102,241,0.2); color:#a5b4fc; padding:2px 7px; border-radius:6px; margin-left:6px;"><i class="fa-solid fa-trophy"></i> Giải đấu: ${r.dat_san?.giai_dau?.TenGiaiDau || ('#GD-' + maGiai)}</span>`
             : (r.dat_san?.san_bong?.TenSan ? `<span style="font-size:0.75rem; color:var(--text-muted); margin-left:6px;">(${r.dat_san.san_bong.TenSan})</span>` : '');
 
         return `

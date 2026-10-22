@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Carbon\Carbon;
 use App\Models\DatSan;
+use App\Models\HoaDonDatSan;
 use App\Models\NguoiDung;
 use App\Models\GiaoDich;
 use App\Models\GiaiDau;
@@ -19,7 +20,7 @@ class DatSanController extends Controller
 {
     public function datSan(Request $request)
     {
-        $user = NguoiDung::find(Auth::id() ?? $request->user()->ID);
+        $user = NguoiDung::find(Auth::id() ?? $request->user()->MaNguoiDung);
 
         if ($user && $user->TrangThaiKhoa) {
             return response()->json([
@@ -29,32 +30,29 @@ class DatSanController extends Controller
         }
 
         $slots = $request->slots;
-        $purpose = $request->purpose; // 'normal' hoặc ID của Giải đấu
+        $purpose = $request->purpose; // 'normal' hoặc MaGiaiDau
 
         if (!$slots || count($slots) == 0) {
             return response()->json(['success' => false, 'message' => 'Giỏ hàng trống!']);
         }
 
         if ($purpose !== 'normal') {
-            // Điều kiện 1: Bắt buộc đặt ít nhất 5 khung giờ
             if (count($slots) < 5) {
                 return response()->json([
-                    'success' => false, 
+                    'success' => false,
                     'message' => 'Theo quy định, tổ chức giải đấu phải đặt tối thiểu 5 khung giờ!'
                 ]);
             }
 
-            // Điều kiện 2: Kiểm tra thời hạn 3 ngày kể từ NgayDuyet
             $giaiDau = GiaiDau::find($purpose);
             if (!$giaiDau) {
                 return response()->json(['success' => false, 'message' => 'Không tìm thấy thông tin giải đấu!']);
             }
 
-            // Cộng 3 ngày vào Ngày Duyệt và so sánh với thời gian hiện tại
             $ngayHetHan = Carbon::parse($giaiDau->NgayDuyet)->addDays(3);
             if (now()->greaterThan($ngayHetHan)) {
                 return response()->json([
-                    'success' => false, 
+                    'success' => false,
                     'message' => 'Giải đấu đã quá hạn 3 ngày kể từ lúc được duyệt. Bạn không thể đặt sân cho giải này nữa!'
                 ]);
             }
@@ -71,7 +69,7 @@ class DatSanController extends Controller
         // 2. KIỂM TRA SỐ DƯ VÍ
         if ($user->SoDuVi < $tienCoc) {
             return response()->json([
-                'success' => false, 
+                'success' => false,
                 'message' => 'Số dư ví không đủ (' . number_format($user->SoDuVi) . 'đ). Vui lòng nạp thêm tối thiểu ' . number_format($tienCoc - $user->SoDuVi) . 'đ để cọc!'
             ]);
         }
@@ -79,12 +77,12 @@ class DatSanController extends Controller
         // 3. BẮT ĐẦU TRANSACTION
         DB::beginTransaction();
         try {
-            // 1. TẠO GIAO DỊCH TRƯỚC (ĐỂ LẤY ID)
+            // 1. TẠO GIAO DỊCH TRƯỚC
             $soDuTruoc = $user->SoDuVi;
             $soDuSau = $soDuTruoc - $tienCoc;
-            
+
             $giaoDich = GiaoDich::create([
-                'ID_NguoiDung' => $user->ID,
+                'MaNguoiDung'  => $user->MaNguoiDung,
                 'LoaiGiaoDich' => 'DatSan',
                 'DongTien'     => 'Tru',
                 'SoTien'       => $tienCoc,
@@ -96,49 +94,55 @@ class DatSanController extends Controller
             // 2. CẬP NHẬT SỐ DƯ NGAY
             $user->update(['SoDuVi' => $soDuSau]);
 
-            // 3. TẠO CÁC LỊCH ĐẶT SÂN
+            // 3. TẠO HÓA ĐƠN ĐẶT SÂN (1-1 VỚI GIAO DỊCH, 1-N VỚI ĐẶT SÂN)
+            $hoaDon = HoaDonDatSan::create([
+                'MaNguoiDung'         => $user->MaNguoiDung,
+                'MaGiaoDich'          => $giaoDich->MaGiaoDich,
+                'TongTienSan'         => $tongTien,
+                'TienDaCoc'           => $tienCoc,
+                'PhuongThucThanhToan' => 'ViDienTu',
+                'TrangThai'           => 'DaCoc'
+            ]);
+
+            // 4. TẠO CÁC LỊCH ĐẶT SÂN CHI TIẾT
             $failed_slots = [];
             $failed_messages = [];
             $cacVeVuaTao = [];
 
             foreach ($slots as $slot) {
-                // Chuyển đổi định dạng ngày DD/MM/YYYY sang Y-m-d
                 $ngayDa = Carbon::createFromFormat('d/m/Y', $slot['date'])->format('Y-m-d');
                 $gioBatDau = explode(' - ', $slot['time'])[0] . ':00';
-                
+
                 $khungGio = KhungGio::where('GioBatDau', $gioBatDau)->first();
                 if (!$khungGio) {
                     throw new \Exception("Lỗi dữ liệu khung giờ: {$slot['time']}");
                 }
 
-                // CƠ CHẾ CHỐNG RACE CONDITION (Khóa Pessimistic Locking)
-                // lockForUpdate() sẽ khóa dòng này lại, ai truy cập cùng lúc phải đứng chờ
-                $daDat = DatSan::where('ID_SanBong', $slot['pitchId'])
+                $daDat = DatSan::where('MaSanBong', $slot['pitchId'])
                                ->where('NgayDa', $ngayDa)
-                               ->where('ID_KhungGio', $khungGio->ID)
+                               ->where('MaKhungGio', $khungGio->MaKhungGio)
                                ->where('TrangThai', '!=', 'DaHuy')
-                               ->lockForUpdate() 
+                               ->lockForUpdate()
                                ->first();
 
-                if ($daDat) {   
+                if ($daDat) {
                     $failed_slots[] = isset($slot['id']) ? $slot['id'] : null;
                     $failed_messages[] = "[{$slot['time']} ngày {$slot['date']}]";
                 } else if (empty($failed_slots)) {
-                    // Chỉ Insert nếu CHƯA phát hiện bất kỳ lỗi nào trong toàn bộ vòng lặp
                     $veMoi = DatSan::create([
-                        'ID_NguoiDung' => $user->ID,
-                        'ID_SanBong'   => $slot['pitchId'],
-                        'ID_KhungGio'  => $khungGio->ID,
-                        'ID_GiaiDau'   => ($purpose !== 'normal') ? $purpose : null,
-                        'ID_GiaoDich'  => $giaoDich->ID,
-                        'NgayDa'       => $ngayDa,
-                        'TongTien'     => $slot['price'],
-                        'TienCoc'      => $slot['price'] * $tyLeCoc,
-                        'TrangThai'    => 'DaCoc' 
+                        'MaNguoiDung'    => $user->MaNguoiDung,
+                        'MaSanBong'      => $slot['pitchId'],
+                        'MaKhungGio'     => $khungGio->MaKhungGio,
+                        'MaGiaiDau'      => ($purpose !== 'normal') ? $purpose : null,
+                        'MaHoaDonDatSan' => $hoaDon->MaHoaDonDatSan,
+                        'NgayDa'         => $ngayDa,
+                        'TongTien'       => $slot['price'],
+                        'TienCoc'        => $slot['price'] * $tyLeCoc,
+                        'TrangThai'      => 'DaCoc'
                     ]);
 
                     $cacVeVuaTao[] = [
-                        'maVe'    => ($purpose !== 'normal') ? ('GD-' . $purpose) : ('PT-' . $veMoi->ID),
+                        'maVe'    => ($purpose !== 'normal') ? ('GD-' . $purpose) : ('PT-' . $veMoi->MaDatSan),
                         'tenSan'  => $slot['pitchName'] ?? 'Sân bóng',
                         'cumSan'  => $slot['clusterName'] ?? '',
                         'ngay'    => $slot['date'],
@@ -149,27 +153,23 @@ class DatSanController extends Controller
                 }
             }
 
-            // Nếu có bất kỳ slot nào bị trùng, Rollback và báo lỗi hàng loạt
             if (!empty($failed_slots)) {
                 DB::rollBack();
                 $msg_gop = implode(', ', $failed_messages);
                 return response()->json([
-                    'success' => false,
-                    'message' => "Rất tiếc! Các khung giờ sau vừa bị khách khác đặt mất: {$msg_gop}. Hệ thống đã tự động gỡ chúng khỏi giỏ hàng!",
-                    'failed_slot_ids' => $failed_slots // Trả về dạng Mảng (Array)
+                    'success'         => false,
+                    'message'         => "Rất tiếc! Các khung giờ sau vừa bị khách khác đặt mất: {$msg_gop}. Hệ thống đã tự động gỡ chúng khỏi giỏ hàng!",
+                    'failed_slot_ids' => $failed_slots
                 ]);
             }
 
-            // 5. CẬP NHẬT TRẠNG THÁI GIẢI ĐẤU
             if ($purpose !== 'normal') {
                 $giaiDau = GiaiDau::find($purpose);
                 if ($giaiDau) {
-                    // Cập nhật thành 'HetHan' để khóa giải đấu lại, tránh bị lợi dụng đặt thêm
                     $giaiDau->update(['TrangThai' => 'HetHan']);
                 }
             }
 
-            // MỌI THỨ AN TOÀN -> LƯU VÀO DB
             DB::commit();
 
             if ($user->Email && !str_ends_with($user->Email, '.offline')) {
@@ -194,19 +194,18 @@ class DatSanController extends Controller
                             </div>
                         ";
                     }
-                    Mail::html("<h2>Xác nhận đặt sân thành công - DN Football</h2><p>Chào <strong>{$user->HoTen}</strong>, dưới đây là vé điện tử kèm mã QR nhận sân của bạn:</p>{$htmlVe}", function ($message) use ($user) {
+                    Mail::html("<h2>Xác nhận đặt sân thành công - DN Football</h2><p>Chào <strong>{$user->HoTen}</strong>, dưới đây là vé điện tử kèm mã QR nhận sân của bạn (Mã hóa đơn: <strong>{$hoaDon->MaHoaDonDatSan}</strong>):</p>{$htmlVe}", function ($message) use ($user) {
                         $message->to($user->Email)->subject('Vé Điện Tử QR Code - DN Football');
                     });
                 } catch (\Exception $mailEx) {}
             }
-            
+
             broadcast(new \App\Events\AdminDataUpdated())->toOthers();
             broadcast(new \App\Events\SystemDataUpdated())->toOthers();
 
             return response()->json(['success' => true, 'message' => 'Đặt sân thành công! Số dư đã được trừ.', 'data' => $cacVeVuaTao]);
 
         } catch (\Exception $e) {
-            // NẾU CÓ LỖI (Người khác đặt trước, lỗi DB) -> HOÀN TÁC TOÀN BỘ VÀ KHÔNG TRỪ TIỀN
             DB::rollBack();
             return response()->json(['success' => false, 'message' => $e->getMessage()]);
         }
@@ -214,25 +213,24 @@ class DatSanController extends Controller
 
     public function layDanhSachDaDat(Request $request)
     {
-        $idSanBong = $request->query('id_san_bong');
-        
-        // Lấy các khung giờ đã đặt (Trạng thái khác DaHuy) của sân này
-        $daDat = DatSan::where('ID_SanBong', $idSanBong)
+        $maSanBong = $request->query('ma_san_bong', $request->query('id_san_bong'));
+
+        $daDat = DatSan::where('MaSanBong', $maSanBong)
                        ->where('TrangThai', '!=', 'DaHuy')
-                       ->get(['NgayDa', 'ID_KhungGio']); // Chỉ lấy 2 cột cần thiết cho nhẹ
-                       
+                       ->get(['NgayDa', 'MaKhungGio']);
+
         return response()->json([
             'success' => true,
-            'data' => $daDat
+            'data'    => $daDat
         ]);
     }
 
     public function layDanhSachCuaToi(Request $request)
     {
-        $user = NguoiDung::find(Auth::id() ?? $request->user()->ID);
+        $user = NguoiDung::find(Auth::id() ?? $request->user()->MaNguoiDung);
 
-        $danhSach = DatSan::with(['sanBong.cumSan', 'khungGio', 'giaiDau', 'danhGia'])
-                        ->where('ID_NguoiDung', $user->ID)
+        $danhSach = DatSan::with(['sanBong.cumSan', 'khungGio', 'giaiDau', 'danhGia', 'hoaDonDatSan'])
+                        ->where('MaNguoiDung', $user->MaNguoiDung)
                         ->orderBy('NgayDa', 'desc')
                         ->get();
 
@@ -241,15 +239,14 @@ class DatSanController extends Controller
 
     public function huySanPhongTrao(Request $request, $id)
     {
-        $user = NguoiDung::find(Auth::id() ?? $request->user()->ID);
-        
-        $datSan = DatSan::with('khungGio', 'sanBong')->where('ID', $id)->where('ID_NguoiDung', $user->ID)->first();
+        $user = NguoiDung::find(Auth::id() ?? $request->user()->MaNguoiDung);
+
+        $datSan = DatSan::with('khungGio', 'sanBong')->where('MaDatSan', $id)->where('MaNguoiDung', $user->MaNguoiDung)->first();
 
         if (!$datSan) return response()->json(['success' => false, 'message' => 'Không tìm thấy lịch đặt!']);
-        if ($datSan->ID_GiaiDau != null) return response()->json(['success' => false, 'message' => 'Đây là lịch đá giải. Vui lòng hủy theo toàn bộ giải đấu!']);
+        if ($datSan->MaGiaiDau != null) return response()->json(['success' => false, 'message' => 'Đây là lịch đá giải. Vui lòng hủy theo toàn bộ giải đấu!']);
         if ($datSan->TrangThai !== 'DaCoc') return response()->json(['success' => false, 'message' => 'Chỉ có thể hủy tự động đối với sân ở trạng thái Đã cọc!']);
 
-        // Nghiệp vụ: Phải hủy trước 10 tiếng
         $thoiGianDa = Carbon::parse($datSan->NgayDa . ' ' . $datSan->khungGio->GioBatDau);
         if (now()->diffInHours($thoiGianDa, false) < 10) {
             return response()->json(['success' => false, 'message' => 'Đã quá hạn hủy miễn phí (phải hủy trước 10 tiếng). Vui lòng tạo Yêu cầu hủy gấp!']);
@@ -260,12 +257,16 @@ class DatSanController extends Controller
             $tienHoan = $datSan->TienCoc;
             $datSan->update(['TrangThai' => 'DaHuy']);
 
+            if ($datSan->MaHoaDonDatSan) {
+                self::dongBoHoaDonDatSan($datSan->MaHoaDonDatSan);
+            }
+
             $soDuTruoc = $user->SoDuVi;
             $soDuSau = $soDuTruoc + $tienHoan;
             $user->update(['SoDuVi' => $soDuSau]);
 
             GiaoDich::create([
-                'ID_NguoiDung' => $user->ID,
+                'MaNguoiDung'  => $user->MaNguoiDung,
                 'LoaiGiaoDich' => 'HoanTienHuySan',
                 'DongTien'     => 'Cong',
                 'SoTien'       => $tienHoan,
@@ -288,25 +289,23 @@ class DatSanController extends Controller
 
     public function huySanGiaiDau(Request $request, $idGiaiDau)
     {
-        $user = NguoiDung::find(Auth::id() ?? $request->user()->ID);
-        
-        $giaiDau = GiaiDau::where('ID', $idGiaiDau)->where('ID_NguoiDung', $user->ID)->first();
+        $user = NguoiDung::find(Auth::id() ?? $request->user()->MaNguoiDung);
+
+        $giaiDau = GiaiDau::where('MaGiaiDau', $idGiaiDau)->where('MaNguoiDung', $user->MaNguoiDung)->first();
         if (!$giaiDau) return response()->json(['success' => false, 'message' => 'Không tìm thấy giải đấu!']);
 
-        // Lấy tất cả lịch đặt chưa diễn ra thuộc giải đấu này
-        $danhSachDat = DatSan::with('khungGio')->where('ID_GiaiDau', $idGiaiDau)->where('TrangThai', 'DaCoc')->get();
+        $danhSachDat = DatSan::with('khungGio')->where('MaGiaiDau', $idGiaiDau)->where('TrangThai', 'DaCoc')->get();
 
         if ($danhSachDat->isEmpty()) {
             return response()->json(['success' => false, 'message' => 'Giải đấu này không còn lịch đặt hợp lệ để hủy!']);
         }
 
-        // Nghiệp vụ: Tìm trận khai mạc sớm nhất, phải hủy trước 7 ngày
         $tranSomNhat = $danhSachDat->sortBy(function($ds) {
             return Carbon::parse($ds->NgayDa . ' ' . $ds->khungGio->GioBatDau);
         })->first();
 
         $thoiGianDa = Carbon::parse($tranSomNhat->NgayDa . ' ' . $tranSomNhat->khungGio->GioBatDau);
-        
+
         if (now()->diffInDays($thoiGianDa, false) < 7) {
             return response()->json(['success' => false, 'message' => 'Đã quá hạn hủy giải đấu miễn phí (phải trước 7 ngày khai mạc). Vui lòng tạo Yêu cầu hủy gấp!']);
         }
@@ -314,17 +313,21 @@ class DatSanController extends Controller
         DB::beginTransaction();
         try {
             $tongTienHoan = $danhSachDat->sum('TienCoc');
-            
-            // Cập nhật trạng thái hàng loạt
-            DatSan::where('ID_GiaiDau', $idGiaiDau)->where('TrangThai', 'DaCoc')->update(['TrangThai' => 'DaHuy']);
+            $maHoaDonIds = $danhSachDat->pluck('MaHoaDonDatSan')->filter()->unique();
+
+            DatSan::where('MaGiaiDau', $idGiaiDau)->where('TrangThai', 'DaCoc')->update(['TrangThai' => 'DaHuy']);
             $giaiDau->update(['TrangThai' => 'DaHuy']);
+
+            foreach ($maHoaDonIds as $maHD) {
+                self::dongBoHoaDonDatSan($maHD);
+            }
 
             $soDuTruoc = $user->SoDuVi;
             $soDuSau = $soDuTruoc + $tongTienHoan;
             $user->update(['SoDuVi' => $soDuSau]);
 
             GiaoDich::create([
-                'ID_NguoiDung' => $user->ID,
+                'MaNguoiDung'  => $user->MaNguoiDung,
                 'LoaiGiaoDich' => 'HoanTienHuySan',
                 'DongTien'     => 'Cong',
                 'SoTien'       => $tongTienHoan,
@@ -337,7 +340,7 @@ class DatSanController extends Controller
 
             broadcast(new \App\Events\AdminDataUpdated())->toOthers();
             broadcast(new \App\Events\SystemDataUpdated())->toOthers();
-            
+
             return response()->json(['success' => true, 'message' => 'Hủy giải đấu thành công! Toàn bộ cọc đã được hoàn vào ví.']);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -349,19 +352,18 @@ class DatSanController extends Controller
     {
         $userDangNhap = auth()->user();
 
-        $query = DatSan::with(['nguoiDung', 'nhanVienXuLy', 'sanBong.cumSan', 'khungGio', 'giaiDau']);
+        $query = DatSan::with(['nguoiDung', 'nhanVienXuLy', 'sanBong.cumSan', 'khungGio', 'giaiDau', 'hoaDonDatSan']);
 
-        // CHÈN LOGIC CÁCH LY
         if ($userDangNhap->VaiTro === 'QuanLySan') {
             $query->whereHas('sanBong', function ($q) use ($userDangNhap) {
-                $q->where('ID_CumSan', $userDangNhap->ID_CumSan);
+                $q->where('MaCumSan', $userDangNhap->MaCumSan);
             });
         }
 
         $danhSach = $query->orderBy('NgayDa', 'desc')
-                          ->orderBy('ID_KhungGio', 'asc')
+                          ->orderBy('MaKhungGio', 'asc')
                           ->get();
-            
+
         return response()->json(['success' => true, 'data' => $danhSach]);
     }
 
@@ -372,7 +374,7 @@ class DatSanController extends Controller
             return response()->json(['success' => false, 'message' => 'Không tìm thấy dữ liệu đặt sân!']);
         }
 
-        if ($datSan->ID_NguoiDung !== null) {
+        if ($datSan->MaNguoiDung !== null) {
             return response()->json(['success' => false, 'message' => 'Đây là lịch của khách có tài khoản, không cần dùng OTP!']);
         }
 
@@ -384,9 +386,8 @@ class DatSanController extends Controller
             return response()->json(['success' => false, 'message' => 'Không tìm thấy địa chỉ Email của khách vãng lai này!']);
         }
 
-        // Sinh mã OTP 6 chữ số và lưu vào Cache trong 5 phút
         $otp = (string) rand(100000, 999999);
-        \Illuminate\Support\Facades\Cache::put('guest_cancel_otp_' . $datSan->ID, $otp, now()->addMinutes(5));
+        \Illuminate\Support\Facades\Cache::put('guest_cancel_otp_' . $datSan->MaDatSan, $otp, now()->addMinutes(5));
 
         $tenSan = $datSan->sanBong ? $datSan->sanBong->TenSan : 'Sân bóng';
         $cumSan = ($datSan->sanBong && $datSan->sanBong->cumSan) ? $datSan->sanBong->cumSan->TenCumSan : '';
@@ -398,7 +399,7 @@ class DatSanController extends Controller
             $noiDungMail = "
                 <h2>Mã xác thực (OTP) hủy lịch đặt sân</h2>
                 <p>Chào <strong>{$datSan->TenKhachVangLai}</strong>,</p>
-                <p>Hệ thống DN Football vừa nhận được yêu cầu hủy lịch đặt sân và hoàn tiền cọc cho vé <strong>#PT-{$datSan->ID}</strong>:</p>
+                <p>Hệ thống DN Football vừa nhận được yêu cầu hủy lịch đặt sân và hoàn tiền cọc cho vé <strong>#PT-{$datSan->MaDatSan}</strong>:</p>
                 <ul>
                     <li><strong>Sân:</strong> {$tenSan} ({$cumSan})</li>
                     <li><strong>Thời gian:</strong> {$gioDa} ngày {$ngayDa}</li>
@@ -442,69 +443,68 @@ class DatSanController extends Controller
             $ngayDa = date('d/m/Y', strtotime($datSan->NgayDa));
             $gioDa = $datSan->khungGio ? substr($datSan->khungGio->GioBatDau, 0, 5) . ' - ' . substr($datSan->khungGio->GioKetThuc, 0, 5) : '';
 
-            // NẾU LÀ HỦY SÂN: TÁCH 2 LUỒNG (KHÁCH TÀI KHOẢN vs KHÁCH VÃNG LAI)
             if ($request->trang_thai === 'DaHuy') {
-                if ($datSan->ID_NguoiDung !== null) {
-                    // --- LUỒNG 1: KHÁCH HÀNG CÓ TÀI KHOẢN ---
-                    $user = NguoiDung::find($datSan->ID_NguoiDung);
+                if ($datSan->MaNguoiDung !== null) {
+                    $user = NguoiDung::find($datSan->MaNguoiDung);
                     if ($user) {
                         $soDuTruoc = $user->SoDuVi;
                         $tienHoan = $datSan->TienCoc;
                         $soDuSau = $soDuTruoc + $tienHoan;
-                        
+
                         $user->update(['SoDuVi' => $soDuSau]);
 
                         GiaoDich::create([
-                            'ID_NguoiDung'    => $user->ID,
-                            'ID_NhanVienXuLy' => $userDangNhap->ID,
-                            'LoaiGiaoDich'    => 'HoanTienHuySan',
-                            'DongTien'        => 'Cong',
-                            'SoTien'          => $tienHoan,
-                            'SoDuTruoc'       => $soDuTruoc,
-                            'SoDuSau'         => $soDuSau,
-                            'NoiDung'         => "Hỗ trợ hủy lịch gấp và hoàn cọc: " . $tenSan
+                            'MaNguoiDung'    => $user->MaNguoiDung,
+                            'MaNhanVienXuLy' => $userDangNhap->MaNguoiDung,
+                            'LoaiGiaoDich'   => 'HoanTienHuySan',
+                            'DongTien'       => 'Cong',
+                            'SoTien'         => $tienHoan,
+                            'SoDuTruoc'      => $soDuTruoc,
+                            'SoDuSau'        => $soDuSau,
+                            'NoiDung'        => "Hỗ trợ hủy lịch gấp và hoàn cọc: " . $tenSan
                         ]);
                     }
                 } else {
-                    // --- LUỒNG 2: KHÁCH VÃNG LAI ---
-                    // Kiểm tra mã OTP xác thực
                     $otpInput = trim($request->input('otp', ''));
-                    $cachedOtp = \Illuminate\Support\Facades\Cache::get('guest_cancel_otp_' . $datSan->ID);
+                    $cachedOtp = \Illuminate\Support\Facades\Cache::get('guest_cancel_otp_' . $datSan->MaDatSan);
 
                     if (!$otpInput || !$cachedOtp || $otpInput !== (string) $cachedOtp) {
-                   DB::rollBack();
-                   return response()->json([
-                       'success' => false,
-                       'message' => 'Mã OTP không chính xác hoặc đã bị hết hạn!<br>Vui lòng kiểm tra lại.'
-                   ]);
-               }
+                        DB::rollBack();
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Mã OTP không chính xác hoặc đã bị hết hạn!<br>Vui lòng kiểm tra lại.'
+                        ]);
+                    }
 
-                    // Xóa OTP sau khi xác thực thành công
-                    \Illuminate\Support\Facades\Cache::forget('guest_cancel_otp_' . $datSan->ID);
+                    \Illuminate\Support\Facades\Cache::forget('guest_cancel_otp_' . $datSan->MaDatSan);
                 }
             }
 
-            // 1. Cập nhật trạng thái trận đấu và lưu người xử lý
             $datSan->update([
-                'TrangThai'       => $request->trang_thai,
-                'ID_NhanVienXuLy' => $userDangNhap->ID
+                'TrangThai'      => $request->trang_thai,
+                'MaNhanVienXuLy' => $userDangNhap->MaNguoiDung
             ]);
 
-            // 2. KÍCH HOẠT AUTO-CHỐT GIẢI ĐẤU (Nếu có)
-            if ($datSan->ID_GiaiDau != null) {
-                $giaiDau = GiaiDau::find($datSan->ID_GiaiDau);
+            if ($datSan->MaHoaDonDatSan) {
+                self::dongBoHoaDonDatSan($datSan->MaHoaDonDatSan);
+            }
+
+            if ($datSan->MaGiaiDau != null) {
+                $giaiDau = GiaiDau::find($datSan->MaGiaiDau);
                 if ($giaiDau) {
-                    $conTranDaCoc = DatSan::where('ID_GiaiDau', $giaiDau->ID)
+                    $conTranDaCoc = DatSan::where('MaGiaiDau', $giaiDau->MaGiaiDau)
                                           ->where('TrangThai', 'DaCoc')
                                           ->exists();
                     if (!$conTranDaCoc) {
-                        $giaiDau->update(['TrangThai' => 'HoanThanh']);
+                        $coTranDaXong = DatSan::where('MaGiaiDau', $giaiDau->MaGiaiDau)
+                                              ->whereIn('TrangThai', ['HoanThanh', 'KhongDen'])
+                                              ->exists();
+                        $giaiDau->update(['TrangThai' => $coTranDaXong ? 'HoanThanh' : 'DaHuy']);
                     }
                 }
             }
-
-            // 3. TẠO THÔNG BÁO (CHỈ DÀNH CHO KHÁCH CÓ TÀI KHOẢN) HOẶC GỬI MAIL (CHO KHÁCH VÃNG LAI)
-            if ($datSan->ID_NguoiDung !== null) {
+            
+            if ($datSan->MaNguoiDung !== null) {
                 $tieuDe = '';
                 $noiDung = '';
 
@@ -520,25 +520,24 @@ class DatSanController extends Controller
                 }
 
                 ThongBao::create([
-                    'ID_NguoiDung' => $datSan->ID_NguoiDung,
+                    'MaNguoiDung'  => $datSan->MaNguoiDung,
                     'TieuDe'       => $tieuDe,
                     'NoiDung'      => $noiDung,
                     'LoaiThongBao' => 'DatSan'
                 ]);
             } else if ($request->trang_thai === 'DaHuy' && $datSan->EmailKhachVangLai) {
-                // Gửi Email xác nhận đã hủy vé cho khách vãng lai
                 try {
                     $tienCocStr = number_format($datSan->TienCoc, 0, ',', '.') . 'đ';
                     $mailHuy = "
                         <h2>Xác nhận hủy lịch đặt sân thành công</h2>
                         <p>Chào <strong>{$datSan->TenKhachVangLai}</strong>,</p>
-                        <p>Lịch đặt sân <strong>#PT-{$datSan->ID}</strong> tại <strong>{$tenSan} ({$cumSan})</strong> lúc <strong>{$gioDa} ngày {$ngayDa}</strong> đã được hủy thành công theo yêu cầu của bạn.</p>
+                        <p>Lịch đặt sân <strong>#PT-{$datSan->MaDatSan}</strong> tại <strong>{$tenSan} ({$cumSan})</strong> lúc <strong>{$gioDa} ngày {$ngayDa}</strong> đã được hủy thành công theo yêu cầu của bạn.</p>
                         <p><strong>Số tiền cọc hoàn lại:</strong> <span style='color:#10b981; font-weight:bold;'>{$tienCocStr}</span></p>
                         <p>Cảm ơn bạn đã sử dụng dịch vụ của DN Football!</p>
                     ";
                     Mail::html($mailHuy, function ($message) use ($datSan) {
                         $message->to($datSan->EmailKhachVangLai)
-                                ->subject('Xác nhận hủy vé đặt sân #PT-' . $datSan->ID . ' - DN Football');
+                                ->subject('Xác nhận hủy vé đặt sân #PT-' . $datSan->MaDatSan . ' - DN Football');
                     });
                 } catch (\Exception $mailEx) {
                     \Illuminate\Support\Facades\Log::error('Lỗi gửi mail hủy sân khách vãng lai: ' . $mailEx->getMessage());
@@ -547,12 +546,12 @@ class DatSanController extends Controller
 
             DB::commit();
 
-            if ($datSan->ID_NguoiDung !== null) {
-                broadcast(new \App\Events\UserDataUpdated($datSan->ID_NguoiDung))->toOthers();
+            if ($datSan->MaNguoiDung !== null) {
+                broadcast(new \App\Events\UserDataUpdated($datSan->MaNguoiDung))->toOthers();
             }
             broadcast(new \App\Events\AdminDataUpdated())->toOthers();
             broadcast(new \App\Events\SystemDataUpdated())->toOthers();
-            
+
             return response()->json(['success' => true, 'message' => 'Đã cập nhật trạng thái sân thành công!']);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -576,49 +575,58 @@ class DatSanController extends Controller
 
         DB::beginTransaction();
         try {
-            // 1. TÌM HOẶC TẠO NHANH TÀI KHOẢN KHÁCH HÀNG
             $khachHang = NguoiDung::where('SoDienThoai', $request->sdt_khach)->first();
-            
+
             if (!$khachHang) {
                 $tenKhach = $request->ho_ten ? $request->ho_ten : 'Khách Offline';
                 $emailAo = $request->sdt_khach . '@dnfootball.offline';
                 $khachHang = NguoiDung::create([
-                    'HoTen' => $tenKhach,
+                    'HoTen'       => $tenKhach,
                     'SoDienThoai' => $request->sdt_khach,
-                    'Email' => $emailAo,
-                    'MatKhau' => \Illuminate\Support\Facades\Hash::make('123456'), // Mật khẩu mặc định
-                    'VaiTro' => 'KhachHang',
-                    'SoDuVi' => 0
+                    'Email'       => $emailAo,
+                    'MatKhau'     => \Illuminate\Support\Facades\Hash::make('123456'),
+                    'VaiTro'      => 'KhachHang',
+                    'SoDuVi'      => 0
                 ]);
             }
 
-            // 2. TẠO GIAO DỊCH TRƯỚC
             $giaoDich = null;
             if ($request->tien_coc > 0) {
                 $giaoDich = GiaoDich::create([
-                    'ID_NguoiDung'    => $khachHang->ID,
-                    'ID_NhanVienXuLy' => $userDangNhap->ID,
-                    'LoaiGiaoDich'    => 'DatSan',
-                    'DongTien'        => 'Tru',
-                    'SoTien'          => $request->tien_coc,
-                    'SoDuTruoc'       => $khachHang->SoDuVi,
-                    'SoDuSau'         => $khachHang->SoDuVi, // Không trừ ví
-                    'NoiDung'         => "Thu tiền cọc trực tiếp tại sân (" . count($request->slots) . " khung giờ)"
+                    'MaNguoiDung'    => $khachHang->MaNguoiDung,
+                    'MaNhanVienXuLy' => $userDangNhap->MaNguoiDung,
+                    'LoaiGiaoDich'   => 'DatSan',
+                    'DongTien'       => 'Tru',
+                    'SoTien'         => $request->tien_coc,
+                    'SoDuTruoc'      => $khachHang->SoDuVi,
+                    'SoDuSau'        => $khachHang->SoDuVi,
+                    'NoiDung'        => "Thu tiền cọc trực tiếp tại sân (" . count($request->slots) . " khung giờ)"
                 ]);
             }
+
+            $tongTienSan = array_reduce($request->slots, function ($carry, $s) {
+                return $carry + ($s['price'] ?? 0);
+            }, 0);
+
+            $hoaDon = HoaDonDatSan::create([
+                'MaNguoiDung'         => $khachHang->MaNguoiDung,
+                'MaGiaoDich'          => $giaoDich ? $giaoDich->MaGiaoDich : null,
+                'TongTienSan'         => $tongTienSan,
+                'TienDaCoc'           => $request->tien_coc,
+                'PhuongThucThanhToan' => 'TienMat',
+                'TrangThai'           => 'DaCoc'
+            ]);
 
             $failed_slots = [];
             $failed_messages = [];
 
-            // Thuật toán chia đều tiền cọc
             $soLuongSlot = count($request->slots);
             $tienCocMoiSlot = ($request->tien_coc > 0) ? round($request->tien_coc / $soLuongSlot) : 0;
 
-            // 3. LẶP QUA CÁC SLOT ĐỂ CHỐNG TRÙNG LỊCH (Pessimistic Locking)
             foreach ($request->slots as $index => $slot) {
-                $daDat = DatSan::where('ID_SanBong', $slot['pitchId'])
+                $daDat = DatSan::where('MaSanBong', $slot['pitchId'])
                                ->where('NgayDa', $slot['dateDb'])
-                               ->where('ID_KhungGio', $slot['kgId'])
+                               ->where('MaKhungGio', $slot['kgId'])
                                ->where('TrangThai', '!=', 'DaHuy')
                                ->lockForUpdate()
                                ->first();
@@ -627,42 +635,38 @@ class DatSanController extends Controller
                     $failed_slots[] = $slot['id'];
                     $failed_messages[] = "[{$slot['timeStr']} ngày {$slot['dateDisplay']}]";
                 } else if (empty($failed_slots)) {
-
                     $cocThucTe = $tienCocMoiSlot;
                     if ($index === $soLuongSlot - 1) {
                         $cocThucTe = $request->tien_coc - ($tienCocMoiSlot * ($soLuongSlot - 1));
                     }
 
-                    // 3. TẠO LỊCH ĐẶT SÂN
                     DatSan::create([
-                        'ID_NguoiDung' => $khachHang->ID,
-                        'ID_SanBong'   => $slot['pitchId'],
-                        'ID_KhungGio'  => $slot['kgId'],
-                        'ID_GiaiDau'   => null,
-                        'ID_NhanVienXuLy' => $userDangNhap->ID,
-                        'ID_GiaoDich'     => $giaoDich ? $giaoDich->ID : null,
-                        'NgayDa'       => $slot['dateDb'],
-                        'TongTien'     => $slot['price'],
-                        'TienCoc'      => $cocThucTe,
-                        'TrangThai'    => 'DaCoc' 
+                        'MaNguoiDung'    => $khachHang->MaNguoiDung,
+                        'MaSanBong'      => $slot['pitchId'],
+                        'MaKhungGio'     => $slot['kgId'],
+                        'MaGiaiDau'      => null,
+                        'MaHoaDonDatSan' => $hoaDon->MaHoaDonDatSan,
+                        'MaNhanVienXuLy' => $userDangNhap->MaNguoiDung,
+                        'NgayDa'         => $slot['dateDb'],
+                        'TongTien'       => $slot['price'],
+                        'TienCoc'        => $cocThucTe,
+                        'TrangThai'      => 'DaCoc'
                     ]);
                 }
             }
 
-            // Nếu có bất kỳ slot nào bị trùng, Rollback và báo lỗi hàng loạt
             if (!empty($failed_slots)) {
                 DB::rollBack();
                 $msg_gop = implode(', ', $failed_messages);
                 return response()->json([
-                    'success' => false,
-                    'message' => "Lỗi! Các khung giờ sau vừa bị khách hàng khác đặt mất: {$msg_gop}. Đã tự động gỡ khỏi giỏ!",
+                    'success'         => false,
+                    'message'         => "Lỗi! Các khung giờ sau vừa bị khách hàng khác đặt mất: {$msg_gop}. Đã tự động gỡ khỏi giỏ!",
                     'failed_slot_ids' => $failed_slots
                 ]);
             }
 
             DB::commit();
 
-            // Phát tín hiệu làm mới giao diện cho TẤT CẢ mọi người
             broadcast(new \App\Events\SystemDataUpdated())->toOthers();
             broadcast(new \App\Events\AdminDataUpdated())->toOthers();
 
@@ -691,24 +695,23 @@ class DatSanController extends Controller
             'email_khach.email'    => 'Địa chỉ Email không đúng định dạng!',
             'slots.required'       => 'Giỏ hàng đặt sân đang trống!'
         ]);
-        
+
         $slots = $request->slots;
         $tongTienCoc = 0;
         $failed_slots = [];
         $failed_messages = [];
 
-        // Kiểm tra trước xem các khung giờ khách chọn có bị ai đặt mất chưa (Chưa INSERT vào DB)
         foreach ($slots as $slot) {
             $ngayDa = $slot['dateDb'];
             $khungGio = KhungGio::find($slot['kgId']);
-            
+
             if (!$khungGio) {
                 return response()->json(['success' => false, 'message' => 'Lỗi dữ liệu khung giờ!']);
             }
 
-            $daDat = DatSan::where('ID_SanBong', $slot['pitchId'])
+            $daDat = DatSan::where('MaSanBong', $slot['pitchId'])
                            ->where('NgayDa', $ngayDa)
-                           ->where('ID_KhungGio', $khungGio->ID)
+                           ->where('MaKhungGio', $khungGio->MaKhungGio)
                            ->where('TrangThai', '!=', 'DaHuy')
                            ->first();
 
@@ -716,20 +719,19 @@ class DatSanController extends Controller
                 $failed_slots[] = $slot['id'];
                 $failed_messages[] = "[{$slot['timeStr']} ngày {$slot['dateDisplay']}]";
             } else {
-                $tongTienCoc += ($slot['price'] * 0.3); // Cọc 30%
+                $tongTienCoc += ($slot['price'] * 0.3);
             }
         }
 
         if (!empty($failed_slots)) {
             $msg_gop = implode(', ', $failed_messages);
             return response()->json([
-                'success' => false,
-                'message' => "Rất tiếc! Các khung giờ sau vừa bị đặt mất: {$msg_gop}.",
+                'success'         => false,
+                'message'         => "Rất tiếc! Các khung giờ sau vừa bị đặt mất: {$msg_gop}.",
                 'failed_slot_ids' => $failed_slots
             ]);
         }
 
-        // Sinh mã giao dịch duy nhất và lưu thông tin đặt sân tạm vào Cache (15 phút)
         $vnp_TxnRef = 'GUEST_' . time() . '_' . rand(1000, 9999);
         \Illuminate\Support\Facades\Cache::put('guest_booking_' . $vnp_TxnRef, [
             'ho_ten'      => $request->ho_ten,
@@ -738,12 +740,11 @@ class DatSanController extends Controller
             'slots'       => $slots,
         ], now()->addMinutes(15));
 
-        // Tạo URL thanh toán VNPay
         $vnp_TmnCode = config('vnpay.tmn_code');
         $vnp_HashSecret = config('vnpay.hash_secret');
         $vnp_Url = config('vnpay.url');
-        $vnp_Returnurl = url('/api/dat-san-guest/vnpay-return'); 
-        
+        $vnp_Returnurl = url('/api/dat-san-guest/vnpay-return');
+
         $vnp_OrderInfo = "Thanh toan tien coc dat san khach vang lai";
         $vnp_OrderType = 'billpayment';
         $vnp_Amount = $tongTienCoc * 100;
@@ -792,24 +793,23 @@ class DatSanController extends Controller
         ]);
     }
 
-    // XỬ LÝ KẾT QUẢ VNPAY TRẢ VỀ: THÀNH CÔNG MỚI TẠO DATSAN
     public function vnpayReturnGuest(Request $request)
     {
         $vnp_HashSecret = config('vnpay.hash_secret');
         $inputData = array();
-        
+
         foreach ($request->all() as $key => $value) {
             if (substr($key, 0, 4) == "vnp_") {
                 $inputData[$key] = $value;
             }
         }
-        
+
         $vnp_SecureHash = $inputData['vnp_SecureHash'] ?? '';
         unset($inputData['vnp_SecureHash']);
         ksort($inputData);
         $i = 0;
         $hashData = "";
-        
+
         foreach ($inputData as $key => $value) {
             if ($i == 1) {
                 $hashData = $hashData . '&' . urlencode($key) . "=" . urlencode($value);
@@ -822,18 +822,15 @@ class DatSanController extends Controller
         $secureHash = hash_hmac('sha512', $hashData, $vnp_HashSecret);
         $frontendUrl = 'http://127.0.0.1:5500/html/index.html';
 
-        // Kiểm tra chữ ký bảo mật
         if ($secureHash !== $vnp_SecureHash) {
             return redirect($frontendUrl . '?vnpay_status=invalid_signature#fields-section');
         }
 
-        // Nếu thanh toán thất bại hoặc người dùng bấm Hủy trên VNPay
         if ($request->vnp_ResponseCode !== '00') {
             \Illuminate\Support\Facades\Cache::forget('guest_booking_' . $request->vnp_TxnRef);
             return redirect($frontendUrl . '?vnpay_status=failed#fields-section');
         }
 
-        // Thanh toán thành công (ResponseCode == '00') -> Lấy dữ liệu từ Cache ra để tạo DatSan
         $bookingData = \Illuminate\Support\Facades\Cache::pull('guest_booking_' . $request->vnp_TxnRef);
         if (!$bookingData) {
             return redirect($frontendUrl . '?vnpay_status=error#fields-section');
@@ -841,23 +838,36 @@ class DatSanController extends Controller
 
         $slots = $bookingData['slots'];
         $cacVeVuaTao = [];
-        $idCumSan = null;
+        $maCumSan = null;
 
         DB::beginTransaction();
         try {
+            $tongTienSan = array_reduce($slots, function ($carry, $s) {
+                return $carry + ($s['price'] ?? 0);
+            }, 0);
+            $tongCocGuest = $tongTienSan * 0.3;
+
+            $hoaDon = HoaDonDatSan::create([
+                'MaNguoiDung'         => null,
+                'MaGiaoDich'          => null,
+                'TongTienSan'         => $tongTienSan,
+                'TienDaCoc'           => $tongCocGuest,
+                'PhuongThucThanhToan' => 'ChuyenKhoan',
+                'TrangThai'           => 'DaCoc'
+            ]);
+
             foreach ($slots as $slot) {
                 $ngayDa = $slot['dateDb'];
                 $khungGio = KhungGio::find($slot['kgId']);
-                
+
                 $sanBong = SanBong::find($slot['pitchId']);
-                if ($sanBong && $idCumSan == null) {
-                    $idCumSan = $sanBong->ID_CumSan;
+                if ($sanBong && $maCumSan == null) {
+                    $maCumSan = $sanBong->MaCumSan;
                 }
 
-                // Khóa dòng chống trùng lặp
-                $daDat = DatSan::where('ID_SanBong', $slot['pitchId'])
+                $daDat = DatSan::where('MaSanBong', $slot['pitchId'])
                                ->where('NgayDa', $ngayDa)
-                               ->where('ID_KhungGio', $khungGio->ID)
+                               ->where('MaKhungGio', $khungGio->MaKhungGio)
                                ->where('TrangThai', '!=', 'DaHuy')
                                ->lockForUpdate()
                                ->first();
@@ -872,8 +882,9 @@ class DatSanController extends Controller
                     'TenKhachVangLai'   => $bookingData['ho_ten'],
                     'SDTKhachVangLai'   => $bookingData['sdt_khach'],
                     'EmailKhachVangLai' => $bookingData['email_khach'],
-                    'ID_SanBong'        => $slot['pitchId'],
-                    'ID_KhungGio'       => $khungGio->ID,
+                    'MaSanBong'         => $slot['pitchId'],
+                    'MaKhungGio'        => $khungGio->MaKhungGio,
+                    'MaHoaDonDatSan'    => $hoaDon->MaHoaDonDatSan,
                     'NgayDa'            => $ngayDa,
                     'TongTien'          => $slot['price'],
                     'TienCoc'           => $tienCoc,
@@ -881,7 +892,7 @@ class DatSanController extends Controller
                 ]);
 
                 $cacVeVuaTao[] = [
-                    'maVe'    => 'PT-' . $veMoi->ID,
+                    'maVe'    => 'PT-' . $veMoi->MaDatSan,
                     'tenSan'  => $slot['pitchName'],
                     'cumSan'  => $slot['clusterName'],
                     'ngay'    => $slot['dateDisplay'],
@@ -893,13 +904,12 @@ class DatSanController extends Controller
 
             DB::commit();
 
-            // Tìm thông tin Admin và Quản lý cụm sân để gửi Email vé
             $adminInfo = NguoiDung::where('VaiTro', 'Admin')->first();
             $sdtAdmin = $adminInfo ? $adminInfo->SoDienThoai : '0899244124';
 
             $sdtQuanLy = 'Đang cập nhật';
-            if ($idCumSan) {
-                $quanLy = NguoiDung::where('VaiTro', 'QuanLySan')->where('ID_CumSan', $idCumSan)->first();
+            if ($maCumSan) {
+                $quanLy = NguoiDung::where('VaiTro', 'QuanLySan')->where('MaCumSan', $maCumSan)->first();
                 if ($quanLy) {
                     $sdtQuanLy = $quanLy->SoDienThoai;
                 }
@@ -930,7 +940,7 @@ class DatSanController extends Controller
                 $noiDungMail = "
                     <h2>Xác nhận đặt sân thành công</h2>
                     <p>Chào {$bookingData['ho_ten']},</p>
-                    <p>Cảm ơn bạn đã đặt sân tại DN Football. Dưới đây là thông tin vé của bạn:</p>
+                    <p>Cảm ơn bạn đã đặt sân tại DN Football. Dưới đây là thông tin vé của bạn (Mã hóa đơn: <strong>{$hoaDon->MaHoaDonDatSan}</strong>):</p>
                     {$htmlVe}
                     <div style='background:#fef2f2; border:1px solid #fca5a5; padding:15px; border-radius:8px; margin-top:20px;'>
                         <h4 style='margin:0 0 10px 0; color:#b91c1c;'>Lưu ý quan trọng:</h4>
@@ -961,5 +971,55 @@ class DatSanController extends Controller
             DB::rollBack();
             return redirect($frontendUrl . '?vnpay_status=error#fields-section');
         }
+    }
+
+    public static function dongBoHoaDonDatSan($maHoaDon)
+    {
+        if (!$maHoaDon) return;
+
+        $cacDatSan = DatSan::where('MaHoaDonDatSan', $maHoaDon)->get();
+        if ($cacDatSan->isEmpty()) return;
+
+        // 1. Xác định TrangThai của HoaDonDatSan theo thứ tự ưu tiên
+        if ($cacDatSan->contains('TrangThai', 'DaCoc')) {
+            $trangThaiHoaDon = 'DaCoc';
+        } elseif ($cacDatSan->contains('TrangThai', 'HoanThanh')) {
+            $trangThaiHoaDon = 'HoanThanh';
+        } elseif ($cacDatSan->contains('TrangThai', 'KhongDen')) {
+            $trangThaiHoaDon = 'KhongDen';
+        } else {
+            // Tất cả 100% các ca trong hóa đơn đều là 'DaHuy'
+            $trangThaiHoaDon = 'DaHuy';
+        }
+
+        // 2. Tính toán lại TongTienSan và TienDaCoc của HoaDonDatSan
+        if ($trangThaiHoaDon === 'DaHuy') {
+            // Nếu toàn bộ hóa đơn bị hủy hết: giữ nguyên tổng tiền ban đầu để lưu lịch sử hóa đơn hủy
+            $tongTienSan = $cacDatSan->sum('TongTien');
+            $tienDaCoc   = $cacDatSan->sum('TienCoc');
+        } else {
+            // Chỉ tính các sân KHÔNG BỊ HỦY (loại bỏ các sân lẻ đã hủy và đã hoàn cọc)
+            $cacSanHieuLuc = $cacDatSan->where('TrangThai', '!=', 'DaHuy');
+
+            $tongTienSan = 0;
+            $tienDaCoc   = 0;
+
+            foreach ($cacSanHieuLuc as $ds) {
+                $tienDaCoc += (float) $ds->TienCoc;
+
+                // Nếu khách KhongDen (bùng sân, dù Phong trào hay Giải đấu) -> Chỉ thu đúng phần TienCoc đã cọc
+                if ($ds->TrangThai === 'KhongDen') {
+                    $tongTienSan += (float) $ds->TienCoc;
+                } else {
+                    $tongTienSan += (float) $ds->TongTien;
+                }
+            }
+        }
+
+        HoaDonDatSan::where('MaHoaDonDatSan', $maHoaDon)->update([
+            'TongTienSan' => $tongTienSan,
+            'TienDaCoc'   => $tienDaCoc,
+            'TrangThai'   => $trangThaiHoaDon,
+        ]);
     }
 }

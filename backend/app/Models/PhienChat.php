@@ -5,33 +5,33 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Traits\GeneratesCustomId;
 
 class PhienChat extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, GeneratesCustomId;
 
     protected $table = 'PhienChat';
-    protected $primaryKey = 'ID';
+    protected $primaryKey = 'MaPhienChat';
+    protected $idPrefix = 'PC';
 
-    // Cấu hình tên cột Timestamps
     const CREATED_AT = 'NgayTao';
     const UPDATED_AT = 'NgayCapNhat';
     const DELETED_AT = 'NgayXoa';
-    
+
     protected $fillable = [
-        'ID_NguoiDung',
+        'MaPhienChat',
+        'MaNguoiDung',
         'TieuDe',
     ];
 
-    // Quan hệ với bảng NguoiDung
     public function nguoiDung()
     {
-        return $this->belongsTo(NguoiDung::class, 'ID_NguoiDung', 'ID');
+        return $this->belongsTo(NguoiDung::class, 'MaNguoiDung', 'MaNguoiDung');
     }
 
-    // Quan hệ với bảng TinNhan
     public function tinNhans()
     {
-        return $this->hasMany(TinNhan::class, 'ID_PhienChat', 'ID');
+        return $this->hasMany(TinNhan::class, 'MaPhienChat', 'MaPhienChat');
     }
 }

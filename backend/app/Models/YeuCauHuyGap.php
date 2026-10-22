@@ -4,28 +4,36 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\GeneratesCustomId;
 
 class YeuCauHuyGap extends Model
 {
-    use HasFactory;
+    use HasFactory, GeneratesCustomId;
 
     protected $table = 'YeuCauHuyGap';
-    protected $primaryKey = 'ID';
-    
-    // Đổi tên created_at thành NgayTao
+    protected $primaryKey = 'MaYeuCauHuyGap';
+    protected $idPrefix = 'YCHG';
+
     const CREATED_AT = 'NgayTao';
-    // Tắt hoàn toàn updated_at
     const UPDATED_AT = null;
 
     protected $fillable = [
-        'ID_NguoiDung', 
-        'ID_DatSan', 
-        'NoiDung', 
-        'TrangThai', 
-        'LyDoHuy', 
+        'MaYeuCauHuyGap',
+        'MaNguoiDung',
+        'MaDatSan',
+        'NoiDung',
+        'TrangThai',
+        'LyDoHuy',
         'NgayDuyet'
     ];
 
-    public function nguoiDung() { return $this->belongsTo(NguoiDung::class, 'ID_NguoiDung', 'ID'); }
-    public function datSan() { return $this->belongsTo(DatSan::class, 'ID_DatSan', 'ID'); }
+    public function nguoiDung()
+    {
+        return $this->belongsTo(NguoiDung::class, 'MaNguoiDung', 'MaNguoiDung');
+    }
+
+    public function datSan()
+    {
+        return $this->belongsTo(DatSan::class, 'MaDatSan', 'MaDatSan');
+    }
 }

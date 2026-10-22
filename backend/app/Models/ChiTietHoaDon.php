@@ -7,16 +7,20 @@ use Illuminate\Database\Eloquent\Model;
 class ChiTietHoaDon extends Model
 {
     protected $table = 'ChiTietHoaDon';
-    public $incrementing = false; // Bảng này dùng khóa ngoại kép
+    public $incrementing = false;
     protected $primaryKey = null;
+    protected $keyType = 'string';
     public $timestamps = false;
 
-    protected $fillable = ['ID_HoaDon', 'ID_SanPham', 'SoLuong', 'DonGia'];
-    
-    // Tự động thêm trường 'ThanhTien' vào JSON response
+    protected $fillable = [
+        'MaHoaDon',
+        'MaSanPham',
+        'SoLuong',
+        'DonGia'
+    ];
+
     protected $appends = ['ThanhTien'];
 
-    // Accessor: Tính toán Thành Tiền ở Backend
     public function getThanhTienAttribute()
     {
         return $this->SoLuong * $this->DonGia;
@@ -24,11 +28,11 @@ class ChiTietHoaDon extends Model
 
     public function hoaDon()
     {
-        return $this->belongsTo(HoaDonBanHang::class, 'ID_HoaDon', 'ID');
+        return $this->belongsTo(HoaDonBanHang::class, 'MaHoaDon', 'MaHoaDonBanHang');
     }
 
     public function sanPham()
     {
-        return $this->belongsTo(SanPham::class, 'ID_SanPham', 'ID');
+        return $this->belongsTo(SanPham::class, 'MaSanPham', 'MaSanPham');
     }
 }

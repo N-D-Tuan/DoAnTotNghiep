@@ -3,16 +3,24 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\GeneratesCustomId;
 
 class Phuong extends Model
 {
+    use GeneratesCustomId;
+
     protected $table = 'Phuong';
-    protected $primaryKey = 'ID';
+    protected $primaryKey = 'MaPhuong';
+    protected $idPrefix = 'P';
     public $timestamps = false;
-    protected $fillable = ['TenPhuong'];
+
+    protected $fillable = [
+        'MaPhuong',
+        'TenPhuong'
+    ];
 
     public function cumSans()
     {
-        return $this->hasMany(CumSan::class, 'ID_Phuong', 'ID');
+        return $this->hasMany(CumSan::class, 'MaPhuong', 'MaPhuong');
     }
 }

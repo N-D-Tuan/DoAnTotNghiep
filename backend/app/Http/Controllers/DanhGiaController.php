@@ -9,27 +9,24 @@ use App\Models\CumSan;
 
 class DanhGiaController extends Controller
 {
-    // 1. Lấy danh sách đánh giá & điểm trung bình của 1 Cụm sân (hoặc tất cả cụm sân)
     public function layDanhSachTheoCumSan(Request $request)
     {
-        $idCumSan = $request->query('id_cum_san');
+        $maCumSan = $request->query('ma_cum_san', $request->query('id_cum_san'));
 
-        // Nếu truyền id_cum_san -> Trả về chi tiết đánh giá của cụm sân đó
-        if ($idCumSan) {
+        if ($maCumSan) {
             $danhSach = DanhGia::with([
-                    'nguoiDung:ID,HoTen',
-                    'datSan.sanBong:ID,TenSan',
-                    'datSan.khungGio:ID,GioBatDau,GioKetThuc',
-                    'datSan.giaiDau:ID,TenGiaiDau'
+                    'nguoiDung:MaNguoiDung,HoTen',
+                    'datSan.sanBong:MaSanBong,TenSan',
+                    'datSan.khungGio:MaKhungGio,GioBatDau,GioKetThuc',
+                    'datSan.giaiDau:MaGiaiDau,TenGiaiDau'
                 ])
-                ->where('ID_CumSan', $idCumSan)
+                ->where('MaCumSan', $maCumSan)
                 ->orderBy('NgayTao', 'desc')
                 ->get();
 
             $tongSo = $danhSach->count();
             $trungBinh = $tongSo > 0 ? round($danhSach->avg('SoSao'), 1) : 0;
 
-            // Thống kê số lượng theo từng mức sao (1 -> 5)
             $phanBoSao = [
                 5 => $danhSach->where('SoSao', 5)->count(),
                 4 => $danhSach->where('SoSao', 4)->count(),
@@ -47,11 +44,10 @@ class DanhGiaController extends Controller
             ]);
         }
 
-        // Nếu không truyền id_cum_san -> Trả về bảng tổng hợp số sao trung bình của tất cả các cụm sân
-        $thongKeCumSan = DanhGia::selectRaw('ID_CumSan, COUNT(*) as tong_danh_gia, ROUND(AVG(SoSao), 1) as trung_binh_sao')
-            ->groupBy('ID_CumSan')
+        $thongKeCumSan = DanhGia::selectRaw('MaCumSan, COUNT(*) as tong_danh_gia, ROUND(AVG(SoSao), 1) as trung_binh_sao')
+            ->groupBy('MaCumSan')
             ->get()
-            ->keyBy('ID_CumSan');
+            ->keyBy('MaCumSan');
 
         return response()->json([
             'success' => true,
@@ -59,15 +55,16 @@ class DanhGiaController extends Controller
         ]);
     }
 
-    // 2. Khách hàng gửi đánh giá cho đơn đặt sân / giải đấu đã Hoàn thành (Chỉ 1 lần duy nhất)
     public function taoDanhGia(Request $request)
     {
         $user = $request->user();
+        $maDatSan = $request->input('ma_dat_san', $request->input('id_dat_san'));
+        $request->merge(['ma_dat_san_check' => $maDatSan]);
 
         $request->validate([
-            'id_dat_san' => 'required|integer',
-            'so_sao'     => 'required|integer|min:1|max:5',
-            'noi_dung'   => 'nullable|string|max:1000'
+            'ma_dat_san_check' => 'required|string',
+            'so_sao'           => 'required|integer|min:1|max:5',
+            'noi_dung'         => 'nullable|string|max:1000'
         ], [
             'so_sao.required' => 'Vui lòng chọn số sao đánh giá!',
             'so_sao.min'      => 'Số sao tối thiểu là 1 sao!',
@@ -75,10 +72,9 @@ class DanhGiaController extends Controller
             'noi_dung.max'    => 'Nội dung đánh giá không vượt quá 1000 ký tự!'
         ]);
 
-        // Tìm lịch đặt sân của chính khách hàng này
         $datSan = DatSan::with(['sanBong', 'giaiDau'])
-                        ->where('ID', $request->id_dat_san)
-                        ->where('ID_NguoiDung', $user->ID)
+                        ->where('MaDatSan', $maDatSan)
+                        ->where('MaNguoiDung', $user->MaNguoiDung)
                         ->first();
 
         if (!$datSan) {
@@ -88,16 +84,13 @@ class DanhGiaController extends Controller
             ], 404);
         }
 
-        // TRƯỜNG HỢP 1: ĐƠN THUỘC GIẢI ĐẤU -> CẢ GIẢI ĐẤU CHỈ ĐƯỢC ĐÁNH GIÁ 1 LẦN DUY NHẤT
-        if (!empty($datSan->ID_GiaiDau)) {
-            $idGiaiDau = $datSan->ID_GiaiDau;
+        if (!empty($datSan->MaGiaiDau)) {
+            $maGiaiDau = $datSan->MaGiaiDau;
 
-            // Lấy tất cả các trận thuộc giải đấu này
-            $cacTranTrongGiai = DatSan::where('ID_GiaiDau', $idGiaiDau)
-                                      ->where('ID_NguoiDung', $user->ID)
+            $cacTranTrongGiai = DatSan::where('MaGiaiDau', $maGiaiDau)
+                                      ->where('MaNguoiDung', $user->MaNguoiDung)
                                       ->get();
 
-            // Kiểm tra giải đấu đã hoàn thành chưa (giaiDau->TrangThai === 'HoanThanh' hoặc tất cả các trận đã chốt xong và có trận HoanThanh)
             $trangThaiGiai = $datSan->giaiDau ? $datSan->giaiDau->TrangThai : '';
             $conTranChuaChot = $cacTranTrongGiai->contains('TrangThai', 'DaCoc');
             $coTranHoanThanh = $cacTranTrongGiai->contains('TrangThai', 'HoanThanh');
@@ -109,9 +102,8 @@ class DanhGiaController extends Controller
                 ], 400);
             }
 
-            // Kiểm tra xem bất kỳ trận nào trong giải đấu này đã có đánh giá chưa
-            $idsDatSanTrongGiai = $cacTranTrongGiai->pluck('ID');
-            $daDanhGiaGiai = DanhGia::whereIn('ID_DatSan', $idsDatSanTrongGiai)->exists();
+            $idsDatSanTrongGiai = $cacTranTrongGiai->pluck('MaDatSan');
+            $daDanhGiaGiai = DanhGia::whereIn('MaDatSan', $idsDatSanTrongGiai)->exists();
 
             if ($daDanhGiaGiai) {
                 return response()->json([
@@ -119,9 +111,7 @@ class DanhGiaController extends Controller
                     'message' => 'Giải đấu này đã được bạn đánh giá trước đó (mỗi giải đấu chỉ đánh giá 1 lần)!'
                 ], 400);
             }
-        } 
-        // TRƯỜNG HỢP 2: ĐÁ PHONG TRÀO (LẺ)
-        else {
+        } else {
             if ($datSan->TrangThai !== 'HoanThanh') {
                 return response()->json([
                     'success' => false,
@@ -129,7 +119,7 @@ class DanhGiaController extends Controller
                 ], 400);
             }
 
-            $daDanhGia = DanhGia::where('ID_DatSan', $datSan->ID)->exists();
+            $daDanhGia = DanhGia::where('MaDatSan', $datSan->MaDatSan)->exists();
             if ($daDanhGia) {
                 return response()->json([
                     'success' => false,
@@ -138,8 +128,8 @@ class DanhGiaController extends Controller
             }
         }
 
-        $idCumSan = $datSan->sanBong ? $datSan->sanBong->ID_CumSan : null;
-        if (!$idCumSan) {
+        $maCumSan = $datSan->sanBong ? $datSan->sanBong->MaCumSan : null;
+        if (!$maCumSan) {
             return response()->json([
                 'success' => false,
                 'message' => 'Không xác định được cụm sân của lịch đặt này!'
@@ -147,11 +137,11 @@ class DanhGiaController extends Controller
         }
 
         $danhGia = DanhGia::create([
-            'ID_DatSan'    => $datSan->ID,
-            'ID_CumSan'    => $idCumSan,
-            'ID_NguoiDung' => $user->ID,
-            'SoSao'        => $request->so_sao,
-            'NoiDung'      => $request->noi_dung ? trim($request->noi_dung) : null
+            'MaDatSan'    => $datSan->MaDatSan,
+            'MaCumSan'    => $maCumSan,
+            'MaNguoiDung' => $user->MaNguoiDung,
+            'SoSao'       => $request->so_sao,
+            'NoiDung'     => $request->noi_dung ? trim($request->noi_dung) : null
         ]);
 
         try {

@@ -15,34 +15,34 @@ use App\Models\NguoiDung;
 
 class GiaiDauController extends Controller
 {
-    // 1. API Lấy danh sách giải đấu của người dùng đang đăng nhập
     public function layDanhSachCuaToi()
     {
-        $userId = Auth::id(); // Lấy ID khách hàng từ phiên đăng nhập
+        $userId = Auth::id();
 
         $danhSach = GiaiDau::with('cumSan')
-            ->where('ID_NguoiDung', $userId)
+            ->where('MaNguoiDung', $userId)
             ->orderBy('NgayTao', 'desc')
             ->get();
 
         return response()->json([
             'success' => true,
-            'data' => $danhSach
+            'data'    => $danhSach
         ], 200);
     }
 
-    // 2. API Tạo yêu cầu giải đấu mới
     public function taoYeuCau(Request $request)
     {
-        // Kiểm tra dữ liệu đầu vào
+        $maCumSan = $request->input('ma_cum_san', $request->input('id_cum_san'));
+        $request->merge(['ma_cum_san_check' => $maCumSan]);
+
         $request->validate([
-            'id_cum_san' => 'required|exists:CumSan,ID',
-            'ten_giai_dau' => 'required|string|max:255',
-            'ngay_bat_dau' => 'required|date|after_or_equal:today',
-            'ngay_ket_thuc' => 'required|date|after_or_equal:ngay_bat_dau',
-            'noi_dung' => 'nullable|string'
+            'ma_cum_san_check' => 'required|exists:CumSan,MaCumSan',
+            'ten_giai_dau'     => 'required|string|max:255',
+            'ngay_bat_dau'     => 'required|date|after_or_equal:today',
+            'ngay_ket_thuc'    => 'required|date|after_or_equal:ngay_bat_dau',
+            'noi_dung'         => 'nullable|string'
         ], [
-            'ngay_bat_dau.after_or_equal' => 'Ngày bắt đầu không được trong quá khứ.',
+            'ngay_bat_dau.after_or_equal'  => 'Ngày bắt đầu không được trong quá khứ.',
             'ngay_ket_thuc.after_or_equal' => 'Ngày kết thúc phải sau hoặc bằng ngày bắt đầu.'
         ]);
 
@@ -51,36 +51,32 @@ class GiaiDauController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Tài khoản của bạn đang bị khóa. Không thể tạo yêu cầu tổ chức giải đấu!'
-            ]); 
+            ]);
         }
 
-        // Trạng thái 'ChoDuyet' và 'NgayTao' đã được tự động xử lý ở DB và Model
         $giaiDau = GiaiDau::create([
-            'ID_NguoiDung' => Auth::id(),
-            'ID_CumSan' => $request->id_cum_san,
-            'TenGiaiDau' => $request->ten_giai_dau,
-            'NgayBatDau' => $request->ngay_bat_dau,
+            'MaNguoiDung' => Auth::id(),
+            'MaCumSan'    => $maCumSan,
+            'TenGiaiDau'  => $request->ten_giai_dau,
+            'NgayBatDau'  => $request->ngay_bat_dau,
             'NgayKetThuc' => $request->ngay_ket_thuc,
-            'NoiDung' => $request->noi_dung
+            'NoiDung'     => $request->noi_dung
         ]);
 
-        $admins = NguoiDung::where('VaiTro', 'Admin')->get();
-        $nguoiTao = NguoiDung::find(Auth::id()); // Lấy tên người dùng vừa tạo
-        
+        $nguoiTao = NguoiDung::find(Auth::id());
         $nguoiNhanThongBao = NguoiDung::where('VaiTro', 'QuanLySan')
-                               ->where('ID_CumSan', $request->id_cum_san)
+                               ->where('MaCumSan', $maCumSan)
                                ->get();
 
         foreach ($nguoiNhanThongBao as $nhanSu) {
             ThongBao::create([
-                'ID_NguoiDung' => $nhanSu->ID,
+                'MaNguoiDung'  => $nhanSu->MaNguoiDung,
                 'TieuDe'       => 'Yêu cầu Giải đấu mới',
                 'NoiDung'      => 'Khách hàng ' . ($nguoiTao ? $nguoiTao->HoTen : '') . ' vừa gửi yêu cầu tổ chức giải đấu "' . $giaiDau->TenGiaiDau . '".',
                 'LoaiThongBao' => 'GiaiDau'
             ]);
 
-            // Kích hoạt chuông đỏ cá nhân cho từng người quản lý
-            broadcast(new \App\Events\UserDataUpdated($nhanSu->ID))->toOthers();
+            broadcast(new \App\Events\UserDataUpdated($nhanSu->MaNguoiDung))->toOthers();
         }
 
         broadcast(new \App\Events\AdminDataUpdated())->toOthers();
@@ -88,20 +84,18 @@ class GiaiDauController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Gửi yêu cầu tổ chức giải đấu thành công!',
-            'data' => $giaiDau
+            'data'    => $giaiDau
         ], 201);
     }
 
-    // 3. API Lấy toàn bộ danh sách giải đấu (Dành cho Admin)
     public function layDanhSachAdmin()
     {
         $userDangNhap = auth()->user();
 
         $query = GiaiDau::with(['cumSan', 'nguoiDung']);
 
-        // CHÈN LOGIC CÁCH LY
         if ($userDangNhap->VaiTro === 'QuanLySan') {
-            $query->where('ID_CumSan', $userDangNhap->ID_CumSan);
+            $query->where('MaCumSan', $userDangNhap->MaCumSan);
         }
 
         $danhSach = $query->orderBy('NgayTao', 'desc')->get();
@@ -109,7 +103,6 @@ class GiaiDauController extends Controller
         return response()->json(['success' => true, 'data' => $danhSach]);
     }
 
-    // 4. API Cập nhật trạng thái duyệt/từ chối
     public function xuLyYeuCau(Request $request, $id)
     {
         $request->validate([
@@ -120,16 +113,14 @@ class GiaiDauController extends Controller
         ]);
 
         $giaiDau = GiaiDau::find($id);
-        
+
         if (!$giaiDau) {
             return response()->json(['success' => false, 'message' => 'Không tìm thấy giải đấu!'], 404);
         }
 
-        $trangThaiMoi = $request->trang_thai; // 'DaDuyet' hoặc 'TuChoi'
-        
+        $trangThaiMoi = $request->trang_thai;
         $giaiDau->TrangThai = $trangThaiMoi;
-        
-        // Nếu duyệt, hệ thống tự động ghi nhận mốc thời gian hiện tại vào cột NgayDuyet
+
         if ($trangThaiMoi === 'DaDuyet') {
             $giaiDau->NgayDuyet = now();
         } else {
@@ -138,23 +129,19 @@ class GiaiDauController extends Controller
 
         $giaiDau->save();
 
-        // -----------------------------------------
-        // TẠO THÔNG BÁO GIẢI ĐẤU
-        // -----------------------------------------
         $tieuDe = $trangThaiMoi === 'DaDuyet' ? 'Giải đấu đã được duyệt' : 'Giải đấu bị từ chối';
-        $noiDung = $trangThaiMoi === 'DaDuyet' 
-            ? 'Yêu cầu tổ chức giải đấu "' . $giaiDau->TenGiaiDau . '" của bạn đã được duyệt thành công.' 
+        $noiDung = $trangThaiMoi === 'DaDuyet'
+            ? 'Yêu cầu tổ chức giải đấu "' . $giaiDau->TenGiaiDau . '" của bạn đã được duyệt thành công.'
             : 'Yêu cầu tổ chức giải đấu "' . $giaiDau->TenGiaiDau . '" của bạn đã bị từ chối. Lý do: ' . $request->ly_do_huy;
 
         ThongBao::create([
-            'ID_NguoiDung' => $giaiDau->ID_NguoiDung,
+            'MaNguoiDung'  => $giaiDau->MaNguoiDung,
             'TieuDe'       => $tieuDe,
             'NoiDung'      => $noiDung,
             'LoaiThongBao' => 'GiaiDau'
         ]);
-        // -----------------------------------------
 
-        broadcast(new \App\Events\UserDataUpdated($giaiDau->ID_NguoiDung))->toOthers();
+        broadcast(new \App\Events\UserDataUpdated($giaiDau->MaNguoiDung))->toOthers();
         broadcast(new \App\Events\AdminDataUpdated())->toOthers();
 
         return response()->json([
@@ -163,7 +150,6 @@ class GiaiDauController extends Controller
         ], 200);
     }
 
-    // API 5: Lấy ma trận lịch sân để Admin kiểm tra trước khi duyệt
     public function layMaTranLich($id)
     {
         $giaiDau = GiaiDau::find($id);
@@ -171,37 +157,33 @@ class GiaiDauController extends Controller
             return response()->json(['success' => false, 'message' => 'Không tìm thấy giải đấu!'], 404);
         }
 
-        // 1. Lấy thông tin Cụm sân
-        $cumSan = CumSan::find($giaiDau->ID_CumSan);
+        $cumSan = CumSan::find($giaiDau->MaCumSan);
         if (!$cumSan) {
             return response()->json(['success' => false, 'message' => 'Không tìm thấy thông tin cụm sân!'], 404);
         }
 
-        $sanBongs = SanBong::where('ID_CumSan', $giaiDau->ID_CumSan)
+        $sanBongs = SanBong::where('MaCumSan', $giaiDau->MaCumSan)
             ->where('TrangThai', 'HoatDong')
             ->get();
 
-        // 2. Lấy danh sách Khung giờ nằm trong khoảng Giờ hoạt động của Cụm sân
         $khungGios = KhungGio::where('GioBatDau', '>=', $cumSan->GioMoCua)
             ->where('GioKetThuc', '<=', $cumSan->GioDongCua)
             ->orderBy('GioBatDau')
             ->get();
 
-        // Lấy danh sách các ID sân con
-        $sanBongIds = $sanBongs->pluck('ID');
+        $sanBongIds = $sanBongs->pluck('MaSanBong');
 
-        // 3. Lấy tất cả các lịch Đã Đặt trong khoảng thời gian diễn ra giải đấu của các sân này
-        $datSans = DatSan::whereIn('ID_SanBong', $sanBongIds)
+        $datSans = DatSan::whereIn('MaSanBong', $sanBongIds)
             ->whereBetween('NgayDa', [$giaiDau->NgayBatDau, $giaiDau->NgayKetThuc])
-            ->whereIn('TrangThai', ['DaCoc', 'HoanThanh', 'KhongDen']) // Chỉ lấy các lịch đã chốt
-            ->get(['ID_SanBong', 'ID_KhungGio', 'NgayDa']);
+            ->whereIn('TrangThai', ['DaCoc', 'HoanThanh', 'KhongDen'])
+            ->get(['MaSanBong', 'MaKhungGio', 'NgayDa']);
 
         return response()->json([
-            'success' => true,
-            'giai_dau' => $giaiDau,
-            'san_bongs' => $sanBongs,
+            'success'    => true,
+            'giai_dau'   => $giaiDau,
+            'san_bongs'  => $sanBongs,
             'khung_gios' => $khungGios,
-            'dat_sans' => $datSans 
+            'dat_sans'   => $datSans
         ]);
     }
 }

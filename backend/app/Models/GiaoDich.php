@@ -4,22 +4,23 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\GeneratesCustomId;
 
 class GiaoDich extends Model
 {
-    use HasFactory;
+    use HasFactory, GeneratesCustomId;
 
-    protected $table = 'giaodich';
-    protected $primaryKey = 'ID';
+    protected $table = 'GiaoDich';
+    protected $primaryKey = 'MaGiaoDich';
+    protected $idPrefix = 'GD';
 
-    // Trỏ cột created_at mặc định sang NgayTao
     const CREATED_AT = 'NgayTao';
-    // Tắt tính năng tự động ghi updated_at
     const UPDATED_AT = null;
 
     protected $fillable = [
-        'ID_NguoiDung',
-        'ID_NhanVienXuLy',
+        'MaGiaoDich',
+        'MaNguoiDung',
+        'MaNhanVienXuLy',
         'LoaiGiaoDich',
         'DongTien',
         'SoTien',
@@ -28,20 +29,19 @@ class GiaoDich extends Model
         'NoiDung',
     ];
 
-    // Liên kết với bảng NguoiDung
     public function nguoiDung()
     {
-        return $this->belongsTo(NguoiDung::class, 'ID_NguoiDung', 'ID');
-    }
-
-    // Liên kết với bảng DatSan
-    public function danhSachDatSan()
-    {
-        return $this->hasMany(DatSan::class, 'ID_GiaoDich', 'ID');
+        return $this->belongsTo(NguoiDung::class, 'MaNguoiDung', 'MaNguoiDung');
     }
 
     public function nhanVienXuLy()
     {
-        return $this->belongsTo(NguoiDung::class, 'ID_NhanVienXuLy', 'ID');
+        return $this->belongsTo(NguoiDung::class, 'MaNhanVienXuLy', 'MaNguoiDung');
+    }
+
+    // Quan hệ 1-1 với HoaDonDatSan
+    public function hoaDonDatSan()
+    {
+        return $this->hasOne(HoaDonDatSan::class, 'MaGiaoDich', 'MaGiaoDich');
     }
 }
