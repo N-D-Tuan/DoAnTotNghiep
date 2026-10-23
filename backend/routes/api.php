@@ -52,6 +52,7 @@ Route::get('/vnpay-return', [VNPayController::class, 'vnpayReturn']);
 Route::post('/dat-san-guest/thanh-toan', [DatSanController::class, 'thanhToanGuest']);
 Route::get('/dat-san-guest/vnpay-return', [DatSanController::class, 'vnpayReturnGuest']);
 Route::get('/danh-gia', [DanhGiaController::class, 'layDanhSachTheoCumSan']);
+Route::get('/hoa-don-dat-san/{maHoaDon}', [DatSanController::class, 'layChiTietHoaDonDatSan']);
 
 // ==========================================================
 // NHÓM 2: PROTECTED API (BẮT BUỘC TRUYỀN TOKEN TRONG HEADER)
@@ -74,7 +75,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/dat-san', [DatSanController::class, 'datSan']);
     Route::get('/dat-san/cua-toi', [DatSanController::class, 'layDanhSachCuaToi']);
     Route::put('/dat-san/{id}/huy', [DatSanController::class, 'huySanPhongTrao']);
-    
+    Route::put('/hoa-don-dat-san/{maHoaDon}/huy', [DatSanController::class, 'huyHoaDonKhachHang']);
+
     Route::post('/yeu-cau-huy-gap', [YeuCauHuyGapController::class, 'taoYeuCau']);
     Route::get('/yeu-cau-huy-gap/cua-toi', [YeuCauHuyGapController::class, 'layDanhSachCuaToi']);
     
@@ -110,6 +112,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/admin/dat-san', [DatSanController::class, 'layDanhSachAdmin']);
     Route::put('/admin/dat-san/{id}/chot', [DatSanController::class, 'chotTrangThaiAdmin']);
     Route::post('/admin/dat-san/{id}/gui-otp-huy-guest', [DatSanController::class, 'guiOtpHuySanGuest']);
+    Route::put('/admin/hoa-don-dat-san/{maHoaDon}/huy', [DatSanController::class, 'huyHoaDonAdmin']);
+    Route::post('/admin/hoa-don-dat-san/{maHoaDon}/gui-otp-huy-guest', [DatSanController::class, 'guiOtpHuyHoaDonGuest']);
     Route::get('/admin/yeu-cau-huy-gap', [YeuCauHuyGapController::class, 'layDanhSachAdmin']);
     Route::put('/admin/yeu-cau-huy-gap/{id}/xu-ly', [YeuCauHuyGapController::class, 'xuLyYeuCau']);
     Route::get('/admin/giai-dau', [GiaiDauController::class, 'layDanhSachAdmin']);

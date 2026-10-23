@@ -248,8 +248,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const urlParams = new URLSearchParams(window.location.search);
         const vnpayStatus = urlParams.get('vnpay_status');
+        const maHoaDonGuest = urlParams.get('ma_hoa_don');
         if (vnpayStatus) {
-            showGuestPaymentResultModal(vnpayStatus);
+            showGuestPaymentResultModal(vnpayStatus, maHoaDonGuest);
             window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
         }
 
@@ -897,7 +898,7 @@ window.checkoutGuestBooking = async function() {
 let guestResultTimer = null;
 let guestResultCountdown = null;
 
-window.showGuestPaymentResultModal = function(status) {
+window.showGuestPaymentResultModal = function(status, maHoaDon = null) {
     let modal = document.getElementById('guest-payment-result-modal');
     if (!modal) {
         modal = document.createElement('div');
@@ -914,7 +915,7 @@ window.showGuestPaymentResultModal = function(status) {
     if (status === 'success') {
         iconHtml = '<i class="fa-solid fa-circle-check" style="font-size: 3.5rem; color: #22C55E;"></i>';
         title = 'Đặt sân thành công!';
-        message = 'Thanh toán qua VNPay đã hoàn tất. Chúng tôi đã gửi mã vé điện tử và thông tin chi tiết về Email của bạn. Vui lòng kiểm tra hộp thư!';
+        message = `Thanh toán qua VNPay đã hoàn tất${maHoaDon ? ` (Mã hóa đơn: <strong style="color:#22C55E;">#${maHoaDon}</strong>)` : ''}. Chúng tôi đã gửi Hóa đơn và Vé điện tử QR về Email của bạn.<br><br><strong style="color:#f8fafc;">Bạn có muốn xuất hóa đơn đặt sân ngay bây giờ không?</strong>`;
         btnColor = '#22C55E';
         guestSelectedSlots = [];
         updateGuestFloatingCart();
@@ -935,36 +936,133 @@ window.showGuestPaymentResultModal = function(status) {
         btnColor = '#ef4444';
     }
 
-    let secondsLeft = 5;
+    const actionButtonsHtml = (status === 'success' && maHoaDon)
+        ? `
+            <div style="display: flex; gap: 12px; justify-content: center;">
+                <button type="button" class="btn" onclick="closeGuestPaymentResultModal()" style="flex: 1; background: #334155; color: #f8fafc; font-weight: 600; padding: 12px; border-radius: 10px;">
+                    Đóng
+                </button>
+                <button type="button" class="btn" onclick="exportGuestBookingInvoice('${maHoaDon}')" style="flex: 1.3; background: #22C55E; color: #0F172A; font-weight: 700; padding: 12px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
+                    <i class="fa-solid fa-print"></i> Xuất hóa đơn
+                </button>
+            </div>
+        `
+        : `
+            <button type="button" class="btn" id="btn-close-guest-result" onclick="closeGuestPaymentResultModal()" style="width: 100%; background: ${btnColor}; color: #0F172A; font-weight: 700; padding: 12px;">
+                Đóng
+            </button>
+        `;
 
     modal.innerHTML = `
-        <div class="modal-card" style="max-width: 420px; text-align: center; padding: 28px 24px;">
+        <div class="modal-card" style="max-width: 440px; text-align: center; padding: 28px 24px;">
             <div style="margin-bottom: 16px;">${iconHtml}</div>
             <h3 style="font-size: 1.35rem; color: var(--text-main); margin-bottom: 10px;">${title}</h3>
             <p style="color: var(--text-muted); font-size: 0.92rem; line-height: 1.6; margin-bottom: 24px;">${message}</p>
-            <button type="button" class="btn" id="btn-close-guest-result" onclick="closeGuestPaymentResultModal()" style="width: 100%; background: ${btnColor}; color: #0F172A; font-weight: 700; padding: 12px;">
-                Đóng (${secondsLeft}s)
-            </button>
+            ${actionButtonsHtml}
         </div>
     `;
 
     modal.style.display = 'flex';
     setTimeout(() => modal.classList.add('active'), 10);
+};
 
-    if (guestResultTimer) clearTimeout(guestResultTimer);
-    if (guestResultCountdown) clearInterval(guestResultCountdown);
-
-    guestResultCountdown = setInterval(() => {
-        secondsLeft--;
-        const btn = document.getElementById('btn-close-guest-result');
-        if (btn && secondsLeft > 0) {
-            btn.innerText = `Đóng (${secondsLeft}s)`;
+// Hàm Xuất / In Hóa Đơn Đặt Sân cho Khách Vãng Lai
+window.exportGuestBookingInvoice = async function(maHoaDon) {
+    try {
+        const res = await fetch(`${API_BASE_URL}/hoa-don-dat-san/${maHoaDon}`);
+        const json = await res.json();
+        if (!json.success || !json.data) {
+            alert(json.message || 'Không tìm thấy dữ liệu hóa đơn!');
+            return;
         }
-    }, 1000);
+        const hd = json.data;
+        const listDatSan = hd.dat_sans || hd.datSans || [];
+        const first = listDatSan[0] || {};
+        const tenKhach = hd.nguoi_dung?.HoTen || first.TenKhachVangLai || 'Khách vãng lai';
+        const sdtKhach = hd.nguoi_dung?.SoDienThoai || first.SDTKhachVangLai || 'N/A';
+        const ngayLap = hd.NgayTao ? new Date(hd.NgayTao).toLocaleString('vi-VN') : new Date().toLocaleString('vi-VN');
 
-    guestResultTimer = setTimeout(() => {
-        closeGuestPaymentResultModal();
-    }, 5000);
+        const rowsHtml = listDatSan.map((ds, i) => {
+            const tenSan = ds.san_bong?.TenSan || 'Sân bóng';
+            const cumSan = ds.san_bong?.cum_san?.TenCumSan || '';
+            const kg = ds.khung_gio ? `${ds.khung_gio.GioBatDau.substring(0,5)} - ${ds.khung_gio.GioKetThuc.substring(0,5)}` : '';
+            const ngayDa = ds.NgayDa ? ds.NgayDa.split('-').reverse().join('/') : '';
+            return `
+                <tr>
+                    <td style="text-align:center;">${i + 1}</td>
+                    <td style="text-align:center; font-family:monospace; font-weight:bold;">#PT-${ds.MaDatSan || ds.ID}</td>
+                    <td><strong>${tenSan}</strong><br><small>${cumSan}</small></td>
+                    <td style="text-align:center;">${kg}<br><small>${ngayDa}</small></td>
+                    <td style="text-align:right;">${Number(ds.TongTien).toLocaleString('vi-VN')}đ</td>
+                    <td style="text-align:right; color:#047857; font-weight:bold;">${Number(ds.TienCoc).toLocaleString('vi-VN')}đ</td>
+                </tr>
+            `;
+        }).join('');
+
+        const tongTien = Number(hd.TongTienSan || 0);
+        const tienCoc = Number(hd.TienDaCoc || 0);
+        const conLai = Math.max(0, tongTien - tienCoc);
+
+        const printWin = window.open('', '_blank', 'width=850,height=700');
+        if (!printWin) return alert('Vui lòng cho phép mở cửa sổ Pop-up để in hóa đơn!');
+
+        printWin.document.write(`
+            <!DOCTYPE html>
+            <html lang="vi">
+            <head>
+                <meta charset="UTF-8">
+                <title>Hóa đơn đặt sân #${hd.MaHoaDonDatSan} - DN Football</title>
+                <style>
+                    body { font-family: Arial, sans-serif; color: #0f172a; margin: 30px; line-height: 1.5; }
+                    .header { display: flex; justify-content: space-between; border-bottom: 2px solid #0b5d3b; padding-bottom: 14px; margin-bottom: 20px; }
+                    .brand { font-size: 20px; font-weight: 800; color: #0b5d3b; }
+                    h2 { text-align: center; color: #0b5d3b; margin: 15px 0; }
+                    table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 13px; }
+                    th, td { border: 1px solid #cbd5e1; padding: 10px; }
+                    th { background: #f1f5f9; }
+                    .summary { width: 320px; margin-left: auto; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <div>
+                        <div class="brand">HỆ THỐNG SÂN BÓNG ĐÁ DN FOOTBALL</div>
+                        <div style="font-size:13px; color:#475569;">Đà Nẵng, Việt Nam | Hotline: 0899244124</div>
+                    </div>
+                    <div style="text-align:right; font-size:13px;">
+                        <strong>Mã hóa đơn: #${hd.MaHoaDonDatSan}</strong><br>
+                        Ngày lập: ${ngayLap}
+                    </div>
+                </div>
+                <h2>HÓA ĐƠN ĐẶT SÂN</h2>
+                <p><strong>Khách hàng:</strong> ${tenKhach} &bull; <strong>Số điện thoại:</strong> ${sdtKhach}</p>
+                <p><strong>Phương thức thanh toán cọc:</strong> Chuyển khoản VNPay</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>STT</th>
+                            <th>Mã Vé</th>
+                            <th>Sân Bóng & Cơ Sở</th>
+                            <th>Khung Giờ & Ngày Đá</th>
+                            <th>Đơn Giá Sân</th>
+                            <th>Tiền Đã Cọc</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rowsHtml}</tbody>
+                </table>
+                <div class="summary">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>Tổng tiền sân:</span><strong>${tongTien.toLocaleString('vi-VN')}đ</strong></div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#047857;"><span>Đã đặt cọc:</span><strong>${tienCoc.toLocaleString('vi-VN')}đ</strong></div>
+                    <div style="display:flex; justify-content:space-between; border-top:1px dashed #cbd5e1; padding-top:8px; color:#e11d48; font-size:15px;"><strong>Còn thu tại sân:</strong><strong>${conLai.toLocaleString('vi-VN')}đ</strong></div>
+                </div>
+                <script>window.onload = function(){ setTimeout(() => window.print(), 350); };<\/script>
+            </body>
+            </html>
+        `);
+        printWin.document.close();
+    } catch (e) {
+        alert('Lỗi tải hóa đơn!');
+    }
 };
 
 window.closeGuestPaymentResultModal = function() {

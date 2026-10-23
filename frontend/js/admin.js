@@ -2453,6 +2453,10 @@ function getBookingCodeVariants(item) {
         );
     }
 
+    if (item.MaHoaDonDatSan) {
+        variants.push(String(item.MaHoaDonDatSan).toLowerCase(), `#${item.MaHoaDonDatSan}`.toLowerCase());
+    }
+
     return variants;
 }
 
@@ -2498,67 +2502,128 @@ function renderDSTable(data) {
     const tbody = document.getElementById('datsan-table-body');
     if (data.length === 0) return tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="text-align: center; padding: 40px;">Không có dữ liệu.</td></tr>`;
 
-    tbody.innerHTML = data.map(item => {
-        let badgeColor = '#6b7280', badgeBg = '#f3f4f6', viStatus = item.TrangThai;
-        if(item.TrangThai === 'DaCoc') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; viStatus = 'Đã cọc'; }
-        else if(item.TrangThai === 'DaHuy') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; viStatus = 'Đã hủy'; }
-        else if(item.TrangThai === 'HoanThanh') { badgeColor = '#047857'; badgeBg = '#d1fae5'; viStatus = 'Hoàn thành'; }
-        else if(item.TrangThai === 'KhongDen') { badgeColor = '#6b7280'; badgeBg = '#f3f4f6'; viStatus = 'Không đến'; }
+    // Gom nhóm theo MaHoaDonDatSan trên trang hiện tại
+    const invoiceGroups = {};
+    data.forEach(item => {
+        const key = item.MaHoaDonDatSan || ('LE_' + item.ID);
+        if (!invoiceGroups[key]) {
+            invoiceGroups[key] = {
+                maHoaDon: item.MaHoaDonDatSan || null,
+                hoaDonObj: item.hoa_don_dat_san || item.hoaDonDatSan || null,
+                items: []
+            };
+        }
+        invoiceGroups[key].items.push(item);
+    });
 
-        const badgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${viStatus}</span>`;
-        
-        const maVeDisplay = item.ID_GiaiDau ? `GD-${item.ID_GiaiDau}` : `PT-${item.ID}`;
-        const badgeClassVe = item.ID_GiaiDau 
-            ? 'background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; box-shadow: 0 2px 4px rgba(67, 56, 202, 0.1);' 
-            : 'background: #f8fafc; color: #475569; border: 1px solid #e2e8f0; box-shadow: 0 2px 4px rgba(71, 85, 105, 0.08);';        
-        const isGiaiDau = item.ID_GiaiDau !== null;
-        const tenGiaiDau = isGiaiDau && item.giai_dau ? item.giai_dau.TenGiaiDau : '';
-        const tagLoai = isGiaiDau 
-            ? `<span style="font-size: 0.75rem; background: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: 4px;"><i class="fa-solid fa-trophy"></i> Giải đấu</span>` 
-            : `<span style="font-size: 0.75rem; background: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px;">Phong trào</span>`;
-        const htmlTenGiai = isGiaiDau ? `<div style="font-size: 0.85rem; color: #4338ca; margin-top: 4px; font-weight: 600;"><i class="fa-solid fa-medal"></i> ${tenGiaiDau}</div>` : '';
+    let html = '';
 
-        const d = new Date(item.NgayDa);
-        const dateStr = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth()+1).toString().padStart(2, '0')}/${d.getFullYear()}`;
-        const timeStr = item.khung_gio ? `${item.khung_gio.GioBatDau.substring(0,5)} - ${item.khung_gio.GioKetThuc.substring(0,5)}` : '';
+    Object.values(invoiceGroups).forEach(group => {
+        const first = group.items[0];
+        const tenKhach = first.ID_NguoiDung ? (first.nguoi_dung?.HoTen || 'N/A') : (first.TenKhachVangLai || 'N/A');
+        const sdtKhach = first.ID_NguoiDung ? (first.nguoi_dung?.SoDienThoai || '') : (first.SDTKhachVangLai || '');
+        const isMember = Boolean(first.ID_NguoiDung);
 
-        const tienThu = Number(item.TongTien) - Number(item.TienCoc);
+        // Tính toàn bộ các trận thuộc hóa đơn này trong allDatSanData
+        const allMatchesInInvoice = group.maHoaDon
+            ? allDatSanData.filter(d => d.MaHoaDonDatSan === group.maHoaDon)
+            : group.items;
 
-        // Nút hành động (Thêm event.stopPropagation() để không bị kích hoạt sự kiện click của dòng)
-        let actionHtml = '';
-        if (item.TrangThai === 'DaCoc') {
-            actionHtml = `<button class="btn-primary" style="padding: 6px 12px; font-size: 0.85rem;" onclick="event.stopPropagation(); openDSConfirmModal('${item.ID}')">Chốt sân</button>`;
-        } else {
-            actionHtml = `<span style="color: var(--text-muted); font-size: 0.85rem;">Đã xử lý</span>`;
+        const activeDaCocCount = allMatchesInInvoice.filter(d => d.TrangThai === 'DaCoc').length;
+        const hdObj = group.hoaDonObj;
+        const tongHD = hdObj ? Number(hdObj.TongTienSan) : allMatchesInInvoice.reduce((s, d) => s + Number(d.TongTien), 0);
+        const cocHD = hdObj ? Number(hdObj.TienDaCoc) : allMatchesInInvoice.reduce((s, d) => s + Number(d.TienCoc), 0);
+
+        // Vẽ thanh Header của Hóa Đơn Đặt Sân
+        if (group.maHoaDon) {
+            html += `
+                <tr style="background: #f0fdf4; border-top: 2px solid #86efac; border-bottom: 1px solid #bbf7d0;">
+                    <td colspan="7" style="padding: 10px 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                                <span style="background: #0b5d3b; color: #fff; font-family: monospace; font-weight: 700; padding: 4px 10px; border-radius: 6px; font-size: 0.88rem;">
+                                    <i class="fa-solid fa-file-invoice-dollar"></i> Hóa đơn #${group.maHoaDon}
+                                </span>
+                                <span style="font-size: 0.88rem; color: #0f172a;">Khách: <strong>${tenKhach}</strong> (${sdtKhach})</span>
+                                <span style="font-size: 0.84rem; color: #475569;">&bull; Tổng HĐ (${allMatchesInInvoice.length} trận): <strong>${tongHD.toLocaleString('vi-VN')}đ</strong> | Đã cọc: <strong style="color:#047857;">${cocHD.toLocaleString('vi-VN')}đ</strong></span>
+                            </div>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <button type="button" class="btn-outline-sm" style="background: #fff; color: #2563eb; border-color: #93c5fd; padding: 5px 11px; font-size: 0.8rem; font-weight: 700;" onclick="printAdminBookingInvoice('${group.maHoaDon}')">
+                                    <i class="fa-solid fa-print"></i> Xuất hóa đơn
+                                </button>
+                                ${activeDaCocCount > 0 ? `
+                                <button type="button" class="btn-outline-sm" style="background: #fef2f2; color: #dc2626; border-color: #fca5a5; padding: 5px 11px; font-size: 0.8rem; font-weight: 700;" onclick="openAdminCancelInvoiceModal('${group.maHoaDon}', ${activeDaCocCount}, ${isMember}, '${tenKhach.replace(/'/g, "\\'")}', '${first.EmailKhachVangLai || ''}', ${cocHD})">
+                                    <i class="fa-solid fa-ban"></i> Hủy cả hóa đơn (${activeDaCocCount} trận)
+                                </button>` : ''}
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            `;
         }
 
-        const tenKhachHienThi = item.ID_NguoiDung ? (item.nguoi_dung?.HoTen || 'N/A') : (item.TenKhachVangLai || 'N/A');
-        const sdtKhachHienThi = item.ID_NguoiDung ? (item.nguoi_dung?.SoDienThoai || '') : (item.SDTKhachVangLai || '');
+        // Vẽ các dòng trận đấu thuộc hóa đơn
+        group.items.forEach(item => {
+            let badgeColor = '#6b7280', badgeBg = '#f3f4f6', viStatus = item.TrangThai;
+            if(item.TrangThai === 'DaCoc') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; viStatus = 'Đã cọc'; }
+            else if(item.TrangThai === 'DaHuy') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; viStatus = 'Đã hủy'; }
+            else if(item.TrangThai === 'HoanThanh') { badgeColor = '#047857'; badgeBg = '#d1fae5'; viStatus = 'Hoàn thành'; }
+            else if(item.TrangThai === 'KhongDen') { badgeColor = '#6b7280'; badgeBg = '#f3f4f6'; viStatus = 'Không đến'; }
 
-        return `<tr onclick="openBookingDetailModalAdmin('${item.ID}')" style="cursor: pointer; transition: background-color 0.15s;" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor=''">
-            <td style="text-align: center;">
-                <span style="padding: 6px 12px; border-radius: 8px; font-weight: 700; font-family: 'Courier New', Courier, monospace; font-size: 0.95rem; display: inline-block; white-space: nowrap; letter-spacing: 1px; ${badgeClassVe}">
-                    ${maVeDisplay}
-                </span>
-            </td>
-            <td>
-                <strong>${tenKhachHienThi}</strong><br>
-                <span style="font-size: 0.85rem; color: var(--text-muted);">${sdtKhachHienThi}</span>
-            </td>
-            <td>
-                <strong style="color: var(--text-dark);">${item.san_bong ? item.san_bong.TenSan : 'N/A'}</strong> ${tagLoai}<br>
-                <span style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-solid fa-location-dot"></i> ${item.san_bong?.cum_san?.TenCumSan || ''}</span>
-                ${htmlTenGiai}
-            </td>
-            <td>
-                <span style="font-size: 0.9rem;">Ngày: ${dateStr}</span><br>
-                <strong style="color: var(--primary);">Giờ: ${timeStr}</strong>
-            </td>
-            <td><strong style="color: #ea580c;">${tienThu.toLocaleString('vi-VN')}đ</strong></td>
-            <td>${badgeHtml}</td>
-            <td style="text-align: center;">${actionHtml}</td>
-        </tr>`;
-    }).join('');
+            const badgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${viStatus}</span>`;
+            const maVeDisplay = item.ID_GiaiDau ? `GD-${item.ID_GiaiDau}` : `PT-${item.ID}`;
+            const badgeClassVe = item.ID_GiaiDau 
+                ? 'background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe;' 
+                : 'background: #f8fafc; color: #475569; border: 1px solid #e2e8f0;';        
+            const isGiaiDau = item.ID_GiaiDau !== null;
+            const tenGiaiDau = isGiaiDau && item.giai_dau ? item.giai_dau.TenGiaiDau : '';
+            const tagLoai = isGiaiDau 
+                ? `<span style="font-size: 0.75rem; background: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: 4px;"><i class="fa-solid fa-trophy"></i> Giải đấu</span>` 
+                : `<span style="font-size: 0.75rem; background: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px;">Phong trào</span>`;
+            const htmlTenGiai = isGiaiDau ? `<div style="font-size: 0.85rem; color: #4338ca; margin-top: 4px; font-weight: 600;"><i class="fa-solid fa-medal"></i> ${tenGiaiDau}</div>` : '';
+
+            const d = new Date(item.NgayDa);
+            const dateStr = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth()+1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+            const timeStr = item.khung_gio ? `${item.khung_gio.GioBatDau.substring(0,5)} - ${item.khung_gio.GioKetThuc.substring(0,5)}` : '';
+            const tienThu = Number(item.TongTien) - Number(item.TienCoc);
+
+            let actionHtml = '';
+            if (item.TrangThai === 'DaCoc') {
+                actionHtml = `<button class="btn-primary" style="padding: 6px 12px; font-size: 0.85rem;" onclick="event.stopPropagation(); openDSConfirmModal('${item.ID}')">Chốt sân</button>`;
+            } else {
+                actionHtml = `<span style="color: var(--text-muted); font-size: 0.85rem;">Đã xử lý</span>`;
+            }
+
+            const tenKhachHienThi = item.ID_NguoiDung ? (item.nguoi_dung?.HoTen || 'N/A') : (item.TenKhachVangLai || 'N/A');
+            const sdtKhachHienThi = item.ID_NguoiDung ? (item.nguoi_dung?.SoDienThoai || '') : (item.SDTKhachVangLai || '');
+
+            html += `<tr onclick="openBookingDetailModalAdmin('${item.ID}')" style="cursor: pointer; transition: background-color 0.15s;" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor=''">
+                <td style="text-align: center; padding-left: 20px;">
+                    <span style="padding: 5px 10px; border-radius: 8px; font-weight: 700; font-family: monospace; font-size: 0.9rem; display: inline-block; white-space: nowrap; ${badgeClassVe}">
+                        ${maVeDisplay}
+                    </span>
+                </td>
+                <td>
+                    <strong>${tenKhachHienThi}</strong><br>
+                    <span style="font-size: 0.85rem; color: var(--text-muted);">${sdtKhachHienThi}</span>
+                </td>
+                <td>
+                    <strong style="color: var(--text-dark);">${item.san_bong ? item.san_bong.TenSan : 'N/A'}</strong> ${tagLoai}<br>
+                    <span style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-solid fa-location-dot"></i> ${item.san_bong?.cum_san?.TenCumSan || ''}</span>
+                    ${htmlTenGiai}
+                </td>
+                <td>
+                    <span style="font-size: 0.9rem;">Ngày: ${dateStr}</span><br>
+                    <strong style="color: var(--primary);">Giờ: ${timeStr}</strong>
+                </td>
+                <td><strong style="color: #ea580c;">${tienThu.toLocaleString('vi-VN')}đ</strong></td>
+                <td>${badgeHtml}</td>
+                <td style="text-align: center;">${actionHtml}</td>
+            </tr>`;
+        });
+    });
+
+    tbody.innerHTML = html;
 }
 
 // MODAL XEM CHI TIẾT ĐẶT SÂN (DÀNH CHO QUẢN LÝ SÂN & ADMIN)
@@ -5613,11 +5678,10 @@ async function submitOfflineBooking() {
             btn.disabled = false;
             btn.innerHTML = 'Chốt giữ sân';
 
-            // 4. Mượn hàm alert của trình duyệt hoặc Toast (nếu có) để báo thành công
-            if (typeof showSystemModal === "function") {
-                showSystemModal("Thành công", "Đã chốt giữ sân thành công!", "success");
+            if (data.ma_hoa_don) {
+                openOfflineBookingSuccessInvoiceModal(data.ma_hoa_don);
             } else {
-                alert("Giữ sân thành công!");
+                showSystemModal("Thành công", "Đã chốt giữ sân thành công!", "success");
             }
             
         } else {
@@ -5655,6 +5719,34 @@ async function submitOfflineBooking() {
         btn.disabled = false;
         btn.innerHTML = 'Chốt giữ sân';
     }
+}
+
+function openOfflineBookingSuccessInvoiceModal(maHoaDon) {
+    let modal = document.getElementById('offline-invoice-ask-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'offline-invoice-ask-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 100000; align-items: center; justify-content: center;';
+        document.body.appendChild(modal);
+    }
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 410px; width: 92%; text-align: center; padding: 28px 24px; border-radius: 16px;">
+            <div style="font-size: 3.4rem; color: #10b981; margin-bottom: 12px;"><i class="fa-solid fa-circle-check"></i></div>
+            <h3 style="margin-bottom: 8px; font-size: 1.3rem;">Giữ sân thành công!</h3>
+            <p style="color: var(--text-muted); margin-bottom: 22px; font-size: 0.93rem; line-height: 1.5;">
+                Đã tạo hóa đơn đặt sân <strong>#${maHoaDon}</strong>.<br>
+                <strong style="color:#0f172a;">Bạn có muốn xuất hóa đơn đặt sân cho khách không?</strong>
+            </p>
+            <div style="display: flex; gap: 12px; justify-content: center;">
+                <button type="button" class="btn-outline" style="flex: 1; padding: 10px;" onclick="document.getElementById('offline-invoice-ask-modal').style.display='none'">Đóng</button>
+                <button type="button" class="btn-primary" style="flex: 1.3; padding: 10px; background: #2563eb; border-color: #2563eb;" onclick="document.getElementById('offline-invoice-ask-modal').style.display='none'; printAdminBookingInvoice('${maHoaDon}');">
+                    <i class="fa-solid fa-print"></i> Xuất hóa đơn
+                </button>
+            </div>
+        </div>
+    `;
+    modal.style.display = 'flex';
 }
 
 // ======================================================
@@ -9645,3 +9737,221 @@ function printBangCongModal() {
     `);
     printWindow.document.close();
 }
+
+// ======================================================
+// XUẤT HÓA ĐƠN ĐẶT SÂN & HỦY TOÀN BỘ HÓA ĐƠN (QUẢN LÝ SÂN & NHÂN VIÊN)
+// ======================================================
+window.printAdminBookingInvoice = async function(maHoaDon) {
+    try {
+        const res = await fetch(`${API_BASE_URL}/hoa-don-dat-san/${maHoaDon}`);
+        const json = await res.json();
+        if (!json.success || !json.data) {
+            return showSystemModal('Lỗi', json.message || 'Không tìm thấy hóa đơn!', 'error');
+        }
+        const hd = json.data;
+        const listDatSan = hd.dat_sans || hd.datSans || [];
+        const first = listDatSan[0] || {};
+        const tenKhach = hd.nguoi_dung?.HoTen || first.TenKhachVangLai || 'Khách hàng';
+        const sdtKhach = hd.nguoi_dung?.SoDienThoai || first.SDTKhachVangLai || '';
+        const ngayLap = hd.NgayTao ? new Date(hd.NgayTao).toLocaleString('vi-VN') : '';
+        const statusMap = { 'DaCoc': 'Đã đặt cọc', 'HoanThanh': 'Đã hoàn thành', 'DaHuy': 'Đã hủy', 'KhongDen': 'Không đến' };
+
+        const rowsHtml = listDatSan.map((ds, i) => {
+            const tenSan = ds.san_bong?.TenSan || 'Sân bóng';
+            const cumSan = ds.san_bong?.cum_san?.TenCumSan || '';
+            const kg = ds.khung_gio ? `${ds.khung_gio.GioBatDau.substring(0,5)} - ${ds.khung_gio.GioKetThuc.substring(0,5)}` : '';
+            const ngayDa = ds.NgayDa ? ds.NgayDa.split('-').reverse().join('/') : '';
+            const maVe = (ds.MaGiaiDau || ds.ID_GiaiDau) ? `GD-${ds.MaGiaiDau || ds.ID_GiaiDau}` : `PT-${ds.MaDatSan || ds.ID}`;
+            return `
+                <tr>
+                    <td style="text-align:center;">${i + 1}</td>
+                    <td style="text-align:center; font-family:monospace; font-weight:bold;">#${maVe}</td>
+                    <td><strong>${tenSan}</strong><br><small>${cumSan}</small></td>
+                    <td style="text-align:center;">${kg}<br><small>${ngayDa}</small></td>
+                    <td style="text-align:center;">${statusMap[ds.TrangThai] || ds.TrangThai}</td>
+                    <td style="text-align:right;">${Number(ds.TongTien).toLocaleString('vi-VN')}đ</td>
+                    <td style="text-align:right; color:#047857; font-weight:bold;">${Number(ds.TienCoc).toLocaleString('vi-VN')}đ</td>
+                </tr>
+            `;
+        }).join('');
+
+        const tongTien = Number(hd.TongTienSan || 0);
+        const tienCoc = Number(hd.TienDaCoc || 0);
+        const conLai = Math.max(0, tongTien - tienCoc);
+
+        const printWin = window.open('', '_blank', 'width=880,height=720');
+        if (!printWin) return showSystemModal('Cảnh báo', 'Vui lòng cho phép mở Pop-up để in hóa đơn!', 'error');
+
+        printWin.document.write(`
+            <!DOCTYPE html>
+            <html lang="vi">
+            <head>
+                <meta charset="UTF-8">
+                <title>Hóa đơn đặt sân #${hd.MaHoaDonDatSan} - DN Football</title>
+                <style>
+                    body { font-family: Arial, sans-serif; color: #0f172a; margin: 30px; line-height: 1.5; }
+                    .header { display: flex; justify-content: space-between; border-bottom: 2px solid #0b5d3b; padding-bottom: 14px; margin-bottom: 20px; }
+                    .brand { font-size: 20px; font-weight: 800; color: #0b5d3b; }
+                    h2 { text-align: center; color: #0b5d3b; margin: 15px 0; }
+                    table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 13px; }
+                    th, td { border: 1px solid #cbd5e1; padding: 10px; }
+                    th { background: #f1f5f9; }
+                    .summary { width: 340px; margin-left: auto; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <div>
+                        <div class="brand">HỆ THỐNG SÂN BÓNG ĐÁ DN FOOTBALL</div>
+                        <div style="font-size:13px; color:#475569;">Đà Nẵng, Việt Nam | Hotline: 0899244124</div>
+                    </div>
+                    <div style="text-align:right; font-size:13px;">
+                        <strong>Mã hóa đơn: #${hd.MaHoaDonDatSan}</strong><br>
+                        Ngày lập: ${ngayLap}<br>
+                        Trạng thái HĐ: <strong>${statusMap[hd.TrangThai] || hd.TrangThai}</strong>
+                    </div>
+                </div>
+                <h2>HÓA ĐƠN ĐẶT SÂN</h2>
+                <p><strong>Khách hàng:</strong> ${tenKhach} &bull; <strong>Số điện thoại:</strong> ${sdtKhach}</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>STT</th>
+                            <th>Mã Vé</th>
+                            <th>Sân Bóng & Cơ Sở</th>
+                            <th>Khung Giờ & Ngày Đá</th>
+                            <th>Trạng Thái</th>
+                            <th>Đơn Giá Sân</th>
+                            <th>Tiền Đã Cọc</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rowsHtml}</tbody>
+                </table>
+                <div class="summary">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>Tổng tiền hóa đơn:</span><strong>${tongTien.toLocaleString('vi-VN')}đ</strong></div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#047857;"><span>Đã đặt cọc:</span><strong>${tienCoc.toLocaleString('vi-VN')}đ</strong></div>
+                    <div style="display:flex; justify-content:space-between; border-top:1px dashed #cbd5e1; padding-top:8px; color:#e11d48; font-size:15px;"><strong>Còn thu tại sân:</strong><strong>${conLai.toLocaleString('vi-VN')}đ</strong></div>
+                </div>
+                <script>window.onload = function(){ setTimeout(() => window.print(), 350); };<\/script>
+            </body>
+            </html>
+        `);
+        printWin.document.close();
+    } catch (e) {
+        showSystemModal('Lỗi', 'Không thể tải dữ liệu hóa đơn!', 'error');
+    }
+};
+
+window.openAdminCancelInvoiceModal = function(maHoaDon, soTran, isMember, tenKhach, emailGuest, tongCoc) {
+    let modal = document.getElementById('admin-cancel-invoice-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'admin-cancel-invoice-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 10000; align-items: center; justify-content: center;';
+        document.body.appendChild(modal);
+    }
+
+    if (isMember) {
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 430px; width: 92%; text-align: center; padding: 28px 24px; border-radius: 16px;">
+                <div style="font-size: 3.2rem; color: #ef4444; margin-bottom: 12px;"><i class="fa-solid fa-file-circle-xmark"></i></div>
+                <h3 style="margin-bottom: 10px; font-size: 1.3rem;">Hủy cả Hóa đơn #${maHoaDon}?</h3>
+                <p style="color: #64748b; font-size: 0.92rem; line-height: 1.6; margin-bottom: 22px;">
+                    Khách hàng: <strong style="color:#0f172a;">${tenKhach}</strong>.<br>
+                    Hệ thống sẽ hủy toàn bộ <strong>${soTran} trận đang đặt cọc</strong> trong hóa đơn này và hoàn trả 100% tiền cọc vào ví khách hàng.
+                </p>
+                <div style="display: flex; gap: 12px; justify-content: center;">
+                    <button type="button" class="btn-outline" style="flex: 1; padding: 10px;" onclick="document.getElementById('admin-cancel-invoice-modal').style.display='none'">Đóng</button>
+                    <button type="button" id="btn-exec-cancel-inv" class="btn-primary" style="flex: 1.2; padding: 10px; background: #ef4444; border-color: #ef4444;" onclick="executeAdminCancelInvoice('${maHoaDon}')">Đồng ý Hủy</button>
+                </div>
+            </div>
+        `;
+    } else {
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 440px; width: 92%; padding: 24px; text-align: left; border-radius: 16px;">
+                <h3 style="margin: 0 0 12px 0; font-size: 1.15rem; color: #0f172a;"><i class="fa-solid fa-user-check" style="color:#ef4444;"></i> Hủy Hóa đơn Khách vãng lai (#${maHoaDon})</h3>
+                <div id="admin-inv-otp-alert" class="modal-alert" style="display:none; margin-bottom:12px;"></div>
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-bottom:14px; font-size:0.88rem; line-height:1.6;">
+                    <div>Khách vãng lai: <strong>${tenKhach}</strong> (${soTran} trận)</div>
+                    <div>Email nhận OTP: <strong style="color:#2563eb;">${emailGuest || 'Chưa có'}</strong></div>
+                </div>
+                <div class="form-group" style="margin-bottom:18px;">
+                    <label style="font-size:0.85rem; font-weight:600;">Mã xác thực OTP <span style="color:red;">*</span></label>
+                    <div style="display:flex; gap:8px;">
+                        <input type="text" id="admin-inv-otp-input" class="form-control" placeholder="Nhập 6 số OTP..." maxlength="6" style="flex:1; text-align:center; font-weight:700;">
+                        <button type="button" id="btn-send-inv-otp" class="btn-outline-sm" style="white-space:nowrap; color:#2563eb; border-color:#93c5fd; background:#eff6ff;" onclick="sendAdminInvoiceGuestOtp('${maHoaDon}')">Gửi OTP</button>
+                    </div>
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:10px;">
+                    <button type="button" class="btn-outline" style="width:auto; padding:9px 18px;" onclick="document.getElementById('admin-cancel-invoice-modal').style.display='none'">Đóng</button>
+                    <button type="button" id="btn-exec-cancel-inv" class="btn-primary" style="width:auto; padding:9px 18px; background:#ef4444; border-color:#ef4444;" onclick="executeAdminCancelInvoice('${maHoaDon}', true)">Xác nhận Hủy HĐ</button>
+                </div>
+            </div>
+        `;
+    }
+    modal.style.display = 'flex';
+};
+
+window.sendAdminInvoiceGuestOtp = async function(maHoaDon) {
+    const btn = document.getElementById('btn-send-inv-otp');
+    const alertBox = document.getElementById('admin-inv-otp-alert');
+    btn.disabled = true;
+    btn.innerText = 'Đang gửi...';
+    try {
+        const res = await fetch(`${API_BASE_URL}/admin/hoa-don-dat-san/${maHoaDon}/gui-otp-huy-guest`, { method: 'POST' });
+        const data = await res.json();
+        alertBox.textContent = data.message;
+        alertBox.className = 'modal-alert ' + (data.success ? 'success' : 'error');
+        alertBox.style.display = 'block';
+    } catch (e) {
+        alertBox.textContent = 'Lỗi kết nối!';
+        alertBox.className = 'modal-alert error';
+        alertBox.style.display = 'block';
+    } finally {
+        btn.disabled = false;
+        btn.innerText = 'Gửi lại OTP';
+    }
+};
+
+window.executeAdminCancelInvoice = async function(maHoaDon, needOtp = false) {
+    const otp = needOtp ? document.getElementById('admin-inv-otp-input')?.value.trim() : null;
+    if (needOtp && (!otp || otp.length !== 6)) {
+        const alertBox = document.getElementById('admin-inv-otp-alert');
+        alertBox.textContent = 'Vui lòng nhập đủ 6 số OTP!';
+        alertBox.className = 'modal-alert error';
+        alertBox.style.display = 'block';
+        return;
+    }
+
+    const btn = document.getElementById('btn-exec-cancel-inv');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/admin/hoa-don-dat-san/${maHoaDon}/huy`, {
+            method: 'PUT',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ otp })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            document.getElementById('admin-cancel-invoice-modal').style.display = 'none';
+            showSystemModal('Thành công', data.message, 'success');
+            if (typeof loadDanhSachDatSanAdmin === 'function' && document.getElementById('datsan-table-body')) {
+                loadDanhSachDatSanAdmin();
+            }
+            if (typeof loadStaffDanhSachDatSan === 'function' && document.getElementById('staff-datsan-table-body')) {
+                loadStaffDanhSachDatSan();
+            }
+        } else {
+            showSystemModal('Lỗi', data.message || 'Không thể hủy hóa đơn!', 'error');
+            btn.disabled = false;
+            btn.innerHTML = 'Xác nhận Hủy';
+        }
+    } catch (e) {
+        showSystemModal('Lỗi', 'Mất kết nối máy chủ!', 'error');
+        btn.disabled = false;
+        btn.innerHTML = 'Xác nhận Hủy';
+    }
+};
