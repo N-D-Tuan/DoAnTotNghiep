@@ -3582,6 +3582,9 @@ function switchUserTab(role, btnElement) {
     filterAndRenderUsers();
 }
 
+// Biến toàn cục lưu ID Nhân viên / Quản lý sân đang được mở trong Modal chi tiết
+let currentViewedInternalUserId = null;
+
 async function loadDanhSachUsersAPI() {
     try {
         const response = await fetch(`${API_BASE_URL}/admin/khach-hang`);
@@ -3589,9 +3592,18 @@ async function loadDanhSachUsersAPI() {
         if (res.success) {
             allUsersData = res.data;
             filterAndRenderUsers();
+
+            // REALTIME: Nếu Admin/Quản lý đang mở Modal xem chi tiết Nhân viên/Quản lý sân -> Tự động cập nhật lại nội dung Modal ngay lập tức
+            const internalModal = document.getElementById('internal-user-detail-modal');
+            if (internalModal && internalModal.style.display === 'flex' && currentViewedInternalUserId !== null) {
+                openInternalUserDetailModal(currentViewedInternalUserId);
+            }
         }
     } catch (error) {
-        document.getElementById('user-table-body').innerHTML = `<tr><td colspan="6" class="text-center text-danger" style="text-align: center;">Lỗi kết nối máy chủ!</td></tr>`;
+        const tbody = document.getElementById('user-table-body');
+        if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger" style="text-align: center;">Lỗi kết nối máy chủ!</td></tr>`;
+        }
     }
 }
 
@@ -3744,7 +3756,7 @@ function filterAndRenderUsers() {
                         <div style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-solid fa-envelope" style="width: 16px; color: #94a3b8;"></i> ${u.Email || 'Chưa cập nhật'}</div>
                     </td>
                     <td>${coSoStr}</td>
-                    <td style="text-align: center;">${statusBadge}</td>
+                    <td style="text-align: center; white-space: nowrap;">${statusBadge}</td>
                     <td style="text-align: center; white-space: nowrap;">
                         <div style="display: inline-flex; gap: 6px; align-items: center;">
                             ${isClickableInternal ? `<button class="btn-outline-sm" onclick="event.stopPropagation(); openInternalUserDetailModal('${u.ID}')"><i class="fa-solid fa-eye"></i> Chi tiết</button>` : ''}
@@ -3759,10 +3771,19 @@ function filterAndRenderUsers() {
     renderUserPagination(totalPages);
 }
 
+window.closeInternalUserDetailModal = function() {
+    const modal = document.getElementById('internal-user-detail-modal');
+    if (modal) modal.style.display = 'none';
+    currentViewedInternalUserId = null;
+};
+
 // MODAL HIỂN THỊ THÔNG TIN CHI TIẾT NHÂN VIÊN / QUẢN LÝ SÂN
 window.openInternalUserDetailModal = function(userId) {
     const u = allUsersData.find(item => String(item.ID) === String(userId) || String(item.MaNguoiDung) === String(userId));
     if (!u) return;
+
+    // Lưu lại ID nhân sự đang mở để phục vụ đồng bộ Realtime khi có AdminDataUpdated
+    currentViewedInternalUserId = u.ID || u.MaNguoiDung;
 
     let modal = document.getElementById('internal-user-detail-modal');
     if (!modal) {
@@ -3771,7 +3792,7 @@ window.openInternalUserDetailModal = function(userId) {
         modal.className = 'modal-overlay';
         modal.style.cssText = 'display: none; z-index: 10000; align-items: center; justify-content: center;';
         modal.onclick = function(e) {
-            if (e.target === modal) modal.style.display = 'none';
+            if (e.target === modal) closeInternalUserDetailModal();
         };
         document.body.appendChild(modal);
     }
@@ -3818,7 +3839,7 @@ window.openInternalUserDetailModal = function(userId) {
                     <i class="fa-solid fa-id-card-clip" style="font-size: 1.25rem; color: #38bdf8;"></i>
                     <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700;">Hồ sơ chi tiết nhân sự</h3>
                 </div>
-                <i class="fa-solid fa-xmark" style="cursor: pointer; font-size: 1.2rem; color: #94a3b8;" onclick="document.getElementById('internal-user-detail-modal').style.display='none'"></i>
+                <i class="fa-solid fa-xmark" style="cursor: pointer; font-size: 1.2rem; color: #94a3b8;" onclick="closeInternalUserDetailModal()"></i>
             </div>
 
             <div style="padding: 22px;">
@@ -3872,7 +3893,7 @@ window.openInternalUserDetailModal = function(userId) {
             </div>
 
             <div style="padding: 14px 22px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 10px;">
-                <button type="button" class="btn-primary" style="padding: 9px 24px; border-radius: 8px;" onclick="document.getElementById('internal-user-detail-modal').style.display='none'">Đóng</button>
+                <button type="button" class="btn-primary" style="padding: 9px 24px; border-radius: 8px;" onclick="closeInternalUserDetailModal()">Đóng</button>
             </div>
         </div>
     `;

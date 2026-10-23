@@ -555,6 +555,7 @@ function closeProfileModal() { document.getElementById('profile-modal').style.di
     const el = document.getElementById(id);
     if (!el) return;
     el.addEventListener('input', () => {
+        updateCustomerBankWarningUI();
         const user = JSON.parse(sessionStorage.getItem('dn_football_user'));
         const isChanged = 
             document.getElementById('prof-hoten').value !== (user.HoTen || '') ||
@@ -3969,12 +3970,20 @@ async function executeStaffXacNhanLuong() {
         const data = await response.json();
 
         if (response.ok && data.success) {
-            // Cập nhật luôn thông tin ngân hàng vào sessionStorage của nhân viên
-            const user = JSON.parse(sessionStorage.getItem('dn_football_user')) || {};
-            user.TenNganHang = bank;
-            user.STKNganHang = stk;
-            user.TenTaiKhoan = owner;
-            sessionStorage.setItem('dn_football_user', JSON.stringify(user));
+            // CHỈ CẬP NHẬT sessionStorage theo đúng dữ liệu chuẩn từ Backend trả về
+            if (data.user) {
+                sessionStorage.setItem('dn_football_user', JSON.stringify(data.user));
+            } else {
+                // Kiểm tra nếu trong sessionStorage CHƯA CÓ đủ thông tin ngân hàng thì mới lưu
+                const user = JSON.parse(sessionStorage.getItem('dn_football_user')) || {};
+                const daCoNganHang = user.TenNganHang && user.STKNganHang && user.TenTaiKhoan;
+                if (!daCoNganHang) {
+                    user.TenNganHang = bank;
+                    user.STKNganHang = stk;
+                    user.TenTaiKhoan = owner;
+                    sessionStorage.setItem('dn_football_user', JSON.stringify(user));
+                }
+            }
 
             document.getElementById('staff-xac-nhan-luong-modal').style.display = 'none';
             showSystemModal("Thành công", data.message, "success");

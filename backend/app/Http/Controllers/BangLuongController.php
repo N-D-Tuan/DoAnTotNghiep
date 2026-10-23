@@ -407,19 +407,26 @@ class BangLuongController extends Controller
             return response()->json(['success' => false, 'message' => 'Dữ liệu không hợp lệ.']);
         }
 
-        // Hỗ trợ nhận 3 cột riêng (ten_ngan_hang, stk_ngan_hang, ten_tai_khoan) hoặc tách từ chuỗi thong_tin_ngan_hang
-        if ($request->filled('ten_ngan_hang') || $request->filled('stk_ngan_hang')) {
-            $user->TenNganHang = trim($request->input('ten_ngan_hang', $user->TenNganHang));
-            $user->STKNganHang = trim($request->input('stk_ngan_hang', $user->STKNganHang));
-            $user->TenTaiKhoan = trim($request->input('ten_tai_khoan', $user->TenTaiKhoan ?? $user->HoTen));
-            $user->save();
-        } elseif ($request->filled('thong_tin_ngan_hang')) {
-            $raw = trim($request->thong_tin_ngan_hang);
-            $parts = array_map('trim', explode('-', $raw));
-            $user->TenNganHang = $parts[0] ?? $raw;
-            $user->STKNganHang = $parts[1] ?? ($user->STKNganHang ?? '');
-            $user->TenTaiKhoan = $parts[2] ?? ($user->TenTaiKhoan ?? mb_strtoupper($user->HoTen, 'UTF-8'));
-            $user->save();
+        // Kiểm tra xem tài khoản nhân viên đã có sẵn đầy đủ thông tin ngân hàng chưa
+        $daCoThongTinNganHang = !empty(trim($user->TenNganHang ?? '')) 
+                             && !empty(trim($user->STKNganHang ?? '')) 
+                             && !empty(trim($user->TenTaiKhoan ?? ''));
+
+        // CHỈ CẬP NHẬT vào bảng NguoiDung nếu nhân viên CHƯA CÓ thông tin ngân hàng
+        if (!$daCoThongTinNganHang) {
+            if ($request->filled('ten_ngan_hang') || $request->filled('stk_ngan_hang')) {
+                $user->TenNganHang = trim($request->input('ten_ngan_hang'));
+                $user->STKNganHang = trim($request->input('stk_ngan_hang'));
+                $user->TenTaiKhoan = mb_strtoupper(trim($request->input('ten_tai_khoan', $user->HoTen)), 'UTF-8');
+                $user->save();
+            } elseif ($request->filled('thong_tin_ngan_hang')) {
+                $raw = trim($request->thong_tin_ngan_hang);
+                $parts = array_map('trim', explode('-', $raw));
+                $user->TenNganHang = $parts[0] ?? $raw;
+                $user->STKNganHang = $parts[1] ?? '';
+                $user->TenTaiKhoan = mb_strtoupper($parts[2] ?? $user->HoTen, 'UTF-8');
+                $user->save();
+            }
         }
 
         $bg->NgayXacNhan = Carbon::now()->toDateTimeString();
@@ -438,9 +445,14 @@ class BangLuongController extends Controller
             broadcast(new \App\Events\UserDataUpdated($mgr->MaNguoiDung))->toOthers();
         }
 
+        broadcast(new \App\Events\AdminDataUpdated())->toOthers();
         broadcast(new \App\Events\SystemDataUpdated())->toOthers();
 
-        return response()->json(['success' => true, 'message' => 'Đã gửi xác nhận. Quản lý sẽ sớm chuyển khoản cho bạn.']);
+        return response()->json([
+            'success' => true,
+            'message' => 'Đã gửi xác nhận. Quản lý sẽ sớm chuyển khoản cho bạn.',
+            'user'    => $user
+        ]);
     }
 
     // 7. Nhân viên Báo Cáo Sai Sót (Khiếu nại)

@@ -68,13 +68,19 @@ class GiaoDichController extends Controller
             $stk = trim($request->so_tai_khoan);
             $chuTk = mb_strtoupper(trim($request->chu_tai_khoan), 'UTF-8');
 
-            // 1. Trừ tiền trực tiếp trong ví + Lưu thông tin ngân hàng mặc định cho user
-            $user->update([
-                'SoDuVi'      => $soDuSau,
-                'TenNganHang' => $nganHang,
-                'STKNganHang' => $stk,
-                'TenTaiKhoan' => $chuTk
-            ]);
+            // Kiểm tra xem người dùng đã có thông tin ngân hàng trong hồ sơ chưa
+            $daCoThongTinNganHang = !empty(trim($user->TenNganHang ?? '')) 
+                                 && !empty(trim($user->STKNganHang ?? '')) 
+                                 && !empty(trim($user->TenTaiKhoan ?? ''));
+
+            // 1. Trừ tiền trong ví. Chỉ lưu thông tin ngân hàng vào NguoiDung nếu CHƯA CÓ
+            $updateData = ['SoDuVi' => $soDuSau];
+            if (!$daCoThongTinNganHang) {
+                $updateData['TenNganHang'] = $nganHang;
+                $updateData['STKNganHang'] = $stk;
+                $updateData['TenTaiKhoan'] = $chuTk;
+            }
+            $user->update($updateData);
 
             // 2. Tạo bản ghi Giao dịch
             GiaoDich::create([
@@ -103,7 +109,8 @@ class GiaoDichController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Rút tiền thành công! Số dư ví đã được cập nhật.'
+                'message' => 'Rút tiền thành công! Số dư ví đã được cập nhật.',
+                'user'    => $user
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
