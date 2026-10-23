@@ -3642,7 +3642,7 @@ function filterAndRenderUsers() {
             <tr>
                 <th>Khách hàng</th>
                 <th>Liên hệ</th>
-                <th style="text-align: center;">Số dư ví</th>
+                <th style="text-align: center;">Định danh VNeID</th>
                 <th style="text-align: center;">Tỷ lệ Bùng sân</th>
                 <th style="text-align: center;">Trạng thái</th>
                 <th style="text-align: center;">Hành động</th>
@@ -3707,7 +3707,11 @@ function filterAndRenderUsers() {
                         <div><i class="fa-solid fa-phone" style="width: 16px; color: #94a3b8;"></i> ${u.SoDienThoai}</div>
                         <div style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-solid fa-envelope" style="width: 16px; color: #94a3b8;"></i> ${u.Email || 'Chưa cập nhật'}</div>
                     </td>
-                    <td style="text-align: center;"><strong style="color: #047857; font-size: 1.05rem;">${Number(u.SoDuVi).toLocaleString('vi-VN')}đ</strong></td>
+                    <td style="text-align: center;">
+                        ${u.Vneid 
+                            ? `<strong style="color: #334155; font-family: monospace; font-size: 0.95rem; background: #f1f5f9; padding: 4px 10px; border-radius: 6px; border: 1px solid #e2e8f0;">${u.Vneid}</strong>` 
+                            : `<span style="color: #94a3b8; font-size: 0.85rem; font-style: italic;">Chưa cập nhật</span>`}
+                    </td>
                     <td style="text-align: center;">${tyLeBungHtml}</td>
                     <td style="text-align: center;">${statusBadge}</td>
                     <td style="text-align: center;"><button class="btn-outline-sm" onclick="renderChiTietKhachHang('${u.ID}')"><i class="fa-solid fa-eye"></i> Chi tiết</button></td>
@@ -3951,9 +3955,12 @@ async function renderChiTietKhachHang(id) {
         currentKhachHangDatSan = dsDatSan;
 
         const tk = res.thong_ke || {
-            so_du_vi: kh.SoDuVi || 0,
-            tong_tien_da_nap: 0,
+            vneid: kh.Vneid || null,
+            ten_ngan_hang: kh.TenNganHang || null,
+            stk_ngan_hang: kh.STKNganHang || null,
+            ten_tai_khoan: kh.TenTaiKhoan || null,
             tong_so_tran: dsDatSan.length,
+            tong_hoan_thanh: dsDatSan.filter(d => d.TrangThai === 'HoanThanh').length,
             tong_bung_san: dsDatSan.filter(d => d.TrangThai === 'KhongDen').length,
             tong_da_chot: dsDatSan.filter(d => d.TrangThai === 'HoanThanh' || d.TrangThai === 'KhongDen').length,
             ty_le_bung: 0
@@ -3963,30 +3970,60 @@ async function renderChiTietKhachHang(id) {
             tk.ty_le_bung = Math.round((tk.tong_bung_san / tk.tong_da_chot) * 100);
         }
 
-        // Xử lý bảo mật thẻ Tổng tiền nạp (Nếu null -> Ẩn đi bằng icon Ổ khóa)
-        const tongTienNapHtml = tk.tong_tien_da_nap === null 
-            ? `<div class="stat-value" style="color: #ef4444; font-size: 1.2rem; margin-top: 5px;"><i class="fa-solid fa-lock"></i> Bảo mật</div>` 
-            : `<div class="stat-value" style="color: #4338ca;">${Number(tk.tong_tien_da_nap).toLocaleString('vi-VN')}đ</div>`;
+        // Ô 1: Hiển thị Thông tin Tài khoản Ngân hàng của Khách hàng
+        const tenNH = tk.ten_ngan_hang || kh.TenNganHang;
+        const stkNH = tk.stk_ngan_hang || kh.STKNganHang;
+        const chuTK = tk.ten_tai_khoan || kh.TenTaiKhoan;
+        const hasBank = Boolean(tenNH && stkNH);
+
+        const nganHangCardHtml = hasBank ? `
+            <div style="font-size: 1.05rem; font-weight: 800; color: #047857; margin-top: 4px; font-family: monospace;">
+                <i class="fa-solid fa-building-columns" style="margin-right: 5px;"></i>${tenNH} - ${stkNH}
+            </div>
+            <div style="font-size: 0.82rem; color: #475569; font-weight: 600; margin-top: 4px;">
+                Chủ TK: ${chuTK || kh.HoTen}
+            </div>
+        ` : `
+            <div style="font-size: 0.95rem; font-weight: 600; color: #94a3b8; margin-top: 8px; font-style: italic;">
+                <i class="fa-solid fa-circle-info"></i> Chưa liên kết ngân hàng
+            </div>
+        `;
+
+        // Ô 2: Hiển thị Số định danh VNeID / CCCD của Khách hàng
+        const vneidVal = tk.vneid || kh.Vneid;
+        const vneidCardHtml = vneidVal ? `
+            <div class="stat-value" style="color: #2563eb; font-family: monospace; font-size: 1.35rem; letter-spacing: 0.5px;">
+                <i class="fa-solid fa-id-card" style="font-size: 1.1rem; margin-right: 6px;"></i>${vneidVal}
+            </div>
+            <div style="font-size: 0.82rem; color: #16a34a; font-weight: 600; margin-top: 4px;">
+                <i class="fa-solid fa-circle-check"></i> Đã cập nhật định danh
+            </div>
+        ` : `
+            <div style="font-size: 0.95rem; font-weight: 600; color: #94a3b8; margin-top: 8px; font-style: italic;">
+                <i class="fa-solid fa-circle-exclamation"></i> Chưa cập nhật VNeID
+            </div>
+        `;
 
         // Nút Khóa/Mở Khóa
         const lockBtnHtml = kh.TrangThaiKhoa 
             ? `<button class="btn-primary" style="background: #16a34a; border-color: #16a34a;" onclick="openKhoaKhachHangModal('${kh.ID}', true)"><i class="fa-solid fa-unlock"></i> Mở khóa tài khoản</button>`
             : `<button class="btn-primary" style="background: #ef4444; border-color: #ef4444;" onclick="openKhoaKhachHangModal('${kh.ID}', false)"><i class="fa-solid fa-lock"></i> Khóa tài khoản</button>`;
 
-        const isQuanLySan = currentUser.VaiTro === 'QuanLySan';
-
         // Render HTML
         contentArea.innerHTML = `
             <button class="btn-back" onclick="renderQuanLyKhachHang()"><i class="fa-solid fa-arrow-left"></i> Quay lại danh sách</button>
-            <!-- ... (Phần Header giữ nguyên như cũ) ... -->
             <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding: 24px; background: white; border-radius: 12px; box-shadow: var(--shadow-sm); border: 1px solid var(--border);">
                 <div style="display: flex; align-items: center; gap: 20px;">
                     <div style="width: 70px; height: 70px; border-radius: 50%; background: var(--primary-light); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: bold;">
                         ${kh.HoTen.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                        <h1 class="page-title" style="margin-bottom: 4px;">${kh.HoTen}${kh.TrangThaiKhoa ? '<span class="badge badge-danger" style="vertical-align: middle; font-size: 0.8rem; margin-left: 8px;">Bị khóa</span>' : ''}</h1>
-                        <div style="color: var(--text-muted); font-size: 0.95rem; display: flex; gap: 15px;">
+                        <h1 class="page-title" style="margin-bottom: 4px;">
+                            ${kh.HoTen}
+                            <span style="font-size: 0.85rem; font-family: monospace; color: #475569; background: #f1f5f9; padding: 3px 8px; border-radius: 6px; margin-left: 6px; vertical-align: middle;">Mã: ${kh.MaNguoiDung || kh.ID}</span>
+                            ${kh.TrangThaiKhoa ? '<span class="badge badge-danger" style="vertical-align: middle; font-size: 0.8rem; margin-left: 8px;">Bị khóa</span>' : ''}
+                        </h1>
+                        <div style="color: var(--text-muted); font-size: 0.95rem; display: flex; gap: 15px; margin-top: 6px;">
                             <span><i class="fa-solid fa-phone"></i> ${kh.SoDienThoai}</span>
                             <span><i class="fa-solid fa-envelope"></i> ${kh.Email || 'N/A'}</span>
                         </div>
@@ -3995,19 +4032,20 @@ async function renderChiTietKhachHang(id) {
                 <div>${lockBtnHtml}</div>
             </div>
 
-            <!-- Thống kê nhanh dùng dữ liệu Backend (Đã cách ly) -->
+            <!-- 4 Ô Thông tin & Thống kê (Đã thay thế Số dư ví & Tổng tiền nạp) -->
             <div class="stat-grid" style="margin-bottom: 24px;">
                 <div class="stat-card">
-                    <div class="stat-title">Số dư ví hiện tại</div>
-                    <div class="stat-value" style="color: #047857;">${Number(tk.so_du_vi).toLocaleString('vi-VN')}đ</div>
+                    <div class="stat-title">Tài khoản ngân hàng</div>
+                    ${nganHangCardHtml}
                 </div>
                 <div class="stat-card">
-                    <div class="stat-title">Tổng tiền đã nạp</div>
-                    ${tongTienNapHtml}
+                    <div class="stat-title">Số định danh VNeID</div>
+                    ${vneidCardHtml}
                 </div>
                 <div class="stat-card">
                     <div class="stat-title">Tổng số trận đặt</div>
                     <div class="stat-value">${tk.tong_so_tran} trận</div>
+                    <div style="font-size: 0.85rem; color: #047857; margin-top: 4px; font-weight: 600;">(Hoàn thành: ${tk.tong_hoan_thanh ?? 0} trận)</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-title">Tỷ lệ bùng sân</div>
@@ -4016,11 +4054,10 @@ async function renderChiTietKhachHang(id) {
                 </div>
             </div>
 
-            <!-- Tabs Lịch sử -->
+            <!-- Lịch sử Đặt sân -->
             <div class="panel">
                 <div style="display: flex; gap: 20px; border-bottom: 1px solid var(--border);">
                     <button class="nav-tab active" onclick="switchKhachHangTab('tab-ls-datsan', this)" style="margin-left: 20px; padding: 12px 0; border: none; background: transparent; font-weight: 600; cursor: pointer; border-bottom: 2px solid var(--primary); color: var(--primary);">Lịch sử Đặt sân</button>
-                    ${isQuanLySan ? '' : `<button class="nav-tab" onclick="switchKhachHangTab('tab-ls-giaodich', this)" style="padding: 12px 0; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Lịch sử Giao dịch Ví</button>`}
 
                     <div id="kh-filter-container" style="display: flex; justify-content: flex-end; align-items: center; margin-left: auto; margin-right: 20px;">
                         <select class="form-control" style="width: 200px;" onchange="filterKHDatsan(this.value)">
@@ -4033,7 +4070,7 @@ async function renderChiTietKhachHang(id) {
                     </div>
                 </div>
 
-                <!-- Tab 1: Đặt Sân -->
+                <!-- Bảng Đặt Sân -->
                 <div id="tab-ls-datsan" class="tab-pane active">
                     <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
                         <table class="admin-table">
@@ -4051,26 +4088,6 @@ async function renderChiTietKhachHang(id) {
                         </table>
                     </div>
                 </div>
-
-                <!-- Tab 2: Giao Dịch -->
-                ${isQuanLySan ? '' : `
-                <div id="tab-ls-giaodich" class="tab-pane" style="display: none;">
-                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
-                        <table class="admin-table">
-                            <thead style="position: sticky; top: 0; background: #F8FAFC;">
-                                <tr>
-                                    <th>Mã GD</th>
-                                    <th>Nội dung</th>
-                                    <th>Ngày Giao Dịch</th>
-                                    <th>Biến động</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${renderKhachHangGiaoDichTable(dsGiaoDich)}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>`}
             </div>
         `;
     } catch (e) {
