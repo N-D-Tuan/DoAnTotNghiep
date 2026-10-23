@@ -2418,23 +2418,67 @@ async function loadDanhSachDatSanAdmin() {
     } catch (error) { showDSAlert('Lỗi kết nối máy chủ.', false); }
 }
 
+// Hàm tạo toàn bộ các biến thể mã vé (mới & cũ) của 1 dòng Đặt sân để tìm kiếm bất chấp định dạng
+function getBookingCodeVariants(item) {
+    const rawId = String(item.MaDatSan || item.ID || '').toUpperCase().trim();
+    const rawGiaiId = String(item.MaGiaiDau || item.ID_GiaiDau || '').toUpperCase().trim();
+    const numId = rawId.replace(/\D/g, '').replace(/^0+/, '') || '0';
+    const paddedId = numId.padStart(3, '0');
+
+    const variants = [
+        rawId.toLowerCase(),
+        `pt-${rawId}`.toLowerCase(),
+        `#pt-${rawId}`.toLowerCase(),
+        `pt-${numId}`.toLowerCase(),
+        `#pt-${numId}`.toLowerCase(),
+        `pt-ds${numId}`.toLowerCase(),
+        `pt-ds${paddedId}`.toLowerCase(),
+        `ds${numId}`.toLowerCase(),
+        `ds${paddedId}`.toLowerCase()
+    ];
+
+    if (rawGiaiId) {
+        const numGiai = rawGiaiId.replace(/\D/g, '').replace(/^0+/, '') || '0';
+        const paddedGiai = numGiai.padStart(3, '0');
+        variants.push(
+            rawGiaiId.toLowerCase(),
+            `gd-${rawGiaiId}`.toLowerCase(),
+            `#gd-${rawGiaiId}`.toLowerCase(),
+            `gd-${numGiai}`.toLowerCase(),
+            `#gd-${numGiai}`.toLowerCase(),
+            `gd-gdau${numGiai}`.toLowerCase(),
+            `gd-gdau${paddedGiai}`.toLowerCase(),
+            `gdau${numGiai}`.toLowerCase(),
+            `gdau${paddedGiai}`.toLowerCase()
+        );
+    }
+
+    return variants;
+}
+
 function applyDSFiltersAndRender() {
+    const searchTerm = currentDSSearch.toLowerCase().trim().replace(/^#/, '');
+
     let filteredData = allDatSanData.filter(item => {
         const matchStatus = (currentDSFilter === 'All' || item.TrangThai === currentDSFilter);
-        const maVeSearch = item.ID_GiaiDau ? `gd-${item.ID_GiaiDau}` : `pt-${item.ID}`;
+
+        // Kiểm tra khớp mã vé (Hỗ trợ cả PT-DS100, PT-100, DS100, GD-GDAU011, GD-GDAU11, GD-11...)
+        const codeVariants = getBookingCodeVariants(item);
+        const matchCode = searchTerm !== '' && codeVariants.some(v => v.includes(searchTerm));
+
         const sdt = item.ID_NguoiDung ? (item.nguoi_dung?.SoDienThoai?.toLowerCase() || '') : (item.SDTKhachVangLai?.toLowerCase() || '');
         const tenKhach = item.ID_NguoiDung ? (item.nguoi_dung?.HoTen?.toLowerCase() || '') : (item.TenKhachVangLai?.toLowerCase() || '');
         const tenSan = item.san_bong ? item.san_bong.TenSan.toLowerCase() : '';
         const cumSan = (item.san_bong && item.san_bong.cum_san) ? item.san_bong.cum_san.TenCumSan.toLowerCase() : '';
         const tenGiai = (item.ID_GiaiDau !== null && item.giai_dau) ? item.giai_dau.TenGiaiDau.toLowerCase() : '';
 
-        const searchTerm = currentDSSearch.toLowerCase().trim();
-        const matchSearch = maVeSearch.includes(searchTerm)
-                         ||sdt.includes(currentDSSearch) 
-                         || tenKhach.includes(currentDSSearch) 
-                         || tenSan.includes(currentDSSearch)
-                         || cumSan.includes(currentDSSearch)
-                         || tenGiai.includes(currentDSSearch);
+        const matchSearch = searchTerm === ''
+                        || matchCode
+                        || sdt.includes(searchTerm) 
+                        || tenKhach.includes(searchTerm) 
+                        || tenSan.includes(searchTerm)
+                        || cumSan.includes(searchTerm)
+                        || tenGiai.includes(searchTerm);
         
         // Lọc ngày chính xác
         const matchDate = currentDSDate ? (item.NgayDa === currentDSDate) : true;
@@ -2568,7 +2612,7 @@ window.openBookingDetailModalAdmin = function(id) {
     const nvXuLyObj = item.nhan_vien_xu_ly || item.nhanVienXuLy || null;
     const nguoiXuLyHtml = item.ID_NhanVienXuLy
         ? `<strong style="color: #0f172a;">${nvXuLyObj?.HoTen || 'Nhân sự'}</strong> <span style="font-size: 0.8rem; color: #475569; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: monospace; border: 1px solid #e2e8f0;">ID: #${item.ID_NhanVienXuLy}</span>`
-        : `<span style="color: #94a3b8; font-style: italic;">Chưa có (Chờ xử lý)</span>`;
+        : `<span style="color: #94a3b8; font-style: italic;">Chưa có</span>`;
 
     // 5. Tài chính
     const tongTien = Number(item.TongTien || 0);
@@ -3009,35 +3053,69 @@ function handleAdminQrResult(rawText) {
         return showDSAlert(`Mã QR "${rawText}" không đúng định dạng vé DN Football (PT-... hoặc GD-...)!`, false);
     }
 
-    const prefix = match[1];
-    const targetId = match[2]; // Ví dụ: 'DS001' hoặc 'GDAU001'
-    const codeStr = `${prefix}-${targetId}`;
-
-    currentDSDate = '';
-    currentDSFilter = 'All';
-    currentDSSearch = codeStr.toLowerCase();
-    currentDSPage = 1;
-
-    if (document.getElementById('ds-date-input')) document.getElementById('ds-date-input').value = '';
-    if (document.getElementById('ds-status-select')) document.getElementById('ds-status-select').value = 'All';
-    if (document.getElementById('ds-search-input')) document.getElementById('ds-search-input').value = codeStr;
-
-    applyDSFiltersAndRender();
+    const prefix = match[1];   // 'PT' hoặc 'GD'
+    const rawCode = match[2];  // Có thể là '100', 'DS100', '11', 'GDAU11', 'GDAU011'
+    const rawNum = rawCode.replace(/\D/g, '').replace(/^0+/, '') || '0';
 
     if (prefix === 'PT') {
-        const booking = allDatSanData.find(b => !b.MaGiaiDau && !b.ID_GiaiDau && String(b.MaDatSan || b.ID).toUpperCase() === targetId);
+        // Tìm vé phong trào khớp theo Mã mới (DS100) hoặc Số thứ tự cũ (100 -> DS100 / DS001)
+        const booking = allDatSanData.find(b => {
+            if (b.MaGiaiDau || b.ID_GiaiDau) return false;
+            const bId = String(b.MaDatSan || b.ID || '').toUpperCase();
+            const bNum = bId.replace(/\D/g, '').replace(/^0+/, '') || '0';
+            return bId === rawCode || bId === `DS${rawNum.padStart(3, '0')}` || bNum === rawNum;
+        });
+
+        const mappedCode = booking ? `PT-${booking.MaDatSan || booking.ID}` : `PT-DS${rawNum.padStart(3, '0')}`;
+
+        currentDSDate = '';
+        currentDSFilter = 'All';
+        currentDSSearch = mappedCode.toLowerCase();
+        currentDSPage = 1;
+
+        if (document.getElementById('ds-date-input')) document.getElementById('ds-date-input').value = '';
+        if (document.getElementById('ds-status-select')) document.getElementById('ds-status-select').value = 'All';
+        if (document.getElementById('ds-search-input')) document.getElementById('ds-search-input').value = mappedCode;
+
+        applyDSFiltersAndRender();
+
         if (booking) {
-            showDSAlert(`Đã quét thành công vé phong trào #${codeStr}!`, true);
+            const noteLegacy = (cleaned !== mappedCode) ? ` (Ánh xạ từ mã cũ #${cleaned})` : '';
+            showDSAlert(`Đã quét thành công vé phong trào #${mappedCode}${noteLegacy}!`, true);
             openBookingDetailModalAdmin(booking.MaDatSan || booking.ID);
         } else {
-            showDSAlert(`Không tìm thấy vé #${codeStr} thuộc cụm sân của bạn!`, false);
+            showDSAlert(`Không tìm thấy vé #${mappedCode} (Mã quét: #${cleaned}) thuộc cụm sân của bạn!`, false);
         }
     } else {
-        const tourMatches = allDatSanData.filter(b => String(b.MaGiaiDau || b.ID_GiaiDau || '').toUpperCase() === targetId);
+        // Tìm các trận thuộc Giải đấu khớp theo Mã mới (GDAU011) hoặc Số thứ tự cũ (11 -> GDAU011)
+        const tourMatches = allDatSanData.filter(b => {
+            const gId = String(b.MaGiaiDau || b.ID_GiaiDau || '').toUpperCase();
+            if (!gId) return false;
+            const gNum = gId.replace(/\D/g, '').replace(/^0+/, '') || '0';
+            return gId === rawCode || gId === `GDAU${rawNum.padStart(3, '0')}` || gNum === rawNum;
+        });
+
+        const actualGiaiId = tourMatches.length > 0
+            ? (tourMatches[0].MaGiaiDau || tourMatches[0].ID_GiaiDau)
+            : `GDAU${rawNum.padStart(3, '0')}`;
+        const mappedCode = `GD-${actualGiaiId}`;
+
+        currentDSDate = '';
+        currentDSFilter = 'All';
+        currentDSSearch = mappedCode.toLowerCase();
+        currentDSPage = 1;
+
+        if (document.getElementById('ds-date-input')) document.getElementById('ds-date-input').value = '';
+        if (document.getElementById('ds-status-select')) document.getElementById('ds-status-select').value = 'All';
+        if (document.getElementById('ds-search-input')) document.getElementById('ds-search-input').value = mappedCode;
+
+        applyDSFiltersAndRender();
+
         if (tourMatches.length > 0) {
-            showDSAlert(`Đã quét Thẻ Giải Đấu #${codeStr} (Tìm thấy ${tourMatches.length} trận đấu)!`, true);
+            const noteLegacy = (cleaned !== mappedCode) ? ` (Ánh xạ từ mã cũ #${cleaned})` : '';
+            showDSAlert(`Đã quét Thẻ Giải Đấu #${mappedCode}${noteLegacy} (Tìm thấy ${tourMatches.length} trận đấu)!`, true);
         } else {
-            showDSAlert(`Không tìm thấy lịch thi đấu nào của giải #${codeStr}!`, false);
+            showDSAlert(`Không tìm thấy lịch thi đấu nào của giải #${mappedCode} (Mã quét: #${cleaned})!`, false);
         }
     }
 }
