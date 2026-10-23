@@ -174,6 +174,7 @@ class DatSanController extends Controller
 
             if ($user->Email && !str_ends_with($user->Email, '.offline')) {
                 try {
+                    $htmlHoaDon = self::buildEmailHoaDonHtml($hoaDon, $user->HoTen, $user->SoDienThoai, $cacVeVuaTao);
                     $htmlVe = '';
                     foreach ($cacVeVuaTao as $ve) {
                         $qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=6&data=" . urlencode($ve['maVe']);
@@ -194,8 +195,8 @@ class DatSanController extends Controller
                             </div>
                         ";
                     }
-                    Mail::html("<h2>Xác nhận đặt sân thành công - DN Football</h2><p>Chào <strong>{$user->HoTen}</strong>, dưới đây là vé điện tử kèm mã QR nhận sân của bạn (Mã hóa đơn: <strong>{$hoaDon->MaHoaDonDatSan}</strong>):</p>{$htmlVe}", function ($message) use ($user) {
-                        $message->to($user->Email)->subject('Vé Điện Tử QR Code - DN Football');
+                    Mail::html("<h2>Xác nhận đặt sân & Hóa đơn điện tử - DN Football</h2><p>Chào <strong>{$user->HoTen}</strong>, cảm ơn bạn đã đặt sân. Dưới đây là <strong>Hóa đơn đặt sân</strong> và <strong>Vé điện tử QR Code</strong> của bạn:</p>{$htmlHoaDon}<h3 style='margin-top:24px; color:#0f172a;'>Danh sách Vé Điện Tử (Check-in tại sân):</h3>{$htmlVe}", function ($message) use ($user, $hoaDon) {
+                        $message->to($user->Email)->subject("Hóa Đơn #{$hoaDon->MaHoaDonDatSan} & Vé Điện Tử - DN Football");
                     });
                 } catch (\Exception $mailEx) {}
             }
@@ -203,7 +204,12 @@ class DatSanController extends Controller
             broadcast(new \App\Events\AdminDataUpdated())->toOthers();
             broadcast(new \App\Events\SystemDataUpdated())->toOthers();
 
-            return response()->json(['success' => true, 'message' => 'Đặt sân thành công! Số dư đã được trừ.', 'data' => $cacVeVuaTao]);
+            return response()->json([
+                'success'    => true,
+                'message'    => 'Đặt sân thành công! Số dư đã được trừ.',
+                'ma_hoa_don' => $hoaDon->MaHoaDonDatSan,
+                'data'       => $cacVeVuaTao
+            ]);
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -670,7 +676,11 @@ class DatSanController extends Controller
             broadcast(new \App\Events\SystemDataUpdated())->toOthers();
             broadcast(new \App\Events\AdminDataUpdated())->toOthers();
 
-            return response()->json(['success' => true, 'message' => 'Giữ sân thành công!']);
+            return response()->json([
+                'success'    => true,
+                'message'    => 'Giữ sân thành công!',
+                'ma_hoa_don' => $hoaDon->MaHoaDonDatSan
+            ]);
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -916,6 +926,7 @@ class DatSanController extends Controller
             }
 
             try {
+                $htmlHoaDon = self::buildEmailHoaDonHtml($hoaDon, $bookingData['ho_ten'], $bookingData['sdt_khach'], $cacVeVuaTao);
                 $htmlVe = '';
                 foreach ($cacVeVuaTao as $ve) {
                     $qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=6&data=" . urlencode($ve['maVe']);
@@ -938,9 +949,11 @@ class DatSanController extends Controller
                 }
 
                 $noiDungMail = "
-                    <h2>Xác nhận đặt sân thành công</h2>
-                    <p>Chào {$bookingData['ho_ten']},</p>
-                    <p>Cảm ơn bạn đã đặt sân tại DN Football. Dưới đây là thông tin vé của bạn (Mã hóa đơn: <strong>{$hoaDon->MaHoaDonDatSan}</strong>):</p>
+                    <h2>Xác nhận đặt sân & Hóa đơn điện tử - DN Football</h2>
+                    <p>Chào <strong>{$bookingData['ho_ten']}</strong>,</p>
+                    <p>Cảm ơn bạn đã đặt sân tại DN Football. Dưới đây là <strong>Hóa đơn đặt sân (#{$hoaDon->MaHoaDonDatSan})</strong> và thông tin vé của bạn:</p>
+                    {$htmlHoaDon}
+                    <h3 style='margin-top:24px; color:#0f172a;'>Danh sách Vé Điện Tử:</h3>
                     {$htmlVe}
                     <div style='background:#fef2f2; border:1px solid #fca5a5; padding:15px; border-radius:8px; margin-top:20px;'>
                         <h4 style='margin:0 0 10px 0; color:#b91c1c;'>Lưu ý quan trọng:</h4>
@@ -954,9 +967,9 @@ class DatSanController extends Controller
                     </div>
                 ";
 
-                Mail::html($noiDungMail, function ($message) use ($bookingData) {
+                Mail::html($noiDungMail, function ($message) use ($bookingData, $hoaDon) {
                     $message->to($bookingData['email_khach'])
-                            ->subject('Vé Đặt Sân - DN Football');
+                            ->subject("Hóa Đơn #{$hoaDon->MaHoaDonDatSan} & Vé Đặt Sân - DN Football");
                 });
             } catch (\Exception $mailEx) {
                 \Illuminate\Support\Facades\Log::error('Lỗi gửi mail vé khách vãng lai: ' . $mailEx->getMessage());
@@ -965,7 +978,7 @@ class DatSanController extends Controller
             broadcast(new \App\Events\AdminDataUpdated())->toOthers();
             broadcast(new \App\Events\SystemDataUpdated())->toOthers();
 
-            return redirect($frontendUrl . '?vnpay_status=success#fields-section');
+            return redirect($frontendUrl . '?vnpay_status=success&ma_hoa_don=' . $hoaDon->MaHoaDonDatSan . '#fields-section');
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -1021,5 +1034,301 @@ class DatSanController extends Controller
             'TienDaCoc'   => $tienDaCoc,
             'TrangThai'   => $trangThaiHoaDon,
         ]);
+    }
+
+    // Dựng bảng HTML Hóa Đơn Đặt Sân đính kèm trong Email
+    public static function buildEmailHoaDonHtml($hoaDon, $tenKhach, $sdtKhach, $cacVe)
+    {
+        $tongTien = number_format($hoaDon->TongTienSan, 0, ',', '.') . 'đ';
+        $tienCoc  = number_format($hoaDon->TienDaCoc, 0, ',', '.') . 'đ';
+        $conLai   = number_format($hoaDon->TongTienSan - $hoaDon->TienDaCoc, 0, ',', '.') . 'đ';
+        $ngayTao  = date('H:i - d/m/Y', strtotime($hoaDon->NgayTao ?? now()));
+
+        $ptMap = [
+            'ViDienTu'    => 'Ví điện tử DN Football',
+            'ChuyenKhoan' => 'Chuyển khoản VNPay',
+            'TienMat'     => 'Tiền mặt tại quầy'
+        ];
+        $ptText = $ptMap[$hoaDon->PhuongThucThanhToan] ?? $hoaDon->PhuongThucThanhToan;
+
+        $rowsHtml = '';
+        foreach ($cacVe as $idx => $ve) {
+            $stt = $idx + 1;
+            $rowsHtml .= "
+                <tr>
+                    <td style='border:1px solid #cbd5e1; padding:8px; text-align:center;'>{$stt}</td>
+                    <td style='border:1px solid #cbd5e1; padding:8px; font-weight:bold;'>#{$ve['maVe']}</td>
+                    <td style='border:1px solid #cbd5e1; padding:8px;'>{$ve['tenSan']} ({$ve['cumSan']})</td>
+                    <td style='border:1px solid #cbd5e1; padding:8px; text-align:center;'>{$ve['gio']} | {$ve['ngay']}</td>
+                    <td style='border:1px solid #cbd5e1; padding:8px; text-align:right; color:#047857; font-weight:bold;'>{$ve['tienCoc']}</td>
+                    <td style='border:1px solid #cbd5e1; padding:8px; text-align:right; color:#e11d48; font-weight:bold;'>{$ve['conLai']}</td>
+                </tr>
+            ";
+        }
+
+        return "
+            <div style='border:2px solid #0b5d3b; border-radius:12px; overflow:hidden; margin:16px 0; background:#ffffff; font-family:Arial,sans-serif;'>
+                <div style='background:#0b5d3b; color:#ffffff; padding:14px 18px; display:flex; justify-content:space-between; align-items:center;'>
+                    <div>
+                        <h3 style='margin:0; font-size:17px; text-transform:uppercase;'>HÓA ĐƠN ĐẶT SÂN ĐIỆN TỬ</h3>
+                        <div style='font-size:12px; opacity:0.9; margin-top:3px;'>Mã hóa đơn: <strong>#{$hoaDon->MaHoaDonDatSan}</strong> | Ngày lập: {$ngayTao}</div>
+                    </div>
+                </div>
+                <div style='padding:16px 18px;'>
+                    <p style='margin:0 0 8px 0;'><strong>Khách hàng:</strong> {$tenKhach} - <strong>SĐT:</strong> {$sdtKhach}</p>
+                    <p style='margin:0 0 14px 0;'><strong>Phương thức thanh toán cọc:</strong> {$ptText}</p>
+                    <table style='width:100%; border-collapse:collapse; font-size:13px; margin-bottom:14px;'>
+                        <thead>
+                            <tr style='background:#f1f5f9; color:#0f172a;'>
+                                <th style='border:1px solid #cbd5e1; padding:8px;'>STT</th>
+                                <th style='border:1px solid #cbd5e1; padding:8px;'>Mã Vé</th>
+                                <th style='border:1px solid #cbd5e1; padding:8px; text-align:left;'>Sân Bóng</th>
+                                <th style='border:1px solid #cbd5e1; padding:8px;'>Khung Giờ & Ngày Đá</th>
+                                <th style='border:1px solid #cbd5e1; padding:8px; text-align:right;'>Tiền Đã Cọc</th>
+                                <th style='border:1px solid #cbd5e1; padding:8px; text-align:right;'>Còn Thu Tại Sân</th>
+                            </tr>
+                        </thead>
+                        <tbody>{$rowsHtml}</tbody>
+                    </table>
+                    <div style='background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px 15px; text-align:right;'>
+                        <div style='margin-bottom:4px;'>Tổng tiền sân (" . count($cacVe) . " trận): <strong>{$tongTien}</strong></div>
+                        <div style='margin-bottom:4px; color:#047857;'>Tổng tiền đã cọc: <strong>{$tienCoc}</strong></div>
+                        <div style='font-size:15px; color:#e11d48;'><strong>TỔNG CẦN THANH TOÁN THÊM: {$conLai}</strong></div>
+                    </div>
+                </div>
+            </div>
+        ";
+    }
+
+    // API Lấy chi tiết 1 Hóa Đơn Đặt Sân để Xuất / In PDF
+    public function layChiTietHoaDonDatSan($maHoaDon)
+    {
+        $hoaDon = HoaDonDatSan::with(['nguoiDung', 'datSans.sanBong.cumSan', 'datSans.khungGio', 'datSans.giaiDau'])
+            ->where('MaHoaDonDatSan', $maHoaDon)
+            ->first();
+
+        if (!$hoaDon) {
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy hóa đơn đặt sân!'], 404);
+        }
+
+        return response()->json(['success' => true, 'data' => $hoaDon]);
+    }
+
+    // Khách hàng tự hủy toàn bộ các trận đang Đã Cọc trong 1 Hóa Đơn Phong Trào
+    public function huyHoaDonKhachHang(Request $request, $maHoaDon)
+    {
+        $user = NguoiDung::find(Auth::id() ?? $request->user()->MaNguoiDung);
+        $hoaDon = HoaDonDatSan::where('MaHoaDonDatSan', $maHoaDon)->where('MaNguoiDung', $user->MaNguoiDung)->first();
+
+        if (!$hoaDon) {
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy hóa đơn đặt sân!']);
+        }
+
+        $cacTranDaCoc = DatSan::with(['khungGio', 'sanBong'])
+            ->where('MaHoaDonDatSan', $maHoaDon)
+            ->where('TrangThai', 'DaCoc')
+            ->get();
+
+        if ($cacTranDaCoc->isEmpty()) {
+            return response()->json(['success' => false, 'message' => 'Hóa đơn này không còn trận nào ở trạng thái Đã cọc để hủy!']);
+        }
+
+        // Kiểm tra điều kiện trước 10 tiếng cho toàn bộ các trận đang Đã cọc trong hóa đơn
+        foreach ($cacTranDaCoc as $ds) {
+            if ($ds->MaGiaiDau !== null) {
+                return response()->json(['success' => false, 'message' => 'Hóa đơn giải đấu vui lòng hủy tại tab Giải đấu!']);
+            }
+            $thoiGianDa = Carbon::parse($ds->NgayDa . ' ' . $ds->khungGio->GioBatDau);
+            if (now()->diffInHours($thoiGianDa, false) < 10) {
+                $ngayFormat = Carbon::parse($ds->NgayDa)->format('d/m/Y');
+                $gioFormat = substr($ds->khungGio->GioBatDau, 0, 5);
+                return response()->json([
+                    'success' => false,
+                    'message' => "Không thể hủy cả hóa đơn vì trận [{$ds->sanBong->TenSan} - {$gioFormat} ngày {$ngayFormat}] đã sát giờ đá (< 10 tiếng). Bạn có thể hủy lẻ các trận khác hoặc gửi Yêu cầu hủy gấp!"
+                ]);
+            }
+        }
+
+        DB::beginTransaction();
+        try {
+            $tongTienHoan = $cacTranDaCoc->sum('TienCoc');
+            $soTranHuy = $cacTranDaCoc->count();
+
+            DatSan::where('MaHoaDonDatSan', $maHoaDon)
+                ->where('TrangThai', 'DaCoc')
+                ->update(['TrangThai' => 'DaHuy']);
+
+            self::dongBoHoaDonDatSan($maHoaDon);
+
+            $soDuTruoc = $user->SoDuVi;
+            $soDuSau = $soDuTruoc + $tongTienHoan;
+            $user->update(['SoDuVi' => $soDuSau]);
+
+            GiaoDich::create([
+                'MaNguoiDung'  => $user->MaNguoiDung,
+                'LoaiGiaoDich' => 'HoanTienHuySan',
+                'DongTien'     => 'Cong',
+                'SoTien'       => $tongTienHoan,
+                'SoDuTruoc'    => $soDuTruoc,
+                'SoDuSau'      => $soDuSau,
+                'NoiDung'      => "Hoàn cọc hủy toàn bộ hóa đơn #{$maHoaDon} ({$soTranHuy} trận)"
+            ]);
+
+            DB::commit();
+
+            broadcast(new \App\Events\AdminDataUpdated())->toOthers();
+            broadcast(new \App\Events\SystemDataUpdated())->toOthers();
+
+            return response()->json([
+                'success' => true,
+                'message' => "Đã hủy thành công toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon} và hoàn " . number_format($tongTienHoan, 0, ',', '.') . "đ vào ví!"
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => 'Lỗi hệ thống: ' . $e->getMessage()]);
+        }
+    }
+
+    // Gửi OTP xác nhận hủy toàn bộ hóa đơn cho Khách vãng lai
+    public function guiOtpHuyHoaDonGuest(Request $request, $maHoaDon)
+    {
+        $cacTran = DatSan::with(['sanBong.cumSan', 'khungGio'])
+            ->where('MaHoaDonDatSan', $maHoaDon)
+            ->where('TrangThai', 'DaCoc')
+            ->get();
+
+        if ($cacTran->isEmpty()) {
+            return response()->json(['success' => false, 'message' => 'Không còn trận Đã cọc nào trong hóa đơn này để hủy!']);
+        }
+
+        $first = $cacTran->first();
+        if ($first->MaNguoiDung !== null || !$first->EmailKhachVangLai) {
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy email khách vãng lai của hóa đơn này!']);
+        }
+
+        $otp = (string) rand(100000, 999999);
+        \Illuminate\Support\Facades\Cache::put('guest_cancel_invoice_otp_' . $maHoaDon, $otp, now()->addMinutes(5));
+
+        $tongCoc = number_format($cacTran->sum('TienCoc'), 0, ',', '.') . 'đ';
+        $soTran = $cacTran->count();
+
+        try {
+            $noiDungMail = "
+                <h2>Mã xác thực (OTP) hủy toàn bộ Hóa đơn đặt sân #{$maHoaDon}</h2>
+                <p>Chào <strong>{$first->TenKhachVangLai}</strong>,</p>
+                <p>Hệ thống DN Football vừa nhận được yêu cầu hủy toàn bộ <strong>{$soTran} trận</strong> trong hóa đơn <strong>#{$maHoaDon}</strong>.</p>
+                <p><strong>Tổng số tiền cọc hoàn trả:</strong> <span style='color:#10b981; font-weight:bold;'>{$tongCoc}</span></p>
+                <p>Mã OTP xác nhận của bạn là: <strong style='font-size: 20px; color: #e11d48; letter-spacing: 2px;'>{$otp}</strong> (Hiệu lực 5 phút)</p>
+            ";
+            Mail::html($noiDungMail, function ($message) use ($first, $maHoaDon) {
+                $message->to($first->EmailKhachVangLai)
+                        ->subject("Mã OTP Hủy Hóa Đơn #{$maHoaDon} - DN Football");
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Đã gửi mã OTP hủy hóa đơn tới email: ' . $first->EmailKhachVangLai
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Lỗi gửi email OTP: ' . $e->getMessage()]);
+        }
+    }
+
+    // Quản lý / Nhân viên hủy toàn bộ các trận Đã cọc trong 1 Hóa đơn đặt sân
+    public function huyHoaDonAdmin(Request $request, $maHoaDon)
+    {
+        $userDangNhap = auth()->user();
+
+        $cacTranDaCoc = DatSan::with(['sanBong.cumSan', 'khungGio'])
+            ->where('MaHoaDonDatSan', $maHoaDon)
+            ->where('TrangThai', 'DaCoc')
+            ->get();
+
+        if ($cacTranDaCoc->isEmpty()) {
+            return response()->json(['success' => false, 'message' => 'Hóa đơn này không còn trận nào ở trạng thái Đã cọc để hủy!']);
+        }
+
+        $first = $cacTranDaCoc->first();
+        $tongTienHoan = $cacTranDaCoc->sum('TienCoc');
+        $soTranHuy = $cacTranDaCoc->count();
+
+        DB::beginTransaction();
+        try {
+            if ($first->MaNguoiDung !== null) {
+                $khach = NguoiDung::find($first->MaNguoiDung);
+                if ($khach) {
+                    $soDuTruoc = $khach->SoDuVi;
+                    $soDuSau = $soDuTruoc + $tongTienHoan;
+                    $khach->update(['SoDuVi' => $soDuSau]);
+
+                    GiaoDich::create([
+                        'MaNguoiDung'    => $khach->MaNguoiDung,
+                        'MaNhanVienXuLy' => $userDangNhap->MaNguoiDung,
+                        'LoaiGiaoDich'   => 'HoanTienHuySan',
+                        'DongTien'       => 'Cong',
+                        'SoTien'         => $tongTienHoan,
+                        'SoDuTruoc'      => $soDuTruoc,
+                        'SoDuSau'        => $soDuSau,
+                        'NoiDung'        => "Hỗ trợ hủy toàn bộ hóa đơn đặt sân #{$maHoaDon} ({$soTranHuy} trận)"
+                    ]);
+
+                    ThongBao::create([
+                        'MaNguoiDung'  => $khach->MaNguoiDung,
+                        'TieuDe'       => "Hóa đơn đặt sân #{$maHoaDon} đã được hủy",
+                        'NoiDung'      => "Ban quản lý đã hỗ trợ hủy toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon}. Số tiền cọc " . number_format($tongTienHoan, 0, ',', '.') . "đ đã được hoàn lại vào ví của bạn.",
+                        'LoaiThongBao' => 'DatSan'
+                    ]);
+                }
+            } else {
+                $otpInput = trim($request->input('otp', ''));
+                $cachedOtp = \Illuminate\Support\Facades\Cache::get('guest_cancel_invoice_otp_' . $maHoaDon);
+
+                if (!$otpInput || !$cachedOtp || $otpInput !== (string) $cachedOtp) {
+                    DB::rollBack();
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Mã OTP hủy hóa đơn không chính xác hoặc đã hết hạn!'
+                    ]);
+                }
+                \Illuminate\Support\Facades\Cache::forget('guest_cancel_invoice_otp_' . $maHoaDon);
+            }
+
+            DatSan::where('MaHoaDonDatSan', $maHoaDon)
+                ->where('TrangThai', 'DaCoc')
+                ->update([
+                    'TrangThai'      => 'DaHuy',
+                    'MaNhanVienXuLy' => $userDangNhap->MaNguoiDung
+                ]);
+
+            self::dongBoHoaDonDatSan($maHoaDon);
+
+            // Nếu thuộc giải đấu thì kiểm tra đồng bộ trạng thái giải đấu
+            if ($first->MaGiaiDau !== null) {
+                $giaiDau = GiaiDau::find($first->MaGiaiDau);
+                if ($giaiDau) {
+                    $conTranDaCoc = DatSan::where('MaGiaiDau', $giaiDau->MaGiaiDau)->where('TrangThai', 'DaCoc')->exists();
+                    if (!$conTranDaCoc) {
+                        $coTranDaXong = DatSan::where('MaGiaiDau', $giaiDau->MaGiaiDau)->whereIn('TrangThai', ['HoanThanh', 'KhongDen'])->exists();
+                        $giaiDau->update(['TrangThai' => $coTranDaXong ? 'HoanThanh' : 'DaHuy']);
+                    }
+                }
+            }
+
+            DB::commit();
+
+            if ($first->MaNguoiDung !== null) {
+                broadcast(new \App\Events\UserDataUpdated($first->MaNguoiDung))->toOthers();
+            }
+            broadcast(new \App\Events\AdminDataUpdated())->toOthers();
+            broadcast(new \App\Events\SystemDataUpdated())->toOthers();
+
+            return response()->json([
+                'success' => true,
+                'message' => "Đã hủy toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon} và hoàn cọc thành công!"
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => 'Lỗi hệ thống: ' . $e->getMessage()]);
+        }
     }
 }
