@@ -35,6 +35,9 @@ class KhachHangController extends Controller
         $danhSach = $query->orderBy('VaiTro')->orderBy('MaNguoiDung', 'desc')->get();
 
         $data = $danhSach->map(function ($user) use ($userDangNhap) {
+            // Ẩn số dư ví để bảo mật thông tin tài chính khách hàng
+            $user->makeHidden(['SoDuVi']);
+
             if ($user->VaiTro !== 'KhachHang') {
                 $user->tong_hoan_thanh = 0;
                 $user->tong_bung_san = 0;
@@ -86,6 +89,9 @@ class KhachHangController extends Controller
             }
         }
 
+        // Ẩn số dư ví của khách hàng
+        $khachHang->makeHidden(['SoDuVi']);
+
         $queryDatSan = DatSan::with(['sanBong.cumSan', 'khungGio', 'giaiDau'])
             ->where('MaNguoiDung', $id);
 
@@ -111,15 +117,10 @@ class KhachHangController extends Controller
         $lichSuGiaoDich = $queryGiaoDich->orderBy('NgayTao', 'desc')->get();
 
         if ($userDangNhap->VaiTro === 'QuanLySan') {
-            $tongTienDaNap = null;
             $tongSoTran = $lichSuDatSan->count();
             $tongHoanThanh = $lichSuDatSan->where('TrangThai', 'HoanThanh')->count();
             $tongBungSan = $lichSuDatSan->where('TrangThai', 'KhongDen')->count();
         } else {
-            $tongTienDaNap = GiaoDich::where('MaNguoiDung', $id)
-                                     ->where('LoaiGiaoDich', 'NapTien')
-                                     ->sum('SoTien');
-
             $tongSoTran = DatSan::where('MaNguoiDung', $id)->count();
             $tongHoanThanh = DatSan::where('MaNguoiDung', $id)->where('TrangThai', 'HoanThanh')->count();
             $tongBungSan = DatSan::where('MaNguoiDung', $id)->where('TrangThai', 'KhongDen')->count();
@@ -129,13 +130,15 @@ class KhachHangController extends Controller
         $tyLeBung = $tongDaChot > 0 ? round(($tongBungSan / $tongDaChot) * 100) : 0;
 
         $thongKe = [
-            'so_du_vi'         => $khachHang->SoDuVi,
-            'tong_tien_da_nap' => $tongTienDaNap,
-            'tong_so_tran'     => $tongSoTran,
-            'tong_hoan_thanh'  => $tongHoanThanh,
-            'tong_bung_san'    => $tongBungSan,
-            'tong_da_chot'     => $tongDaChot,
-            'ty_le_bung'       => $tyLeBung
+            'vneid'           => $khachHang->Vneid,
+            'ten_ngan_hang'   => $khachHang->TenNganHang,
+            'stk_ngan_hang'   => $khachHang->STKNganHang,
+            'ten_tai_khoan'   => $khachHang->TenTaiKhoan,
+            'tong_so_tran'    => $tongSoTran,
+            'tong_hoan_thanh' => $tongHoanThanh,
+            'tong_bung_san'   => $tongBungSan,
+            'tong_da_chot'    => $tongDaChot,
+            'ty_le_bung'      => $tyLeBung
         ];
 
         return response()->json([
