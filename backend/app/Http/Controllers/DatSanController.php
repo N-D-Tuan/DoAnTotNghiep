@@ -437,7 +437,7 @@ class DatSanController extends Controller
 
         DB::beginTransaction();
         try {
-            $datSan = DatSan::with(['sanBong.cumSan', 'khungGio'])->find($id);
+            $datSan = DatSan::with(['sanBong.cumSan', 'khungGio', 'hoaDonDatSan'])->find($id);
             if (!$datSan) return response()->json(['success' => false, 'message' => 'Không tìm thấy dữ liệu đặt sân!']);
 
             if ($datSan->TrangThai !== 'DaCoc') {
@@ -449,26 +449,70 @@ class DatSanController extends Controller
             $ngayDa = date('d/m/Y', strtotime($datSan->NgayDa));
             $gioDa = $datSan->khungGio ? substr($datSan->khungGio->GioBatDau, 0, 5) . ' - ' . substr($datSan->khungGio->GioKetThuc, 0, 5) : '';
 
+            $phuongThucHoan = $request->input('phuong_thuc_hoan', 'vi'); // 'vi' | 'chuyen_khoan'
+            $thongTinCK = '';
+
             if ($request->trang_thai === 'DaHuy') {
                 if ($datSan->MaNguoiDung !== null) {
                     $user = NguoiDung::find($datSan->MaNguoiDung);
                     if ($user) {
-                        $soDuTruoc = $user->SoDuVi;
                         $tienHoan = $datSan->TienCoc;
-                        $soDuSau = $soDuTruoc + $tienHoan;
+                        $soDuTruoc = $user->SoDuVi;
 
-                        $user->update(['SoDuVi' => $soDuSau]);
+                        if ($phuongThucHoan === 'chuyen_khoan') {
+                            $nganHang = trim($request->input('ngan_hang', ''));
+                            $soTaiKhoan = trim($request->input('so_tai_khoan', ''));
+                            $chuTaiKhoan = strtoupper(trim($request->input('chu_tai_khoan', '')));
 
-                        GiaoDich::create([
-                            'MaNguoiDung'    => $user->MaNguoiDung,
-                            'MaNhanVienXuLy' => $userDangNhap->MaNguoiDung,
-                            'LoaiGiaoDich'   => 'HoanTienHuySan',
-                            'DongTien'       => 'Cong',
-                            'SoTien'         => $tienHoan,
-                            'SoDuTruoc'      => $soDuTruoc,
-                            'SoDuSau'        => $soDuSau,
-                            'NoiDung'        => "Hỗ trợ hủy lịch gấp và hoàn cọc: " . $tenSan
-                        ]);
+                            if (!$nganHang || !$soTaiKhoan || !$chuTaiKhoan) {
+                                DB::rollBack();
+                                return response()->json([
+                                    'success' => false,
+                                    'message' => 'Vui lòng nhập đầy đủ Tên ngân hàng, Số tài khoản và Tên chủ tài khoản để hoàn tiền chuyển khoản!'
+                                ]);
+                            }
+
+                            $thongTinCK = " ({$nganHang} - {$soTaiKhoan} - {$chuTaiKhoan})";
+
+                            // Nếu khách chưa có thông tin ngân hàng thì cập nhật giúp khách luôn
+                            if (!$user->TenNganHang || !$user->STKNganHang || !$user->TenTaiKhoan) {
+                                $user->update([
+                                    'TenNganHang' => $nganHang,
+                                    'STKNganHang' => $soTaiKhoan,
+                                    'TenTaiKhoan' => $chuTaiKhoan
+                                ]);
+                            }
+
+                            if ($tienHoan > 0) {
+                                GiaoDich::create([
+                                    'MaNguoiDung'    => $user->MaNguoiDung,
+                                    'MaNhanVienXuLy' => $userDangNhap->MaNguoiDung,
+                                    'LoaiGiaoDich'   => 'HoanTienHuySan',
+                                    'DongTien'       => 'Cong',
+                                    'SoTien'         => $tienHoan,
+                                    'SoDuTruoc'      => $soDuTruoc,
+                                    'SoDuSau'        => $soDuTruoc, // Không cộng vào ví vì đã chuyển khoản trực tiếp
+                                    'NoiDung'        => "Hoàn cọc hủy sân đặt hộ qua Chuyển khoản{$thongTinCK}: {$tenSan}"
+                                ]);
+                            }
+                        } else {
+                            // Mặc định: Hoàn tiền vào Ví tài khoản
+                            $soDuSau = $soDuTruoc + $tienHoan;
+                            $user->update(['SoDuVi' => $soDuSau]);
+
+                            if ($tienHoan > 0) {
+                                GiaoDich::create([
+                                    'MaNguoiDung'    => $user->MaNguoiDung,
+                                    'MaNhanVienXuLy' => $userDangNhap->MaNguoiDung,
+                                    'LoaiGiaoDich'   => 'HoanTienHuySan',
+                                    'DongTien'       => 'Cong',
+                                    'SoTien'         => $tienHoan,
+                                    'SoDuTruoc'      => $soDuTruoc,
+                                    'SoDuSau'        => $soDuSau,
+                                    'NoiDung'        => "Hỗ trợ hủy lịch gấp và hoàn cọc vào ví: " . $tenSan
+                                ]);
+                            }
+                        }
                     }
                 } else {
                     $otpInput = trim($request->input('otp', ''));
@@ -522,7 +566,10 @@ class DatSanController extends Controller
                     $noiDung = "Hệ thống ghi nhận bạn đã không đến nhận sân tại {$tenSan} lúc {$gioDa} ngày {$ngayDa}. Tiền cọc của lịch đặt này sẽ không được hoàn lại theo quy định.";
                 } else if ($request->trang_thai === 'DaHuy') {
                     $tieuDe = 'Lịch đặt sân đã bị hủy';
-                    $noiDung = "Ban quản lý đã hỗ trợ hủy lịch đặt sân tại {$tenSan} lúc {$gioDa} ngày {$ngayDa}. Số tiền cọc " . number_format($datSan->TienCoc, 0, ',', '.') . "đ đã được hoàn lại vào ví của bạn.";
+                    $hinhThucStr = ($phuongThucHoan === 'chuyen_khoan')
+                        ? "đã được hoàn trả qua chuyển khoản ngân hàng {$thongTinCK}."
+                        : "đã được hoàn lại vào ví của bạn.";
+                    $noiDung = "Ban quản lý đã hỗ trợ hủy lịch đặt sân tại {$tenSan} lúc {$gioDa} ngày {$ngayDa}. Số tiền cọc " . number_format($datSan->TienCoc, 0, ',', '.') . "đ {$hinhThucStr}";
                 }
 
                 ThongBao::create([
@@ -1251,6 +1298,8 @@ class DatSanController extends Controller
         $first = $cacTranDaCoc->first();
         $tongTienHoan = $cacTranDaCoc->sum('TienCoc');
         $soTranHuy = $cacTranDaCoc->count();
+        $phuongThucHoan = $request->input('phuong_thuc_hoan', 'vi'); // 'vi' | 'chuyen_khoan'
+        $thongTinCK = '';
 
         DB::beginTransaction();
         try {
@@ -1258,24 +1307,68 @@ class DatSanController extends Controller
                 $khach = NguoiDung::find($first->MaNguoiDung);
                 if ($khach) {
                     $soDuTruoc = $khach->SoDuVi;
-                    $soDuSau = $soDuTruoc + $tongTienHoan;
-                    $khach->update(['SoDuVi' => $soDuSau]);
 
-                    GiaoDich::create([
-                        'MaNguoiDung'    => $khach->MaNguoiDung,
-                        'MaNhanVienXuLy' => $userDangNhap->MaNguoiDung,
-                        'LoaiGiaoDich'   => 'HoanTienHuySan',
-                        'DongTien'       => 'Cong',
-                        'SoTien'         => $tongTienHoan,
-                        'SoDuTruoc'      => $soDuTruoc,
-                        'SoDuSau'        => $soDuSau,
-                        'NoiDung'        => "Hỗ trợ hủy toàn bộ hóa đơn đặt sân #{$maHoaDon} ({$soTranHuy} trận)"
-                    ]);
+                    if ($phuongThucHoan === 'chuyen_khoan') {
+                        $nganHang = trim($request->input('ngan_hang', ''));
+                        $soTaiKhoan = trim($request->input('so_tai_khoan', ''));
+                        $chuTaiKhoan = strtoupper(trim($request->input('chu_tai_khoan', '')));
+
+                        if (!$nganHang || !$soTaiKhoan || !$chuTaiKhoan) {
+                            DB::rollBack();
+                            return response()->json([
+                                'success' => false,
+                                'message' => 'Vui lòng nhập đầy đủ Tên ngân hàng, Số tài khoản và Tên chủ tài khoản để hoàn tiền chuyển khoản!'
+                            ]);
+                        }
+
+                        $thongTinCK = " ({$nganHang} - {$soTaiKhoan} - {$chuTaiKhoan})";
+
+                        if (!$khach->TenNganHang || !$khach->STKNganHang || !$khach->TenTaiKhoan) {
+                            $khach->update([
+                                'TenNganHang' => $nganHang,
+                                'STKNganHang' => $soTaiKhoan,
+                                'TenTaiKhoan' => $chuTaiKhoan
+                            ]);
+                        }
+
+                        if ($tongTienHoan > 0) {
+                            GiaoDich::create([
+                                'MaNguoiDung'    => $khach->MaNguoiDung,
+                                'MaNhanVienXuLy' => $userDangNhap->MaNguoiDung,
+                                'LoaiGiaoDich'   => 'HoanTienHuySan',
+                                'DongTien'       => 'Cong',
+                                'SoTien'         => $tongTienHoan,
+                                'SoDuTruoc'      => $soDuTruoc,
+                                'SoDuSau'        => $soDuTruoc,
+                                'NoiDung'        => "Hoàn cọc hủy hóa đơn đặt hộ #{$maHoaDon} ({$soTranHuy} trận) qua Chuyển khoản{$thongTinCK}"
+                            ]);
+                        }
+                    } else {
+                        $soDuSau = $soDuTruoc + $tongTienHoan;
+                        $khach->update(['SoDuVi' => $soDuSau]);
+
+                        if ($tongTienHoan > 0) {
+                            GiaoDich::create([
+                                'MaNguoiDung'    => $khach->MaNguoiDung,
+                                'MaNhanVienXuLy' => $userDangNhap->MaNguoiDung,
+                                'LoaiGiaoDich'   => 'HoanTienHuySan',
+                                'DongTien'       => 'Cong',
+                                'SoTien'         => $tongTienHoan,
+                                'SoDuTruoc'      => $soDuTruoc,
+                                'SoDuSau'        => $soDuSau,
+                                'NoiDung'        => "Hỗ trợ hủy toàn bộ hóa đơn đặt sân #{$maHoaDon} ({$soTranHuy} trận) - Hoàn vào ví"
+                            ]);
+                        }
+                    }
+
+                    $hinhThucStr = ($phuongThucHoan === 'chuyen_khoan')
+                        ? "đã được hoàn trả qua chuyển khoản ngân hàng{$thongTinCK}."
+                        : "đã được hoàn lại vào ví của bạn.";
 
                     ThongBao::create([
                         'MaNguoiDung'  => $khach->MaNguoiDung,
                         'TieuDe'       => "Hóa đơn đặt sân #{$maHoaDon} đã được hủy",
-                        'NoiDung'      => "Ban quản lý đã hỗ trợ hủy toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon}. Số tiền cọc " . number_format($tongTienHoan, 0, ',', '.') . "đ đã được hoàn lại vào ví của bạn.",
+                        'NoiDung'      => "Ban quản lý đã hỗ trợ hủy toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon}. Số tiền cọc " . number_format($tongTienHoan, 0, ',', '.') . "đ {$hinhThucStr}",
                         'LoaiThongBao' => 'DatSan'
                     ]);
                 }
@@ -1302,7 +1395,6 @@ class DatSanController extends Controller
 
             self::dongBoHoaDonDatSan($maHoaDon);
 
-            // Nếu thuộc giải đấu thì kiểm tra đồng bộ trạng thái giải đấu
             if ($first->MaGiaiDau !== null) {
                 $giaiDau = GiaiDau::find($first->MaGiaiDau);
                 if ($giaiDau) {
@@ -1322,9 +1414,13 @@ class DatSanController extends Controller
             broadcast(new \App\Events\AdminDataUpdated())->toOthers();
             broadcast(new \App\Events\SystemDataUpdated())->toOthers();
 
+            $msgSuccess = ($phuongThucHoan === 'chuyen_khoan')
+                ? "Đã hủy toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon} và ghi nhận hoàn cọc qua Chuyển khoản!"
+                : "Đã hủy toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon} và hoàn cọc vào ví khách hàng!";
+
             return response()->json([
                 'success' => true,
-                'message' => "Đã hủy toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon} và hoàn cọc thành công!"
+                'message' => $msgSuccess
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
