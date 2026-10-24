@@ -1901,6 +1901,24 @@ function closeStaffDSConfirmModal() {
     if(modal) modal.style.display = 'none'; 
 }
 
+function isOfflineBookedItemStaff(item) {
+    if (!item) return false;
+    const hd = item.hoa_don_dat_san || item.hoaDonDatSan || null;
+    if (hd && hd.PhuongThucThanhToan === 'TienMat') return true;
+    if (item.ID_NhanVienXuLy || item.MaNhanVienXuLy) return true;
+    const email = item.nguoi_dung?.Email || '';
+    if (email.endsWith('.offline')) return true;
+    return false;
+}
+
+window.toggleSingleCancelRefundMethod = function(prefix) {
+    const method = document.querySelector(`input[name="${prefix}_refund_method"]:checked`)?.value || 'vi';
+    const bankBox = document.getElementById(`${prefix}-bank-refund-box`);
+    if (bankBox) {
+        bankBox.style.display = (method === 'chuyen_khoan') ? 'block' : 'none';
+    }
+};
+
 function openStaffCancelConfirmModal() {
     closeStaffDSConfirmModal(); // Đóng modal hiện tại
     
@@ -1920,23 +1938,64 @@ function openStaffCancelConfirmModal() {
     }
     
     const isMember = Boolean(item.ID_NguoiDung);
+    const isOffline = isOfflineBookedItemStaff(item);
 
     if (isMember) {
-        // LUỒNG 1: KHÁCH HÀNG CÓ TÀI KHOẢN
+        const kh = item.nguoi_dung || {};
+        const tenKhach = kh.HoTen || 'N/A';
+        const tienCocStr = Number(item.TienCoc || 0).toLocaleString('vi-VN') + 'đ';
+
+        const offlineOptionsHtml = isOffline ? `
+            <div style="text-align: left; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 12px; padding: 14px; margin-bottom: 18px;">
+                <div style="font-size: 0.84rem; font-weight: 700; color: #0f172a; margin-bottom: 10px;">
+                    <i class="fa-solid fa-hand-holding-dollar" style="color: var(--primary); margin-right: 5px;"></i>
+                    Đơn đặt sân hộ — Chọn hình thức hoàn tiền cọc (${tienCocStr}):
+                </div>
+                <label style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; background: #fff; border: 1px solid #e2e8f0; cursor: pointer; margin-bottom: 8px; font-size: 0.88rem; font-weight: 600; color: #1e293b;">
+                    <input type="radio" name="staff_single_refund_method" value="chuyen_khoan" checked onchange="toggleSingleCancelRefundMethod('staff_single')">
+                    <span><i class="fa-solid fa-building-columns" style="color: #2563eb; margin-right: 5px;"></i> Hoàn tiền bằng Chuyển khoản ngân hàng</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; background: #fff; border: 1px solid #e2e8f0; cursor: pointer; font-size: 0.88rem; font-weight: 600; color: #1e293b;">
+                    <input type="radio" name="staff_single_refund_method" value="vi" onchange="toggleSingleCancelRefundMethod('staff_single')">
+                    <span><i class="fa-solid fa-wallet" style="color: #10b981; margin-right: 5px;"></i> Hoàn tiền vào Ví tài khoản (${tenKhach})</span>
+                </label>
+
+                <div id="staff_single-bank-refund-box" style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed #cbd5e1; display: block;">
+                    <div style="margin-bottom: 8px;">
+                        <label style="font-size: 0.8rem; font-weight: 600; color: #475569; display: block; margin-bottom: 4px;">Tên ngân hàng nhận <span style="color:red;">*</span></label>
+                        <input type="text" id="staff_single_bank_name" class="form-control" placeholder="VD: Vietcombank, MB Bank..." value="${kh.TenNganHang || ''}" style="height: 36px; font-size: 0.86rem;">
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <div>
+                            <label style="font-size: 0.8rem; font-weight: 600; color: #475569; display: block; margin-bottom: 4px;">Số tài khoản <span style="color:red;">*</span></label>
+                            <input type="text" id="staff_single_bank_stk" class="form-control" placeholder="Nhập STK..." value="${kh.STKNganHang || ''}" style="height: 36px; font-size: 0.86rem; font-family: monospace;">
+                        </div>
+                        <div>
+                            <label style="font-size: 0.8rem; font-weight: 600; color: #475569; display: block; margin-bottom: 4px;">Chủ tài khoản <span style="color:red;">*</span></label>
+                            <input type="text" id="staff_single_bank_owner" class="form-control" placeholder="TÊN IN HOA..." value="${kh.TenTaiKhoan || tenKhach.toUpperCase()}" style="height: 36px; font-size: 0.86rem; text-transform: uppercase;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        ` : `
+            <p style="color: #64748b; margin-bottom: 26px; line-height: 1.6; font-size: 0.92rem;">
+                Khách hàng thành viên: <strong style="color: #0f172a;">${tenKhach}</strong>.<br>
+                Hệ thống sẽ <strong style="color: #0f172a;">HỦY LỊCH</strong> và tự động <strong style="color: #0f172a;">HOÀN TRẢ 100% TIỀN CỌC (${tienCocStr})</strong> vào ví khách hàng.
+            </p>
+        `;
+
         modal.innerHTML = `
-            <div class="modal-content" style="max-width: 420px; width: 92%; text-align: center; padding: 30px 24px; border-radius: 16px;">
-                <div style="font-size: 3.5rem; color: #ef4444; margin-bottom: 14px;"><i class="fa-solid fa-triangle-exclamation"></i></div>
-                <h3 style="margin-bottom: 10px; font-size: 1.35rem; font-weight: 800; color: #0f172a;">Xác nhận Hủy Sân</h3>
-                <p style="color: #64748b; margin-bottom: 26px; line-height: 1.6; font-size: 0.92rem;">
-                    Khách hàng thành viên: <strong style="color: #0f172a;">${item.nguoi_dung?.HoTen || 'N/A'}</strong>.<br>
-                    Hệ thống sẽ <strong style="color: #0f172a;">HỦY LỊCH</strong> và tự động <strong style="color: #0f172a;">HOÀN TRẢ 100% TIỀN CỌC (${Number(item.TienCoc).toLocaleString('vi-VN')}đ)</strong> vào ví khách hàng.
-                </p>
+            <div class="modal-content" style="max-width: 460px; width: 92%; text-align: center; padding: 26px 24px; border-radius: 16px;">
+                <div style="font-size: 3.2rem; color: #ef4444; margin-bottom: 10px;"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                <h3 style="margin-bottom: 10px; font-size: 1.3rem; font-weight: 800; color: #0f172a;">Xác nhận Hủy Sân ${isOffline ? '(Đặt hộ)' : ''}</h3>
+                <div id="staff-member-cancel-alert" class="modal-alert" style="display: none; margin: 0 0 12px 0; text-align: left;"></div>
+                ${offlineOptionsHtml}
                 <div style="display: flex; justify-content: center; gap: 12px;">
-                    <button type="button" onclick="closeStaffCancelConfirmModal()" style="padding: 10px 24px; border-radius: 10px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-weight: 600; font-size: 0.92rem; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f1f5f9'; this.style.borderColor='#94a3b8'; this.style.color='#0f172a';" onmouseout="this.style.background='#ffffff'; this.style.borderColor='#cbd5e1'; this.style.color='#475569';">
+                    <button type="button" onclick="closeStaffCancelConfirmModal()" style="flex: 1; padding: 10px 18px; border-radius: 10px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-weight: 600; font-size: 0.92rem; cursor: pointer;">
                         Hủy bỏ
                     </button>
-                    <button type="button" onclick="executeStaffCapNhatDatSan('DaHuy'); closeStaffCancelConfirmModal();" style="padding: 10px 24px; border-radius: 10px; border: 1px solid #ef4444; background: #ef4444; color: #ffffff; font-weight: 700; font-size: 0.92rem; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.25); transition: all 0.2s ease;" onmouseover="this.style.background='#dc2626'; this.style.borderColor='#dc2626';" onmouseout="this.style.background='#ef4444'; this.style.borderColor='#ef4444';">
-                        <i class="fa-solid fa-trash"></i> Đồng ý Hủy
+                    <button type="button" id="btn-staff-confirm-member-cancel" onclick="confirmMemberCancelStaff(${isOffline})" style="flex: 1.3; padding: 10px 18px; border-radius: 10px; border: 1px solid #ef4444; background: #ef4444; color: #ffffff; font-weight: 700; font-size: 0.92rem; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
+                        <i class="fa-solid fa-trash"></i> Xác nhận Hủy & Hoàn tiền
                     </button>
                 </div>
             </div>`;
@@ -1961,17 +2020,17 @@ function openStaffCancelConfirmModal() {
                     <label style="font-size: 0.86rem; font-weight: 600; color: #1e293b; margin-bottom: 6px; display: block;">Mã xác thực OTP (gửi về Email khách) <span style="color: #ef4444;">*</span></label>
                     <div style="display: flex; gap: 10px; align-items: stretch;">
                         <input type="text" id="staff-guest-cancel-otp" class="form-control" placeholder="Nhập 6 số OTP..." maxlength="6" style="flex: 1; font-weight: 700; letter-spacing: 2px; text-align: center; border-radius: 10px;">
-                        <button type="button" id="btn-staff-send-guest-otp" onclick="sendGuestCancelOtpStaff('${item.ID}')" style="width: auto; padding: 0 16px; border-radius: 10px; border: 1px solid #bfdbfe; background: #eff6ff; color: #2563eb; font-weight: 700; font-size: 0.86rem; white-space: nowrap; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s ease;" onmouseover="this.style.background='#dbeafe'; this.style.borderColor='#93c5fd';" onmouseout="this.style.background='#eff6ff'; this.style.borderColor='#bfdbfe';">
+                        <button type="button" id="btn-staff-send-guest-otp" onclick="sendGuestCancelOtpStaff('${item.ID}')" style="width: auto; padding: 0 16px; border-radius: 10px; border: 1px solid #bfdbfe; background: #eff6ff; color: #2563eb; font-weight: 700; font-size: 0.86rem; white-space: nowrap; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
                             <i class="fa-solid fa-paper-plane"></i> Gửi OTP
                         </button>
                     </div>
                 </div>
 
                 <div style="display: flex; justify-content: flex-end; gap: 10px;">
-                    <button type="button" onclick="closeStaffCancelConfirmModal()" style="padding: 10px 20px; border-radius: 10px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-weight: 600; font-size: 0.9rem; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f1f5f9'; this.style.borderColor='#94a3b8'; this.style.color='#0f172a';" onmouseout="this.style.background='#ffffff'; this.style.borderColor='#cbd5e1'; this.style.color='#475569';">
+                    <button type="button" onclick="closeStaffCancelConfirmModal()" style="padding: 10px 20px; border-radius: 10px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-weight: 600; font-size: 0.9rem; cursor: pointer;">
                         Đóng
                     </button>
-                    <button type="button" id="btn-staff-confirm-guest-cancel" onclick="confirmGuestCancelStaff()" style="padding: 10px 20px; border-radius: 10px; border: 1px solid #ef4444; background: #ef4444; color: #ffffff; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.25); transition: all 0.2s ease;" onmouseover="this.style.background='#dc2626'; this.style.borderColor='#dc2626';" onmouseout="this.style.background='#ef4444'; this.style.borderColor='#ef4444';">
+                    <button type="button" id="btn-staff-confirm-guest-cancel" onclick="confirmGuestCancelStaff()" style="padding: 10px 20px; border-radius: 10px; border: 1px solid #ef4444; background: #ef4444; color: #ffffff; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
                         <i class="fa-solid fa-check"></i> Xác nhận Hủy & Hoàn cọc
                     </button>
                 </div>
@@ -1979,6 +2038,79 @@ function openStaffCancelConfirmModal() {
     }
 
     modal.style.display = 'flex';
+}
+
+async function confirmMemberCancelStaff(isOffline = false) {
+    const alertBox = document.getElementById('staff-member-cancel-alert');
+    let extraPayload = { phuong_thuc_hoan: 'vi' };
+
+    if (isOffline) {
+        const method = document.querySelector('input[name="staff_single_refund_method"]:checked')?.value || 'vi';
+        extraPayload.phuong_thuc_hoan = method;
+
+        if (method === 'chuyen_khoan') {
+            const nganHang = document.getElementById('staff_single_bank_name')?.value.trim() || '';
+            const stk = document.getElementById('staff_single_bank_stk')?.value.trim() || '';
+            const owner = document.getElementById('staff_single_bank_owner')?.value.trim().toUpperCase() || '';
+
+            if (!nganHang || !stk || !owner) {
+                alertBox.textContent = 'Vui lòng nhập đầy đủ Tên ngân hàng, Số tài khoản và Chủ tài khoản nhận tiền!';
+                alertBox.className = 'modal-alert error';
+                alertBox.style.display = 'block';
+                return;
+            }
+            extraPayload.ngan_hang = nganHang;
+            extraPayload.so_tai_khoan = stk;
+            extraPayload.chu_tai_khoan = owner;
+        }
+    }
+
+    const btn = document.getElementById('btn-staff-confirm-member-cancel');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+
+    const ok = await executeStaffCapNhatDatSan('DaHuy', null, alertBox, extraPayload);
+    if (ok) {
+        closeStaffCancelConfirmModal();
+    } else {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-trash"></i> Xác nhận Hủy & Hoàn tiền';
+    }
+}
+
+async function executeStaffCapNhatDatSan(trangThai, otp = null, customAlertBox = null, extraPayload = {}) {
+    if (!pendingStaffDSId) return false;
+    closeStaffDSConfirmModal(); 
+
+    try {
+        const payload = { trang_thai: trangThai, ...extraPayload };
+        if (otp) payload.otp = otp;
+
+        const response = await fetch(`${API_BASE_URL}/admin/dat-san/${pendingStaffDSId}/chot`, {
+            method: 'PUT',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` },
+            body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            showStaffDSAlert('Đã cập nhật trạng thái thành công!', true);
+            loadStaffDanhSachDatSan();
+            return true;
+        } else {
+            if (customAlertBox) {
+                customAlertBox.innerHTML = (data.message || 'Lỗi xử lý.').replace(/\n/g, '<br>');
+                customAlertBox.className = 'modal-alert error';
+                customAlertBox.style.display = 'block';
+            } else {
+                showStaffDSAlert(data.message || 'Lỗi xử lý.', false);
+            }
+            return false;
+        }
+    } catch (e) {
+        showStaffDSAlert('Lỗi kết nối máy chủ.', false);
+        return false;
+    }
 }
 
 function closeStaffCancelConfirmModal() {
@@ -2032,41 +2164,6 @@ async function confirmGuestCancelStaff() {
     } else {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-check"></i> Xác nhận Hủy & Hoàn cọc';
-    }
-}
-
-async function executeStaffCapNhatDatSan(trangThai, otp = null, customAlertBox = null) {
-    if (!pendingStaffDSId) return false;
-    closeStaffDSConfirmModal(); 
-
-    try {
-        const payload = { trang_thai: trangThai };
-        if (otp) payload.otp = otp;
-
-        const response = await fetch(`${API_BASE_URL}/admin/dat-san/${pendingStaffDSId}/chot`, {
-            method: 'PUT',
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` },
-            body: JSON.stringify(payload)
-        });
-        const data = await response.json();
-        
-        if (response.ok && data.success) {
-            showStaffDSAlert('Đã cập nhật trạng thái thành công!', true);
-            loadStaffDanhSachDatSan();
-            return true;
-        } else {
-            if (customAlertBox) {
-                customAlertBox.innerHTML = (data.message || 'Lỗi xử lý.').replace(/\n/g, '<br>');
-                customAlertBox.className = 'modal-alert error';
-                customAlertBox.style.display = 'block';
-            } else {
-                showStaffDSAlert(data.message || 'Lỗi xử lý.', false);
-            }
-            return false;
-        }
-    } catch (e) {
-        showStaffDSAlert('Lỗi kết nối máy chủ.', false);
-        return false;
     }
 }
 
@@ -4920,18 +5017,70 @@ window.openAdminCancelInvoiceModal = function(maHoaDon, soTran, isMember, tenKha
         document.body.appendChild(modal);
     }
 
+    // Tìm bản ghi đầu tiên thuộc hóa đơn này để kiểm tra có phải Đặt hộ (Offline) không và lấy thông tin ngân hàng sẵn có
+    const sourceList = (typeof allDatSanData !== 'undefined' && allDatSanData.length > 0)
+        ? allDatSanData
+        : (typeof staffDatSanData !== 'undefined' ? staffDatSanData : []);
+    const sampleItem = sourceList.find(d => d.MaHoaDonDatSan === maHoaDon) || null;
+    const hdObj = sampleItem?.hoa_don_dat_san || sampleItem?.hoaDonDatSan || null;
+    const isOfflineInvoice = Boolean(
+        (hdObj && hdObj.PhuongThucThanhToan === 'TienMat') ||
+        sampleItem?.ID_NhanVienXuLy ||
+        sampleItem?.MaNhanVienXuLy ||
+        (sampleItem?.nguoi_dung?.Email && sampleItem.nguoi_dung.Email.endsWith('.offline'))
+    );
+    const kh = sampleItem?.nguoi_dung || {};
+    const tongCocStr = Number(tongCoc || 0).toLocaleString('vi-VN') + 'đ';
+
     if (isMember) {
+        const offlineInvOptionsHtml = isOfflineInvoice ? `
+            <div style="text-align: left; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 12px; padding: 14px; margin-bottom: 18px;">
+                <div style="font-size: 0.84rem; font-weight: 700; color: #0f172a; margin-bottom: 10px;">
+                    <i class="fa-solid fa-hand-holding-dollar" style="color: var(--primary); margin-right: 5px;"></i>
+                    Hóa đơn đặt hộ (${soTran} trận) — Chọn hình thức hoàn cọc (${tongCocStr}):
+                </div>
+                <label style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; background: #fff; border: 1px solid #e2e8f0; cursor: pointer; margin-bottom: 8px; font-size: 0.88rem; font-weight: 600; color: #1e293b;">
+                    <input type="radio" name="inv_refund_method" value="chuyen_khoan" checked onchange="toggleSingleCancelRefundMethod('inv')">
+                    <span><i class="fa-solid fa-building-columns" style="color: #2563eb; margin-right: 5px;"></i> Hoàn tiền bằng Chuyển khoản ngân hàng</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; background: #fff; border: 1px solid #e2e8f0; cursor: pointer; font-size: 0.88rem; font-weight: 600; color: #1e293b;">
+                    <input type="radio" name="inv_refund_method" value="vi" onchange="toggleSingleCancelRefundMethod('inv')">
+                    <span><i class="fa-solid fa-wallet" style="color: #10b981; margin-right: 5px;"></i> Hoàn tiền vào Ví tài khoản (${tenKhach})</span>
+                </label>
+
+                <div id="inv-bank-refund-box" style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed #cbd5e1; display: block;">
+                    <div style="margin-bottom: 8px;">
+                        <label style="font-size: 0.8rem; font-weight: 600; color: #475569; display: block; margin-bottom: 4px;">Tên ngân hàng nhận <span style="color:red;">*</span></label>
+                        <input type="text" id="inv_bank_name" class="form-control" placeholder="VD: Vietcombank, MB Bank..." value="${kh.TenNganHang || ''}" style="height: 36px; font-size: 0.86rem;">
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <div>
+                            <label style="font-size: 0.8rem; font-weight: 600; color: #475569; display: block; margin-bottom: 4px;">Số tài khoản <span style="color:red;">*</span></label>
+                            <input type="text" id="inv_bank_stk" class="form-control" placeholder="Nhập STK..." value="${kh.STKNganHang || ''}" style="height: 36px; font-size: 0.86rem; font-family: monospace;">
+                        </div>
+                        <div>
+                            <label style="font-size: 0.8rem; font-weight: 600; color: #475569; display: block; margin-bottom: 4px;">Chủ tài khoản <span style="color:red;">*</span></label>
+                            <input type="text" id="inv_bank_owner" class="form-control" placeholder="TÊN IN HOA..." value="${kh.TenTaiKhoan || tenKhach.toUpperCase()}" style="height: 36px; font-size: 0.86rem; text-transform: uppercase;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        ` : `
+            <p style="color: #64748b; font-size: 0.92rem; line-height: 1.6; margin-bottom: 22px;">
+                Khách hàng: <strong style="color:#0f172a;">${tenKhach}</strong>.<br>
+                Hệ thống sẽ hủy toàn bộ <strong>${soTran} trận đang đặt cọc</strong> trong hóa đơn này và hoàn trả 100% tiền cọc (${tongCocStr}) vào ví khách hàng.
+            </p>
+        `;
+
         modal.innerHTML = `
-            <div class="modal-content" style="max-width: 430px; width: 92%; text-align: center; padding: 28px 24px; border-radius: 16px;">
-                <div style="font-size: 3.2rem; color: #ef4444; margin-bottom: 12px;"><i class="fa-solid fa-file-circle-xmark"></i></div>
+            <div class="modal-content" style="max-width: 460px; width: 92%; text-align: center; padding: 26px 24px; border-radius: 16px;">
+                <div style="font-size: 3.2rem; color: #ef4444; margin-bottom: 10px;"><i class="fa-solid fa-file-circle-xmark"></i></div>
                 <h3 style="margin-bottom: 10px; font-size: 1.3rem;">Hủy cả Hóa đơn #${maHoaDon}?</h3>
-                <p style="color: #64748b; font-size: 0.92rem; line-height: 1.6; margin-bottom: 22px;">
-                    Khách hàng: <strong style="color:#0f172a;">${tenKhach}</strong>.<br>
-                    Hệ thống sẽ hủy toàn bộ <strong>${soTran} trận đang đặt cọc</strong> trong hóa đơn này và hoàn trả 100% tiền cọc vào ví khách hàng.
-                </p>
+                <div id="admin-inv-member-alert" class="modal-alert" style="display:none; margin-bottom:12px; text-align:left;"></div>
+                ${offlineInvOptionsHtml}
                 <div style="display: flex; gap: 12px; justify-content: center;">
                     <button type="button" class="btn-outline" style="flex: 1; padding: 10px;" onclick="document.getElementById('admin-cancel-invoice-modal').style.display='none'">Đóng</button>
-                    <button type="button" id="btn-exec-cancel-inv" class="btn-primary" style="flex: 1.2; padding: 10px; background: #ef4444; border-color: #ef4444;" onclick="executeAdminCancelInvoice('${maHoaDon}')">Đồng ý Hủy</button>
+                    <button type="button" id="btn-exec-cancel-inv" class="btn-primary" style="flex: 1.3; padding: 10px; background: #ef4444; border-color: #ef4444;" onclick="executeAdminCancelInvoice('${maHoaDon}', false, ${isOfflineInvoice})">Xác nhận Hủy & Hoàn tiền</button>
                 </div>
             </div>
         `;
@@ -4953,7 +5102,7 @@ window.openAdminCancelInvoiceModal = function(maHoaDon, soTran, isMember, tenKha
                 </div>
                 <div style="display:flex; justify-content:flex-end; gap:10px;">
                     <button type="button" class="btn-outline" style="width:auto; padding:9px 18px;" onclick="document.getElementById('admin-cancel-invoice-modal').style.display='none'">Đóng</button>
-                    <button type="button" id="btn-exec-cancel-inv" class="btn-primary" style="width:auto; padding:9px 18px; background:#ef4444; border-color:#ef4444;" onclick="executeAdminCancelInvoice('${maHoaDon}', true)">Xác nhận Hủy HĐ</button>
+                    <button type="button" id="btn-exec-cancel-inv" class="btn-primary" style="width:auto; padding:9px 18px; background:#ef4444; border-color:#ef4444;" onclick="executeAdminCancelInvoice('${maHoaDon}', true, false)">Xác nhận Hủy HĐ</button>
                 </div>
             </div>
         `;
@@ -4982,14 +5131,39 @@ window.sendAdminInvoiceGuestOtp = async function(maHoaDon) {
     }
 };
 
-window.executeAdminCancelInvoice = async function(maHoaDon, needOtp = false) {
-    const otp = needOtp ? document.getElementById('admin-inv-otp-input')?.value.trim() : null;
-    if (needOtp && (!otp || otp.length !== 6)) {
-        const alertBox = document.getElementById('admin-inv-otp-alert');
-        alertBox.textContent = 'Vui lòng nhập đủ 6 số OTP!';
-        alertBox.className = 'modal-alert error';
-        alertBox.style.display = 'block';
-        return;
+window.executeAdminCancelInvoice = async function(maHoaDon, needOtp = false, isOfflineInvoice = false) {
+    let payload = { phuong_thuc_hoan: 'vi' };
+
+    if (needOtp) {
+        const otp = document.getElementById('admin-inv-otp-input')?.value.trim();
+        if (!otp || otp.length !== 6) {
+            const alertBox = document.getElementById('admin-inv-otp-alert');
+            alertBox.textContent = 'Vui lòng nhập đủ 6 số OTP!';
+            alertBox.className = 'modal-alert error';
+            alertBox.style.display = 'block';
+            return;
+        }
+        payload.otp = otp;
+    } else if (isOfflineInvoice) {
+        const method = document.querySelector('input[name="inv_refund_method"]:checked')?.value || 'vi';
+        payload.phuong_thuc_hoan = method;
+
+        if (method === 'chuyen_khoan') {
+            const nganHang = document.getElementById('inv_bank_name')?.value.trim() || '';
+            const stk = document.getElementById('inv_bank_stk')?.value.trim() || '';
+            const owner = document.getElementById('inv_bank_owner')?.value.trim().toUpperCase() || '';
+
+            if (!nganHang || !stk || !owner) {
+                const alertBox = document.getElementById('admin-inv-member-alert');
+                alertBox.textContent = 'Vui lòng nhập đầy đủ Tên ngân hàng, Số tài khoản và Chủ tài khoản nhận tiền!';
+                alertBox.className = 'modal-alert error';
+                alertBox.style.display = 'block';
+                return;
+            }
+            payload.ngan_hang = nganHang;
+            payload.so_tai_khoan = stk;
+            payload.chu_tai_khoan = owner;
+        }
     }
 
     const btn = document.getElementById('btn-exec-cancel-inv');
@@ -5000,7 +5174,7 @@ window.executeAdminCancelInvoice = async function(maHoaDon, needOtp = false) {
         const res = await fetch(`${API_BASE_URL}/admin/hoa-don-dat-san/${maHoaDon}/huy`, {
             method: 'PUT',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-            body: JSON.stringify({ otp })
+            body: JSON.stringify(payload)
         });
         const data = await res.json();
         if (res.ok && data.success) {
@@ -5015,11 +5189,11 @@ window.executeAdminCancelInvoice = async function(maHoaDon, needOtp = false) {
         } else {
             showSystemModal('Lỗi', data.message || 'Không thể hủy hóa đơn!', 'error');
             btn.disabled = false;
-            btn.innerHTML = 'Xác nhận Hủy';
+            btn.innerHTML = 'Xác nhận Hủy & Hoàn tiền';
         }
     } catch (e) {
         showSystemModal('Lỗi', 'Mất kết nối máy chủ!', 'error');
         btn.disabled = false;
-        btn.innerHTML = 'Xác nhận Hủy';
+        btn.innerHTML = 'Xác nhận Hủy & Hoàn tiền';
     }
 };
