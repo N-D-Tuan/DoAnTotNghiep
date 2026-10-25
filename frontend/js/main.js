@@ -717,6 +717,7 @@ function toggleGuestSlot(element, clusterId, clusterName, pitchId, pitchName, da
     } else {
         guestSelectedSlots.push({ 
             id: slotId, 
+            clusterId,
             pitchId, 
             kgId, 
             dateDb, 
@@ -766,25 +767,59 @@ window.openGuestCartModal = function() {
     
     let html = '';
     let totalAmount = 0;
+
+    // Gom theo từng cụm sân để tính đúng thuế VAT (8% làm tròn dưới hàng nghìn) của từng hóa đơn cụm sân
+    const clusterTotals = {};
     
     guestSelectedSlots.forEach((s, index) => {
-        totalAmount += Number(s.price);
+        const priceNum = Number(s.price || 0);
+        totalAmount += priceNum;
+        const cKey = String(s.clusterId || s.clusterName || 'default');
+        clusterTotals[cKey] = (clusterTotals[cKey] || 0) + priceNum;
+
         html += `
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 7px 10px; background: #ffffff; border-radius: 6px; margin-bottom: 6px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 6px;">
                 <div>
                     <h4 style="font-size: 0.88rem; font-weight: 700; margin: 0 0 2px 0; color: #16a34a;">${s.clusterName} - ${s.pitchName}</h4>
                     <p style="margin: 0; color: #64748b; font-size: 0.8rem;">Ngày: <strong style="color: #0f172a;">${s.dateDisplay}</strong> | Giờ: <strong style="color: #0f172a;">${s.timeStr}</strong></p>
                 </div>
                 <div style="text-align: right; display: flex; align-items: center; gap: 10px;">
-                    <span style="color: #ea580c; font-weight: 700; font-size: 0.88rem;">${Number(s.price).toLocaleString('vi-VN')}đ</span>
+                    <span style="color: #ea580c; font-weight: 700; font-size: 0.88rem;">${priceNum.toLocaleString('vi-VN')}đ</span>
                     <i class="fa-solid fa-trash-can" style="color: #ef4444; cursor: pointer; font-size: 0.9rem;" onclick="removeGuestSlotByIndex(${index})"></i>
                 </div>
             </div>
         `;
     });
+
+    // Tính tổng thuế VAT 8% (làm tròn dưới hàng nghìn trên từng cụm sân)
+    let totalVatAmount = 0;
+    const clusterCount = Object.keys(clusterTotals).length;
+    Object.values(clusterTotals).forEach(subTotal => {
+        totalVatAmount += Math.floor((subTotal * 0.08) / 1000) * 1000;
+    });
+    const totalInvoiceAmount = totalAmount + totalVatAmount;
+    const depositAmount = Math.round(totalAmount * 0.3);
+
+    // Khung chi tiết tiền sân + Thuế VAT 8% + Tổng hóa đơn tương tự Khách hàng có tài khoản
+    html += `
+        <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px 14px; margin-top: 10px; font-size: 0.86rem; color: #334155;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                <span style="color: #64748b;">Tổng tiền sân gốc (${guestSelectedSlots.length} ca${clusterCount > 1 ? ` • ${clusterCount} Hóa đơn` : ''}):</span>
+                <strong style="color: #0f172a;">${totalAmount.toLocaleString('vi-VN')}đ</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px dashed #cbd5e1;">
+                <span style="color: #64748b;">Thuế VAT (8%):</span>
+                <strong style="color: #475569;">+${totalVatAmount.toLocaleString('vi-VN')}đ</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.92rem;">
+                <span style="font-weight: 700; color: #0f172a;">Tổng cộng Hóa đơn:</span>
+                <strong style="color: #2563eb;">${totalInvoiceAmount.toLocaleString('vi-VN')}đ</strong>
+            </div>
+        </div>
+    `;
     
     listContainer.innerHTML = html;
-    document.getElementById('guest-cart-total-deposit').innerText = Math.round(totalAmount * 0.3).toLocaleString('vi-VN') + 'đ';
+    document.getElementById('guest-cart-total-deposit').innerText = depositAmount.toLocaleString('vi-VN') + 'đ';
     
     const modal = document.getElementById('guest-cart-modal');
     modal.style.display = 'flex';
@@ -907,6 +942,8 @@ window.showGuestPaymentResultModal = function(status, maHoaDon = null) {
         document.body.appendChild(modal);
     }
 
+    const invoiceIds = maHoaDon ? String(maHoaDon).split(',').map(s => s.trim()).filter(Boolean) : [];
+
     let iconHtml = '';
     let title = '';
     let message = '';
@@ -915,7 +952,8 @@ window.showGuestPaymentResultModal = function(status, maHoaDon = null) {
     if (status === 'success') {
         iconHtml = '<i class="fa-solid fa-circle-check" style="font-size: 3.5rem; color: #22C55E;"></i>';
         title = 'Đặt sân thành công!';
-        message = `Thanh toán qua VNPay đã hoàn tất${maHoaDon ? ` (Mã hóa đơn: <strong style="color:#22C55E;">#${maHoaDon}</strong>)` : ''}. Chúng tôi đã gửi Hóa đơn và Vé điện tử QR về Email của bạn.<br><br><strong style="color:#f8fafc;">Bạn có muốn xuất hóa đơn đặt sân ngay bây giờ không?</strong>`;
+        const hdLabel = invoiceIds.length > 0 ? ` (Mã hóa đơn: <strong style="color:#22C55E;">#${invoiceIds.join(', #')}</strong>)` : '';
+        message = `Thanh toán qua VNPay đã hoàn tất${hdLabel}. Chúng tôi đã gửi Hóa đơn và Vé điện tử QR về Email của bạn.<br><br><strong style="color:#f8fafc;">Bạn có muốn xuất hóa đơn đặt sân ngay bây giờ không?</strong>`;
         btnColor = '#22C55E';
         guestSelectedSlots = [];
         updateGuestFloatingCart();
@@ -936,15 +974,19 @@ window.showGuestPaymentResultModal = function(status, maHoaDon = null) {
         btnColor = '#ef4444';
     }
 
-    const actionButtonsHtml = (status === 'success' && maHoaDon)
+    const printButtonsHtml = invoiceIds.map(idHD => `
+        <button type="button" class="btn" onclick="exportGuestBookingInvoice('${idHD}')" style="flex: 1.3; background: #22C55E; color: #0F172A; font-weight: 700; padding: 12px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap;">
+            <i class="fa-solid fa-print"></i> Xuất HĐ #${idHD}
+        </button>
+    `).join('');
+
+    const actionButtonsHtml = (status === 'success' && invoiceIds.length > 0)
         ? `
-            <div style="display: flex; gap: 12px; justify-content: center;">
+            <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
                 <button type="button" class="btn" onclick="closeGuestPaymentResultModal()" style="flex: 1; background: #334155; color: #f8fafc; font-weight: 600; padding: 12px; border-radius: 10px;">
                     Đóng
                 </button>
-                <button type="button" class="btn" onclick="exportGuestBookingInvoice('${maHoaDon}')" style="flex: 1.3; background: #22C55E; color: #0F172A; font-weight: 700; padding: 12px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
-                    <i class="fa-solid fa-print"></i> Xuất hóa đơn
-                </button>
+                ${printButtonsHtml}
             </div>
         `
         : `
@@ -954,7 +996,7 @@ window.showGuestPaymentResultModal = function(status, maHoaDon = null) {
         `;
 
     modal.innerHTML = `
-        <div class="modal-card" style="max-width: 440px; text-align: center; padding: 28px 24px;">
+        <div class="modal-card" style="max-width: 460px; text-align: center; padding: 28px 24px;">
             <div style="margin-bottom: 16px;">${iconHtml}</div>
             <h3 style="font-size: 1.35rem; color: var(--text-main); margin-bottom: 10px;">${title}</h3>
             <p style="color: var(--text-muted); font-size: 0.92rem; line-height: 1.6; margin-bottom: 24px;">${message}</p>
@@ -978,32 +1020,37 @@ window.exportGuestBookingInvoice = async function(maHoaDon) {
         const hd = json.data;
         const listDatSan = hd.dat_sans || hd.datSans || [];
         const first = listDatSan[0] || {};
-        const tenKhach = hd.nguoi_dung?.HoTen || first.TenKhachVangLai || 'Khách vãng lai';
-        const sdtKhach = hd.nguoi_dung?.SoDienThoai || first.SDTKhachVangLai || 'N/A';
+        const tenKhach = hd.nguoi_dung?.HoTen || first.TenNguoiDat || first.TenKhachVangLai || 'Khách vãng lai';
+        const sdtKhach = hd.nguoi_dung?.SoDienThoai || first.SDTNguoiDat || first.SDTKhachVangLai || 'N/A';
         const ngayLap = hd.NgayTao ? new Date(hd.NgayTao).toLocaleString('vi-VN') : new Date().toLocaleString('vi-VN');
 
+        let tongTienSanGoc = 0;
         const rowsHtml = listDatSan.map((ds, i) => {
             const tenSan = ds.san_bong?.TenSan || 'Sân bóng';
             const cumSan = ds.san_bong?.cum_san?.TenCumSan || '';
             const kg = ds.khung_gio ? `${ds.khung_gio.GioBatDau.substring(0,5)} - ${ds.khung_gio.GioKetThuc.substring(0,5)}` : '';
             const ngayDa = ds.NgayDa ? ds.NgayDa.split('-').reverse().join('/') : '';
+            const donGia = Number(ds.pivot?.DonGia ?? ds.TongTien ?? 0);
+            if (ds.TrangThai !== 'DaHuy') tongTienSanGoc += donGia;
+
             return `
                 <tr>
                     <td style="text-align:center;">${i + 1}</td>
                     <td style="text-align:center; font-family:monospace; font-weight:bold;">#PT-${ds.MaDatSan || ds.ID}</td>
                     <td><strong>${tenSan}</strong><br><small>${cumSan}</small></td>
                     <td style="text-align:center;">${kg}<br><small>${ngayDa}</small></td>
-                    <td style="text-align:right;">${Number(ds.TongTien).toLocaleString('vi-VN')}đ</td>
+                    <td style="text-align:right;">${donGia.toLocaleString('vi-VN')}đ</td>
                     <td style="text-align:right; color:#047857; font-weight:bold;">${Number(ds.TienCoc).toLocaleString('vi-VN')}đ</td>
                 </tr>
             `;
         }).join('');
 
-        const tongTien = Number(hd.TongTienSan || 0);
+        const tongTien = Number(hd.TongTien ?? hd.TongTienSan ?? 0);
+        const thueVAT = Number(hd.ThueVAT || 0);
         const tienCoc = Number(hd.TienDaCoc || 0);
         const conLai = Math.max(0, tongTien - tienCoc);
 
-        const printWin = window.open('', '_blank', 'width=850,height=700');
+        const printWin = window.open('', '_blank', 'width=850,height=720');
         if (!printWin) return alert('Vui lòng cho phép mở cửa sổ Pop-up để in hóa đơn!');
 
         printWin.document.write(`
@@ -1020,7 +1067,7 @@ window.exportGuestBookingInvoice = async function(maHoaDon) {
                     table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 13px; }
                     th, td { border: 1px solid #cbd5e1; padding: 10px; }
                     th { background: #f1f5f9; }
-                    .summary { width: 320px; margin-left: auto; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px; }
+                    .summary { width: 340px; margin-left: auto; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px; font-size: 13.5px; }
                 </style>
             </head>
             <body>
@@ -1044,14 +1091,16 @@ window.exportGuestBookingInvoice = async function(maHoaDon) {
                             <th>Mã Vé</th>
                             <th>Sân Bóng & Cơ Sở</th>
                             <th>Khung Giờ & Ngày Đá</th>
-                            <th>Đơn Giá Sân</th>
+                            <th>Đơn Giá Khung Giờ</th>
                             <th>Tiền Đã Cọc</th>
                         </tr>
                     </thead>
                     <tbody>${rowsHtml}</tbody>
                 </table>
                 <div class="summary">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>Tổng tiền sân:</span><strong>${tongTien.toLocaleString('vi-VN')}đ</strong></div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>Tổng tiền sân gốc:</span><strong>${tongTienSanGoc.toLocaleString('vi-VN')}đ</strong></div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#475569;"><span>Thuế VAT (8%):</span><strong>+${thueVAT.toLocaleString('vi-VN')}đ</strong></div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px; border-top:1px solid #e2e8f0; padding-top:6px;"><span>Tổng tiền hóa đơn:</span><strong>${tongTien.toLocaleString('vi-VN')}đ</strong></div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#047857;"><span>Đã đặt cọc:</span><strong>${tienCoc.toLocaleString('vi-VN')}đ</strong></div>
                     <div style="display:flex; justify-content:space-between; border-top:1px dashed #cbd5e1; padding-top:8px; color:#e11d48; font-size:15px;"><strong>Còn thu tại sân:</strong><strong>${conLai.toLocaleString('vi-VN')}đ</strong></div>
                 </div>

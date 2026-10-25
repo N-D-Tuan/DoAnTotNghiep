@@ -57,26 +57,6 @@ class CumSan extends Model
         return $this->hasMany(CaLamViec::class, 'MaCumSan', 'MaCumSan');
     }
 
-    public function banGiaoCas()
-    {
-        return $this->hasMany(BanGiaoCa::class, 'MaCumSan', 'MaCumSan');
-    }
-
-    public function sanPhams()
-    {
-        return $this->hasMany(SanPham::class, 'MaCumSan', 'MaCumSan');
-    }
-
-    public function hoaDonBanHangs()
-    {
-        return $this->hasMany(HoaDonBanHang::class, 'MaCumSan', 'MaCumSan');
-    }
-
-    public function phieuNhapHangs()
-    {
-        return $this->hasMany(PhieuNhapHang::class, 'MaCumSan', 'MaCumSan');
-    }
-
     public function danhGias()
     {
         return $this->hasMany(DanhGia::class, 'MaCumSan', 'MaCumSan');

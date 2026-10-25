@@ -34,9 +34,4 @@ class CaLamViec extends Model
     {
         return $this->hasMany(LichLamViec::class, 'MaCaLamViec', 'MaCaLamViec');
     }
-
-    public function banGiaoCas()
-    {
-        return $this->hasMany(BanGiaoCa::class, 'MaCaLamViec', 'MaCaLamViec');
-    }
 }

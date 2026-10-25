@@ -36,6 +36,11 @@ let currentBookingDate = '';
 let currentBookingStatus = 'All';
 let currentBookingTab = 'phong_trao';
 let currentBookingPurpose = sessionStorage.getItem('dn_football_booking_purpose') || 'normal';
+let availablePromotions = [];
+let selectedPromotion = null;
+let selectedPromotionsByCluster = {};
+let activePromoTargetClusterId = null;
+const CUSTOMER_VAT_RATE = 0.08;
 
 // ======================================================
 // USER ĐANG ĐĂNG NHẬP
@@ -655,33 +660,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.Echo.channel('system-updates')
             .listen('SystemDataUpdated', async (e) => {
                 console.log('⚡ Hệ thống có thay đổi Cụm sân/Sân bóng...');
+                const cacheBuster = new Date().getTime();
 
-                // Cập nhật biến toàn cục chứa Giờ mở/đóng cửa mới nhất trước khi chạy các lệnh khác
+                // 1. Cập nhật biến toàn cục chứa Giờ mở/đóng cửa mới nhất
                 if (currentClusterId !== null) {
                     try {
-                        const csRes = await fetch(`${API_BASE_URL}/cum-san/${currentClusterId}`);
+                        const csRes = await fetch(`${API_BASE_URL}/cum-san/${currentClusterId}?_t=${cacheBuster}`);
                         const csData = await csRes.json();
 
-                        // Kiểm tra Cụm sân hiện tại có bị Admin Xóa mềm không
-                        if (!csData.success || csData.data.deleted_at !== null) {
-                            
-                            // 1. Dọn dẹp tất cả khung giờ của cụm sân này ra khỏi giỏ hàng
+                        if (!csData.success || csData.data.deleted_at !== null || csData.data.TrangThai === 'BaoTri') {
                             selectedSlots = selectedSlots.filter(s => s.clusterId !== currentClusterId);
                             saveToSession();
                             
-                            // 2. Cập nhật Modal Giỏ hàng nếu đang mở
                             if (document.getElementById('cart-modal')?.style.display === 'flex') {
                                 if (selectedSlots.length > 0) openCartModal(); 
                                 else closeCartModal();
                             }
 
-                            // 3. Thông báo cho khách hàng biết
                             showToast(`Cụm sân "${currentClusterName}" đã bị ngừng hoạt động hoặc bảo trì!`);
-                            
-                            // 4. Đá văng người dùng ra ngoài màn hình danh sách cụm sân
                             renderClusters();
-                            
-                            // 5. Dừng luôn luồng cập nhật ngầm bên dưới vì cụm sân đã "bốc hơi"
                             return; 
                         }
 
@@ -694,36 +691,26 @@ document.addEventListener('DOMContentLoaded', async () => {
                     } catch(err) { console.error("Lỗi lấy thông tin cụm sân:", err); }
                 }
 
-                // KIỂM TRA SÂN BÓNG BẢO TRÌ NẾU KHÁCH ĐANG XEM LỊCH CỦA SÂN ĐÓ
+                // 2. Kiểm tra sân bóng bảo trì nếu khách đang xem lịch của sân đó
                 if (currentPitchId !== null && currentClusterId !== null) {
                     try {
-                        // Tận dụng API có sẵn bằng cách truyền query cum_san_id
-                        const pitchRes = await fetch(`${API_BASE_URL}/san-bong?cum_san_id=${currentClusterId}`);
+                        const pitchRes = await fetch(`${API_BASE_URL}/san-bong?cum_san_id=${currentClusterId}&_t=${cacheBuster}`);
                         const pitchData = await pitchRes.json();
                         
                         if (pitchData.success) {
-                            // Dùng hàm find() để lọc ra đúng sân bóng khách đang đứng xem
-                            const currentPitchInfo = pitchData.data.find(p => p.ID == currentPitchId);
+                            const currentPitchInfo = pitchData.data.find(p => String(p.MaSanBong || p.ID) === String(currentPitchId));
 
-                            // Nếu không tìm thấy hoặc Sân bóng bị chuyển sang Bảo trì
                             if (!currentPitchInfo || currentPitchInfo.TrangThai === 'BaoTri') {
-                                
-                                // 1. Gỡ hết các ô của sân này khỏi giỏ hàng
                                 selectedSlots = selectedSlots.filter(s => s.pitchId !== currentPitchId);
                                 saveToSession();
                                 
-                                // 2. Cập nhật lại Modal giỏ hàng
                                 if (document.getElementById('cart-modal')?.style.display === 'flex') {
                                     if (selectedSlots.length > 0) openCartModal(); 
                                     else closeCartModal();
                                 }
 
-                                // 3. Thông báo cho khách
                                 showToast(`Sân bóng "${currentPitchName}" vừa được đưa vào bảo trì!`);
-                                
-                                // 4. Đá khách văng ra trang Danh sách sân con của Cụm này
                                 renderPitches(currentClusterId, currentClusterName, currentClusterAddress, currentClusterGioMo, currentClusterGioDong);
-                                
                                 return;
                             }
                         }
@@ -731,13 +718,92 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
 
                 await revalidateCartPrices();
-                
-                // Trạng thái 1: Khách đang xem trang Danh sách Cụm Sân (Dựa vào ID vùng chứa lưới sân)
-                if (document.getElementById('cluster-grid-container')) {
+
+                // 3. Nếu khách đang mở Modal xem danh sách đánh giá của Cụm sân
+                if (typeof refreshOpenCustomerReviewsModal === 'function') {
+                    refreshOpenCustomerReviewsModal();
+                }
+
+                // 4. TRẠNG THÁI A: Khách đang đứng ở bảng Lịch Sân
+                if (currentPitchId !== null && document.querySelector('.schedule-table')) {
+                    try {
+                        const dsRes = await fetch(`${API_BASE_URL}/dat-san/da-dat?id_san_bong=${currentPitchId}&_t=${cacheBuster}`);
+                        const bookedSlots = (await dsRes.json()).data || [];
+
+                        // Bước A1: Nhả tất cả các ô đang "Đã đặt" về lại "CÒN TRỐNG" và khôi phục sự kiện click
+                        document.querySelectorAll('.schedule-table .slot.booked').forEach(el => {
+                            if (el.innerText.trim() === 'Đã đặt') {
+                                el.classList.remove('booked');
+                                el.classList.add('available');
+                                el.innerText = 'CÒN TRỐNG';
+                                const slotArgs = el.getAttribute('data-slot-args');
+                                if (slotArgs) {
+                                    el.setAttribute('onclick', `toggleSlot(this, ${slotArgs})`);
+                                }
+                            }
+                        });
+
+                        // Bước A2: Quét danh sách bookedSlots từ Server và tô xám ngay theo data-slot-key (giống hệt main.js)
+                        bookedSlots.forEach(booked => {
+                            const maKG = booked.MaKhungGio || booked.ID_KhungGio;
+                            const ngayDa = String(booked.NgayDa).substring(0, 10);
+                            const targetKey = `${currentPitchId}-${ngayDa}-${maKG}`;
+
+                            let slotEl = document.querySelector(`.schedule-table .slot[data-slot-key="${targetKey}"]`);
+
+                            // Dự phòng nếu DOM cũ chưa có data-slot-key
+                            if (!slotEl) {
+                                const parts = ngayDa.split('-');
+                                const dateFull = `${parts[2]}/${parts[1]}/${parts[0]}`;
+                                slotEl = Array.from(document.querySelectorAll('.schedule-table .slot')).find(el => {
+                                    const sid = el.getAttribute('data-slot-id') || '';
+                                    return sid.includes(`-${dateFull}-`);
+                                });
+                            }
+
+                            if (slotEl && !slotEl.classList.contains('booked')) {
+                                const slotId = slotEl.getAttribute('data-slot-id');
+                                const timeStr = slotEl.getAttribute('data-time-str') || '';
+                                const dateFull = slotEl.getAttribute('data-date-full') || ngayDa;
+
+                                slotEl.classList.remove('available', 'selected');
+                                slotEl.classList.add('booked');
+                                slotEl.innerText = 'Đã đặt';
+                                slotEl.removeAttribute('onclick');
+
+                                // Nếu ô này đang nằm trong giỏ hàng của khách -> Gỡ khỏi giỏ và báo Toast
+                                const existingIndex = selectedSlots.findIndex(s => s.id === slotId);
+                                if (existingIndex > -1) {
+                                    selectedSlots.splice(existingIndex, 1);
+                                    saveToSession();
+                                    
+                                    if (document.getElementById('cart-modal')?.style.display === 'flex') {
+                                        if (selectedSlots.length > 0) openCartModal();
+                                        else closeCartModal();
+                                    }
+                                    showToast(`Khung giờ ${timeStr} ngày ${dateFull} vừa bị khách khác đặt mất!`);
+                                }
+                            }
+                        });
+
+                        // Bước A3: Đồng bộ lại các ô đang chọn với giỏ hàng
+                        document.querySelectorAll('.schedule-table .slot.selected').forEach(el => {
+                            const slotId = el.getAttribute('data-slot-id');
+                            if (!selectedSlots.some(s => s.id === slotId)) {
+                                el.classList.remove('selected');
+                                el.innerText = 'CÒN TRỐNG';
+                            }
+                        });
+                    } catch (err) {
+                        console.error("Lỗi cập nhật ngầm lịch khách hàng:", err);
+                    }
+                }
+                // 5. TRẠNG THÁI B: Khách đang xem trang Danh sách Cụm Sân
+                else if (document.getElementById('cluster-grid-container')) {
                     try {
                         const [response, ratingRes] = await Promise.all([
-                            fetch(`${API_BASE_URL}/cum-san`),
-                            fetch(`${API_BASE_URL}/danh-gia`)
+                            fetch(`${API_BASE_URL}/cum-san?_t=${cacheBuster}`),
+                            fetch(`${API_BASE_URL}/danh-gia?_t=${cacheBuster}`)
                         ]);
                         const res = await response.json();
                         const ratingMap = (await ratingRes.json()).data || {};
@@ -752,16 +818,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                         filterClusters(); 
                     } catch(err) { console.error(err); }
                 }
-
-                // Nếu khách đang mở Modal xem danh sách đánh giá của Cụm sân
-                if (typeof refreshOpenCustomerReviewsModal === 'function') {
-                    refreshOpenCustomerReviewsModal();
-                }
-
-                // Trạng thái 2: Khách đang xem trang chi tiết Sân con bên trong 1 Cụm
+                // 6. TRẠNG THÁI C: Khách đang xem trang chi tiết Sân con bên trong 1 Cụm
                 else if (currentClusterId !== null && currentPitchId === null && document.querySelector('.cluster-detail-header')) {
                     try {
-                        // Cập nhật lại chuỗi hiển thị giờ trên thẻ Header nếu Admin vừa thay đổi
                         const headerInfo = document.querySelector('.cluster-detail-info');
                         if (headerInfo) {
                             headerInfo.innerHTML = `
@@ -770,12 +829,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                             `;
                         }
 
-                        // 1. Gọi API ngầm lấy danh sách sân con mới nhất của cụm này
-                        const response = await fetch(`${API_BASE_URL}/san-bong?cum_san_id=${currentClusterId}`);
+                        const response = await fetch(`${API_BASE_URL}/san-bong?cum_san_id=${currentClusterId}&_t=${cacheBuster}`);
                         const res = await response.json();
                         
                         if (res.success) {
-                            // 2. Lọc và gom nhóm sân con đang Hoạt Động
                             const activePitches = res.data.filter(sb => sb.TrangThai === 'HoatDong');
                             const grouped = {};
                             
@@ -786,7 +843,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 grouped[loaiSanName].pitches.push(sb);
                             });
 
-                            // 3. Tạo cấu trúc HTML mới
                             let newHtml = '';
                             if (activePitches.length === 0) {
                                 newHtml = `<p style="text-align:center; color: var(--text-muted); margin-top: 40px;">Cụm sân này hiện chưa có sân con nào hoạt động.</p>`;
@@ -816,190 +872,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 }
                             }
 
-                            // 4. Tìm thẻ Header của Cụm sân hiện tại
                             const headerNode = document.querySelector('.cluster-detail-header');
                             if (headerNode) {
-                                // Quét và xóa sạch các danh sách sân/thông báo trống cũ (nằm ngay dưới Header)
                                 let nextNode = headerNode.nextElementSibling;
                                 while (nextNode) {
                                     const toRemove = nextNode;
                                     nextNode = nextNode.nextElementSibling;
                                     toRemove.remove();
                                 }
-                                
-                                // Chèn khối HTML danh sách sân mới mượt mà ngay bên dưới Header
                                 headerNode.insertAdjacentHTML('afterend', newHtml);
                             }
                         }
                     } catch(err) { console.error("Lỗi cập nhật ngầm danh sách sân con:", err); }
-                }
-
-                // TRẠNG THÁI 3: Khách đang xem Lịch Sân
-                else if (currentPitchId !== null && document.querySelector('.schedule-table')) {
-                    try {
-                        // Gọi thêm API gia-tien để lấy bảng giá chính xác của cụm sân này
-                        const [kgRes, dsRes, gtRes] = await Promise.all([
-                            fetch(`${API_BASE_URL}/khung-gio`),
-                            fetch(`${API_BASE_URL}/dat-san/da-dat?id_san_bong=${currentPitchId}&_t=${new Date().getTime()}`),
-                            fetch(`${API_BASE_URL}/gia-tien?cum_san_id=${currentClusterId}`)
-                        ]);
-                        
-                        const allKhungGio = (await kgRes.json()).data || [];
-                        const bookedSlots = (await dsRes.json()).data || [];
-                        
-                        // Lọc ra bảng giá đúng với Loại sân hiện tại (Sân 5, Sân 7...)
-                        const giaTienData = (await gtRes.json()).data || [];
-                        const validPrices = giaTienData.filter(gt => gt.ID_LoaiSan == currentLoaiSanId);
-
-                        // BƯỚC 1 - CHỈ RESET NHỮNG Ô ĐANG BỊ "ĐÃ ĐẶT" TRỞ VỀ "CÒN TRỐNG"
-                        const allBookedElements = document.querySelectorAll('.schedule-table .slot.booked');
-                        allBookedElements.forEach(el => {
-                            if (el.innerText === 'Đã đặt') {
-                                el.classList.remove('booked');
-                                el.classList.add('available');
-                                el.innerText = 'CÒN TRỐNG';
-                            }
-                        });
-
-                        // BƯỚC 1.5 - ẨN/HIỆN DÒNG TỰ ĐỘNG THEO GIÁ TIỀN
-                        const moCua = currentClusterGioMo.substring(0, 5);
-                        const dongCua = currentClusterGioDong.substring(0, 5);
-                        
-                        const tbody = document.querySelector('.schedule-table tbody');
-                        if (tbody) {
-                            const rows = tbody.querySelectorAll('tr');
-                            rows.forEach(tr => {
-                                const timeTd = tr.querySelector('td:first-child strong');
-                                if (!timeTd) return;
-                                
-                                const timeStr = timeTd.innerText.trim();
-                                const [gioBatDau, gioKetThuc] = timeStr.split(' - ');
-                                const start = gioBatDau.substring(0, 5);
-                                const end = gioKetThuc.substring(0, 5);
-
-                                const kgMatch = allKhungGio.find(k => k.GioBatDau.substring(0,5) === start);
-                                
-                                let isValid = false;
-                                let actualPrice = 0;
-
-                                if (kgMatch) {
-                                    const priceInfo = validPrices.find(p => p.ID_KhungGio == kgMatch.ID);
-                                    if (priceInfo && priceInfo.SoTien > 0) {
-                                        actualPrice = priceInfo.SoTien;
-                                        if (start >= moCua && end <= dongCua) {
-                                            isValid = true;
-                                        }
-                                    }
-                                }
-
-                                if (!isValid) {
-                                    // TRƯỜNG HỢP 1: BỊ XÓA GIÁ HOẶC ĐÓNG CỬA -> ẨN DÒNG
-                                    tr.style.display = 'none';
-                                    const priceTd = tr.querySelector('td:nth-child(2)');
-                                    if (priceTd) priceTd.innerText = '-';
-                                    
-                                    const slotsInRow = tr.querySelectorAll('.slot');
-                                    let removedSomething = false;
-                                    slotsInRow.forEach(slotEl => {
-                                        if (slotEl.innerText !== 'Quá giờ') {
-                                            slotEl.classList.remove('available', 'selected');
-                                            slotEl.classList.add('booked');
-                                            slotEl.innerText = 'Đóng';
-                                            slotEl.removeAttribute('onclick');
-                                        }
-                                        
-                                        const slotId = slotEl.getAttribute('data-slot-id');
-                                        const existingIndex = selectedSlots.findIndex(s => s.id === slotId);
-                                        if (existingIndex > -1) {
-                                            selectedSlots.splice(existingIndex, 1);
-                                            removedSomething = true;
-                                        }
-                                    });
-                                    
-                                    if (removedSomething) {
-                                        saveToSession();
-                                        if (document.getElementById('cart-modal')?.style.display === 'flex') {
-                                            if (selectedSlots.length > 0) openCartModal(); 
-                                            else closeCartModal();
-                                        }
-                                        showToast(`Khung giờ ${timeStr} đã bị ngừng kinh doanh!`);
-                                    }
-                                } else {
-                                    // TRƯỜNG HỢP 2: CÓ GIÁ TRỞ LẠI -> HIỂN THỊ DÒNG
-                                    tr.style.display = '';
-                                    const priceTd = tr.querySelector('td:nth-child(2)');
-                                    if (priceTd) priceTd.innerText = Number(actualPrice).toLocaleString('vi-VN') + 'đ';
-                                    
-                                    const slotsInRow = tr.querySelectorAll('.slot');
-                                    slotsInRow.forEach(slotEl => {
-                                        if (slotEl.innerText !== 'Quá giờ' && slotEl.innerText !== 'Đã đặt') {
-                                            // Biến các ô "Đóng" (do vừa bị ẩn) trở lại thành "CÒN TRỐNG"
-                                            if (slotEl.innerText === 'Đóng') {
-                                                slotEl.classList.remove('booked');
-                                                slotEl.classList.add('available');
-                                                slotEl.innerText = 'CÒN TRỐNG';
-                                            }
-                                            
-                                            // Set lại onclick mang theo mức giá mới
-                                            const slotIdParts = slotEl.getAttribute('data-slot-id').split('-');
-                                            const dateVal = slotIdParts[2];
-                                            const timeVal = `${slotIdParts[3]}-${slotIdParts[4]}`;
-                                            slotEl.setAttribute('onclick', "toggleSlot(this, '${currentClusterId}', '${currentClusterName}', '${currentPitchId}', '${currentPitchName}', '${dateVal}', '${timeVal}', ${actualPrice})")
-                                        }
-                                    });
-                                }
-                            });
-                        }
-
-                        // BƯỚC 2 - TÔ MÀU XÁM LẠI CHO CÁC Ô THỰC SỰ ĐANG BỊ ĐẶT TRÊN DATABASE
-                        bookedSlots.forEach(booked => {
-                            const kg = allKhungGio.find(k => k.ID === booked.ID_KhungGio);
-                            if (!kg) return;
-
-                            const timeStr = `${kg.GioBatDau.substring(0,5)} - ${kg.GioKetThuc.substring(0,5)}`;
-                            const dateParts = booked.NgayDa.substring(0, 10).split('-'); 
-                            const dateFull = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
-                            
-                            const targetSlotId = `${currentClusterName}-${currentPitchName}-${dateFull}-${timeStr}`;
-                            const slotEl = document.querySelector(`.schedule-table .slot[data-slot-id="${targetSlotId}"]`);
-                            
-                            if (slotEl && !slotEl.classList.contains('booked')) {
-                                slotEl.classList.remove('available', 'selected');
-                                slotEl.classList.add('booked');
-                                slotEl.innerText = 'Đã đặt';
-                                slotEl.removeAttribute('onclick');
-
-                                const existingIndex = selectedSlots.findIndex(s => s.id === targetSlotId);
-                                if (existingIndex > -1) {
-                                    selectedSlots.splice(existingIndex, 1);
-                                    saveToSession();
-                                    
-                                    if (document.getElementById('cart-modal')?.style.display === 'flex') {
-                                        openCartModal(); 
-                                    }
-                                    showToast(`Khung giờ ${timeStr} ngày ${dateFull} vừa bị khách khác đặt mất!`);
-                                }
-                            }
-                        });
-
-                        await revalidateCartPrices();
-
-                        // BƯỚC 3 - ĐỒNG BỘ GIAO DIỆN "ĐÃ CHỌN" VỚI GIỎ HÀNG THỰC TẾ
-                        // Quét mọi ô đang hiển thị là "ĐÃ CHỌN" trên màn hình
-                        const allSelectedElements = document.querySelectorAll('.schedule-table .slot.selected');
-                        allSelectedElements.forEach(el => {
-                            const slotId = el.getAttribute('data-slot-id');
-                            // Kiểm tra xem ID của ô này có còn nằm trong mảng giỏ hàng nữa không
-                            const isStillInCart = selectedSlots.some(s => s.id === slotId);
-                            
-                            // Nếu đã bị hàm revalidateCartPrices xóa khỏi mảng -> Ép nhả giao diện về CÒN TRỐNG
-                            if (!isStillInCart) {
-                                el.classList.remove('selected');
-                                el.innerText = 'CÒN TRỐNG';
-                            }
-                        });
-
-                    } catch(err) { console.error("Lỗi cập nhật ngầm lịch:", err); }
                 }
             });
     }
@@ -1100,40 +984,303 @@ async function loadUserTournaments() {
 // Biến toàn cục hoặc biến cục bộ để lưu mục đích ban đầu khi mở modal
 let initialBookingPurpose = currentBookingPurpose;
 
+// Gom nhóm các khung giờ trong giỏ hàng theo từng Cụm sân (Mỗi Cụm sân = 1 Hóa đơn độc lập)
+function getCustomerCartClusterGroups() {
+    const groups = {};
+    selectedSlots.forEach((slot, index) => {
+        const cId = String(slot.clusterId);
+        if (!groups[cId]) {
+            groups[cId] = {
+                clusterId: cId,
+                clusterName: slot.clusterName || ('Cụm sân #' + cId),
+                slots: [],
+                rawTotal: 0
+            };
+        }
+        groups[cId].slots.push({ ...slot, _cartIndex: index });
+        groups[cId].rawTotal += Number(slot.price || 0);
+    });
+    return groups;
+}
+
+// Xác định phạm vi của 1 mã khuyến mãi: 'HE_THONG' | 'CUM_SAN' | 'KHACH_HANG'
+function getPromoScopeType(promo) {
+    if (!promo) return 'HE_THONG';
+    return promo.pham_vi || (!promo.MaNguoiDung ? 'HE_THONG' : (promo.nguoi_dung?.VaiTro === 'QuanLySan' ? 'CUM_SAN' : 'KHACH_HANG'));
+}
+
+// Đánh giá chi tiết 1 mã khuyến mãi:
+// - Nếu là Mã Toàn hệ thống (HE_THONG) hoặc Mã Cá nhân (KHACH_HANG): Xét điều kiện tối thiểu trên TỔNG TIỀN TOÀN GIỎ HÀNG
+// - Nếu là Mã Riêng Cụm sân (CUM_SAN): Xét điều kiện tối thiểu trên TỔNG TIỀN CỦA CỤM SÂN ĐÓ
+function evaluatePromotionForCluster(promo, clusterId = null) {
+    if (!promo) {
+        return { isEligible: false, applicableAmount: 0, actualDiscount: 0, potentialDiscount: 0, needMore: 0, lockReason: '' };
+    }
+
+    const groups = getCustomerCartClusterGroups();
+    const totalCartAmount = selectedSlots.reduce((sum, s) => sum + Number(s.price || 0), 0);
+    const phamVi = getPromoScopeType(promo);
+    const minOrder = Number(promo.GiaTriHoaDonToiThieu || 0);
+
+    // TRƯỜNG HỢP 1: MÃ TOÀN HỆ THỐNG HOẶC MÃ CÁ NHÂN KHÁCH HÀNG -> Xét trên Tổng tiền toàn giỏ hàng!
+    if (phamVi === 'HE_THONG' || phamVi === 'KHACH_HANG') {
+        const applicableAmount = totalCartAmount;
+        const isEligible = applicableAmount > 0 && applicableAmount >= minOrder;
+        const needMore = Math.max(0, minOrder - applicableAmount);
+
+        let actualDiscount = 0;
+        if (isEligible) {
+            if (promo.LoaiKhuyenMai === 'PhanTram') {
+                actualDiscount = Math.round(applicableAmount * (Number(promo.GiaTri || 0) / 100));
+                const maxCap = Number(promo.GiaTriToiDa || 0);
+                if (maxCap > 0 && actualDiscount > maxCap) actualDiscount = maxCap;
+            } else {
+                actualDiscount = Number(promo.GiaTri || 0);
+            }
+            actualDiscount = Math.min(applicableAmount, actualDiscount);
+        }
+
+        const baseForPreview = Math.max(applicableAmount, minOrder, 100000);
+        let potentialDiscount = 0;
+        if (promo.LoaiKhuyenMai === 'PhanTram') {
+            potentialDiscount = Math.round(baseForPreview * (Number(promo.GiaTri || 0) / 100));
+            const maxCap = Number(promo.GiaTriToiDa || 0);
+            if (maxCap > 0 && potentialDiscount > maxCap) potentialDiscount = maxCap;
+        } else {
+            potentialDiscount = Number(promo.GiaTri || 0);
+        }
+
+        const lockReason = !isEligible
+            ? `Đặt thêm ${needMore.toLocaleString('vi-VN')}đ (trên tổng giỏ hàng) để mở khóa mã này (Giảm tới ${potentialDiscount.toLocaleString('vi-VN')}đ)`
+            : '';
+
+        return {
+            phamVi,
+            tenCumSan: 'Toàn hệ thống',
+            isEligible,
+            applicableAmount,
+            actualDiscount,
+            potentialDiscount,
+            needMore,
+            minOrder,
+            lockReason
+        };
+    }
+
+    // TRƯỜNG HỢP 2: MÃ RIÊNG CỦA CỤM SÂN (CUM_SAN) -> Chỉ xét trên tiền sân của đúng Cụm sân đó
+    const promoClusterId = String(promo.ma_cum_san_ap_dung || promo.nguoi_dung?.MaCumSan || '');
+    const tenCSPromo = promo.ten_cum_san_ap_dung || promo.nguoi_dung?.cum_san?.TenCumSan || ('Cụm sân #' + promoClusterId);
+    const isWrongCluster = clusterId && String(clusterId) !== promoClusterId;
+
+    const clusterGroup = groups[promoClusterId];
+    const applicableAmount = clusterGroup ? clusterGroup.rawTotal : 0;
+    const isEligible = !isWrongCluster && applicableAmount > 0 && applicableAmount >= minOrder;
+    const needMore = Math.max(0, minOrder - applicableAmount);
+
+    let actualDiscount = 0;
+    if (isEligible) {
+        if (promo.LoaiKhuyenMai === 'PhanTram') {
+            actualDiscount = Math.round(applicableAmount * (Number(promo.GiaTri || 0) / 100));
+            const maxCap = Number(promo.GiaTriToiDa || 0);
+            if (maxCap > 0 && actualDiscount > maxCap) actualDiscount = maxCap;
+        } else {
+            actualDiscount = Number(promo.GiaTri || 0);
+        }
+        actualDiscount = Math.min(applicableAmount, actualDiscount);
+    }
+
+    const baseForPreview = Math.max(applicableAmount, minOrder, 100000);
+    let potentialDiscount = 0;
+    if (promo.LoaiKhuyenMai === 'PhanTram') {
+        potentialDiscount = Math.round(baseForPreview * (Number(promo.GiaTri || 0) / 100));
+        const maxCap = Number(promo.GiaTriToiDa || 0);
+        if (maxCap > 0 && potentialDiscount > maxCap) potentialDiscount = maxCap;
+    } else {
+        potentialDiscount = Number(promo.GiaTri || 0);
+    }
+
+    let lockReason = '';
+    if (isWrongCluster || !clusterGroup) {
+        lockReason = `Mã này chỉ áp dụng riêng cho ${tenCSPromo}`;
+    } else if (!isEligible) {
+        lockReason = `Đặt thêm ${needMore.toLocaleString('vi-VN')}đ tại ${tenCSPromo} để dùng mã (Giảm tới ${potentialDiscount.toLocaleString('vi-VN')}đ)`;
+    }
+
+    return {
+        phamVi,
+        tenCumSan: tenCSPromo,
+        isEligible,
+        applicableAmount,
+        actualDiscount,
+        potentialDiscount,
+        needMore,
+        minOrder,
+        lockReason
+    };
+}
+
+// Hàm đồng bộ làm sạch các mã đã chọn nếu khách xóa bớt sân làm mất điều kiện
+function revalidateSelectedPromotionsByCluster() {
+    const groups = getCustomerCartClusterGroups();
+
+    // 1. Kiểm tra nếu đang chọn 1 mã Toàn hệ thống / Cá nhân (selectedPromotion)
+    if (selectedPromotion) {
+        const freshGlobal = availablePromotions.find(p => p.MaKhuyenMai === selectedPromotion.MaKhuyenMai);
+        if (!freshGlobal || !evaluatePromotionForCluster(freshGlobal, null).isEligible) {
+            selectedPromotion = null;
+        } else {
+            selectedPromotion = freshGlobal;
+        }
+    }
+
+    // 2. Kiểm tra các mã riêng theo từng Cụm sân (selectedPromotionsByCluster)
+    for (const cId of Object.keys(selectedPromotionsByCluster)) {
+        if (!groups[cId]) {
+            delete selectedPromotionsByCluster[cId];
+            continue;
+        }
+        const chosen = selectedPromotionsByCluster[cId];
+        const freshPromo = availablePromotions.find(p => p.MaKhuyenMai === chosen?.MaKhuyenMai);
+        if (!freshPromo || !evaluatePromotionForCluster(freshPromo, cId).isEligible) {
+            delete selectedPromotionsByCluster[cId];
+        } else {
+            selectedPromotionsByCluster[cId] = freshPromo;
+        }
+    }
+}
+
+// Tính toán chi tiết số tiền giảm, thuế VAT 8% và tổng hóa đơn cho từng Cụm sân trong giỏ
+function calculateCartClustersBreakdown() {
+    revalidateSelectedPromotionsByCluster();
+
+    const groups = getCustomerCartClusterGroups();
+    const clusterList = Object.values(groups);
+    const totalRawAmount = selectedSlots.reduce((sum, s) => sum + Number(s.price || 0), 0);
+
+    let totalDiscount = 0;
+    let totalVAT = 0;
+    let totalInvoice = 0;
+    const perCluster = {};
+
+    if (selectedPromotion) {
+        // ĐANG ÁP 1 MÃ TOÀN HỆ THỐNG HOẶC CÁ NHÂN CHO CẢ GIỎ HÀNG -> Phân bổ tiền giảm theo tỷ lệ tiền sân từng Cụm
+        const evGlobal = evaluatePromotionForCluster(selectedPromotion, null);
+        const globalDiscount = evGlobal.isEligible ? evGlobal.actualDiscount : 0;
+        let allocatedSoFar = 0;
+
+        clusterList.forEach((grp, idx) => {
+            let clusterDisc = 0;
+            if (globalDiscount > 0 && totalRawAmount > 0) {
+                if (idx === clusterList.length - 1) {
+                    clusterDisc = Math.max(0, globalDiscount - allocatedSoFar);
+                } else {
+                    clusterDisc = Math.round(globalDiscount * (grp.rawTotal / totalRawAmount));
+                    allocatedSoFar += clusterDisc;
+                }
+                clusterDisc = Math.min(grp.rawTotal, clusterDisc);
+            }
+            const afterDisc = Math.max(0, grp.rawTotal - clusterDisc);
+            const vat = Math.floor((afterDisc * CUSTOMER_VAT_RATE) / 1000) * 1000;
+            const invTotal = afterDisc + vat;
+
+            perCluster[grp.clusterId] = {
+                rawTotal: grp.rawTotal,
+                discount: clusterDisc,
+                vat,
+                invoiceTotal: invTotal,
+                promo: selectedPromotion,
+                isGlobalAllocated: true
+            };
+
+            totalDiscount += clusterDisc;
+            totalVAT += vat;
+            totalInvoice += invTotal;
+        });
+    } else {
+        // ĐANG ÁP MÃ RIÊNG THEO TỪNG CỤM SÂN
+        clusterList.forEach(grp => {
+            const cPromo = selectedPromotionsByCluster[grp.clusterId] || null;
+            const ev = cPromo ? evaluatePromotionForCluster(cPromo, grp.clusterId) : null;
+            const clusterDisc = (ev && ev.isEligible) ? ev.actualDiscount : 0;
+            const afterDisc = Math.max(0, grp.rawTotal - clusterDisc);
+            const vat = Math.floor((afterDisc * CUSTOMER_VAT_RATE) / 1000) * 1000;
+            const invTotal = afterDisc + vat;
+
+            perCluster[grp.clusterId] = {
+                rawTotal: grp.rawTotal,
+                discount: clusterDisc,
+                vat,
+                invoiceTotal: invTotal,
+                promo: cPromo,
+                isGlobalAllocated: false
+            };
+
+            totalDiscount += clusterDisc;
+            totalVAT += vat;
+            totalInvoice += invTotal;
+        });
+    }
+
+    return {
+        totalRawAmount,
+        totalDiscount,
+        totalVAT,
+        totalInvoice,
+        perCluster
+    };
+}
+
+// Hàm tải danh sách khuyến mãi khả dụng của khách hàng
+async function fetchAvailablePromotions(tongTienSan = 0) {
+    try {
+        const res = await fetch(`${API_BASE_URL}/khuyen-mai/kha-dung?tong_tien=${tongTienSan}`);
+        if (res.ok) {
+            const json = await res.json();
+            availablePromotions = json.data || [];
+            revalidateSelectedPromotionsByCluster();
+        }
+    } catch (e) {
+        console.error('Lỗi tải khuyến mãi:', e);
+    }
+}
+
 async function openCartModal() {
     const modal = document.getElementById('cart-modal');
+    const modalContent = modal ? modal.querySelector('.modal-content') : null;
+    if (modalContent) {
+        modalContent.style.maxWidth = '740px';
+        modalContent.style.width = '95%';
+    }
     const modalList = document.getElementById('modal-cart-list');
     const alertBox = document.getElementById('cart-alert');
     if (alertBox) alertBox.style.display = 'none';
 
     initialBookingPurpose = currentBookingPurpose;
 
-    // Đợi tải danh sách giải đấu trước khi render giao diện
-    await loadUserTournaments();
+    let totalAmount = selectedSlots.reduce((sum, s) => sum + Number(s.price), 0);
+
+    await Promise.all([
+        loadUserTournaments(),
+        fetchAvailablePromotions(totalAmount)
+    ]);
     
-    // ====================================================
-    // BỔ SUNG LOGIC LỌC GIẢI ĐẤU THEO CỤM SÂN
-    // ====================================================
-    // Lấy ID cụm sân hiện tại (Hoặc lấy từ dữ liệu giỏ hàng nếu khách đang đứng ở trang chủ)
     let activeClusterId = currentClusterId;
     if (!activeClusterId && selectedSlots.length > 0) {
         activeClusterId = selectedSlots[0].clusterId;
     }
 
-    // Chỉ giữ lại các giải đấu có ID_CumSan trùng khớp với Cụm sân đang xem
     const validTournaments = activeClusterId 
-        ? userActiveTournaments.filter(t => t.ID_CumSan == activeClusterId || t.id_cum_san == activeClusterId) 
+        ? userActiveTournaments.filter(t => t.ID_CumSan == activeClusterId || t.id_cum_san == activeClusterId || t.MaCumSan == activeClusterId) 
         : [];
     
     if (currentBookingPurpose !== 'normal') {
-        const isPurposeValid = validTournaments.some(t => t.ID == currentBookingPurpose);
+        const isPurposeValid = validTournaments.some(t => (t.MaGiaiDau || t.ID) == currentBookingPurpose);
         if (!isPurposeValid) {
             currentBookingPurpose = 'normal';
             sessionStorage.setItem('dn_football_booking_purpose', 'normal');
         }
     }
 
-    // Giao diện Dropdown (Thay biến userActiveTournaments thành validTournaments)
     let tournamentHtml = '';
     if (validTournaments.length > 0) {
         tournamentHtml = `
@@ -1141,35 +1288,141 @@ async function openCartModal() {
                 <label style="font-weight: 600; font-size: 0.9rem; color: var(--primary); display: block; margin-bottom: 6px;">Mục đích đặt sân:</label>
                 <select id="booking-purpose" class="form-control" onchange="handlePurposeChange(this)" style="border-color: #bbf7d0;">
                     <option value="normal" ${currentBookingPurpose === 'normal' ? 'selected' : ''}>Đá phong trào (Cọc 30% - Lịch 7 ngày)</option>
-                    ${validTournaments.map(t => `<option value="${t.ID}" ${currentBookingPurpose == t.ID ? 'selected' : ''}>Giải đấu: ${t.TenGiaiDau} (Cọc 50% - Theo lịch giải)</option>`).join('')}
+                    ${validTournaments.map(t => `<option value="${t.MaGiaiDau || t.ID}" ${currentBookingPurpose == (t.MaGiaiDau || t.ID) ? 'selected' : ''}>Giải đấu: ${t.TenGiaiDau} (Cọc 50% - Theo lịch giải)</option>`).join('')}
                 </select>
             </div>
         `;
     }
     
     if (selectedSlots.length === 0) {
+        selectedPromotion = null;
+        selectedPromotionsByCluster = {};
         modalList.innerHTML = tournamentHtml + `<p style="text-align: center; color: var(--text-muted); padding: 20px;">Chưa có khung giờ nào được chọn.</p>`;
     } else {
-        let totalAmount = selectedSlots.reduce((sum, s) => sum + Number(s.price), 0);
-        modalList.innerHTML = tournamentHtml + `
-            <div id="cart-items-container" style="max-height: 250px; overflow-y: auto;">
-                ${selectedSlots.map((s, index) => `
-                    <div class="cart-item-card">
-                        <div class="cart-item-info">
-                            <h4>${s.clusterName} - ${s.pitchName}</h4>
-                            <p>Ngày: ${s.date} | Giờ: <strong style="color: var(--primary);">${s.time}</strong></p>
-                            <p>Giá: <strong>${Number(s.price).toLocaleString('vi-VN')}đ</strong></p>
-                        </div>
-                        <i class="fa-solid fa-trash-can cart-item-remove" onclick="removeSlotByIndex(${index})"></i>
-                    </div>
-                `).join('')}
+        const clusterGroups = Object.values(getCustomerCartClusterGroups());
+        const isMultiCluster = clusterGroups.length > 1;
+        const breakdown = calculateCartClustersBreakdown();
+
+        const multiClusterNoticeHtml = isMultiCluster ? `
+            <div style="margin-bottom: 12px; padding: 10px 14px; background: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid #2563eb; border-radius: 8px; font-size: 0.82rem; color: #1e3a8a; line-height: 1.5;">
+                <i class="fa-solid fa-file-invoice" style="margin-right: 5px; color: #2563eb;"></i>
+                Giỏ hàng gồm <strong>${clusterGroups.length} Cụm sân</strong> (sẽ tách thành <strong>${clusterGroups.length} Hóa đơn riêng</strong>). Bạn có thể chọn <strong>1 mã Toàn hệ thống / Cá nhân</strong> (tự động chia đều giảm giá cho cả ${clusterGroups.length} hóa đơn) HOẶC chọn <strong>mã riêng của từng Cụm sân</strong>!
             </div>
-            <div style="text-align:right; margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 10px;">
-                <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 4px;">Tổng tiền sân: ${totalAmount.toLocaleString('vi-VN')}đ</div>
-                <div style="font-size: 1.15rem; font-weight: 700;">Tiền cần cọc: <span id="cart-deposit-amount" style="color: var(--primary);">0đ</span></div>
+        ` : '';
+
+        // Vẽ từng khối Cụm sân
+        const clusterSectionsHtml = clusterGroups.map((grp, grpIdx) => {
+            const cId = grp.clusterId;
+            const cCalc = breakdown.perCluster[cId] || { rawTotal: grp.rawTotal, discount: 0, vat: 0, invoiceTotal: grp.rawTotal };
+            const chosenPromo = cCalc.promo;
+
+            const eligibleCountForCluster = availablePromotions.filter(p => evaluatePromotionForCluster(p, cId).isEligible).length;
+
+            const slotsHtml = grp.slots.map(s => `
+                <div class="cart-item-card" style="margin-bottom: 8px;">
+                    <div class="cart-item-info">
+                        <h4>${s.pitchName} <span style="font-size: 0.78rem; color: #64748b; font-weight: 500;">(${s.clusterName})</span></h4>
+                        <p>Ngày: ${s.date} | Giờ: <strong style="color: var(--primary);">${s.time}</strong></p>
+                        <p>Đơn giá khung giờ: <strong>${Number(s.price).toLocaleString('vi-VN')}đ</strong></p>
+                    </div>
+                    <i class="fa-solid fa-trash-can cart-item-remove" onclick="removeSlotByIndex(${s._cartIndex})"></i>
+                </div>
+            `).join('');
+
+            const discountNote = cCalc.isGlobalAllocated && isMultiCluster
+                ? `Đã phân bổ từ mã chung (Tổng giảm ${breakdown.totalDiscount.toLocaleString('vi-VN')}đ) • Giảm tại cơ sở này: -${cCalc.discount.toLocaleString('vi-VN')}đ`
+                : `Đã áp dụng • Giảm ${cCalc.discount.toLocaleString('vi-VN')}đ`;
+
+            const clusterPromoBarHtml = chosenPromo ? `
+                <div onclick="openGrabPromoModal('${cId}')" style="margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 1.5px solid #22c55e; display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="width: 32px; height: 32px; border-radius: 8px; background: #16a34a; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 0.9rem;">
+                            <i class="fa-solid fa-ticket"></i>
+                        </div>
+                        <div style="text-align: left;">
+                            <div style="font-size: 0.84rem; font-weight: 800; color: #15803d;">${chosenPromo.TenKhuyenMai} (#${chosenPromo.MaKhuyenMai})</div>
+                            <div style="font-size: 0.75rem; color: #166534; font-weight: 600;">${discountNote}</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <button type="button" onclick="event.stopPropagation(); removeSelectedPromo('${cId}');" style="background: #fee2e2; color: #dc2626; border: none; padding: 4px 9px; border-radius: 6px; font-size: 0.74rem; font-weight: 700; cursor: pointer;">Bỏ chọn</button>
+                        <i class="fa-solid fa-chevron-right" style="color: #15803d; font-size: 0.8rem;"></i>
+                    </div>
+                </div>
+            ` : `
+                <div onclick="openGrabPromoModal('${cId}')" style="margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: #ffffff; border: 1.5px dashed #94a3b8; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: 0.2s;" onmouseover="this.style.borderColor='var(--primary)'; this.style.background='#f0fdf4'" onmouseout="this.style.borderColor='#94a3b8'; this.style.background='#ffffff'">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="width: 32px; height: 32px; border-radius: 8px; background: #e0f2fe; color: #0284c7; display: flex; align-items: center; justify-content: center; font-size: 0.9rem;">
+                            <i class="fa-solid fa-tags"></i>
+                        </div>
+                        <div style="text-align: left;">
+                            <div style="font-size: 0.84rem; font-weight: 700; color: #0f172a;">Chọn mã ưu đãi cho ${grp.clusterName}</div>
+                            <div style="font-size: 0.75rem; color: #64748b;">
+                                ${eligibleCountForCluster > 0 
+                                    ? `<span style="color: #16a34a; font-weight: 700;">Có ${eligibleCountForCluster} mã đủ điều kiện áp dụng ngay!</span>` 
+                                    : (availablePromotions.length > 0 ? `Bấm để xem mã giảm giá` : 'Hiện chưa có mã khuyến mãi')}
+                            </div>
+                        </div>
+                    </div>
+                    <span style="font-size: 0.8rem; font-weight: 700; color: var(--primary); display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;">
+                        Chọn mã <i class="fa-solid fa-chevron-right" style="font-size: 0.72rem;"></i>
+                    </span>
+                </div>
+            `;
+
+            const subInvoiceSummaryHtml = isMultiCluster ? `
+                <div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 0.78rem; color: #475569;">
+                    <span>Tiền sân: <strong>${grp.rawTotal.toLocaleString('vi-VN')}đ</strong></span>
+                    ${cCalc.discount > 0 ? `<span style="color:#16a34a;">Giảm: <strong>-${cCalc.discount.toLocaleString('vi-VN')}đ</strong></span>` : ''}
+                    <span>VAT (8%): <strong>+${cCalc.vat.toLocaleString('vi-VN')}đ</strong></span>
+                    <span style="color:#2563eb;">Tổng HĐ #${grpIdx + 1}: <strong>${cCalc.invoiceTotal.toLocaleString('vi-VN')}đ</strong></span>
+                </div>
+            ` : '';
+
+            return `
+                <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 12px; padding: 12px; margin-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
+                        <span style="font-size: 0.88rem; font-weight: 800; color: var(--primary);">
+                            <i class="fa-solid fa-building-flag" style="margin-right: 5px;"></i>Hóa đơn ${isMultiCluster ? `#${grpIdx + 1}: ` : ''}${grp.clusterName}
+                        </span>
+                        <span style="font-size: 0.8rem; font-weight: 700; color: #334155;">${grp.slots.length} ca • ${grp.rawTotal.toLocaleString('vi-VN')}đ</span>
+                    </div>
+                    ${slotsHtml}
+                    ${clusterPromoBarHtml}
+                    ${subInvoiceSummaryHtml}
+                </div>
+            `;
+        }).join('');
+
+        modalList.innerHTML = tournamentHtml + multiClusterNoticeHtml + `
+            <div id="cart-items-container" style="max-height: 380px; overflow-y: auto; padding-right: 6px;">
+                ${clusterSectionsHtml}
+            </div>
+
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; margin-top: 10px; font-size: 0.9rem;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px; color: #475569;">
+                    <span>Tổng tiền sân gốc (${selectedSlots.length} ca${isMultiCluster ? ` • ${clusterGroups.length} Hóa đơn` : ''}):</span>
+                    <strong id="cart-raw-total" style="color: #0f172a;">${totalAmount.toLocaleString('vi-VN')}đ</strong>
+                </div>
+                <div id="cart-discount-row" style="display: none; justify-content: space-between; margin-bottom: 6px; color: #16a34a;">
+                    <span><i class="fa-solid fa-ticket"></i> Tổng khuyến mãi giảm:</span>
+                    <strong id="cart-discount-amount">-0đ</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed #cbd5e1; color: #64748b;">
+                    <span>Tổng thuế VAT (8% trên từng hóa đơn):</span>
+                    <strong id="cart-vat-amount">0đ</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.96rem; color: #0f172a;">
+                    <span style="font-weight: 700;">Tổng cộng thanh toán (${clusterGroups.length} Hóa đơn):</span>
+                    <strong id="cart-invoice-total" style="color: #2563eb; font-size: 1.05rem;">0đ</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 6px; border-top: 1px solid #e2e8f0;">
+                    <span style="font-weight: 700; color: #0f172a;">Tiền cần cọc ngay (<span id="cart-deposit-rate-label">30%</span> giá sân):</span>
+                    <span id="cart-deposit-amount" style="font-size: 1.2rem; font-weight: 800; color: var(--primary);">0đ</span>
+                </div>
             </div>
         `;
-        setTimeout(updateCartTotal, 50);
+        setTimeout(updateCartTotal, 20);
     }
 
     const btnModalCheckout = document.querySelector('#cart-modal .btn-primary'); 
@@ -1188,18 +1441,211 @@ async function openCartModal() {
     modal.style.display = 'flex';
 }
 
-// Biến tạm để ghi nhớ trạng thái đang chờ xác nhận
+// ======================================================
+// MODAL CHỌN MÃ GIẢM GIÁ KIỂU GRAB
+// ======================================================
+window.openGrabPromoModal = function(targetClusterId = null) {
+    const groups = getCustomerCartClusterGroups();
+    const clusterIds = Object.keys(groups);
+    if (clusterIds.length === 0) return;
+
+    activePromoTargetClusterId = targetClusterId ? String(targetClusterId) : clusterIds[0];
+    const targetGroup = groups[activePromoTargetClusterId];
+    if (!targetGroup) return;
+
+    let modal = document.getElementById('grab-promo-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'grab-promo-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 10050; align-items: center; justify-content: center;';
+        modal.onclick = function(e) {
+            if (e.target === modal) modal.style.display = 'none';
+        };
+        document.body.appendChild(modal);
+    }
+
+    const totalCartAmount = selectedSlots.reduce((sum, s) => sum + Number(s.price || 0), 0);
+    const clusterAmount = targetGroup.rawTotal;
+    const currentlySelected = selectedPromotion || selectedPromotionsByCluster[activePromoTargetClusterId] || null;
+
+    const sortedPromos = [...availablePromotions].sort((a, b) => {
+        const evalA = evaluatePromotionForCluster(a, activePromoTargetClusterId);
+        const evalB = evaluatePromotionForCluster(b, activePromoTargetClusterId);
+        if (evalA.isEligible !== evalB.isEligible) return evalB.isEligible ? 1 : -1;
+        return evalB.actualDiscount - evalA.actualDiscount;
+    });
+
+    let listHtml = '';
+    if (sortedPromos.length === 0) {
+        listHtml = `
+            <div style="text-align: center; padding: 45px 20px; color: #64748b;">
+                <i class="fa-solid fa-ticket-simple" style="font-size: 3rem; color: #cbd5e1; margin-bottom: 12px; display: block;"></i>
+                <div style="font-weight: 700; color: #334155; margin-bottom: 4px;">Hiện chưa có mã khuyến mãi khả dụng</div>
+                <div style="font-size: 0.85rem;">Hãy quay lại sau để săn các ưu đãi mới từ DN Football nhé!</div>
+            </div>
+        `;
+    } else {
+        listHtml = sortedPromos.map(km => {
+            const ev = evaluatePromotionForCluster(km, activePromoTargetClusterId);
+            const isSelected = currentlySelected && currentlySelected.MaKhuyenMai === km.MaKhuyenMai;
+
+            const valBadge = km.LoaiKhuyenMai === 'PhanTram'
+                ? `GIẢM ${Number(km.GiaTri)}%`
+                : `GIẢM ${(Number(km.GiaTri) / 1000).toLocaleString('vi-VN')}K`;
+
+            const maxCapStr = (km.LoaiKhuyenMai === 'PhanTram' && Number(km.GiaTriToiDa) > 0)
+                ? `Tối đa ${Number(km.GiaTriToiDa).toLocaleString('vi-VN')}đ`
+                : 'Giảm trực tiếp';
+
+            const expDate = km.NgayKetThuc ? new Date(km.NgayKetThuc).toLocaleDateString('vi-VN') : '';
+            const remainCount = Math.max(0, Number(km.SoLuong) - Number(km.SoLuongDaDung));
+
+            let scopeBadgeHtml = '';
+            if (ev.phamVi === 'HE_THONG') {
+                scopeBadgeHtml = `<span style="background: #e0f2fe; color: #0369a1; font-size: 0.68rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-left: 6px;"><i class="fa-solid fa-globe"></i> Toàn hệ thống (Xét tổng giỏ)</span>`;
+            } else if (ev.phamVi === 'CUM_SAN') {
+                scopeBadgeHtml = `<span style="background: #fffbeb; color: #b45309; border: 1px solid #fde68a; font-size: 0.68rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-left: 6px;"><i class="fa-solid fa-building-flag"></i> ${ev.tenCumSan}</span>`;
+            } else {
+                scopeBadgeHtml = `<span style="background: linear-gradient(135deg, #7c3aed, #6d28d9); color: #fff; font-size: 0.68rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-left: 6px;"><i class="fa-solid fa-gift"></i> Dành riêng cho bạn (Xét tổng giỏ)</span>`;
+            }
+
+            const cardStyle = ev.isEligible
+                ? `background: #ffffff; border: 2px solid ${isSelected ? '#16a34a' : '#bbf7d0'}; box-shadow: 0 4px 12px rgba(22, 163, 74, 0.1); cursor: pointer;`
+                : `background: #f1f5f9; border: 1.5px solid #cbd5e1; opacity: 0.62; filter: grayscale(0.8); cursor: not-allowed;`;
+
+            const leftStubBg = ev.isEligible
+                ? 'linear-gradient(135deg, #16a34a 0%, #059669 100%)'
+                : 'linear-gradient(135deg, #64748b 0%, #475569 100%)';
+
+            const progressPct = ev.minOrder > 0 ? Math.min(100, Math.round((ev.applicableAmount / ev.minOrder) * 100)) : 100;
+
+            return `
+                <div onclick="${ev.isEligible ? `applyGrabPromotion('${km.MaKhuyenMai}', '${activePromoTargetClusterId}')` : ''}" style="display: flex; border-radius: 14px; overflow: hidden; margin-bottom: 12px; transition: all 0.2s; ${cardStyle}">
+                    <div style="width: 116px; background: ${leftStubBg}; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 12px 8px; text-align: center; border-right: 2px dashed rgba(255,255,255,0.6); flex-shrink: 0;">
+                        <i class="fa-solid fa-ticket" style="font-size: 1.35rem; margin-bottom: 4px; opacity: 0.9;"></i>
+                        <div style="font-weight: 800; font-size: 0.92rem; line-height: 1.2;">${valBadge}</div>
+                        <div style="font-size: 0.68rem; opacity: 0.92; margin-top: 3px;">${maxCapStr}</div>
+                        <div style="font-family: monospace; font-size: 0.66rem; background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; margin-top: 5px;">#${km.MaKhuyenMai}</div>
+                    </div>
+
+                    <div style="flex: 1; padding: 12px 14px; display: flex; flex-direction: column; justify-content: space-between; text-align: left;">
+                        <div>
+                            <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-bottom: 4px;">
+                                <strong style="font-size: 0.95rem; color: #0f172a;">${km.TenKhuyenMai}</strong>
+                                ${scopeBadgeHtml}
+                            </div>
+                            ${km.MoTa ? `<div style="font-size: 0.8rem; color: #475569; margin-bottom: 6px;">${km.MoTa}</div>` : ''}
+                            <div style="font-size: 0.78rem; color: #64748b; display: flex; flex-wrap: wrap; gap: 8px;">
+                                <span>Đơn tối thiểu: <strong>${ev.minOrder.toLocaleString('vi-VN')}đ</strong></span>
+                                <span>&bull; Số lượng còn: <strong style="color: #0f172a;">${remainCount}/${km.SoLuong}</strong></span>
+                                <span>&bull; HSD: <strong>${expDate}</strong></span>
+                            </div>
+                        </div>
+
+                        ${ev.isEligible ? `
+                            <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center; padding-top: 8px; border-top: 1px dashed #e2e8f0; gap: 8px;">
+                                <span style="font-size: 0.81rem; color: #16a34a; font-weight: 700;">
+                                    <i class="fa-solid fa-circle-check"></i> Đủ điều kiện • Giảm ngay <strong>${ev.actualDiscount.toLocaleString('vi-VN')}đ</strong>
+                                </span>
+                                <button type="button" style="padding: 6px 14px; border-radius: 999px; border: none; background: ${isSelected ? '#0f172a' : '#16a34a'}; color: #fff; font-size: 0.8rem; font-weight: 700; cursor: pointer; white-space: nowrap;">
+                                    ${isSelected ? 'Đang chọn ✓' : 'Áp dụng'}
+                                </button>
+                            </div>
+                        ` : `
+                            <div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed #cbd5e1;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; gap: 8px;">
+                                    <span style="font-size: 0.77rem; color: #dc2626; font-weight: 700; line-height: 1.35;">
+                                        <i class="fa-solid fa-lock"></i> ${ev.lockReason}
+                                    </span>
+                                    <button type="button" disabled style="padding: 4px 10px; border-radius: 999px; border: 1px solid #cbd5e1; background: #e2e8f0; color: #94a3b8; font-size: 0.74rem; font-weight: 700; cursor: not-allowed; white-space: nowrap; flex-shrink: 0;">
+                                        Không khả dụng
+                                    </button>
+                                </div>
+                                <div style="width: 100%; height: 5px; background: #cbd5e1; border-radius: 99px; overflow: hidden;">
+                                    <div style="width: ${progressPct}%; height: 100%; background: #f59e0b;"></div>
+                                </div>
+                            </div>
+                        `}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 570px; width: 94%; padding: 0; border-radius: 18px; overflow: hidden; background: #f8fafc; max-height: 86vh; display: flex; flex-direction: column;">
+            <div style="padding: 16px 20px; background: linear-gradient(135deg, #0b5d3b 0%, #16a34a 100%); color: #fff; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h3 style="margin: 0; font-size: 1.1rem; font-weight: 800;"><i class="fa-solid fa-ticket" style="color: #fde047; margin-right: 8px;"></i>Chọn ưu đãi (${targetGroup.clusterName})</h3>
+                    <div style="font-size: 0.8rem; opacity: 0.95; margin-top: 3px;">
+                        Tiền cơ sở này: <strong>${clusterAmount.toLocaleString('vi-VN')}đ</strong> &bull; Tổng cả giỏ hàng: <strong>${totalCartAmount.toLocaleString('vi-VN')}đ</strong>
+                    </div>
+                </div>
+                <i class="fa-solid fa-xmark" style="cursor: pointer; font-size: 1.25rem;" onclick="document.getElementById('grab-promo-modal').style.display='none'"></i>
+            </div>
+
+            <div style="padding: 16px 18px; overflow-y: auto; flex: 1;">
+                ${listHtml}
+            </div>
+
+            <div style="padding: 12px 18px; background: #fff; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 0.78rem; color: #64748b;">* Mã Toàn hệ thống / Cá nhân sẽ tự động phân bổ giảm giá cho toàn bộ giỏ hàng.</span>
+                <button type="button" class="btn-outline" style="width: auto; padding: 8px 22px; border-radius: 10px;" onclick="document.getElementById('grab-promo-modal').style.display='none'">Đóng</button>
+            </div>
+        </div>
+    `;
+
+    modal.style.display = 'flex';
+};
+
+window.applyGrabPromotion = function(maKhuyenMai, clusterId = null) {
+    const targetCId = clusterId || activePromoTargetClusterId;
+    if (!targetCId) return;
+
+    const found = availablePromotions.find(p => p.MaKhuyenMai === maKhuyenMai);
+    if (!found) return;
+
+    const ev = evaluatePromotionForCluster(found, targetCId);
+    if (!ev.isEligible) return;
+
+    const phamVi = getPromoScopeType(found);
+    if (phamVi === 'HE_THONG' || phamVi === 'KHACH_HANG') {
+        // Nếu chọn Mã Toàn hệ thống hoặc Cá nhân -> Áp cho toàn bộ giỏ hàng và xóa các mã lẻ cụm sân
+        selectedPromotion = found;
+        selectedPromotionsByCluster = {};
+    } else {
+        // Nếu chọn Mã riêng của Cụm sân -> Bỏ mã chung toàn giỏ (nếu đang chọn) và gắn vào đúng Cụm sân này
+        selectedPromotion = null;
+        selectedPromotionsByCluster[String(targetCId)] = found;
+    }
+
+    const promoModal = document.getElementById('grab-promo-modal');
+    if (promoModal) promoModal.style.display = 'none';
+
+    openCartModal();
+};
+
+window.removeSelectedPromo = function(clusterId = null) {
+    if (selectedPromotion) {
+        selectedPromotion = null;
+    } else if (clusterId) {
+        delete selectedPromotionsByCluster[String(clusterId)];
+    } else {
+        selectedPromotionsByCluster = {};
+    }
+    openCartModal();
+};
+
 let pendingBookingPurpose = null;
 let pendingSelectElement = null;
 
 function handlePurposeChange(selectElement) {
     if (selectedSlots.length > 0) {
-        // Ghi nhớ mục đích muốn đổi và hiển thị Modal xác nhận
         pendingBookingPurpose = selectElement.value;
         pendingSelectElement = selectElement;
         document.getElementById('purpose-confirm-modal').style.display = 'flex';
     } else {
-        // Nếu giỏ hàng đang trống, cho phép đổi ngay lập tức không cần xác nhận
         currentBookingPurpose = selectElement.value;
         sessionStorage.setItem('dn_football_booking_purpose', currentBookingPurpose); 
         updateCartTotal();
@@ -1207,47 +1653,51 @@ function handlePurposeChange(selectElement) {
 }
 
 function confirmPurposeChange() {
-    // 1. Đóng Modal xác nhận
     document.getElementById('purpose-confirm-modal').style.display = 'none';
-    
-    // 2. Chấp nhận thay đổi
     if (pendingBookingPurpose !== null) {
         currentBookingPurpose = pendingBookingPurpose;
         sessionStorage.setItem('dn_football_booking_purpose', currentBookingPurpose); 
-        
-        // 3. Xóa giỏ hàng và render lại (Hàm clearAllSlots đã chứa sẵn logic này)
         clearAllSlots(); 
     }
-    
-    // 4. Reset biến tạm
     pendingBookingPurpose = null;
     pendingSelectElement = null;
 }
 
 function cancelPurposeChange() {
-    // 1. Đóng Modal xác nhận
     document.getElementById('purpose-confirm-modal').style.display = 'none';
-    
-    // 2. Trả Dropdown trên màn hình về lại giá trị cũ
     if (pendingSelectElement) {
         pendingSelectElement.value = currentBookingPurpose;
     }
-    
-    // 3. Reset biến tạm
     pendingBookingPurpose = null;
     pendingSelectElement = null;
 }
 
-// Hàm tính toán linh hoạt tiền cọc 30% hoặc 50%
 function updateCartTotal() {
+    const breakdown = calculateCartClustersBreakdown();
     let depositRate = (currentBookingPurpose !== 'normal') ? 0.5 : 0.3; 
-    
-    let totalAmount = selectedSlots.reduce((sum, s) => sum + Number(s.price), 0);
-    let depositAmount = totalAmount * depositRate;
+    let depositAmount = breakdown.totalRawAmount * depositRate;
     
     const depositEl = document.getElementById('cart-deposit-amount');
-    if (depositEl) {
-        depositEl.innerText = depositAmount.toLocaleString('vi-VN') + 'đ';
+    if (depositEl) depositEl.innerText = depositAmount.toLocaleString('vi-VN') + 'đ';
+
+    const rateLabelEl = document.getElementById('cart-deposit-rate-label');
+    if (rateLabelEl) rateLabelEl.innerText = (depositRate * 100) + '%';
+
+    const vatEl = document.getElementById('cart-vat-amount');
+    if (vatEl) vatEl.innerText = breakdown.totalVAT.toLocaleString('vi-VN') + 'đ';
+
+    const invTotalEl = document.getElementById('cart-invoice-total');
+    if (invTotalEl) invTotalEl.innerText = breakdown.totalInvoice.toLocaleString('vi-VN') + 'đ';
+
+    const discRowEl = document.getElementById('cart-discount-row');
+    const discAmtEl = document.getElementById('cart-discount-amount');
+    if (discRowEl && discAmtEl) {
+        if (breakdown.totalDiscount > 0) {
+            discRowEl.style.display = 'flex';
+            discAmtEl.innerText = '-' + breakdown.totalDiscount.toLocaleString('vi-VN') + 'đ';
+        } else {
+            discRowEl.style.display = 'none';
+        }
     }
 }
 
@@ -1257,30 +1707,24 @@ function closeCartModal() {
     const alertBox = document.getElementById('cart-alert');
     if (alertBox) alertBox.style.display = 'none';
 
-    // Lấy giá trị mới nhất từ thẻ select trong modal (nếu có tồn tại)
     const purposeSelect = document.getElementById('booking-purpose');
     if (purposeSelect) {
         currentBookingPurpose = purposeSelect.value;
         sessionStorage.setItem('dn_football_booking_purpose', currentBookingPurpose);
     }
 
-    // Kiểm tra xem mục đích có bị thay đổi so với lúc mở modal hay không,
-    // hoặc giỏ hàng có bị lệch cụm sân hay không
     const isPurposeChanged = (currentBookingPurpose !== initialBookingPurpose);
 
     if (currentClusterId !== null && currentPitchId !== null) {
-        let isPurposeMismatched = false;
         let needReRender = isPurposeChanged;
 
         if (currentBookingPurpose !== 'normal') {
-            const tour = userActiveTournaments.find(t => t.ID == currentBookingPurpose);
-            // Nếu giải đấu không thuộc cụm sân hiện tại -> Ép về normal và xóa giỏ hàng
-            if (!tour || (tour.ID_CumSan != currentClusterId && tour.id_cum_san != currentClusterId)) {
+            const tour = userActiveTournaments.find(t => (t.MaGiaiDau || t.ID) == currentBookingPurpose);
+            if (!tour || (tour.ID_CumSan != currentClusterId && tour.id_cum_san != currentClusterId && tour.MaCumSan != currentClusterId)) {
                 currentBookingPurpose = 'normal';
                 sessionStorage.setItem('dn_football_booking_purpose', 'normal');
                 selectedSlots = [];
                 saveToSession();
-                isPurposeMismatched = true;
                 needReRender = true;
             }
         }
@@ -1292,58 +1736,35 @@ function closeCartModal() {
 }
 
 function removeSlotByIndex(index) {
-
-    // Lưu slot trước khi xóa để biết slot nào cần cập nhật UI
     const removedSlot = selectedSlots[index];
-
     if (!removedSlot) return;
 
-    // Xóa khỏi mảng
     selectedSlots.splice(index, 1);
-
-    // Cập nhật trực tiếp slot trên giao diện lịch
     updateSlotUI(removedSlot, false);
-
-    // Lưu session + cập nhật Floating Cart
     saveToSession();
-
-    // Render lại danh sách bên trong giỏ hàng
     openCartModal();
 }
 
 function clearAllSlots() {
-
-    // Lưu danh sách slot trước khi xóa
     const slotsToRemove = [...selectedSlots];
-
-    // Xóa toàn bộ dữ liệu giỏ hàng
     selectedSlots = [];
+    selectedPromotion = null;
+    selectedPromotionsByCluster = {};
 
-    // Cập nhật trực tiếp tất cả slot đang hiển thị
     slotsToRemove.forEach(slot => {
         updateSlotUI(slot, false);
     });
 
-    // Lưu session và cập nhật Floating Cart
     saveToSession();
 
     const cartModal = document.getElementById('cart-modal');
-
-    if (cartModal) {
-        cartModal.style.display = 'none';
-    }
+    if (cartModal) cartModal.style.display = 'none';
 
     const alertBox = document.getElementById('cart-alert');
-
-    if (alertBox) {
-        alertBox.style.display = 'none';
-    }
+    if (alertBox) alertBox.style.display = 'none';
 }
 
-// ======================================================
-// MODAL THÔNG BÁO KẾT QUẢ ĐẶT SÂN (THÀNH CÔNG / THẤT BẠI)
-// ======================================================
-function showCustomerBookingModal(title, message, isSuccess = true, actionType = null, maHoaDon = null) {
+function showCustomerBookingModal(title, message, isSuccess = true, actionType = null, maHoaDon = null, maHoaDons = []) {
     let modal = document.getElementById('customer-booking-result-modal');
     if (!modal) {
         modal = document.createElement('div');
@@ -1355,6 +1776,10 @@ function showCustomerBookingModal(title, message, isSuccess = true, actionType =
         };
         document.body.appendChild(modal);
     }
+
+    const invoiceList = (Array.isArray(maHoaDons) && maHoaDons.length > 0)
+        ? maHoaDons
+        : (maHoaDon ? [maHoaDon] : []);
 
     const modalBg = isSuccess
         ? 'linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%)'
@@ -1371,13 +1796,16 @@ function showCustomerBookingModal(title, message, isSuccess = true, actionType =
 
     let actionButtonsHtml = '';
     if (isSuccess) {
+        const printButtons = invoiceList.map(idHD => `
+            <button type="button" class="btn-primary" style="flex: 1.2; padding: 11px 12px; border-radius: 10px; font-weight: 700; background: #2563eb; border-color: #2563eb; white-space: nowrap;" onclick="printCustomerBookingInvoice('${idHD}')">
+                <i class="fa-solid fa-print" style="margin-right: 5px;"></i> Xuất HĐ #${idHD}
+            </button>
+        `).join('');
+
         actionButtonsHtml = `
             <button type="button" class="btn-outline" style="flex: 1; padding: 11px 12px; border-radius: 10px; font-weight: 600; background: #fff; border-color: #cbd5e1; color: #475569;" onclick="closeCustomerBookingModal()">Đóng</button>
-            ${maHoaDon ? `
-            <button type="button" class="btn-primary" style="flex: 1.2; padding: 11px 12px; border-radius: 10px; font-weight: 700; background: #2563eb; border-color: #2563eb;" onclick="printCustomerBookingInvoice('${maHoaDon}')">
-                <i class="fa-solid fa-print" style="margin-right: 5px;"></i> Xuất hóa đơn
-            </button>` : ''}
-            <button type="button" class="btn-primary" style="flex: 1.2; padding: 11px 12px; border-radius: 10px; font-weight: 700; background: #10b981; border-color: #10b981;" onclick="closeCustomerBookingModal(); renderMyBookings();">
+            ${printButtons}
+            <button type="button" class="btn-primary" style="flex: 1.2; padding: 11px 12px; border-radius: 10px; font-weight: 700; background: #10b981; border-color: #10b981; white-space: nowrap;" onclick="closeCustomerBookingModal(); renderMyBookings();">
                 <i class="fa-solid fa-ticket" style="margin-right: 5px;"></i> Xem hóa đơn & vé
             </button>
         `;
@@ -1394,13 +1822,17 @@ function showCustomerBookingModal(title, message, isSuccess = true, actionType =
         `;
     }
 
+    const invoiceNoteHtml = (isSuccess && invoiceList.length > 0)
+        ? `<div style="margin-top:8px; color:#0f172a; font-weight:700;">Mã hóa đơn: #${invoiceList.join(', #')} — Bạn có thể in từng hóa đơn ngay bên dưới!</div>`
+        : '';
+
     modal.innerHTML = `
-        <div class="modal-content" style="max-width: 480px; width: 94%; text-align: center; padding: 28px 24px; border-radius: 18px; background: ${modalBg}; border: ${modalBorder}; box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);">
+        <div class="modal-content" style="max-width: 500px; width: 94%; text-align: center; padding: 28px 24px; border-radius: 18px; background: ${modalBg}; border: ${modalBorder}; box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);">
             ${iconHtml}
             <h3 style="margin: 0 0 12px 0; font-size: 1.4rem; font-weight: 800; color: ${titleColor};">${title}</h3>
             <div style="background: ${msgBg}; border: ${msgBorder}; color: ${msgColor}; padding: 12px 16px; border-radius: 12px; margin: 0 0 22px 0; line-height: 1.6; font-size: 0.94rem; font-weight: 500;">
                 ${message}
-                ${(isSuccess && maHoaDon) ? `<div style="margin-top:8px; color:#0f172a; font-weight:700;">Mã hóa đơn: #${maHoaDon} — Bạn có muốn xuất hóa đơn ngay không?</div>` : ''}
+                ${invoiceNoteHtml}
             </div>
             <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
                 ${actionButtonsHtml}
@@ -1417,7 +1849,6 @@ function closeCustomerBookingModal() {
 }
 
 function showCartAlert(message, isSuccess) {
-    // Chuyển hướng mọi thông báo giỏ hàng sang hiển thị bằng Modal
     const isLowBalance = message && (message.toLowerCase().includes('số dư') || message.toLowerCase().includes('không đủ'));
     showCustomerBookingModal(
         isSuccess ? 'Đặt sân thành công!' : 'Đặt sân không thành công',
@@ -1427,17 +1858,12 @@ function showCartAlert(message, isSuccess) {
     );
 }
 
-// Hàm tiến hành đặt sân
 async function checkoutBooking() {
-    openCartModal();
-
-    // Đổi trạng thái UI sang Loading để ngăn click nhiều lần
     const btnFloating = document.querySelector('.cart-actions .btn-primary');
     const btnModal = document.querySelector('#cart-modal .btn-primary');
     if (btnFloating) { btnFloating.disabled = true; btnFloating.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...'; }
     if (btnModal) { btnModal.disabled = true; btnModal.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...'; }
 
-    // Ẩn thông báo cũ (nếu có)
     const alertBox = document.getElementById('cart-alert');
     if (alertBox) alertBox.style.display = 'none';
 
@@ -1445,21 +1871,17 @@ async function checkoutBooking() {
         const uniqueClusterIds = [...new Set(selectedSlots.map(s => s.clusterId))];
 
         for (let cId of uniqueClusterIds) {
-            // 1. KIỂM TRA CỤM SÂN CÓ BỊ XÓA MỀM KHÔNG
             const clusterRes = await fetch(`${API_BASE_URL}/cum-san/${cId}`);
             const clusterData = await clusterRes.json();
             
             if (!clusterData.success || clusterData.data.deleted_at !== null) {
                 const clusterName = selectedSlots.find(s => s.clusterId === cId).clusterName;
-                
-                // Lọc bỏ toàn bộ các sân con thuộc cụm bị lỗi ra khỏi giỏ hàng
                 selectedSlots = selectedSlots.filter(s => s.clusterId !== cId);
                 saveToSession();
                 
                 if (selectedSlots.length > 0) openCartModal();
                 else closeCartModal();
                 
-                // Đồng bộ nhả màu xanh trên giao diện lịch
                 document.querySelectorAll('.schedule-table .slot.selected').forEach(el => {
                     const slotId = el.getAttribute('data-slot-id');
                     if (!selectedSlots.some(s => s.id === slotId)) {
@@ -1476,17 +1898,15 @@ async function checkoutBooking() {
                 return;
             }
 
-            // 2. KIỂM TRA TỪNG SÂN CON CÓ BỊ CHUYỂN SANG 'BAOTRI' KHÔNG
             const pitchRes = await fetch(`${API_BASE_URL}/san-bong?cum_san_id=${cId}`);
             const pitchData = await pitchRes.json();
             
             const pitchesInCluster = selectedSlots.filter(s => s.clusterId === cId).map(s => s.pitchId);
             for (let pId of pitchesInCluster) {
-                const pitchInfo = pitchData.data.find(p => p.ID == pId);
+                const pitchInfo = pitchData.data.find(p => (p.MaSanBong || p.ID) == pId);
                 
                 if (!pitchInfo || pitchInfo.TrangThai === 'BaoTri') {
                     const pitchName = pitchInfo ? pitchInfo.TenSan : 'không xác định';
-                    
                     selectedSlots = selectedSlots.filter(s => s.pitchId !== pId);
                     saveToSession();
                     
@@ -1510,7 +1930,6 @@ async function checkoutBooking() {
                 }
             }
 
-            // 3. KIỂM TRA KHUNG GIỜ CÒN HOẠT ĐỘNG (ĐƯỢC SET GIÁ) TRƯỚC KHI ĐẶT
             const gtRes = await fetch(`${API_BASE_URL}/gia-tien?cum_san_id=${cId}`);
             const kgRes = await fetch(`${API_BASE_URL}/khung-gio`);
             const giaTienData = await gtRes.json();
@@ -1520,7 +1939,7 @@ async function checkoutBooking() {
             const khGioList = allKhungGio.data || [];
 
             for (let pId of pitchesInCluster) {
-                const pitchInfo = pitchData.data.find(p => p.ID == pId);
+                const pitchInfo = pitchData.data.find(p => (p.MaSanBong || p.ID) == pId);
                 if (!pitchInfo) continue;
 
                 const slotsOfThisPitch = selectedSlots.filter(s => s.pitchId == pId);
@@ -1529,7 +1948,7 @@ async function checkoutBooking() {
                     
                     let isSlotValid = false;
                     if (kgMatch) {
-                        const priceExists = prices.find(p => p.ID_LoaiSan == pitchInfo.ID_LoaiSan && p.ID_KhungGio == kgMatch.ID);
+                        const priceExists = prices.find(p => (p.MaLoaiSan || p.ID_LoaiSan) == (pitchInfo.MaLoaiSan || pitchInfo.ID_LoaiSan) && (p.MaKhungGio || p.ID_KhungGio) == (kgMatch.MaKhungGio || kgMatch.ID));
                         if (priceExists && priceExists.SoTien > 0) {
                             const moCua = clusterData.data.GioMoCua.substring(0, 5);
                             const dongCua = clusterData.data.GioDongCua.substring(0, 5);
@@ -1560,9 +1979,22 @@ async function checkoutBooking() {
             }
         }
 
+        // Nếu khách chọn 1 mã Toàn hệ thống / Cá nhân (selectedPromotion) -> gửi qua ma_khuyen_mai
+        // Nếu khách chọn các mã riêng theo từng Cụm sân -> gửi qua khuyen_mai_theo_cum
+        const khuyenMaiTheoCumPayload = {};
+        if (!selectedPromotion) {
+            for (const [cId, promoObj] of Object.entries(selectedPromotionsByCluster)) {
+                if (promoObj && promoObj.MaKhuyenMai) {
+                    khuyenMaiTheoCumPayload[cId] = promoObj.MaKhuyenMai;
+                }
+            }
+        }
+
         const payload = {
             slots: selectedSlots,
-            purpose: currentBookingPurpose
+            purpose: currentBookingPurpose,
+            ma_khuyen_mai: selectedPromotion ? selectedPromotion.MaKhuyenMai : null,
+            khuyen_mai_theo_cum: khuyenMaiTheoCumPayload
         };
 
         const response = await fetch(`${API_BASE_URL}/dat-san`, {
@@ -1570,7 +2002,7 @@ async function checkoutBooking() {
             headers: { 
                 'Accept': 'application/json', 
                 'Content-Type': 'application/json',
-                'X-Socket-ID': window.Echo.socketId()
+                'X-Socket-ID': window.Echo ? window.Echo.socketId() : ''
             },
             body: JSON.stringify(payload)
         });
@@ -1578,42 +2010,36 @@ async function checkoutBooking() {
         const data = await response.json();
 
         if (data.success) {
-            // 1. LƯU NGAY DANH SÁCH SLOT VỪA THANH TOÁN
             const bookedSlots = [...selectedSlots];
             const totalSlotsCount = bookedSlots.length;
 
-            // 2. ĐỒNG BỘ SỐ DƯ VÍ
             syncUserWallet();
 
-            // 3. RESET MỤC ĐÍCH ĐẶT SÂN
             if (currentBookingPurpose !== 'normal') {
                 currentBookingPurpose = 'normal';
                 sessionStorage.setItem('dn_football_booking_purpose', 'normal');
             }
 
-            // 4. CHUYỂN TỪ "ĐÃ CHỌN" -> "ĐÃ ĐẶT"
             bookedSlots.forEach(slot => markSlotAsBooked(slot));
 
-            // 5. XÓA SLOT KHỎI GIỎ HÀNG & LƯU SESSION
             selectedSlots = [];
+            selectedPromotion = null;
+            selectedPromotionsByCluster = {};
             saveToSession();
 
-            // 6. ĐÓNG MODAL GIỎ HÀNG NGAY LẬP TỨC
             const cartModal = document.getElementById('cart-modal');
             if (cartModal) cartModal.style.display = 'none';
 
-            // 7. HIỂN THỊ MODAL THÔNG BÁO ĐẶT SÂN THÀNH CÔNG
             showCustomerBookingModal(
                 'Đặt sân thành công!',
                 data.message || `Bạn đã đặt thành công <strong>${totalSlotsCount} khung giờ</strong>. Tiền cọc đã được trừ trực tiếp từ ví của bạn.`,
                 true,
                 null,
-                data.ma_hoa_don || null
+                data.ma_hoa_don || null,
+                data.ma_hoa_dons || []
             );
         } else {
-            // TRƯỜNG HỢP ĐẶT SÂN THẤT BẠI (Hết tiền, trùng lịch vừa bị người khác đặt...)
             if (data.failed_slot_ids && data.failed_slot_ids.length > 0) {
-                // Xóa các ô bị trùng khỏi giỏ hàng
                 selectedSlots = selectedSlots.filter(s => !data.failed_slot_ids.includes(s.id));
                 saveToSession();
 
@@ -1626,7 +2052,6 @@ async function checkoutBooking() {
                 closeCartModal();
             }
 
-            // Kiểm tra xem có phải lỗi thiếu số dư ví không để hiện nút "Nạp tiền ngay"
             const errMsg = data.message || 'Không thể hoàn tất đặt sân. Vui lòng kiểm tra lại!';
             const isLowBalance = errMsg.toLowerCase().includes('số dư') || errMsg.toLowerCase().includes('không đủ');
 
@@ -2114,8 +2539,10 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
 
                 const [day, month, year] = date.full.split('/');
                 const formatNgayDa = `${year}-${month}-${day}`;
+                const maKG = kg.MaKhungGio || kg.ID;
+                const slotKey = `${pitchId}-${formatNgayDa}-${maKG}`;
                 
-                const isBooked = bookedSlots.some(b => b.NgayDa === formatNgayDa && b.ID_KhungGio === kg.ID);
+                const isBooked = bookedSlots.some(b => b.NgayDa === formatNgayDa && String(b.MaKhungGio || b.ID_KhungGio) === String(maKG));
                 const isSelected = selectedSlots.some(s => s.id === slotId);
                 
                 const [startHour, startMinute] = kg.GioBatDau.split(':');
@@ -2123,6 +2550,7 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                 const isPast = slotDateTime <= now; 
                 
                 let statusClass = 'available', statusText = 'CÒN TRỐNG';
+                const slotDataArgs = `'${clusterId}', '${clusterName.replace(/'/g, "\\'")}', '${pitchId}', '${pitchName.replace(/'/g, "\\'")}', '${date.full}', '${timeStr}', ${priceValue}`;
                 
                 if (isPast) {
                     statusClass = 'booked'; 
@@ -2140,8 +2568,13 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                 
                 html += `
                     <td style="border-bottom: 1px solid #f1f5f9; padding: 6px;">
-                        <div class="slot ${statusClass}" data-slot-id="${slotId}"
-                            ${(!isBooked && !isPast) ? `onclick="toggleSlot(this, '${clusterId}', '${clusterName.replace(/'/g, "\\'")}', '${pitchId}', '${pitchName.replace(/'/g, "\\'")}', '${date.full}', '${timeStr}', ${priceValue})"` : ''}>
+                        <div class="slot ${statusClass}" 
+                            data-slot-id="${slotId}"
+                            data-slot-key="${slotKey}"
+                            data-date-full="${date.full}"
+                            data-time-str="${timeStr}"
+                            data-slot-args="${slotDataArgs}"
+                            ${(!isBooked && !isPast && isValid) ? `onclick="toggleSlot(this, ${slotDataArgs})"` : ''}>
                             ${statusText}
                         </div>
                     </td>
@@ -2398,7 +2831,20 @@ function applyBookingFiltersAndRender() {
                 : group.matches;
 
             const trangThaiHD = hd?.TrangThai || (allInvoiceMatches.some(m => m.TrangThai === 'DaCoc') ? 'DaCoc' : group.matches[0].TrangThai);
-            const tongTienHD = hd ? Number(hd.TongTienSan) : allInvoiceMatches.reduce((s, m) => s + Number(m.TongTien), 0);
+            const tongTienHD = hd ? Number(hd.TongTien ?? hd.TongTienSan) : allInvoiceMatches.reduce((s, m) => s + Number(m.TongTien), 0);
+            const thueVATHD = hd ? Number(hd.ThueVAT || 0) : 0;
+            const tenKMHD = hd?.khuyen_mai?.TenKhuyenMai || hd?.khuyenMai?.TenKhuyenMai || null;
+
+            // Tính tổng tiền sân gốc của các trận còn hiệu lực để suy ra số tiền khuyến mãi đã giảm thực tế
+            const activeMatchesForKM = trangThaiHD === 'DaHuy'
+                ? allInvoiceMatches
+                : allInvoiceMatches.filter(m => m.TrangThai !== 'DaHuy');
+            const tongTienSanGocHD = activeMatchesForKM.reduce((s, m) => {
+                return s + (m.TrangThai === 'KhongDen' ? Number(m.TienCoc || 0) : Number(m.TongTien || 0));
+            }, 0);
+            const tienSauGiamHD = Math.max(0, tongTienHD - thueVATHD);
+            const soTienGiamHD = Math.max(0, tongTienSanGocHD - tienSauGiamHD);
+
             const tienCocHD = hd ? Number(hd.TienDaCoc) : allInvoiceMatches.reduce((s, m) => s + Number(m.TienCoc), 0);
             const conLaiHD = Math.max(0, tongTienHD - tienCocHD);
             const soTranDaCoc = allInvoiceMatches.filter(m => m.TrangThai === 'DaCoc').length;
@@ -2502,7 +2948,9 @@ function applyBookingFiltersAndRender() {
                             </div>
                             <div style="display: flex; flex-wrap: wrap; gap: 16px; font-size: 0.88rem; color: #475569;">
                                 <span>Số trận: <strong style="color:#0f172a;">${allInvoiceMatches.length} trận</strong></span>
-                                <span>Tổng tiền hóa đơn: <strong style="color:#0f172a;">${tongTienHD.toLocaleString('vi-VN')}đ</strong></span>
+                                ${(tenKMHD && soTienGiamHD > 0) ? `<span>Khuyến mãi: <strong style="color:#16a34a;"><i class="fa-solid fa-ticket"></i> ${tenKMHD} (-${soTienGiamHD.toLocaleString('vi-VN')}đ)</strong></span>` : ''}
+                                <span>Thuế VAT: <strong style="color:#475569;">${thueVATHD.toLocaleString('vi-VN')}đ</strong></span>
+                                <span>Tổng hóa đơn: <strong style="color:#0f172a;">${tongTienHD.toLocaleString('vi-VN')}đ</strong></span>
                                 <span>Đã cọc: <strong style="color:#047857;">${tienCocHD.toLocaleString('vi-VN')}đ</strong></span>
                                 <span>Còn thu tại sân: <strong style="color:#ea580c;">${conLaiHD.toLocaleString('vi-VN')}đ</strong></span>
                             </div>
@@ -2790,12 +3238,16 @@ window.printCustomerBookingInvoice = async function(maHoaDon) {
 
         const statusMap = { 'DaCoc': 'Đã đặt cọc', 'HoanThanh': 'Đã hoàn thành', 'DaHuy': 'Đã hủy', 'KhongDen': 'Không đến' };
 
+        let tongTienSanGoc = 0;
         const rowsHtml = listDatSan.map((ds, i) => {
             const tenSan = ds.san_bong?.TenSan || 'Sân bóng';
             const cumSan = ds.san_bong?.cum_san?.TenCumSan || '';
             const kg = ds.khung_gio ? `${ds.khung_gio.GioBatDau.substring(0,5)} - ${ds.khung_gio.GioKetThuc.substring(0,5)}` : '';
             const ngayDa = ds.NgayDa ? ds.NgayDa.split('-').reverse().join('/') : '';
             const maVe = (ds.MaGiaiDau || ds.ID_GiaiDau) ? `GD-${ds.MaGiaiDau || ds.ID_GiaiDau}` : `PT-${ds.MaDatSan || ds.ID}`;
+            const donGia = Number(ds.pivot?.DonGia ?? ds.TongTien ?? 0);
+            if (ds.TrangThai !== 'DaHuy') tongTienSanGoc += donGia;
+
             return `
                 <tr>
                     <td style="text-align:center;">${i + 1}</td>
@@ -2803,17 +3255,21 @@ window.printCustomerBookingInvoice = async function(maHoaDon) {
                     <td><strong>${tenSan}</strong><br><small>${cumSan}</small></td>
                     <td style="text-align:center;">${kg}<br><small>${ngayDa}</small></td>
                     <td style="text-align:center;">${statusMap[ds.TrangThai] || ds.TrangThai}</td>
-                    <td style="text-align:right;">${Number(ds.TongTien).toLocaleString('vi-VN')}đ</td>
+                    <td style="text-align:right;">${donGia.toLocaleString('vi-VN')}đ</td>
                     <td style="text-align:right; color:#047857; font-weight:bold;">${Number(ds.TienCoc).toLocaleString('vi-VN')}đ</td>
                 </tr>
             `;
         }).join('');
 
-        const tongTien = Number(hd.TongTienSan || 0);
+        const tongTien = Number(hd.TongTien ?? hd.TongTienSan ?? 0);
+        const thueVAT = Number(hd.ThueVAT || 0);
+        const tienSauGiam = Math.max(0, tongTien - thueVAT);
+        const soTienGiam = Math.max(0, tongTienSanGoc - tienSauGiam);
+        const kmObj = hd.khuyen_mai || hd.khuyenMai || null;
         const tienCoc = Number(hd.TienDaCoc || 0);
         const conLai = Math.max(0, tongTien - tienCoc);
 
-        const printWin = window.open('', '_blank', 'width=880,height=720');
+        const printWin = window.open('', '_blank', 'width=880,height=740');
         if (!printWin) return showToast('Vui lòng cho phép mở cửa sổ Pop-up để in hóa đơn!');
 
         printWin.document.write(`
@@ -2830,7 +3286,7 @@ window.printCustomerBookingInvoice = async function(maHoaDon) {
                     table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 13px; }
                     th, td { border: 1px solid #cbd5e1; padding: 10px; }
                     th { background: #f1f5f9; }
-                    .summary { width: 340px; margin-left: auto; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px; }
+                    .summary { width: 360px; margin-left: auto; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px; font-size: 13.5px; }
                 </style>
             </head>
             <body>
@@ -2855,14 +3311,17 @@ window.printCustomerBookingInvoice = async function(maHoaDon) {
                             <th>Sân Bóng & Cơ Sở</th>
                             <th>Khung Giờ & Ngày Đá</th>
                             <th>Trạng Thái</th>
-                            <th>Đơn Giá Sân</th>
+                            <th>Đơn Giá Khung Giờ</th>
                             <th>Tiền Đã Cọc</th>
                         </tr>
                     </thead>
                     <tbody>${rowsHtml}</tbody>
                 </table>
                 <div class="summary">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>Tổng tiền hóa đơn:</span><strong>${tongTien.toLocaleString('vi-VN')}đ</strong></div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>Tổng tiền sân gốc:</span><strong>${tongTienSanGoc.toLocaleString('vi-VN')}đ</strong></div>
+                    ${soTienGiam > 0 ? `<div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#2563eb;"><span>Khuyến mãi (${kmObj ? kmObj.TenKhuyenMai : 'Voucher'}):</span><strong>-${soTienGiam.toLocaleString('vi-VN')}đ</strong></div>` : ''}
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#475569;"><span>Thuế VAT (8%):</span><strong>+${thueVAT.toLocaleString('vi-VN')}đ</strong></div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px; border-top:1px solid #e2e8f0; padding-top:6px;"><span>Tổng tiền hóa đơn:</span><strong>${tongTien.toLocaleString('vi-VN')}đ</strong></div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#047857;"><span>Đã đặt cọc:</span><strong>${tienCoc.toLocaleString('vi-VN')}đ</strong></div>
                     <div style="display:flex; justify-content:space-between; border-top:1px dashed #cbd5e1; padding-top:8px; color:#e11d48; font-size:15px;"><strong>Còn thu tại sân:</strong><strong>${conLai.toLocaleString('vi-VN')}đ</strong></div>
                 </div>
@@ -4350,10 +4809,6 @@ function openTicketModal(type, id) {
                     <span style="color: var(--text-muted);">Đã thanh toán (Cọc):</span>
                     <strong style="color: var(--text-dark);">${tienCoc.toLocaleString('vi-VN')}đ</strong>
                 </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; background: #fff1f2; padding: 9px 12px; border-radius: 8px; border: 1px dashed #fecdd3;">
-                    <span style="color: #be123c; font-weight: bold; font-size: 0.82rem;">CẦN THU THÊM:</span>
-                    <strong style="color: #e11d48; font-size: 1.18rem;">${conLai.toLocaleString('vi-VN')}đ</strong>
-                </div>
             </div>
         `;
     } 
@@ -4418,10 +4873,6 @@ function openTicketModal(type, id) {
                 <div style="display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 0.85rem;">
                     <span style="color: var(--text-muted);">Đã thanh toán (Cọc 50%):</span>
                     <strong style="color: var(--text-dark);">${tienCoc.toLocaleString('vi-VN')}đ</strong>
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; background: #fff1f2; padding: 9px 12px; border-radius: 8px; border: 1px dashed #fecdd3;">
-                    <span style="color: #be123c; font-weight: bold; font-size: 0.82rem;">CẦN THU THÊM:</span>
-                    <strong style="color: #e11d48; font-size: 1.18rem;">${conLai.toLocaleString('vi-VN')}đ</strong>
                 </div>
             </div>
         `;
