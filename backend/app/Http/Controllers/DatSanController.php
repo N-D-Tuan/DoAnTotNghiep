@@ -1909,6 +1909,46 @@ class DatSanController extends Controller
                 }
             }
 
+            // GỬI EMAIL XÁC NHẬN HỦY HÓA ĐƠN & HOÀN CỌC CHO KHÁCH VÃNG LAI
+            if ($first->MaNguoiDung === null && $first->EmailNguoiDat) {
+                try {
+                    $tongCocStr = number_format($tongTienHoan, 0, ',', '.') . 'đ';
+                    $danhSachTranHtml = '';
+
+                    foreach ($cacTranDaCoc as $dsItem) {
+                        $tenSanItem = $dsItem->sanBong ? $dsItem->sanBong->TenSan : 'Sân bóng';
+                        $cumSanItem = ($dsItem->sanBong && $dsItem->sanBong->cumSan) ? $dsItem->sanBong->cumSan->TenCumSan : '';
+                        $ngayDaItem = date('d/m/Y', strtotime($dsItem->NgayDa));
+                        $gioDaItem  = $dsItem->khungGio ? substr($dsItem->khungGio->GioBatDau, 0, 5) . ' - ' . substr($dsItem->khungGio->GioKetThuc, 0, 5) : '';
+                        $cocItem    = number_format($dsItem->TienCoc, 0, ',', '.') . 'đ';
+
+                        $danhSachTranHtml .= "
+                            <li>
+                                <strong>Vé #PT-{$dsItem->MaDatSan}:</strong> {$tenSanItem} ({$cumSanItem}) — {$gioDaItem} ngày {$ngayDaItem} (Cọc: {$cocItem})
+                            </li>
+                        ";
+                    }
+
+                    $mailHuyHD = "
+                        <h2>Xác nhận hủy Hóa đơn đặt sân #{$maHoaDon} thành công</h2>
+                        <p>Chào <strong>{$first->TenNguoiDat}</strong>,</p>
+                        <p>Toàn bộ <strong>{$soTranHuy} trận</strong> trong hóa đơn đặt sân <strong>#{$maHoaDon}</strong> của bạn đã được hủy thành công theo yêu cầu:</p>
+                        <ul>
+                            {$danhSachTranHtml}
+                        </ul>
+                        <p><strong>Tổng số tiền cọc hoàn lại:</strong> <span style='color:#10b981; font-weight:bold;'>{$tongCocStr}</span></p>
+                        <p>Cảm ơn bạn đã sử dụng dịch vụ của DN Football!</p>
+                    ";
+
+                    Mail::html($mailHuyHD, function ($message) use ($first, $maHoaDon) {
+                        $message->to($first->EmailNguoiDat)
+                                ->subject("Xác nhận hủy Hóa đơn đặt sân #{$maHoaDon} - DN Football");
+                    });
+                } catch (\Exception $mailEx) {
+                    \Illuminate\Support\Facades\Log::error('Lỗi gửi mail hủy hóa đơn khách vãng lai: ' . $mailEx->getMessage());
+                }
+            }
+
             DB::commit();
 
             if ($first->MaNguoiDung !== null) {
@@ -1917,9 +1957,11 @@ class DatSanController extends Controller
             broadcast(new \App\Events\AdminDataUpdated())->toOthers();
             broadcast(new \App\Events\SystemDataUpdated())->toOthers();
 
-            $msgSuccess = ($phuongThucHoan === 'chuyen_khoan')
-                ? "Đã hủy toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon} và ghi nhận hoàn cọc qua Chuyển khoản!"
-                : "Đã hủy toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon} và hoàn cọc vào ví khách hàng!";
+            $msgSuccess = ($first->MaNguoiDung === null)
+                ? "Đã hủy toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon} của khách vãng lai và gửi Email xác nhận hoàn cọc!"
+                : (($phuongThucHoan === 'chuyen_khoan')
+                    ? "Đã hủy toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon} và ghi nhận hoàn cọc qua Chuyển khoản!"
+                    : "Đã hủy toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon} và hoàn cọc vào ví khách hàng!");
 
             return response()->json([
                 'success' => true,
