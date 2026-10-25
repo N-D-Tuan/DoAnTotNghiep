@@ -94,16 +94,13 @@ document.addEventListener(
         if (currentUser.VaiTro === 'QuanLySan') {
             // Quản lý sân: TUYỆT ĐỐI ẨN menu của Admin
             if(document.getElementById('menu-cumsan')) document.getElementById('menu-cumsan').style.display = 'none';
-            if(document.getElementById('menu-xuatnhap-admin')) document.getElementById('menu-xuatnhap-admin').style.display = 'none';
 
-            // HIỆN menu đặc quyền của Quản lý sân
             if(document.getElementById('menu-sancuatoi')) document.getElementById('menu-sancuatoi').style.display = 'flex';
             if(document.getElementById('menu-datsan')) document.getElementById('menu-datsan').style.display = 'flex';
             if(document.getElementById('menu-giaidau')) document.getElementById('menu-giaidau').style.display = 'flex';
             if(document.getElementById('menu-huysan')) document.getElementById('menu-huysan').style.display = 'flex';
-            if(document.getElementById('menu-kho')) document.getElementById('menu-kho').style.display = 'flex';
             if(document.getElementById('menu-lichlamviec')) document.getElementById('menu-lichlamviec').style.display = 'flex';
-            if(document.getElementById('menu-bangluong-admin')) document.getElementById('menu-bangluong-admin').style.display = 'flex';
+            if(document.getElementById('menu-khuyenmai')) document.getElementById('menu-khuyenmai').style.display = 'flex';
 
             if(menuKhachHang) menuKhachHang.innerHTML = '<i class="fa-solid fa-users"></i> QUẢN LÝ TÀI KHOẢN';
         } 
@@ -113,18 +110,12 @@ document.addEventListener(
             if(document.getElementById('menu-datsan')) document.getElementById('menu-datsan').style.display = 'none';
             if(document.getElementById('menu-giaidau')) document.getElementById('menu-giaidau').style.display = 'none';
             if(document.getElementById('menu-huysan')) document.getElementById('menu-huysan').style.display = 'none';
-            if(document.getElementById('menu-kho')) document.getElementById('menu-kho').style.display = 'none';
             if(document.getElementById('menu-lichlamviec')) document.getElementById('menu-lichlamviec').style.display = 'none';
 
             // Đảm bảo hiển thị đầy đủ menu của Admin
             if(document.getElementById('menu-cumsan')) document.getElementById('menu-cumsan').style.display = 'flex';
-            if(document.getElementById('menu-bangluong-admin')) {
-                const menuBL = document.getElementById('menu-bangluong-admin');
-                menuBL.style.display = 'flex';
-                menuBL.innerHTML = '<i class="fa-solid fa-money-check-dollar"></i> XEM BẢNG LƯƠNG';
-            }
+            if(document.getElementById('menu-khuyenmai')) document.getElementById('menu-khuyenmai').style.display = 'flex';
             if(document.getElementById('menu-captaikhoan')) document.getElementById('menu-captaikhoan').style.display = 'flex';
-            if(document.getElementById('menu-xuatnhap-admin')) document.getElementById('menu-xuatnhap-admin').style.display = 'flex';
 
             if(menuKhachHang) menuKhachHang.innerHTML = '<i class="fa-solid fa-users-gear"></i> QUẢN LÝ TÀI KHOẢN';
         }
@@ -162,9 +153,25 @@ document.addEventListener(
         }
 
         // ==============================================
-        // RENDER TỔNG QUAN KHI ĐĂNG NHẬP
+        // RENDER TỔNG QUAN KHI ĐĂNG NHẬP & KIỂM TRA VNPAY HOÀN TIỀN
         // ==============================================
-        renderTongQuan();
+        const urlParamsAdmin = new URLSearchParams(window.location.search);
+        const vnpayRefundStatus = urlParamsAdmin.get('vnpay_refund');
+        if (vnpayRefundStatus) {
+            renderQuanLyDatSan('All', '');
+            setTimeout(() => {
+                if (vnpayRefundStatus === 'success') {
+                    showSystemModal('Hoàn tiền thành công!', 'Giao dịch hoàn tiền cọc qua cổng VNPay đã hoàn tất. Lịch đặt sân đã được chuyển sang Đã hủy.', 'success');
+                } else if (vnpayRefundStatus === 'failed') {
+                    showSystemModal('Đã hủy giao dịch', 'Giao dịch hoàn tiền trên VNPay chưa hoàn tất. Lịch đặt sân vẫn được giữ nguyên.', 'error');
+                } else {
+                    showSystemModal('Lỗi giao dịch', 'Có lỗi xảy ra trong quá trình xác thực hoàn tiền VNPay!', 'error');
+                }
+            }, 300);
+            window.history.replaceState({}, document.title, window.location.pathname);
+        } else {
+            renderTongQuan();
+        }
 
         // ==========================================
         // KẾT NỐI WEBSOCKET DÀNH CHO ADMIN
@@ -223,10 +230,16 @@ document.addEventListener(
                 // Nếu Admin đang mở tab Yêu cầu Giải đấu -> tự refresh bảng
                 if (document.getElementById('gd-pending-count')) {
                     loadDanhSachGiaiDauAdmin();
-                } 
+                }
+
                 // Nếu Admin đang mở tab Yêu cầu Hủy sân -> tự refresh bảng
                 else if (document.getElementById('uc-pending-count')) {
                     loadDanhSachHuySanAdmin();
+                }
+
+                // Nếu Admin/Quản lý đang mở tab Khuyến mãi -> tự refresh bảng Realtime
+                if (document.getElementById('admin-promo-tbody') && typeof loadAdminPromosData === 'function') {
+                    loadAdminPromosData();
                 }
             });
         
@@ -283,25 +296,10 @@ document.addEventListener(
                     } catch(err) { console.error("Lỗi cập nhật ngầm lịch Admin:", err); }
                 }
 
-                // 2. CẬP NHẬT REALTIME KHO HÀNG
-                // Nếu Quản lý đang mở Tab Danh sách Sản phẩm
-                if (document.getElementById('tab-sanpham') && document.getElementById('tab-sanpham').style.display !== 'none') {
-                    if (currentUser.ID_CumSan) loadDanhSachSanPhamKho(currentUser.ID_CumSan);
-                }
-                // Nếu Quản lý đang mở Tab Lịch sử Nhập hàng
-                if (document.getElementById('tab-phieunhap') && document.getElementById('tab-phieunhap').style.display !== 'none') {
-                    if (currentUser.ID_CumSan) loadLichSuNhapHang(currentUser.ID_CumSan);
-                }
-                // Nếu Quản lý đang mở Tab Hóa đơn bán hàng
-                if (document.getElementById('tab-hoadon') && document.getElementById('tab-hoadon').style.display !== 'none') {
-                    if (currentUser.ID_CumSan) loadQuanLyHoaDonBanHang(currentUser.ID_CumSan);
-                }
-
                 // 3. CẬP NHẬT REALTIME LỊCH LÀM VIỆC
                 const currentTabAdmin = document.getElementById('admin-cal-current');
                 const nextTabAdmin = document.getElementById('admin-cal-next');
                 const chamCongTabAdmin = document.getElementById('admin-cal-chamcong');
-                const giaoCaTabAdmin = document.getElementById('admin-cal-giaoca');
                 
                 // Nếu Quản lý đang đứng ở Tab "Tuần Hiện Tại" (Xem nhân viên bị đổi ca đột xuất)
                 if (currentTabAdmin && currentTabAdmin.style.display !== 'none') {
@@ -325,18 +323,6 @@ document.addEventListener(
                     }
                 }
 
-                // Nếu Quản lý đang đứng ở Tab "Lịch Sử Giao Ca"
-                if (giaoCaTabAdmin && giaoCaTabAdmin.style.display !== 'none') {
-                    if (typeof loadAdminLichSuGiaoCa === 'function') {
-                        loadAdminLichSuGiaoCa();
-                    }
-                }
-
-                // 4. CẬP NHẬT REALTIME BẢNG LƯƠNG (DÀNH CHO CẢ ADMIN VÀ QUẢN LÝ SÂN)
-                if (document.getElementById('admin-bang-luong-tbody') && typeof loadBangLuongAdminData === 'function') {
-                    loadBangLuongAdminData();
-                }
-
                 // 5. Cập nhật biểu đồ Dashboard nếu Admin/Quản lý đang đứng ở trang Tổng quan
                 if (document.getElementById('revenueChart') && typeof updateDashboardStats === 'function') {
                     updateDashboardStats();
@@ -351,6 +337,11 @@ document.addEventListener(
                 // Trường hợp B: Admin hoặc Quản lý sân đang mở Chi tiết Cụm Sân ("Sân của tôi")
                 if (document.getElementById('admin-cs-reviews-list') && typeof currentCumSanId !== 'undefined' && currentCumSanId !== null) {
                     syncAdminClusterReviewsRealtime(currentCumSanId);
+                }
+
+                // 7. CẬP NHẬT REALTIME BẢNG KHUYẾN MÃI KHI KHÁCH ĐẶT/HỦY SÂN
+                if (document.getElementById('admin-promo-tbody') && typeof loadAdminPromosData === 'function') {
+                    loadAdminPromosData();
                 }
             });
 
@@ -2380,7 +2371,7 @@ function renderQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = null) {
                             <th>Khách hàng</th>
                             <th>Thông tin Sân</th>
                             <th>Khung giờ</th>
-                            <th>Tiền thu</th>
+                            <th>Giá sân / Cọc</th>
                             <th>Trạng thái</th>
                             <th style="text-align: center;">Chốt sân</th>
                         </tr>
@@ -2524,17 +2515,17 @@ function renderDSTable(data) {
         const sdtKhach = first.ID_NguoiDung ? (first.nguoi_dung?.SoDienThoai || '') : (first.SDTKhachVangLai || '');
         const isMember = Boolean(first.ID_NguoiDung);
 
-        // Tính toàn bộ các trận thuộc hóa đơn này trong allDatSanData
         const allMatchesInInvoice = group.maHoaDon
             ? allDatSanData.filter(d => d.MaHoaDonDatSan === group.maHoaDon)
             : group.items;
 
         const activeDaCocCount = allMatchesInInvoice.filter(d => d.TrangThai === 'DaCoc').length;
         const hdObj = group.hoaDonObj;
-        const tongHD = hdObj ? Number(hdObj.TongTienSan) : allMatchesInInvoice.reduce((s, d) => s + Number(d.TongTien), 0);
+        const tongHD = hdObj ? Number(hdObj.TongTien ?? hdObj.TongTienSan) : allMatchesInInvoice.reduce((s, d) => s + Number(d.TongTien), 0);
         const cocHD = hdObj ? Number(hdObj.TienDaCoc) : allMatchesInInvoice.reduce((s, d) => s + Number(d.TienCoc), 0);
+        const conPhaiThuHD = (hdObj && hdObj.TrangThai === 'DaHuy') ? 0 : Math.max(0, tongHD - cocHD);
 
-        // Vẽ thanh Header của Hóa Đơn Đặt Sân
+        // Vẽ thanh Header của Hóa Đơn Đặt Sân (Hiển thị rõ Tổng HĐ, Đã cọc và Còn phải thu)
         if (group.maHoaDon) {
             html += `
                 <tr style="background: #f0fdf4; border-top: 2px solid #86efac; border-bottom: 1px solid #bbf7d0;">
@@ -2545,7 +2536,11 @@ function renderDSTable(data) {
                                     <i class="fa-solid fa-file-invoice-dollar"></i> Hóa đơn #${group.maHoaDon}
                                 </span>
                                 <span style="font-size: 0.88rem; color: #0f172a;">Khách: <strong>${tenKhach}</strong> (${sdtKhach})</span>
-                                <span style="font-size: 0.84rem; color: #475569;">&bull; Tổng HĐ (${allMatchesInInvoice.length} trận): <strong>${tongHD.toLocaleString('vi-VN')}đ</strong> | Đã cọc: <strong style="color:#047857;">${cocHD.toLocaleString('vi-VN')}đ</strong></span>
+                                <span style="font-size: 0.84rem; color: #475569;">
+                                    &bull; Tổng HĐ (${allMatchesInInvoice.length} trận): <strong style="color:#0f172a;">${tongHD.toLocaleString('vi-VN')}đ</strong> 
+                                    | Đã cọc: <strong style="color:#047857;">${cocHD.toLocaleString('vi-VN')}đ</strong>
+                                    | Còn phải thu: <strong style="color:#ea580c; font-size:0.92rem; background:#fff7ed; padding:2px 8px; border-radius:6px; border:1px solid #fed7aa;">${conPhaiThuHD.toLocaleString('vi-VN')}đ</strong>
+                                </span>
                             </div>
                             <div style="display: flex; gap: 8px; align-items: center;">
                                 <button type="button" class="btn-outline-sm" style="background: #fff; color: #2563eb; border-color: #93c5fd; padding: 5px 11px; font-size: 0.8rem; font-weight: 700;" onclick="printAdminBookingInvoice('${group.maHoaDon}')">
@@ -2570,7 +2565,7 @@ function renderDSTable(data) {
             else if(item.TrangThai === 'HoanThanh') { badgeColor = '#047857'; badgeBg = '#d1fae5'; viStatus = 'Hoàn thành'; }
             else if(item.TrangThai === 'KhongDen') { badgeColor = '#6b7280'; badgeBg = '#f3f4f6'; viStatus = 'Không đến'; }
 
-            const badgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${viStatus}</span>`;
+            const badgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor}; white-space: nowrap;">${viStatus}</span>`;
             const maVeDisplay = item.ID_GiaiDau ? `GD-${item.ID_GiaiDau}` : `PT-${item.ID}`;
             const badgeClassVe = item.ID_GiaiDau 
                 ? 'background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe;' 
@@ -2585,13 +2580,12 @@ function renderDSTable(data) {
             const d = new Date(item.NgayDa);
             const dateStr = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth()+1).toString().padStart(2, '0')}/${d.getFullYear()}`;
             const timeStr = item.khung_gio ? `${item.khung_gio.GioBatDau.substring(0,5)} - ${item.khung_gio.GioKetThuc.substring(0,5)}` : '';
-            const tienThu = Number(item.TongTien) - Number(item.TienCoc);
 
             let actionHtml = '';
             if (item.TrangThai === 'DaCoc') {
-                actionHtml = `<button class="btn-primary" style="padding: 6px 12px; font-size: 0.85rem;" onclick="event.stopPropagation(); openDSConfirmModal('${item.ID}')">Chốt sân</button>`;
+                actionHtml = `<button class="btn-primary" style="padding: 6px 12px; font-size: 0.85rem; white-space: nowrap;" onclick="event.stopPropagation(); openDSConfirmModal('${item.ID}')">Chốt sân</button>`;
             } else {
-                actionHtml = `<span style="color: var(--text-muted); font-size: 0.85rem;">Đã xử lý</span>`;
+                actionHtml = `<span style="color: var(--text-muted); font-size: 0.85rem; white-space: nowrap;">Đã xử lý</span>`;
             }
 
             const tenKhachHienThi = item.ID_NguoiDung ? (item.nguoi_dung?.HoTen || 'N/A') : (item.TenKhachVangLai || 'N/A');
@@ -2616,7 +2610,10 @@ function renderDSTable(data) {
                     <span style="font-size: 0.9rem;">Ngày: ${dateStr}</span><br>
                     <strong style="color: var(--primary);">Giờ: ${timeStr}</strong>
                 </td>
-                <td><strong style="color: #ea580c;">${tienThu.toLocaleString('vi-VN')}đ</strong></td>
+                <td style="white-space: nowrap;">
+                    <strong style="color: #0f172a;">${Number(item.TongTien).toLocaleString('vi-VN')}đ</strong><br>
+                    <span style="font-size: 0.8rem; color: #047857; font-weight: 600;">Cọc: ${Number(item.TienCoc).toLocaleString('vi-VN')}đ</span>
+                </td>
                 <td>${badgeHtml}</td>
                 <td style="text-align: center;">${actionHtml}</td>
             </tr>`;
@@ -2682,7 +2679,6 @@ window.openBookingDetailModalAdmin = function(id) {
     // 5. Tài chính
     const tongTien = Number(item.TongTien || 0);
     const tienCoc = Number(item.TienCoc || 0);
-    const canThuThem = tongTien - tienCoc;
 
     modal.innerHTML = `
         <div class="modal-content" style="max-width: 440px; width: 92%; padding: 0; border-radius: 12px; overflow: hidden; background: #fff; box-shadow: 0 10px 25px rgba(15, 23, 42, 0.15); border: 1px solid #e2e8f0;">
@@ -2752,10 +2748,6 @@ window.openBookingDetailModalAdmin = function(id) {
                     <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed #cbd5e1; font-size: 0.86rem;">
                         <span style="color: #64748b;">Tiền đã cọc:</span>
                         <strong style="color: #047857;">${tienCoc.toLocaleString('vi-VN')}đ</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-weight: 600; color: #0f172a; font-size: 0.88rem;">Tiền thu còn lại:</span>
-                        <strong style="color: #ea580c; font-size: 1.08rem;">${canThuThem.toLocaleString('vi-VN')}đ</strong>
                     </div>
                 </div>
             </div>
@@ -2931,7 +2923,7 @@ function openAdminCancelConfirmModal() {
                         Hủy bỏ
                     </button>
                     <button type="button" id="btn-admin-confirm-member-cancel" onclick="confirmMemberCancelAdmin(${isOffline})" style="flex: 1.3; padding: 10px 18px; border-radius: 10px; border: 1px solid #ef4444; background: #ef4444; color: #ffffff; font-weight: 700; font-size: 0.92rem; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
-                        <i class="fa-solid fa-trash"></i> Xác nhận Hủy & Hoàn tiền
+                        Hủy & Hoàn tiền
                     </button>
                 </div>
             </div>`;
@@ -3019,7 +3011,11 @@ async function executeCapNhatDatSan(trangThai, otp = null, customAlertBox = null
     closeDSConfirmModal(); 
 
     try {
-        const payload = { trang_thai: trangThai, ...extraPayload };
+        const payload = { 
+            trang_thai: trangThai, 
+            return_url: window.location.origin + window.location.pathname,
+            ...extraPayload 
+        };
         if (otp) payload.otp = otp;
 
         const response = await fetch(`${API_BASE_URL}/admin/dat-san/${pendingDSId}/chot`, {
@@ -3030,6 +3026,10 @@ async function executeCapNhatDatSan(trangThai, otp = null, customAlertBox = null
         const data = await response.json();
         
         if (response.ok && data.success) {
+            if (data.vnpay_url) {
+                window.location.href = data.vnpay_url;
+                return true;
+            }
             showDSAlert('Đã cập nhật trạng thái thành công!', true);
             loadDanhSachDatSanAdmin();
             return true;
@@ -4587,7 +4587,7 @@ async function renderTongQuan() {
                         <div style="display: flex; align-items: baseline; gap: 8px;">
                             <span id="chart-total-amount" style="font-size: 1.8rem; font-weight: 800; color: #16A34A; letter-spacing: -0.5px;">...đ</span>
                             <span style="font-size: 0.85rem; color: #64748b; background: #f8fafc; padding: 4px 10px; border-radius: 12px; border: 1px solid #e2e8f0;">
-                                <i class="fa-solid fa-circle-info" style="margin-right: 4px; color: #3b82f6;"></i>Đã gồm bán nước, nhập kho & lương NV
+                                <i class="fa-solid fa-circle-info" style="margin-right: 4px; color: #3b82f6;"></i>Doanh thu đặt sân & giải đấu
                             </span>
                         </div>
                     </div>
@@ -5334,7 +5334,7 @@ function renderCapTaiKhoan() {
                 <ul style="padding-left: 20px; color: var(--text-muted); font-size: 0.9rem; line-height: 1.7;">
                     <li style="margin-bottom: 10px;"><strong style="color: var(--text-dark);">Admin:</strong> Có toàn quyền xem báo cáo doanh thu tổng và quản lý hệ thống. Không thuộc cụm sân nào.</li>
                     <li style="margin-bottom: 10px;"><strong style="color: var(--text-dark);">Quản lý sân:</strong> Quản lý lịch đặt, nhân viên, kho hàng và cấu hình giá của Cụm sân được chỉ định.</li>
-                    <li><strong style="color: var(--text-dark);">Nhân viên:</strong> Thực hiện các nghiệp vụ bàn giao ca, xử lý đặt sân, thu tiền và bán hàng tại cụm sân được chỉ định.</li>
+                    <li><strong style="color: var(--text-dark);">Nhân viên:</strong> Thực hiện các nghiệp vụ điểm danh ca làm, xử lý đặt sân và thu ngân tại cụm sân được chỉ định.</li>
                 </ul>
             </div>
         </div>
@@ -5603,6 +5603,7 @@ window.toggleOfflineSlot = function(element, pitchId, kgId, dateDb, dateDisplay,
     } else {
         selectedOfflineSlots.push({ 
             id: slotId, 
+            clusterId: currentCumSanId,
             pitchId, 
             kgId, 
             dateDb, 
@@ -5777,8 +5778,8 @@ async function submitOfflineBooking() {
             btn.disabled = false;
             btn.innerHTML = 'Chốt giữ sân';
 
-            if (data.ma_hoa_don) {
-                openOfflineBookingSuccessInvoiceModal(data.ma_hoa_don);
+            if (data.ma_hoa_don || (data.ma_hoa_dons && data.ma_hoa_dons.length > 0)) {
+                openOfflineBookingSuccessInvoiceModal(data.ma_hoa_don, data.ma_hoa_dons || []);
             } else {
                 showSystemModal("Thành công", "Đã chốt giữ sân thành công!", "success");
             }
@@ -5820,7 +5821,7 @@ async function submitOfflineBooking() {
     }
 }
 
-function openOfflineBookingSuccessInvoiceModal(maHoaDon) {
+function openOfflineBookingSuccessInvoiceModal(maHoaDon, maHoaDons = []) {
     let modal = document.getElementById('offline-invoice-ask-modal');
     if (!modal) {
         modal = document.createElement('div');
@@ -5829,997 +5830,32 @@ function openOfflineBookingSuccessInvoiceModal(maHoaDon) {
         modal.style.cssText = 'display: none; z-index: 100000; align-items: center; justify-content: center;';
         document.body.appendChild(modal);
     }
+
+    const invoiceList = (Array.isArray(maHoaDons) && maHoaDons.length > 0)
+        ? maHoaDons
+        : (maHoaDon ? [maHoaDon] : []);
+
+    const printBtnsHtml = invoiceList.map(idHD => `
+        <button type="button" class="btn-primary" style="flex: 1.3; padding: 10px; background: #2563eb; border-color: #2563eb; white-space: nowrap;" onclick="document.getElementById('offline-invoice-ask-modal').style.display='none'; printAdminBookingInvoice('${idHD}');">
+            <i class="fa-solid fa-print"></i> Xuất HĐ #${idHD}
+        </button>
+    `).join('');
+
     modal.innerHTML = `
-        <div class="modal-content" style="max-width: 410px; width: 92%; text-align: center; padding: 28px 24px; border-radius: 16px;">
+        <div class="modal-content" style="max-width: 440px; width: 92%; text-align: center; padding: 28px 24px; border-radius: 16px;">
             <div style="font-size: 3.4rem; color: #10b981; margin-bottom: 12px;"><i class="fa-solid fa-circle-check"></i></div>
             <h3 style="margin-bottom: 8px; font-size: 1.3rem;">Giữ sân thành công!</h3>
             <p style="color: var(--text-muted); margin-bottom: 22px; font-size: 0.93rem; line-height: 1.5;">
-                Đã tạo hóa đơn đặt sân <strong>#${maHoaDon}</strong>.<br>
+                Đã tạo hóa đơn đặt sân <strong>#${invoiceList.join(', #')}</strong>.<br>
                 <strong style="color:#0f172a;">Bạn có muốn xuất hóa đơn đặt sân cho khách không?</strong>
             </p>
-            <div style="display: flex; gap: 12px; justify-content: center;">
+            <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
                 <button type="button" class="btn-outline" style="flex: 1; padding: 10px;" onclick="document.getElementById('offline-invoice-ask-modal').style.display='none'">Đóng</button>
-                <button type="button" class="btn-primary" style="flex: 1.3; padding: 10px; background: #2563eb; border-color: #2563eb;" onclick="document.getElementById('offline-invoice-ask-modal').style.display='none'; printAdminBookingInvoice('${maHoaDon}');">
-                    <i class="fa-solid fa-print"></i> Xuất hóa đơn
-                </button>
+                ${printBtnsHtml}
             </div>
         </div>
     `;
     modal.style.display = 'flex';
-}
-
-// ======================================================
-// MODULE: QUẢN LÝ SÂN - KHO & NHẬP HÀNG
-// ======================================================
-let allSanPhamKhoData = [];
-let sanPhamKhoPage = 1;
-const sanPhamKhoItemsPerPage = 5;
-let currentKhoSearchTerm = '';
-
-let allPhieuNhapData = [];
-let phieuNhapPage = 1;
-const phieuNhapItemsPerPage = 5;
-let phieuNhapFilterMonth = '';
-let phieuNhapFilterYear = '';
-
-let pnCart = [];
-
-function renderQuanLyKho() {
-    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
-    
-    document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
-    const menuLink = document.getElementById('menu-kho');
-    if (menuLink) menuLink.classList.add('active');
-
-    const today = new Date();
-    phieuNhapFilterMonth = (today.getMonth() + 1).toString().padStart(2, '0');
-    phieuNhapFilterYear = today.getFullYear().toString();
-
-    let yearOptions = '';
-    for(let y = today.getFullYear(); y >= 2024; y--) {
-        yearOptions += `<option value="${y}" ${y.toString() === phieuNhapFilterYear ? 'selected' : ''}>Năm ${y}</option>`;
-    }
-
-    const contentArea = document.querySelector('.admin-content');
-    contentArea.innerHTML = `
-        <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-            <div>
-                <h1 class="page-title">Quản lý Kho & Nhập Hàng</h1>
-                <p class="text-muted">Quản lý danh mục mặt hàng và theo dõi lịch sử nhập hàng tại cụm sân của bạn.</p>
-            </div>
-            <button class="btn-primary" onclick="openNhapHangModal()"><i class="fa-solid fa-truck-ramp-box" style="margin-right: 8px;"></i> Lập Phiếu Nhập Hàng</button>
-        </div>
-
-        <div class="panel">
-            <div style="display: flex; gap: 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px; padding: 0 20px;">
-                <button class="nav-tab active" onclick="switchKhoTab('tab-sanpham', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; border-bottom: 2px solid var(--primary); color: var(--primary);">Danh sách Sản phẩm</button>
-                <button class="nav-tab" onclick="switchKhoTab('tab-phieunhap', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Lịch sử Nhập hàng</button>
-                <button class="nav-tab" onclick="switchKhoTab('tab-hoadon', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Hóa đơn Bán hàng</button>
-            </div>
-
-            <!-- Tab 1: Danh sách sản phẩm -->
-            <div id="tab-sanpham" class="tab-pane active" style="padding: 0 20px 20px 20px;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
-                    <div style="position: relative; width: 300px;">
-                        <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
-                        <input type="text" class="form-control" style="padding-left: 35px;" placeholder="Tìm tên sản phẩm..." oninput="handleKhoSearch(this.value)">
-                    </div>
-                    <button class="btn-primary" style="padding: 8px 16px; border-radius: 6px;" onclick="openSanPhamModal()"><i class="fa-solid fa-plus"></i> Thêm món</button>
-                </div>
-                <div class="table-responsive">
-                    <table class="admin-table">
-                        <thead style="background: #F8FAFC;">
-                            <tr>
-                                <th>Tên Mặt Hàng</th>
-                                <th>Giá Bán</th>
-                                <th style="text-align: center;">Tồn Kho</th>
-                                <th style="text-align: center;">Trạng Thái UI</th>
-                                <th style="text-align: center;">Hành động</th>
-                            </tr>
-                        </thead>
-                        <tbody id="sanpham-table-body">
-                            <tr><td colspan="5" class="text-center" style="padding: 30px; text-align: center;">Đang tải danh sách...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div id="sanpham-pagination" style="display: flex; justify-content: center; gap: 8px; margin-top: 15px;"></div>
-            </div>
-
-            <!-- Tab 2: Lịch sử nhập hàng -->
-            <div id="tab-phieunhap" class="tab-pane" style="display: none; padding: 0 20px 20px 20px;">
-                <div style="display: flex; gap: 15px; margin-bottom: 15px;">
-                    <select class="form-control" style="width: 150px;" id="filter-phieunhap-month" onchange="handlePhieuNhapFilter()">
-                        <option value="All">Tất cả tháng</option>
-                        ${[...Array(12)].map((_, i) => {
-                            let m = (i + 1).toString().padStart(2, '0');
-                            return `<option value="${m}" ${m === phieuNhapFilterMonth ? 'selected' : ''}>Tháng ${m}</option>`;
-                        }).join('')}
-                    </select>
-                    <select class="form-control" style="width: 150px;" id="filter-phieunhap-year" onchange="handlePhieuNhapFilter()">
-                        <option value="All">Tất cả năm</option>
-                        ${yearOptions}
-                    </select>
-                </div>
-                <div class="table-responsive">
-                    <table class="admin-table">
-                        <thead style="background: #F8FAFC;">
-                            <tr>
-                                <th>Mã Phiếu</th>
-                                <th>Người Nhập</th>
-                                <th>Chi tiết hàng hóa</th>
-                                <th>Tổng thanh toán</th>
-                                <th>Ngày nhập</th>
-                            </tr>
-                        </thead>
-                        <tbody id="phieunhap-table-body">
-                            <tr><td colspan="5" class="text-center" style="padding: 30px; text-align: center;">Đang tải lịch sử...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div id="phieunhap-pagination" style="display: flex; justify-content: center; gap: 8px; margin-top: 15px;"></div>
-            </div>
-
-            <!-- Tab 3: Lịch sử hóa đơn bán hàng -->
-            <div id="tab-hoadon" class="tab-pane" style="display: none; padding: 0 20px 20px 20px;">
-                <div style="display: flex; gap: 15px; margin-bottom: 15px;">
-                    <input type="date" class="form-control" style="width: 180px;" id="qlhoadon-date-filter" onchange="handleQLHoaDonDateFilter(this.value)">
-                    <button class="btn-outline-sm" onclick="document.getElementById('qlhoadon-date-filter').value=''; handleQLHoaDonDateFilter('')" style="padding: 6px 12px;">Xóa lọc ngày</button>
-                </div>
-
-                <div class="table-responsive">
-                    <table class="admin-table">
-                        <thead style="background: #F8FAFC;">
-                            <tr>
-                                <th>Mã Hóa Đơn</th>
-                                <th>Nhân Viên Lập</th>
-                                <th>Chi tiết món</th>
-                                <th>Tổng doanh thu</th>
-                                <th>Thời gian</th>
-                            </tr>
-                        </thead>
-                        <tbody id="qlhoadon-table-body">
-                            <tr><td colspan="5" class="text-center" style="padding: 30px; text-align: center;">Đang tải dữ liệu...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div id="qlhoadon-pagination" style="display: flex; justify-content: center; gap: 8px; margin-top: 15px;"></div>
-            </div>
-        </div>
-    `;
-
-    loadDanhSachSanPhamKho(currentUser.ID_CumSan);
-}
-
-function switchKhoTab(tabId, element) {
-    const tabs = element.parentElement.children;
-    for (let i = 0; i < tabs.length; i++) {
-        tabs[i].classList.remove('active');
-        tabs[i].style.borderBottom = 'none';
-        tabs[i].style.color = 'var(--text-muted)';
-    }
-    element.classList.add('active');
-    element.style.borderBottom = '2px solid var(--primary)';
-    element.style.color = 'var(--primary)';
-
-    document.getElementById('tab-sanpham').style.display = 'none';
-    document.getElementById('tab-phieunhap').style.display = 'none';
-    document.getElementById('tab-hoadon').style.display = 'none';
-    document.getElementById(tabId).style.display = 'block';
-
-    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
-    if (tabId === 'tab-phieunhap') {
-        loadLichSuNhapHang(currentUser.ID_CumSan);
-    } else if (tabId === 'tab-hoadon') {
-        loadQuanLyHoaDonBanHang(currentUser.ID_CumSan);
-    } else {
-        loadDanhSachSanPhamKho(currentUser.ID_CumSan);
-    }
-}
-
-// ----------------------------------------------------
-// TAB 1: QUẢN LÝ SẢN PHẨM & TỒN KHO
-// ----------------------------------------------------
-async function loadDanhSachSanPhamKho(idCumSan) {
-    try {
-        const response = await fetch(`${API_BASE_URL}/san-pham?id_cum_san=${idCumSan}`);
-        const res = await response.json();
-        
-        if (res.success) {
-            allSanPhamKhoData = res.data || [];
-            applySanPhamFilterAndRender();
-        }
-    } catch (e) {
-        document.getElementById('sanpham-table-body').innerHTML = `<tr><td colspan="5" class="text-center text-danger" style="padding: 30px;">Lỗi kết nối máy chủ!</td></tr>`;
-    }
-}
-
-function handleKhoSearch(val) {
-    currentKhoSearchTerm = val.toLowerCase().trim();
-    sanPhamKhoPage = 1;
-    applySanPhamFilterAndRender();
-}
-
-function applySanPhamFilterAndRender() {
-    let filtered = allSanPhamKhoData.filter(p => p.TenSanPham.toLowerCase().includes(currentKhoSearchTerm));
-
-    const totalPages = Math.ceil(filtered.length / sanPhamKhoItemsPerPage) || 1;
-    if (sanPhamKhoPage > totalPages) sanPhamKhoPage = totalPages;
-
-    const startIdx = (sanPhamKhoPage - 1) * sanPhamKhoItemsPerPage;
-    const pageData = filtered.slice(startIdx, startIdx + sanPhamKhoItemsPerPage);
-
-    const tbody = document.getElementById('sanpham-table-body');
-    if (pageData.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted" style="padding: 30px; text-align: center;">Không có sản phẩm nào.</td></tr>`;
-    } else {
-        tbody.innerHTML = pageData.map(p => {
-            const isHetHang = p.SoLuongTon <= 0;
-            const badgeHtml = isHetHang 
-                ? `<span style="padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; background: #fee2e2; color: #ef4444; font-weight: bold;">Đang mờ (Hết hàng)</span>` 
-                : `<span style="padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; background: #d1fae5; color: #047857; font-weight: bold;">Sáng (Đang bán)</span>`;
-            
-            const tonKhoStyle = isHetHang ? 'color: #ef4444; font-weight: bold;' : 'color: #1e293b; font-weight: bold;';
-
-            // Dữ liệu dùng để Sửa
-            const spDataStr = JSON.stringify(p).replace(/'/g, "\\'");
-
-            return `
-                <tr>
-                    <td><strong style="color: var(--text-dark);">${p.TenSanPham}</strong></td>
-                    <td><strong style="color: #ea580c;">${Number(p.GiaBan).toLocaleString('vi-VN')}đ</strong></td>
-                    <td style="text-align: center;"><span style="${tonKhoStyle}">${p.SoLuongTon}</span></td>
-                    <td style="text-align: center;">${badgeHtml}</td>
-                    <td style="text-align: center;">
-                        <button class="action-btn" onclick='openSanPhamModal(${spDataStr})'><i class="fa-solid fa-pen-to-square"></i> Sửa</button>
-                    </td>
-                </tr>
-            `;
-        }).join('');
-    }
-
-    renderSanPhamPagination(totalPages);
-}
-
-function renderSanPhamPagination(totalPages) {
-    const div = document.getElementById('sanpham-pagination');
-    if (totalPages <= 1) return div.innerHTML = '';
-    
-    let html = `<button class="btn-outline-sm" ${sanPhamKhoPage === 1 ? 'disabled style="opacity:0.5;"' : ''} onclick="sanPhamKhoPage--; applySanPhamFilterAndRender()"><i class="fa-solid fa-chevron-left"></i></button>`;
-    
-    const getPages = (current, total) => {
-        if (total <= 6) return Array.from({length: total}, (_, i) => i + 1);
-        if (current <= 3) return [1, 2, 3, 4, '...', total];
-        if (current >= total - 2) return [1, '...', total - 3, total - 2, total - 1, total];
-        return [1, '...', current - 1, current, current + 1, '...', total];
-    };
-
-    getPages(sanPhamKhoPage, totalPages).forEach(i => {
-        if (i === '...') {
-            html += `<span style="padding: 6px 10px; color: var(--text-muted); font-weight: bold;">...</span>`;
-        } else {
-            html += `<button class="${i === sanPhamKhoPage ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="sanPhamKhoPage=${i}; applySanPhamFilterAndRender()">${i}</button>`;
-        }
-    });
-
-    html += `<button class="btn-outline-sm" ${sanPhamKhoPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="sanPhamKhoPage++; applySanPhamFilterAndRender()"><i class="fa-solid fa-chevron-right"></i></button>`;
-    div.innerHTML = html;
-}
-
-// Logic Lưu Sản phẩm
-function showSPAlert(msg, isSuccess) {
-    const alert = document.getElementById('sanpham-alert');
-    alert.textContent = msg;
-    alert.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
-    alert.style.display = 'block';
-    setTimeout(() => alert.style.display = 'none', 3000);
-}
-
-function openSanPhamModal(sp = null) {
-    document.getElementById('sanpham-alert').style.display = 'none';
-    
-    // Reset file input & preview
-    document.getElementById('sp-hinhanh').value = '';
-    const imgPreview = document.getElementById('sp-img-preview');
-    const previewContainer = document.getElementById('sp-preview-container');
-    
-    if (sp) {
-        document.getElementById('sanpham-modal-title').textContent = 'Chỉnh Sửa Sản Phẩm';
-        document.getElementById('sp-id').value = sp.ID;
-        document.getElementById('sp-ten').value = sp.TenSanPham;
-        document.getElementById('sp-gia').value = sp.GiaBan;
-        
-        if (sp.HinhAnh) {
-            imgPreview.src = `http://127.0.0.1:8000${sp.HinhAnh}`;
-            previewContainer.style.display = 'block';
-        } else {
-            previewContainer.style.display = 'none';
-        }
-    } else {
-        document.getElementById('sanpham-modal-title').textContent = 'Thêm Sản Phẩm Mới';
-        document.getElementById('sp-id').value = '';
-        document.getElementById('sp-ten').value = '';
-        document.getElementById('sp-gia').value = '';
-        previewContainer.style.display = 'none';
-    }
-    document.getElementById('sanpham-modal').style.display = 'flex';
-}
-
-// Bổ sung sự kiện Preview Ảnh khi người dùng chọn file
-document.getElementById('sp-hinhanh').addEventListener('change', function(e) {
-    const file = e.target.files[0];
-    const previewContainer = document.getElementById('sp-preview-container');
-    const imgPreview = document.getElementById('sp-img-preview');
-    
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            imgPreview.src = e.target.result;
-            previewContainer.style.display = 'block';
-        }
-        reader.readAsDataURL(file);
-    } else {
-        previewContainer.style.display = 'none';
-    }
-});
-
-function closeSanPhamModal() { document.getElementById('sanpham-modal').style.display = 'none'; }
-
-async function saveSanPham() {
-    const id = document.getElementById('sp-id').value;
-    const ten = document.getElementById('sp-ten').value.trim();
-    const gia = document.getElementById('sp-gia').value;
-    const imageFile = document.getElementById('sp-hinhanh').files[0];
-    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
-
-    if (!ten || !gia) return showSPAlert('Vui lòng nhập tên và giá bán!', false);
-
-    const btn = document.getElementById('btn-save-sp');
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang lưu...';
-    btn.disabled = true;
-
-    const formData = new FormData();
-    formData.append('ID_CumSan', currentUser.ID_CumSan);
-    formData.append('TenSanPham', ten);
-    formData.append('GiaBan', gia);
-    
-    if (imageFile) {
-        formData.append('HinhAnh', imageFile);
-    }
-
-    if (id) {
-        formData.append('_method', 'PUT'); // Laravel yêu cầu gửi _method=PUT khi upload file dạng PUT
-    }
-
-    const url = id ? `${API_BASE_URL}/san-pham/${id}` : `${API_BASE_URL}/san-pham`;
-
-    try {
-        const response = await fetch(url, {
-            method: 'POST', // Gửi bằng POST vì có file, Laravel sẽ tự bắt _method=PUT
-            headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` },
-            body: formData
-        });
-        const data = await response.json();
-        
-        if (response.ok && data.success) {
-            showSPAlert('Lưu thành công!', true);
-            setTimeout(() => {
-                closeSanPhamModal();
-                loadDanhSachSanPhamKho(currentUser.ID_CumSan);
-            }, 1000);
-        } else {
-            showSPAlert(data.message || 'Lỗi xử lý', false);
-        }
-    } catch (e) {
-        showSPAlert('Lỗi kết nối máy chủ!', false);
-    } finally {
-        btn.innerHTML = 'Lưu Sản Phẩm';
-        btn.disabled = false;
-    }
-}
-
-// ----------------------------------------------------
-// TAB 2: LỊCH SỬ NHẬP HÀNG & PHIẾU NHẬP
-// ----------------------------------------------------
-async function loadLichSuNhapHang(idCumSan) {
-    try {
-        const response = await fetch(`${API_BASE_URL}/phieu-nhap?id_cum_san=${idCumSan}`);
-        const res = await response.json();
-        
-        if (res.success) {
-            allPhieuNhapData = res.data || [];
-            applyPhieuNhapFiltersAndRender();
-        }
-    } catch (e) {
-        document.getElementById('phieunhap-table-body').innerHTML = `<tr><td colspan="5" class="text-center text-danger" style="padding: 30px;">Lỗi kết nối máy chủ!</td></tr>`;
-    }
-}
-
-function handlePhieuNhapFilter() {
-    phieuNhapFilterMonth = document.getElementById('filter-phieunhap-month').value;
-    phieuNhapFilterYear = document.getElementById('filter-phieunhap-year').value;
-    phieuNhapPage = 1;
-    applyPhieuNhapFiltersAndRender();
-}
-
-function applyPhieuNhapFiltersAndRender() {
-    let filtered = allPhieuNhapData.filter(pn => {
-        if (!pn.NgayNhap) return false;
-        
-        // Cắt lấy tháng và năm từ chuỗi YYYY-MM-DD
-        const dateParts = pn.NgayNhap.split('-'); 
-        if (dateParts.length < 2) return false;
-        
-        const y = dateParts[0];
-        const m = dateParts[1];
-
-        const matchMonth = (phieuNhapFilterMonth === 'All' || m === phieuNhapFilterMonth);
-        const matchYear = (phieuNhapFilterYear === 'All' || y === phieuNhapFilterYear);
-        
-        return matchMonth && matchYear;
-    });
-
-    const totalPages = Math.ceil(filtered.length / phieuNhapItemsPerPage) || 1;
-    if (phieuNhapPage > totalPages) phieuNhapPage = totalPages;
-
-    const startIdx = (phieuNhapPage - 1) * phieuNhapItemsPerPage;
-    const pageData = filtered.slice(startIdx, startIdx + phieuNhapItemsPerPage);
-
-    const tbody = document.getElementById('phieunhap-table-body');
-    if (pageData.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted" style="padding: 30px; text-align: center;">Không có phiếu nhập nào trong thời gian này.</td></tr>`;
-    } else {
-        tbody.innerHTML = pageData.map(pn => {
-            const listItems = pn.ChiTietNhap.map(item => `<li><i class="fa-solid fa-angle-right" style="font-size:0.7rem; color:#94a3b8; margin-right:4px;"></i> ${item.ten_san_pham}: <strong style="color:var(--text-dark);">${item.so_luong}</strong></li>`).join('');
-            
-            const dateStr = pn.NgayNhap.replace('T', ' ').substring(0, 16);
-
-            return `
-                <tr>
-                    <td><strong style="font-family: monospace; color: #475569;">#PN${pn.ID}</strong></td>
-                    <td>${pn.nhan_vien ? pn.nhan_vien.HoTen : 'N/A'}</td>
-                    <td><ul style="list-style: none; padding: 0; margin: 0; font-size: 0.85rem;">${listItems}</ul></td>
-                    <td><strong style="color: #b91c1c;">${Number(pn.TongTienThanhToan).toLocaleString('vi-VN')}đ</strong></td>
-                    <td><span style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> ${dateStr}</span></td>
-                </tr>
-            `;
-        }).join('');
-    }
-
-    renderPhieuNhapPagination(totalPages);
-}
-
-function renderPhieuNhapPagination(totalPages) {
-    const div = document.getElementById('phieunhap-pagination');
-    if (totalPages <= 1) return div.innerHTML = '';
-    
-    let html = `<button class="btn-outline-sm" ${phieuNhapPage === 1 ? 'disabled style="opacity:0.5;"' : ''} onclick="phieuNhapPage--; applyPhieuNhapFiltersAndRender()"><i class="fa-solid fa-chevron-left"></i></button>`;
-    
-    const getPages = (current, total) => {
-        if (total <= 6) return Array.from({length: total}, (_, i) => i + 1);
-        if (current <= 3) return [1, 2, 3, 4, '...', total];
-        if (current >= total - 2) return [1, '...', total - 3, total - 2, total - 1, total];
-        return [1, '...', current - 1, current, current + 1, '...', total];
-    };
-
-    getPages(phieuNhapPage, totalPages).forEach(i => {
-        if (i === '...') {
-            html += `<span style="padding: 6px 10px; color: var(--text-muted); font-weight: bold;">...</span>`;
-        } else {
-            html += `<button class="${i === phieuNhapPage ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="phieuNhapPage=${i}; applyPhieuNhapFiltersAndRender()">${i}</button>`;
-        }
-    });
-
-    html += `<button class="btn-outline-sm" ${phieuNhapPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="phieuNhapPage++; applyPhieuNhapFiltersAndRender()"><i class="fa-solid fa-chevron-right"></i></button>`;
-    div.innerHTML = html;
-}
-
-// Logic Phiếu Nhập Hàng
-function showPNAlert(msg, isSuccess) {
-    const alert = document.getElementById('phieunhap-alert');
-    alert.textContent = msg;
-    alert.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
-    alert.style.display = 'block';
-    setTimeout(() => alert.style.display = 'none', 3000);
-}
-
-function openNhapHangModal() {
-    document.getElementById('phieunhap-alert').style.display = 'none';
-    pnCart = [];
-    document.getElementById('pn-tongtien').value = '';
-    renderPnCart();
-
-    // Render danh sách sản phẩm vào Dropdown
-    const select = document.getElementById('pn-chon-sp');
-    if (allSanPhamKhoData.length === 0) {
-        select.innerHTML = '<option value="">-- Kho chưa có mặt hàng nào --</option>';
-    } else {
-        select.innerHTML = '<option value="">-- Chọn mặt hàng cần nhập --</option>' + allSanPhamKhoData.map(p => `<option value="${p.ID}" data-name="${p.TenSanPham}">${p.TenSanPham}</option>`).join('');
-    }
-
-    document.getElementById('phieunhap-modal').style.display = 'flex';
-}
-
-function closePhieuNhapModal() { document.getElementById('phieunhap-modal').style.display = 'none'; }
-
-function addSpToPhieuNhap() {
-    const select = document.getElementById('pn-chon-sp');
-    const slInput = document.getElementById('pn-soluong');
-    const id = select.value;
-    const sl = parseInt(slInput.value);
-
-    if (!id || isNaN(sl) || sl <= 0) {
-        return showPNAlert('Vui lòng chọn hàng và nhập số lượng hợp lệ!', false);
-    }
-
-    const name = select.options[select.selectedIndex].getAttribute('data-name');
-    
-    // Kiểm tra xem đã có trong giỏ chưa
-    const existing = pnCart.find(i => i.id_san_pham == id);
-    if (existing) {
-        existing.so_luong += sl;
-    } else {
-        pnCart.push({ id_san_pham: id, ten_san_pham: name, so_luong: sl });
-    }
-
-    slInput.value = '';
-    renderPnCart();
-}
-
-function removeSpFromPhieuNhap(index) {
-    pnCart.splice(index, 1);
-    renderPnCart();
-}
-
-function renderPnCart() {
-    const tbody = document.getElementById('pn-danhsach-sp');
-    if (pnCart.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="3" class="text-center text-muted">Chưa chọn mặt hàng nào.</td></tr>`;
-        return;
-    }
-
-    tbody.innerHTML = pnCart.map((item, idx) => `
-        <tr>
-            <td><strong style="color: var(--text-dark);">${item.ten_san_pham}</strong></td>
-            <td style="text-align: center;"><span style="font-weight: bold; color: var(--primary);">${item.so_luong}</span></td>
-            <td style="text-align: center;"><i class="fa-solid fa-trash-can" style="color: #ef4444; cursor: pointer;" onclick="removeSpFromPhieuNhap(${idx})"></i></td>
-        </tr>
-    `).join('');
-}
-
-async function submitPhieuNhap() {
-    if (pnCart.length === 0) return showPNAlert('Vui lòng thêm ít nhất 1 mặt hàng vào phiếu nhập.', false);
-    
-    const tongTien = document.getElementById('pn-tongtien').value;
-    if (!tongTien || tongTien < 0) return showPNAlert('Vui lòng nhập tổng tiền đã thanh toán.', false);
-
-    const btn = document.getElementById('btn-save-pn');
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
-    btn.disabled = true;
-
-    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
-    const payload = {
-        ID_CumSan: currentUser.ID_CumSan,
-        ID_NhanVien: currentUser.ID,
-        TongTienThanhToan: tongTien,
-        ChiTietNhap: pnCart
-    };
-
-    try {
-        const response = await fetch(`${API_BASE_URL}/phieu-nhap`, {
-            method: 'POST',
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const data = await response.json();
-        
-        if (response.ok && data.success) {
-            showPNAlert('Nhập hàng và cộng kho thành công!', true);
-            setTimeout(() => {
-                closePhieuNhapModal();
-                loadDanhSachSanPhamKho(currentUser.ID_CumSan); // Cập nhật lại kho
-                loadLichSuNhapHang(currentUser.ID_CumSan);     // Cập nhật lại lịch sử
-            }, 1000);
-        } else {
-            showPNAlert(data.message || 'Lỗi xử lý', false);
-        }
-    } catch (e) {
-        showPNAlert('Lỗi kết nối máy chủ!', false);
-    } finally {
-        btn.innerHTML = '<i class="fa-solid fa-check"></i> Hoàn Tất Nhập Kho';
-        btn.disabled = false;
-    }
-}
-
-// 3. Tab 3: Quản lý Hóa đơn bán hàng
-// KHAI BÁO BIẾN CHO TAB HÓA ĐƠN
-let allQuanLyHoaDonData = [];
-let quanLyHoaDonPage = 1;
-const quanLyHoaDonItemsPerPage = 5;
-let qlHoaDonDateFilter = '';
-
-// HÀM XỬ LÝ KHI THAY ĐỔI NGÀY LỌC
-function handleQLHoaDonDateFilter(val) {
-    qlHoaDonDateFilter = val;
-    quanLyHoaDonPage = 1; // Reset về trang 1 khi lọc
-    renderQuanLyHoaDonPagination();
-}
-
-// HÀM FETCH HÓA ĐƠN
-async function loadQuanLyHoaDonBanHang(idCumSan) {
-    try {
-        const response = await fetch(`${API_BASE_URL}/ban-hang?id_cum_san=${idCumSan}`);
-        const res = await response.json();
-        
-        if (res.success) {
-            allQuanLyHoaDonData = res.data || [];
-            renderQuanLyHoaDonPagination();
-        }
-    } catch (e) {
-        document.getElementById('qlhoadon-table-body').innerHTML = `<tr><td colspan="5" class="text-center text-danger" style="padding: 30px;">Lỗi kết nối máy chủ!</td></tr>`;
-    }
-}
-
-// HÀM RENDER VÀ PHÂN TRANG HÓA ĐƠN (ĐÃ TÍCH HỢP LỌC NGÀY)
-function renderQuanLyHoaDonPagination() {
-    // 1. Lọc dữ liệu theo ngày nếu qlHoaDonDateFilter có giá trị
-    let filteredData = allQuanLyHoaDonData.filter(hd => {
-        if (!qlHoaDonDateFilter) return true;
-        const hdDate = hd.NgayTao ? hd.NgayTao.substring(0, 10) : '';
-        return hdDate === qlHoaDonDateFilter;
-    });
-
-    const totalPages = Math.ceil(filteredData.length / quanLyHoaDonItemsPerPage) || 1;
-    if (quanLyHoaDonPage > totalPages) quanLyHoaDonPage = totalPages;
-
-    const startIdx = (quanLyHoaDonPage - 1) * quanLyHoaDonItemsPerPage;
-    const pageData = filteredData.slice(startIdx, startIdx + quanLyHoaDonItemsPerPage);
-
-    const tbody = document.getElementById('qlhoadon-table-body');
-    if (pageData.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted" style="padding: 30px; text-align: center;">Không có hóa đơn nào phù hợp.</td></tr>`;
-    } else {
-        tbody.innerHTML = pageData.map(hd => {
-            let cacMon = '';
-            if (hd.chi_tiet_hoa_dons && hd.chi_tiet_hoa_dons.length > 0) {
-                cacMon = hd.chi_tiet_hoa_dons.map(ct => {
-                    const tenMon = ct.san_pham ? ct.san_pham.TenSanPham : 'Sản phẩm lỗi';
-                    return `<li><i class="fa-solid fa-angle-right" style="font-size:0.7rem; color:#94a3b8; margin-right:4px;"></i> ${tenMon}: <strong style="color:var(--text-dark);">${ct.SoLuong}</strong></li>`;
-                }).join('');
-            } else {
-                cacMon = '<span class="text-muted">Không có món</span>';
-            }
-
-            const dateStr = hd.NgayTao ? hd.NgayTao.replace('T', ' ').substring(0, 16) : '';
-            
-            return `
-                <tr>
-                    <td><strong style="font-family: monospace; color: #475569;">#HD${hd.ID}</strong></td>
-                    <td><div style="font-weight: 600; color: #3b82f6;">${hd.nhan_vien ? hd.nhan_vien.HoTen : 'N/A'}</div></td>
-                    <td><ul style="list-style: none; padding: 0; margin: 0; font-size: 0.85rem;">${cacMon}</ul></td>
-                    <td><strong style="color: #10b981;">${Number(hd.TongTien).toLocaleString('vi-VN')}đ</strong></td>
-                    <td><span style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> ${dateStr}</span></td>
-                </tr>
-            `;
-        }).join('');
-    }
-
-    const div = document.getElementById('qlhoadon-pagination');
-    if (totalPages <= 1) return div.innerHTML = '';
-    
-    let html = `<button class="btn-outline-sm" ${quanLyHoaDonPage === 1 ? 'disabled style="opacity:0.5;"' : ''} onclick="quanLyHoaDonPage--; renderQuanLyHoaDonPagination()"><i class="fa-solid fa-chevron-left"></i></button>`;
-    
-    const getPages = (current, total) => {
-        if (total <= 6) return Array.from({length: total}, (_, i) => i + 1);
-        if (current <= 3) return [1, 2, 3, 4, '...', total];
-        if (current >= total - 2) return [1, '...', total - 3, total - 2, total - 1, total];
-        return [1, '...', current - 1, current, current + 1, '...', total];
-    };
-
-    getPages(quanLyHoaDonPage, totalPages).forEach(i => {
-        if (i === '...') {
-            html += `<span style="padding: 6px 10px; color: var(--text-muted); font-weight: bold;">...</span>`;
-        } else {
-            html += `<button class="${i === quanLyHoaDonPage ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="quanLyHoaDonPage=${i}; renderQuanLyHoaDonPagination()">${i}</button>`;
-        }
-    });
-
-    html += `<button class="btn-outline-sm" ${quanLyHoaDonPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="quanLyHoaDonPage++; renderQuanLyHoaDonPagination()"><i class="fa-solid fa-chevron-right"></i></button>`;
-    div.innerHTML = html;
-}
-
-// ======================================================
-// MODULE: ADMIN - QUẢN LÝ XUẤT/NHẬP HÀNG TỔNG
-// ======================================================
-let adminPhieuNhapData = [];
-let adminPhieuNhapPage = 1;
-let adminPhieuNhapSearch = '';
-let adminPhieuNhapDate = '';
-let adminPhieuNhapCumSan = 'All';
-
-let adminHoaDonData = [];
-let adminHoaDonPage = 1;
-let adminHoaDonSearch = '';
-let adminHoaDonDate = '';
-let adminHoaDonCumSan = 'All';
-
-const itemsPerAdminXNPage = 5;
-let adminCumSanOptions = ''; // Cache HTML Dropdown Cụm sân
-
-async function renderAdminXuatNhap() {
-    document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
-    const menuLink = document.getElementById('menu-xuatnhap-admin');
-    if (menuLink) menuLink.classList.add('active');
-
-    // Fetch danh sách cụm sân để làm Dropdown Lọc nếu chưa có
-    if (!adminCumSanOptions) {
-        try {
-            const res = await fetch(`${API_BASE_URL}/cum-san`);
-            const data = await res.json();
-            if (data.success) {
-                adminCumSanOptions = data.data.map(cs => `<option value="${cs.ID}">${cs.TenCumSan}</option>`).join('');
-            }
-        } catch (e) { console.error(e); }
-    }
-
-    const contentArea = document.querySelector('.admin-content');
-    contentArea.innerHTML = `
-        <div class="page-header" style="margin-bottom: 24px;">
-            <h1 class="page-title">Quản lý Xuất / Nhập hàng Toàn Hệ Thống</h1>
-            <p class="text-muted">Giám sát lịch sử nhập kho và hóa đơn bán hàng của tất cả các cơ sở.</p>
-        </div>
-
-        <div class="panel">
-            <div style="display: flex; gap: 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px; padding: 0 20px;">
-                <button class="nav-tab active" onclick="switchAdminXuatNhapTab('tab-admin-phieunhap', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; border-bottom: 2px solid var(--primary); color: var(--primary);">Lịch sử Nhập hàng</button>
-                <button class="nav-tab" onclick="switchAdminXuatNhapTab('tab-admin-hoadon', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Hóa đơn Bán hàng</button>
-            </div>
-
-            <!-- TAB 1: PHIẾU NHẬP -->
-            <div id="tab-admin-phieunhap" class="tab-pane active" style="padding: 0 20px 20px 20px;">
-                <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
-                    <div style="position: relative; flex: 1; min-width: 200px;">
-                        <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
-                        <input type="text" class="form-control" style="padding-left: 35px;" placeholder="Tìm mã phiếu, người nhập, tên món..." oninput="handleAdminPNSearch(this.value)">
-                    </div>
-                    <select class="form-control" style="width: 200px;" onchange="handleAdminPNCumSan(this.value)">
-                        <option value="All">Tất cả Cơ sở</option>
-                        ${adminCumSanOptions}
-                    </select>
-                    <input type="date" class="form-control" style="width: 150px;" onchange="handleAdminPNDate(this.value)">
-                    <button class="btn-outline-sm" onclick="document.querySelector('input[type=date]').value=''; handleAdminPNDate('')">Xóa lọc ngày</button>
-                    <button class="btn-primary" onclick="exportAdminPhieuNhapExcel()" style="background: #059669; border-color: #059669; padding: 8px 14px;"><i class="fa-solid fa-file-excel"></i> Xuất Excel</button>
-                </div>
-                
-                <div class="table-responsive">
-                    <table class="admin-table">
-                        <thead style="background: #F8FAFC;">
-                            <tr>
-                                <th>Mã Phiếu</th>
-                                <th>Cơ sở</th>
-                                <th>Người Nhập</th>
-                                <th>Chi tiết hàng hóa</th>
-                                <th>Tổng thanh toán</th>
-                                <th>Ngày nhập</th>
-                            </tr>
-                        </thead>
-                        <tbody id="admin-pn-tbody"><tr><td colspan="6" class="text-center" style="text-align: center;">Đang tải...</td></tr></tbody>
-                    </table>
-                </div>
-                <div id="admin-pn-pagination" style="display: flex; justify-content: center; gap: 8px; margin-top: 15px;"></div>
-            </div>
-
-            <!-- TAB 2: HÓA ĐƠN BÁN HÀNG -->
-            <div id="tab-admin-hoadon" class="tab-pane" style="display: none; padding: 0 20px 20px 20px;">
-                <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
-                    <div style="position: relative; flex: 1; min-width: 200px;">
-                        <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
-                        <input type="text" class="form-control" style="padding-left: 35px;" placeholder="Tìm mã HĐ, thu ngân, tên món..." oninput="handleAdminHDSearch(this.value)">
-                    </div>
-                    <select class="form-control" style="width: 200px;" onchange="handleAdminHDCumSan(this.value)">
-                        <option value="All">Tất cả Cơ sở</option>
-                        ${adminCumSanOptions}
-                    </select>
-                    <input type="date" class="form-control" style="width: 150px;" onchange="handleAdminHDDate(this.value)">
-                    <button class="btn-outline-sm" onclick="document.querySelectorAll('input[type=date]')[1].value=''; handleAdminHDDate('')">Xóa lọc ngày</button>
-                    <button class="btn-primary" onclick="exportAdminHoaDonExcel()" style="background: #059669; border-color: #059669; padding: 8px 14px;"><i class="fa-solid fa-file-excel"></i> Xuất Excel</button>
-                </div>
-                
-                <div class="table-responsive">
-                    <table class="admin-table">
-                        <thead style="background: #F8FAFC;">
-                            <tr>
-                                <th>Mã HĐ</th>
-                                <th>Cơ sở</th>
-                                <th>Thu ngân</th>
-                                <th>Chi tiết món</th>
-                                <th>Tổng doanh thu</th>
-                                <th>Thời gian</th>
-                            </tr>
-                        </thead>
-                        <tbody id="admin-hd-tbody"><tr><td colspan="6" class="text-center" style="text-align: center;">Đang tải...</td></tr></tbody>
-                    </table>
-                </div>
-                <div id="admin-hd-pagination" style="display: flex; justify-content: center; gap: 8px; margin-top: 15px;"></div>
-            </div>
-        </div>
-    `;
-
-    loadAdminPhieuNhap();
-    loadAdminHoaDon();
-}
-
-function switchAdminXuatNhapTab(tabId, element) {
-    const tabs = element.parentElement.children;
-    for (let i = 0; i < tabs.length; i++) {
-        tabs[i].classList.remove('active');
-        tabs[i].style.borderBottom = 'none';
-        tabs[i].style.color = 'var(--text-muted)';
-    }
-    element.classList.add('active');
-    element.style.borderBottom = '2px solid var(--primary)';
-    element.style.color = 'var(--primary)';
-
-    document.getElementById('tab-admin-phieunhap').style.display = 'none';
-    document.getElementById('tab-admin-hoadon').style.display = 'none';
-    document.getElementById(tabId).style.display = 'block';
-}
-
-// ----------------------------------------------------
-// LOGIC TAB 1: PHIẾU NHẬP
-// ----------------------------------------------------
-async function loadAdminPhieuNhap() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/phieu-nhap`); // Không truyền id_cum_san để lấy tất cả
-        const res = await response.json();
-        if (res.success) {
-            adminPhieuNhapData = res.data || [];
-            applyAdminPNFiltersAndRender();
-        }
-    } catch (e) { console.error(e); }
-}
-
-function handleAdminPNSearch(val) { adminPhieuNhapSearch = val.toLowerCase().trim(); adminPhieuNhapPage = 1; applyAdminPNFiltersAndRender(); }
-function handleAdminPNCumSan(val) { adminPhieuNhapCumSan = val; adminPhieuNhapPage = 1; applyAdminPNFiltersAndRender(); }
-function handleAdminPNDate(val) { adminPhieuNhapDate = val; adminPhieuNhapPage = 1; applyAdminPNFiltersAndRender(); }
-
-function applyAdminPNFiltersAndRender() {
-    let filtered = adminPhieuNhapData.filter(pn => {
-        // Lọc Cụm sân
-        const matchCumSan = (adminPhieuNhapCumSan === 'All' || String(pn.ID_CumSan) === String(adminPhieuNhapCumSan));
-        
-        // Lọc Ngày
-        const dateOnly = pn.NgayNhap ? pn.NgayNhap.substring(0, 10) : '';
-        const matchDate = (adminPhieuNhapDate === '' || dateOnly === adminPhieuNhapDate);
-        
-        // Lọc Tìm kiếm (Mã, Tên người nhập, Tên món)
-        const maPhieu = `pn${pn.ID}`.toLowerCase();
-        const tenNhanVien = pn.nhan_vien ? pn.nhan_vien.HoTen.toLowerCase() : '';
-        const tenMonStr = pn.ChiTietNhap ? pn.ChiTietNhap.map(i => i.ten_san_pham).join(' ').toLowerCase() : '';
-        const matchSearch = maPhieu.includes(adminPhieuNhapSearch) || tenNhanVien.includes(adminPhieuNhapSearch) || tenMonStr.includes(adminPhieuNhapSearch);
-
-        return matchCumSan && matchDate && matchSearch;
-    });
-
-    const totalPages = Math.ceil(filtered.length / itemsPerAdminXNPage) || 1;
-    if (adminPhieuNhapPage > totalPages) adminPhieuNhapPage = totalPages;
-    const startIdx = (adminPhieuNhapPage - 1) * itemsPerAdminXNPage;
-    
-    renderAdminPNTable(filtered.slice(startIdx, startIdx + itemsPerAdminXNPage));
-    renderAdminPNPagination(totalPages);
-}
-
-function renderAdminPNTable(data) {
-    const tbody = document.getElementById('admin-pn-tbody');
-    if (data.length === 0) return tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="padding: 30px; text-align: center;">Không tìm thấy phiếu nhập nào.</td></tr>`;
-
-    tbody.innerHTML = data.map(pn => {
-        const listItems = pn.ChiTietNhap ? pn.ChiTietNhap.map(item => `<li><i class="fa-solid fa-angle-right" style="font-size:0.7rem; color:#94a3b8; margin-right:4px;"></i> ${item.ten_san_pham}: <strong>${item.so_luong}</strong></li>`).join('') : '';
-        const dateStr = pn.NgayNhap ? pn.NgayNhap.replace('T', ' ').substring(0, 16) : '';
-        const tenCumSan = pn.cum_san ? pn.cum_san.TenCumSan : 'N/A';
-        
-        return `
-            <tr>
-                <td><strong style="font-family: monospace; color: #475569;">#PN${pn.ID}</strong></td>
-                <td><span style="color: var(--primary); font-weight: 600;"><i class="fa-solid fa-location-dot"></i> ${tenCumSan}</span></td>
-                <td>${pn.nhan_vien ? pn.nhan_vien.HoTen : 'N/A'}</td>
-                <td><ul style="list-style: none; padding: 0; margin: 0; font-size: 0.85rem;">${listItems}</ul></td>
-                <td><strong style="color: #b91c1c;">${Number(pn.TongTienThanhToan).toLocaleString('vi-VN')}đ</strong></td>
-                <td><span style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> ${dateStr}</span></td>
-            </tr>
-        `;
-    }).join('');
-}
-
-function renderAdminPNPagination(totalPages) {
-    const div = document.getElementById('admin-pn-pagination');
-    if (totalPages <= 1) return div.innerHTML = '';
-    let html = `<button class="btn-outline-sm" ${adminPhieuNhapPage === 1 ? 'disabled style="opacity:0.5;"' : ''} onclick="adminPhieuNhapPage--; applyAdminPNFiltersAndRender()"><i class="fa-solid fa-chevron-left"></i></button>`;
-    for(let i=1; i<=totalPages; i++) {
-        html += `<button class="${i === adminPhieuNhapPage ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="adminPhieuNhapPage=${i}; applyAdminPNFiltersAndRender()">${i}</button>`;
-    }
-    html += `<button class="btn-outline-sm" ${adminPhieuNhapPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="adminPhieuNhapPage++; applyAdminPNFiltersAndRender()"><i class="fa-solid fa-chevron-right"></i></button>`;
-    div.innerHTML = html;
-}
-
-// ----------------------------------------------------
-// LOGIC TAB 2: HÓA ĐƠN BÁN HÀNG
-// ----------------------------------------------------
-async function loadAdminHoaDon() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/ban-hang`); // Lấy tất cả hoá đơn
-        const res = await response.json();
-        if (res.success) {
-            adminHoaDonData = res.data || [];
-            applyAdminHDFiltersAndRender();
-        }
-    } catch (e) { console.error(e); }
-}
-
-function handleAdminHDSearch(val) { adminHoaDonSearch = val.toLowerCase().trim(); adminHoaDonPage = 1; applyAdminHDFiltersAndRender(); }
-function handleAdminHDCumSan(val) { adminHoaDonCumSan = val; adminHoaDonPage = 1; applyAdminHDFiltersAndRender(); }
-function handleAdminHDDate(val) { adminHoaDonDate = val; adminHoaDonPage = 1; applyAdminHDFiltersAndRender(); }
-
-function applyAdminHDFiltersAndRender() {
-    let filtered = adminHoaDonData.filter(hd => {
-        // Lọc Cụm sân
-        const matchCumSan = (adminHoaDonCumSan === 'All' || String(hd.ID_CumSan) === String(adminHoaDonCumSan));
-        
-        // Lọc Ngày
-        const dateOnly = hd.NgayTao ? hd.NgayTao.substring(0, 10) : '';
-        const matchDate = (adminHoaDonDate === '' || dateOnly === adminHoaDonDate);
-        
-        // Lọc Tìm kiếm
-        const maHD = `hd${hd.ID}`.toLowerCase();
-        const thuNgan = hd.nhan_vien ? hd.nhan_vien.HoTen.toLowerCase() : '';
-        const tenMonStr = (hd.chi_tiet_hoa_dons && hd.chi_tiet_hoa_dons.length > 0) 
-            ? hd.chi_tiet_hoa_dons.map(i => i.san_pham ? i.san_pham.TenSanPham : '').join(' ').toLowerCase() : '';
-        const matchSearch = maHD.includes(adminHoaDonSearch) || thuNgan.includes(adminHoaDonSearch) || tenMonStr.includes(adminHoaDonSearch);
-
-        return matchCumSan && matchDate && matchSearch;
-    });
-
-    const totalPages = Math.ceil(filtered.length / itemsPerAdminXNPage) || 1;
-    if (adminHoaDonPage > totalPages) adminHoaDonPage = totalPages;
-    const startIdx = (adminHoaDonPage - 1) * itemsPerAdminXNPage;
-    
-    renderAdminHDTable(filtered.slice(startIdx, startIdx + itemsPerAdminXNPage));
-    renderAdminHDPagination(totalPages);
-}
-
-function renderAdminHDTable(data) {
-    const tbody = document.getElementById('admin-hd-tbody');
-    if (data.length === 0) return tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="padding: 30px; text-align: center;">Không tìm thấy hóa đơn nào.</td></tr>`;
-
-    tbody.innerHTML = data.map(hd => {
-        let cacMon = hd.chi_tiet_hoa_dons && hd.chi_tiet_hoa_dons.length > 0 
-            ? hd.chi_tiet_hoa_dons.map(ct => `<li><i class="fa-solid fa-angle-right" style="font-size:0.7rem; color:#94a3b8; margin-right:4px;"></i> ${ct.san_pham ? ct.san_pham.TenSanPham : 'Lỗi món'}: <strong>${ct.SoLuong}</strong></li>`).join('')
-            : '<span class="text-muted">Trống</span>';
-
-        const dateStr = hd.NgayTao ? hd.NgayTao.replace('T', ' ').substring(0, 16) : '';
-        const tenCumSan = hd.cum_san ? hd.cum_san.TenCumSan : 'N/A';
-
-        return `
-            <tr>
-                <td><strong style="font-family: monospace; color: #475569;">#HD${hd.ID}</strong></td>
-                <td><span style="color: var(--primary); font-weight: 600;"><i class="fa-solid fa-location-dot"></i> ${tenCumSan}</span></td>
-                <td><div style="font-weight: 600; color: #3b82f6;">${hd.nhan_vien ? hd.nhan_vien.HoTen : 'N/A'}</div></td>
-                <td><ul style="list-style: none; padding: 0; margin: 0; font-size: 0.85rem;">${cacMon}</ul></td>
-                <td><strong style="color: #10b981;">${Number(hd.TongTien).toLocaleString('vi-VN')}đ</strong></td>
-                <td><span style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> ${dateStr}</span></td>
-            </tr>
-        `;
-    }).join('');
-}
-
-function renderAdminHDPagination(totalPages) {
-    const div = document.getElementById('admin-hd-pagination');
-    if (totalPages <= 1) return div.innerHTML = '';
-    let html = `<button class="btn-outline-sm" ${adminHoaDonPage === 1 ? 'disabled style="opacity:0.5;"' : ''} onclick="adminHoaDonPage--; applyAdminHDFiltersAndRender()"><i class="fa-solid fa-chevron-left"></i></button>`;
-    for(let i=1; i<=totalPages; i++) {
-        html += `<button class="${i === adminHoaDonPage ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="adminHoaDonPage=${i}; applyAdminHDFiltersAndRender()">${i}</button>`;
-    }
-    html += `<button class="btn-outline-sm" ${adminHoaDonPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="adminHoaDonPage++; applyAdminHDFiltersAndRender()"><i class="fa-solid fa-chevron-right"></i></button>`;
-    div.innerHTML = html;
 }
 
 // ======================================================
@@ -6876,7 +5912,6 @@ function renderLichLamViecAdmin() {
                 <button class="nav-tab active" onclick="switchAdminCalTab('admin-cal-current', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; border-bottom: 2px solid var(--primary); color: var(--primary);">Tuần Hiện Tại</button>
                 <button class="nav-tab" onclick="switchAdminCalTab('admin-cal-next', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Tuần Sau</button>
                 <button class="nav-tab" onclick="switchAdminCalTab('admin-cal-chamcong', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Chấm Công / Bảng Công</button>
-                <button class="nav-tab" onclick="switchAdminCalTab('admin-cal-giaoca', this)" style="padding: 15px 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--text-muted);">Lịch Sử Giao Ca</button>
             </div>
 
             <!-- LƯỚI 1: TUẦN HIỆN TẠI -->
@@ -6944,33 +5979,6 @@ function renderLichLamViecAdmin() {
                     </table>
                 </div>
             </div>
-
-            <!-- LƯỚI 4: LỊCH SỬ GIAO CA -->
-            <div id="admin-cal-giaoca" class="tab-pane" style="display: none; padding: 0 20px 20px 20px;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
-                    <div style="display: flex; gap: 15px;">
-                        <input type="date" id="admin-gc-date" class="form-control" style="width: 200px;" onchange="loadAdminLichSuGiaoCa()">
-                        <button class="btn-outline-sm" onclick="loadAdminLichSuGiaoCa()"><i class="fa-solid fa-rotate-right"></i> Làm mới</button>
-                    </div>
-                </div>
-                <div class="table-responsive">
-                    <table class="admin-table">
-                        <thead style="background: #F8FAFC;">
-                            <tr>
-                                <th>Nhân Viên & Ca</th>
-                                <th>Tiền Nhận / Giao</th>
-                                <th style="text-align: right;">Tiền HT / Độ Lệch</th>
-                                <th>Nộp Doanh Thu</th>
-                                <th>Trạng Thái</th>
-                                <th style="text-align: center;">Hành động</th>
-                            </tr>
-                        </thead>
-                        <tbody id="admin-gc-tbody">
-                            <tr><td colspan="6" class="text-center">Đang tải dữ liệu...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
         </div>
     `;
 
@@ -6993,8 +6001,6 @@ function switchAdminCalTab(tabId, element) {
     document.getElementById('admin-cal-next').style.display = 'none';
     const chamcongTab = document.getElementById('admin-cal-chamcong');
     if (chamcongTab) chamcongTab.style.display = 'none';
-    const giaoCaTab = document.getElementById('admin-cal-giaoca');
-    if (giaoCaTab) giaoCaTab.style.display = 'none';
 
     document.getElementById(tabId).style.display = 'block';
 
@@ -7002,13 +6008,10 @@ function switchAdminCalTab(tabId, element) {
 
     if (tabId === 'admin-cal-next') {
         loadAdminCalendarData(1, 'grid-next-week');
-        loadStaffRegistrationStatus(); // Tải danh sách NV bên phải
+        loadStaffRegistrationStatus();
     } else if (tabId === 'admin-cal-chamcong') {
         document.getElementById('admin-cc-date').value = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10);
         loadAdminChamCongData();
-    } else if (tabId === 'admin-cal-giaoca') {
-        document.getElementById('admin-gc-date').value = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10);
-        loadAdminLichSuGiaoCa();
     } else {
         loadAdminCalendarData(0, 'grid-current-week');
     }
@@ -8498,10 +7501,6 @@ window.executeChotCong = async function(e) {
                 // Đề phòng lỗi mảng cục bộ, fall back về cách cũ
                 loadAdminChamCongData();
             }
-
-            if (typeof loadBangLuongAdminData === 'function' && document.getElementById('admin-bang-luong-tbody')) {
-                loadBangLuongAdminData();
-            }
         } else {
             showSystemModal("Lỗi", data.message, "error");
         }
@@ -8513,1328 +7512,12 @@ window.executeChotCong = async function(e) {
     }
 }
 
-// ======================================================
-// MODULE: ADMIN - XEM LỊCH SỬ BÀN GIAO CA
-// ======================================================
-async function loadAdminLichSuGiaoCa() {
-    const dateInput = document.getElementById('admin-gc-date').value;
-    const tbody = document.getElementById('admin-gc-tbody');
-    
-    if (!dateInput) return;
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center" style="padding:30px; text-align: center;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải dữ liệu...</td></tr>`;
-    
-    try {
-        // Chúng ta tận dụng lại API lấy danh sách giao ca đã viết ở Backend
-        const response = await fetch(`${API_BASE_URL}/ban-giao-ca?ngay=${dateInput}`, {
-            headers: { 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` }
-        });
-        const res = await response.json();
-        
-        if (res.success) {
-            renderAdminLichSuGiaoCa(res.data);
-        }
-    } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">Lỗi kết nối máy chủ!</td></tr>`;
-    }
-}
-
-function renderAdminLichSuGiaoCa(data) {
-    const tbody = document.getElementById('admin-gc-tbody');
-    
-    if (!data || data.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="padding: 40px; text-align: center;">Ngày này chưa có bản ghi bàn giao ca.</td></tr>`;
-        return;
-    }
-
-    let html = '';
-    data.forEach(item => {
-        // Trạng thái phiếu
-        let badgeColor = '#64748b', badgeBg = '#f1f5f9', viStatus = 'Chưa xác định';
-        if (item.TrangThai === 'DangTrongCa') { badgeColor = '#047857'; badgeBg = '#d1fae5'; viStatus = 'Đang trong ca'; }
-        else if (item.TrangThai === 'DaChotCa') { badgeColor = '#1d4ed8'; badgeBg = '#dbeafe'; viStatus = 'Đã chốt sổ'; }
-        else if (item.TrangThai === 'ChotCuongChe') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; viStatus = 'Chốt cưỡng chế'; }
-        
-        const badgeHtml = `<span style="padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; background: ${badgeBg}; color: ${badgeColor}; white-space: nowrap; display: inline-block; text-align: center;">${viStatus}</span>`;
-
-        // Tính toán độ lệch
-        let lechHtml = '';
-        if (item.TrangThai === 'DaChotCa') {
-            const tongThucTe = Number(item.TienGiao) + Number(item.TienNopDoanhThu);
-            const lech = Number(item.TienHeThong) - tongThucTe;
-            
-            if (lech > 0) {
-                lechHtml = `<div style="font-size: 0.85rem; color: #ef4444; font-weight: bold;" title="Két thực tế đang THIẾU tiền"><i class="fa-solid fa-arrow-trend-down"></i> Hụt ${lech.toLocaleString('vi-VN')}đ</div>`;
-            } else if (lech < 0) {
-                lechHtml = `<div style="font-size: 0.85rem; color: #10b981; font-weight: bold;" title="Két thực tế đang DƯ tiền"><i class="fa-solid fa-arrow-trend-up"></i> Dư ${Math.abs(lech).toLocaleString('vi-VN')}đ</div>`;
-            } else {
-                lechHtml = `<div style="font-size: 0.85rem; color: #64748b;"><i class="fa-solid fa-check"></i> Khớp số dư</div>`;
-            }
-        }
-
-        // Tên nhân viên và thời gian
-        const tNhan = item.ThoiGianNhan ? item.ThoiGianNhan.substring(11, 16) : '--:--';
-        const tGiao = item.ThoiGianGiao ? item.ThoiGianGiao.substring(11, 16) : '--:--';
-        const nameDisplay = `<div style="font-weight: 600; color: var(--primary);">ID Nhân viên: ${item.ID_NhanVienNhan}</div>`;
-
-        // Ghi chú
-        const noteStr = item.GhiChuGiao ? `<div style="font-size: 0.8rem; color: var(--text-muted); font-style: italic; margin-top: 4px;"><i class="fa-regular fa-comment"></i> ${item.GhiChuGiao}</div>` : '';
-
-        let actionBtn = `<button class="btn-outline-sm" onclick="adminOpenPhieuChiModal('${item.ID}')"><i class="fa-solid fa-list-ul"></i> Lịch sử Thu/Chi</button>`;
-
-        if (item.TrangThai === 'DangTrongCa') {
-            actionBtn += `<br><button class="btn-primary" style="margin-top: 5px; width: 100%; background: #ef4444; border-color: #ef4444; padding: 4px 8px; font-size: 0.8rem;" onclick="executeAdminChotCuongChe('${item.ID}')"><i class="fa-solid fa-lock"></i> Chốt Cưỡng Chế</button>`;
-        }
-
-        html += `
-            <tr>
-                <td>
-                    ${nameDisplay}
-                    <div style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> Nhận: ${tNhan} - Giao: ${tGiao}</div>
-                    ${noteStr}
-                </td>
-                <td>
-                    <div>Nhận: <strong>${Number(item.TienNhan).toLocaleString('vi-VN')}đ</strong></div>
-                    <div style="color: #b45309; margin-top: 4px;">Giao: <strong>${item.TienGiao !== null ? Number(item.TienGiao).toLocaleString('vi-VN') + 'đ' : '--'}</strong></div>
-                </td>
-                <td style="text-align: right;">
-                    <div style="font-size: 1.05rem; font-weight: bold; color: #2563eb;">${Number(item.TienHeThong).toLocaleString('vi-VN')}đ</div>
-                    ${lechHtml}
-                </td>
-                <td>
-                    <div style="font-size: 1.05rem; font-weight: bold; color: #10b981;">${item.TienNopDoanhThu !== null ? '+' + Number(item.TienNopDoanhThu).toLocaleString('vi-VN') + 'đ' : '--'}</div>
-                </td>
-                <td>${badgeHtml}</td>
-                <td style="text-align: center;">${actionBtn}</td>
-            </tr>
-        `;
-    });
-    
-    tbody.innerHTML = html;
-}
-
-window.adminOpenPhieuChiModal = async function(bgcId) {
-    const listContainer = document.getElementById('admin-ds-phieu-chi-list');
-    listContainer.innerHTML = '<div style="text-align: center; padding: 30px;"><i class="fa-solid fa-spinner fa-spin text-primary" style="font-size: 1.5rem;"></i><br><br>Đang tải dữ liệu...</div>';
-    document.getElementById('admin-ds-phieu-chi-modal').style.display = 'flex';
-
-    try {
-        const response = await fetch(`${API_BASE_URL}/ban-giao-ca/${bgcId}/phieu-chi`, {
-            headers: { 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` }
-        });
-        const data = await response.json();
-        
-        if (response.ok && data.success) {
-            if (data.data.length === 0) {
-                listContainer.innerHTML = `
-                    <div style="text-align: center; padding: 30px; color: var(--text-muted);">
-                        <i class="fa-solid fa-folder-open" style="font-size: 2.5rem; color: #cbd5e1; margin-bottom: 10px;"></i><br>
-                        Chưa có phát sinh Thu/Chi nào trong ca này.
-                    </div>`;
-                return;
-            }
-            
-            let html = '';
-            data.data.forEach(p => {
-                const isThu = Number(p.SoTien) < 0; 
-                const color = isThu ? '#10b981' : '#ef4444';
-                const sign = isThu ? '+' : '-';
-                const val = Math.abs(Number(p.SoTien));
-                const badge = isThu 
-                    ? `<span style="background: #d1fae5; color: #047857; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold;">THU</span>`
-                    : `<span style="background: #fee2e2; color: #b91c1c; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold;">CHI</span>`;
-                
-                const timeStr = p.ThoiGian ? p.ThoiGian.substring(11, 16) : ''; 
-
-                html += `
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px dashed #e2e8f0;">
-                        <div>
-                            <div style="font-weight: 600; color: var(--text-dark); font-size: 0.95rem; margin-bottom: 4px;">${badge} ${p.NoiDung}</div>
-                            <div style="font-size: 0.8rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> Lúc ${timeStr}</div>
-                        </div>
-                        <div style="font-weight: bold; font-size: 1.05rem; color: ${color};">${sign}${val.toLocaleString('vi-VN')}đ</div>
-                    </div>
-                `;
-            });
-            listContainer.innerHTML = html;
-        } else {
-            listContainer.innerHTML = '<div style="text-align:center; padding: 20px; color: red;">Lỗi tải dữ liệu.</div>';
-        }
-    } catch(e) {
-        listContainer.innerHTML = '<div style="text-align:center; padding: 20px; color: red;">Mất kết nối máy chủ!</div>';
-    }
-};
-
-window.executeAdminChotCuongChe = function(bgcId) {
-    // 1. Tạo Modal động nếu chưa có
-    let modal = document.getElementById('chot-cuong-che-modal');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'chot-cuong-che-modal';
-        modal.className = 'modal-overlay';
-        modal.style.cssText = 'display: none; z-index: 10000;';
-        document.body.appendChild(modal);
-    }
-
-    // 2. Nạp nội dung HTML cho Modal
-    modal.innerHTML = `
-        <div class="modal-content" style="max-width: 400px; text-align: center; padding: 30px 20px;">
-            <div style="font-size: 3.5rem; color: #ef4444; margin-bottom: 15px;"><i class="fa-solid fa-triangle-exclamation"></i></div>
-            <h3 style="margin-bottom: 10px; font-size: 1.4rem;">Chốt cưỡng chế?</h3>
-            <p style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5;">Bạn có chắc chắn muốn CHỐT CƯỠNG CHẾ ca làm việc này? (Hệ thống sẽ tự ép số liệu thực tế khớp với hệ thống)</p>
-            <div style="display: flex; justify-content: center; gap: 12px;">
-                <button type="button" onclick="document.getElementById('chot-cuong-che-modal').style.display='none'" style="width: auto; padding: 10px 24px; border-radius: 8px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-weight: 600; font-size: 0.92rem; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f1f5f9'; this.style.borderColor='#94a3b8'; this.style.color='#0f172a';" onmouseout="this.style.background='#ffffff'; this.style.borderColor='#cbd5e1'; this.style.color='#475569';">
-                    Hủy bỏ
-                </button>
-                <button class="btn-primary" style="width: auto; padding: 10px 24px; background-color: #ef4444; border-color: #ef4444;" id="btn-confirm-cuong-che">Đồng ý chốt</button>
-            </div>
-        </div>
-    `;
-    
-    // Hiển thị Modal
-    modal.style.display = 'flex';
-
-    // 3. Xử lý logic gọi API khi bấm "Đồng ý"
-    document.getElementById('btn-confirm-cuong-che').onclick = async function() {
-        const btn = this;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
-        btn.disabled = true;
-
-        try {
-            const response = await fetch(`${API_BASE_URL}/admin/ban-giao-ca/${bgcId}/chot-cuong-che`, {
-                method: 'PUT',
-                headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` }
-            });
-            const data = await response.json();
-            
-            if (response.ok && data.success) {
-                modal.style.display = 'none';
-                showSystemModal("Thành công", data.message, "success");
-                loadAdminLichSuGiaoCa(); // Tải lại bảng
-            } else {
-                modal.style.display = 'none';
-                showSystemModal("Lỗi", data.message, "error");
-            }
-        } catch (e) {
-            modal.style.display = 'none';
-            showSystemModal("Lỗi mạng", "Vui lòng thử lại", "error");
-        }
-    };
-};
-
-// Hàm chuyển đổi số phút sang định dạng "X giờ Y phút"
 function formatMinutesToHours(minutes) {
-    if (minutes <= 0) return '';
+    if (!minutes || minutes <= 0) return '';
     if (minutes < 60) return `${minutes} phút`;
-    
     const hours = Math.floor(minutes / 60);
     const remainMinutes = minutes % 60;
-    
-    if (remainMinutes === 0) {
-        return `${hours}h`;
-    }
-    return `${hours}h${remainMinutes}p`;
-}
-
-// ======================================================
-// MODULE: QUẢN LÝ & THEO DÕI BẢNG LƯƠNG (QUẢN LÝ SÂN & ADMIN)
-// ======================================================
-let allAdminBangLuongData = [];
-let currentBLPage = 1;
-const itemsPerBLPage = 5;
-let currentBLSearch = '';
-let currentBLCumSanFilter = 'All';
-let currentBLStatusFilter = 'All';
-let currentBLThangNam = '';
-let blCumSanOptionsCache = '';
-
-async function renderQuanLyBangLuongAdmin() {
-    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
-    const isAdmin = currentUser && currentUser.VaiTro === 'Admin';
-
-    currentBLPage = 1;
-    currentBLSearch = '';
-    currentBLCumSanFilter = 'All';
-    currentBLStatusFilter = 'All';
-
-    // Active menu
-    document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
-    const menuLink = document.getElementById('menu-bangluong-admin');
-    if (menuLink) menuLink.classList.add('active');
-
-    // Khởi tạo danh sách Tháng/Năm (từ năm hiện tại về 2024)
-    const today = new Date();
-    const curMonth = String(today.getMonth() + 1).padStart(2, '0');
-    const curYear = today.getFullYear();
-    if (!currentBLThangNam) {
-        currentBLThangNam = `${curMonth}-${curYear}`;
-    }
-
-    let thangOptions = '';
-    for (let y = curYear; y >= 2024; y--) {
-        for (let m = 12; m >= 1; m--) {
-            if (y === curYear && m > (today.getMonth() + 1)) continue;
-            const mm = String(m).padStart(2, '0');
-            const val = `${mm}-${y}`;
-            const selected = (val === currentBLThangNam) ? 'selected' : '';
-            thangOptions += `<option value="${val}" ${selected}>Tháng ${mm}/${y}</option>`;
-        }
-    }
-
-    // Nếu là Admin -> Tải danh sách Cụm sân cho bộ lọc
-    if (isAdmin && !blCumSanOptionsCache) {
-        try {
-            const csRes = await fetch(`${API_BASE_URL}/cum-san`);
-            const csData = await csRes.json();
-            if (csData.success) {
-                blCumSanOptionsCache = csData.data.map(cs => `<option value="${cs.ID}">${cs.TenCumSan}</option>`).join('');
-            }
-        } catch (e) { console.error(e); }
-    }
-
-    const pageTitle = isAdmin ? 'Theo dõi Bảng Lương Toàn Hệ Thống' : 'Quản lý & Chốt Bảng Lương';
-    const pageDesc = isAdmin 
-        ? 'Giám sát bảng công, thưởng/phạt và trạng thái thanh toán lương nhân viên tại tất cả các cụm sân.' 
-        : 'Kiểm tra bảng công, chốt lương hàng tháng và xác nhận chuyển khoản cho nhân viên thuộc cơ sở của bạn.';
-
-    const filterCumSanHtml = isAdmin ? `
-        <div style="min-width: 200px;">
-            <select id="bl-cumsan-filter" class="form-control" style="height: 42px; width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 0 12px; font-size: 0.9rem; color: #334155; background-color: #fff; cursor: pointer;" onchange="handleBLCumSanFilter(this.value)">
-                <option value="All">Tất cả Cơ sở</option>
-                ${blCumSanOptionsCache}
-            </select>
-        </div>
-    ` : '';
-
-    const contentArea = document.querySelector('.admin-content');
-    contentArea.innerHTML = `
-        <div class="page-header" style="margin-bottom: 24px;">
-            <h1 class="page-title">${pageTitle}</h1>
-            <p class="text-muted">${pageDesc}</p>
-        </div>
-
-        <!-- Thẻ thống kê nhanh kỳ lương đang xem -->
-        <div class="stat-grid" style="margin-bottom: 24px;">
-            <div class="stat-card" style="border-left: 4px solid #3b82f6;">
-                <div class="stat-title">Tổng nhân sự</div>
-                <div id="bl-stat-tong-nv" class="stat-value" style="color: #1e293b;">0</div>
-            </div>
-            <div class="stat-card" style="border-left: 4px solid #2563eb;">
-                <div class="stat-title">Tổng quỹ lương thực lãnh</div>
-                <div id="bl-stat-tong-tien" class="stat-value" style="color: #2563eb;">0đ</div>
-            </div>
-            <div class="stat-card" style="border-left: 4px solid #f59e0b;">
-                <div class="stat-title">Chờ xác nhận / Khiếu nại</div>
-                <div id="bl-stat-cho-xuly" class="stat-value" style="color: #d97706;">0</div>
-            </div>
-            <div class="stat-card" style="border-left: 4px solid #10b981;">
-                <div class="stat-title">Đã thanh toán</div>
-                <div id="bl-stat-da-tt" class="stat-value" style="color: #047857;">0</div>
-            </div>
-        </div>
-
-        <div class="panel">
-            <!-- Thanh công cụ chuẩn hóa chiều cao 42px, căn lề trái/phải gọn đẹp -->
-            <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; padding: 14px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; flex-wrap: wrap;">
-                
-                <!-- Nhóm bên trái: Tìm kiếm & Các bộ lọc -->
-                <div style="display: flex; align-items: center; gap: 12px; flex: 1; flex-wrap: wrap; min-width: 280px;">
-                    <div style="position: relative; flex: 1; min-width: 230px;">
-                        <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #64748b; font-size: 0.9rem; pointer-events: none;"></i>
-                        <input type="text" id="bl-search-input" class="form-control" style="height: 42px; width: 100%; padding: 0 14px 0 38px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 0.9rem; background-color: #fff;" placeholder="Tìm tên nhân viên, SĐT..." oninput="handleBLSearch(this.value)">
-                    </div>
-
-                    ${filterCumSanHtml}
-
-                    <div style="min-width: 185px;">
-                        <select id="bl-status-filter" class="form-control" style="height: 42px; width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 0 12px; font-size: 0.9rem; color: #334155; background-color: #fff; cursor: pointer;" onchange="handleBLStatusFilter(this.value)">
-                            <option value="All">Tất cả trạng thái</option>
-                            <option value="ChuaChot">Chưa chốt (Tạm tính)</option>
-                            <option value="ChoXacNhan">Chờ NV xác nhận</option>
-                            <option value="KhieuNai">Đang khiếu nại</option>
-                            <option value="ChoThanhToan">Chờ chuyển khoản</option>
-                            <option value="DaThanhToan">Đã thanh toán</option>
-                        </select>
-                    </div>
-
-                    <div style="min-width: 155px;">
-                        <select id="admin-bl-thangnam" class="form-control" style="height: 42px; width: 100%; border-radius: 8px; border: 1.5px solid var(--primary); padding: 0 12px; font-size: 0.9rem; font-weight: 700; color: var(--primary); background-color: #f0fdf4; cursor: pointer;" onchange="handleBLThangNamChange(this.value)">
-                            ${thangOptions}
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Nhóm bên phải: Nút Làm mới & Xuất Excel -->
-                <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
-                    <button type="button" class="btn-outline-sm" onclick="loadBangLuongAdminData()" title="Làm mới dữ liệu" style="height: 42px; padding: 0 14px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; color: #475569; font-weight: 600; font-size: 0.88rem; display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f1f5f9'; this.style.borderColor='#94a3b8'; this.style.color='#0f172a';" onmouseout="this.style.background='#fff'; this.style.borderColor='#cbd5e1'; this.style.color='#475569';">
-                        <i class="fa-solid fa-rotate-right"></i> Làm mới
-                    </button>
-
-                    <button type="button" class="btn-primary" onclick="exportBangLuongExcel()" style="height: 42px; padding: 0 18px; border-radius: 8px; background: #059669; border: 1px solid #059669; color: #fff; font-weight: 600; font-size: 0.9rem; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; cursor: pointer; box-shadow: 0 2px 4px rgba(5, 150, 105, 0.2); transition: all 0.2s ease;" onmouseover="this.style.background='#047857'; this.style.borderColor='#047857'; this.style.transform='translateY(-1px)';" onmouseout="this.style.background='#059669'; this.style.borderColor='#059669'; this.style.transform='translateY(0)';">
-                        <i class="fa-solid fa-file-excel" style="font-size: 1rem;"></i> Xuất Excel
-                    </button>
-                </div>
-            </div>
-
-            <!-- Bảng dữ liệu -->
-            <div class="table-responsive" style="min-height: 340px;">
-                <table class="admin-table">
-                    <thead style="background: #F8FAFC;">
-                        <tr>
-                            <th>Nhân Viên</th>
-                            ${isAdmin ? '<th>Cơ Sở</th>' : ''}
-                            <th style="text-align: center;">Số Ca Làm</th>
-                            <th style="text-align: right;">Lương CB</th>
-                            <th style="text-align: right;">Thưởng / Phạt</th>
-                            <th style="text-align: right;">Thực Lãnh</th>
-                            <th>Thông Tin Nhận Lương</th>
-                            <th style="text-align: center;">Trạng Thái</th>
-                            <th style="text-align: center;">Hành Động</th>
-                        </tr>
-                    </thead>
-                    <tbody id="admin-bang-luong-tbody">
-                        <tr><td colspan="${isAdmin ? 9 : 8}" class="text-center" style="padding: 40px; text-align: center;"><i class="fa-solid fa-spinner fa-spin text-primary"></i> Đang tải dữ liệu bảng lương...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Phân trang -->
-            <div id="admin-bl-pagination" style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 15px; margin-bottom: 15px; padding-top: 15px; border-top: 1px solid var(--border);"></div>
-        </div>
-    `;
-
-    loadBangLuongAdminData();
-}
-
-function handleBLSearch(val) {
-    currentBLSearch = val.toLowerCase().trim();
-    currentBLPage = 1;
-    applyBLFiltersAndRender();
-}
-
-function handleBLCumSanFilter(val) {
-    currentBLCumSanFilter = val;
-    currentBLPage = 1;
-    applyBLFiltersAndRender();
-}
-
-function handleBLStatusFilter(val) {
-    currentBLStatusFilter = val;
-    currentBLPage = 1;
-    applyBLFiltersAndRender();
-}
-
-function handleBLThangNamChange(val) {
-    currentBLThangNam = val;
-    currentBLPage = 1;
-    loadBangLuongAdminData();
-}
-
-async function loadBangLuongAdminData() {
-    const tbody = document.getElementById('admin-bang-luong-tbody');
-    if (!tbody) return;
-
-    const selectEl = document.getElementById('admin-bl-thangnam');
-    const thangNam = selectEl ? selectEl.value : currentBLThangNam;
-    currentBLThangNam = thangNam;
-
-    try {
-        const response = await fetch(`${API_BASE_URL}/admin/bang-luong?thang_nam=${thangNam}`);
-        const res = await response.json();
-
-        if (res.success) {
-            allAdminBangLuongData = res.data || [];
-            applyBLFiltersAndRender();
-        } else {
-            showSystemModal('Lỗi', res.message || 'Không tải được bảng lương', 'error');
-        }
-    } catch (e) {
-        console.error('Lỗi tải bảng lương:', e);
-    }
-}
-
-function applyBLFiltersAndRender() {
-    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
-    const isAdmin = currentUser && currentUser.VaiTro === 'Admin';
-    const colSpan = isAdmin ? 9 : 8;
-
-    // 1. Lọc theo Cụm sân, Trạng thái và Từ khóa (Tên / SĐT)
-    const filtered = allAdminBangLuongData.filter(item => {
-        const matchCumSan = (currentBLCumSanFilter === 'All') || (String(item.id_cum_san) === String(currentBLCumSanFilter));
-        const matchStatus = (currentBLStatusFilter === 'All') || (item.trang_thai === currentBLStatusFilter);
-
-        const tenNV = (item.ten_nhan_vien || '').toLowerCase();
-        const sdtNV = (item.so_dien_thoai || '').toLowerCase();
-        const tenCS = (item.ten_cum_san || '').toLowerCase();
-        const matchSearch = !currentBLSearch || tenNV.includes(currentBLSearch) || sdtNV.includes(currentBLSearch) || tenCS.includes(currentBLSearch);
-
-        return matchCumSan && matchStatus && matchSearch;
-    });
-
-    // 2. Cập nhật 4 thẻ thống kê nhanh theo danh sách đang lọc
-    const tongNV = filtered.length;
-    const tongQuyLuong = filtered.reduce((sum, i) => sum + Number(i.thuc_lanh || 0), 0);
-    const choXuLy = filtered.filter(i => i.trang_thai === 'ChoXacNhan' || i.trang_thai === 'KhieuNai' || i.trang_thai === 'ChoThanhToan').length;
-    const daThanhToan = filtered.filter(i => i.trang_thai === 'DaThanhToan').length;
-
-    const elTongNV = document.getElementById('bl-stat-tong-nv');
-    const elTongTien = document.getElementById('bl-stat-tong-tien');
-    const elChoXuLy = document.getElementById('bl-stat-cho-xuly');
-    const elDaTT = document.getElementById('bl-stat-da-tt');
-
-    if (elTongNV) elTongNV.innerHTML = `${tongNV} <span style="font-size: 0.95rem; font-weight: 500; color: #64748b;">nhân viên</span>`;
-    if (elTongTien) elTongTien.innerText = `${tongQuyLuong.toLocaleString('vi-VN')}đ`;
-    if (elChoXuLy) elChoXuLy.innerHTML = `${choXuLy} <span style="font-size: 0.95rem; font-weight: 500; color: #64748b;">bảng lương</span>`;
-    if (elDaTT) elDaTT.innerHTML = `${daThanhToan}/${tongNV} <span style="font-size: 0.95rem; font-weight: 500; color: #64748b;">hoàn tất</span>`;
-
-    // 3. Phân trang
-    const totalPages = Math.ceil(filtered.length / itemsPerBLPage) || 1;
-    if (currentBLPage > totalPages) currentBLPage = totalPages;
-    const startIdx = (currentBLPage - 1) * itemsPerBLPage;
-    const pageData = filtered.slice(startIdx, startIdx + itemsPerBLPage);
-
-    const tbody = document.getElementById('admin-bang-luong-tbody');
-    if (!tbody) return;
-
-    if (pageData.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center text-muted" style="padding: 40px; text-align: center;">Không tìm thấy dữ liệu bảng lương phù hợp.</td></tr>`;
-        document.getElementById('admin-bl-pagination').innerHTML = '';
-        return;
-    }
-
-    tbody.innerHTML = pageData.map(item => {
-        // Thưởng / Phạt
-        const thuong = Number(item.tong_thuong || 0);
-        const phat = Number(item.tong_phat || 0);
-        let thuongPhatHtml = `<span style="color: #10b981; font-weight: 600;">+${thuong.toLocaleString('vi-VN')}đ</span><br><span style="color: #ef4444; font-weight: 600;">-${phat.toLocaleString('vi-VN')}đ</span>`;
-
-        // Thông tin ngân hàng hoặc khiếu nại
-        let bankHtml = `<span style="color: #94a3b8; font-size: 0.82rem; font-style: italic;">Chưa cung cấp</span>`;
-        if (item.thong_tin_ngan_hang) {
-            bankHtml = `<div style="font-size: 0.85rem; font-weight: 600; color: #0f172a; max-width: 210px; line-height: 1.4;">${item.thong_tin_ngan_hang}</div>`;
-        }
-        if (item.trang_thai === 'KhieuNai' && item.ly_do_khieu_nai) {
-            bankHtml += `<div style="margin-top: 4px; font-size: 0.78rem; color: #b91c1c; background: #fef2f2; padding: 3px 6px; border-radius: 4px; border: 1px dashed #fca5a5;">Khiếu nại: "${item.ly_do_khieu_nai}"</div>`;
-        }
-
-        // Badge Trạng thái
-        let badgeHtml = '';
-        if (item.trang_thai === 'ChuaChot') {
-            badgeHtml = `<span style="background: #f1f5f9; color: #475569; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; white-space: nowrap;">Chưa chốt (Tạm tính)</span>`;
-        } else if (item.trang_thai === 'ChoXacNhan') {
-            badgeHtml = `<span style="background: #fef3c7; color: #b45309; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; white-space: nowrap;"><i class="fa-regular fa-clock"></i> Chờ NV xác nhận</span>`;
-        } else if (item.trang_thai === 'KhieuNai') {
-            badgeHtml = `<span style="background: #fee2e2; color: #b91c1c; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; white-space: nowrap;"><i class="fa-solid fa-triangle-exclamation"></i> Bị khiếu nại</span>`;
-        } else if (item.trang_thai === 'ChoThanhToan') {
-            badgeHtml = `<span style="background: #e0e7ff; color: #4338ca; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; white-space: nowrap;"><i class="fa-solid fa-money-check-dollar"></i> Chờ chuyển khoản</span>`;
-        } else if (item.trang_thai === 'DaThanhToan') {
-            badgeHtml = `<span style="background: #d1fae5; color: #047857; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; white-space: nowrap;"><i class="fa-solid fa-check-double"></i> Đã thanh toán</span>`;
-        }
-
-        // Cột Hành động:
-        // - Nút Xem bảng công luôn hiển thị cho cả Admin và Quản lý sân
-        const safeTenNV = (item.ten_nhan_vien || '').replace(/'/g, "\\'");
-        const safeLyDo = (item.ly_do_khieu_nai || '').replace(/'/g, "\\'").replace(/\n/g, ' ');
-        let actionHtml = `
-            <button class="btn-outline-sm" style="padding: 5px 10px; font-size: 0.82rem; border-color: #cbd5e1; color: #334155;" onclick="openLuoiLichLuongModal('${item.id_nhan_vien}', '${currentBLThangNam}', '${safeTenNV}')">
-                <i class="fa-solid fa-calendar-days"></i> Bảng công
-            </button>
-        `;
-
-        // - Nếu là Quản lý sân: Hiển thị thêm các nút nghiệp vụ (Chốt lương / Xử lý khiếu nại / Thanh toán)
-        if (!isAdmin) {
-            if (item.trang_thai === 'ChuaChot') {
-                actionHtml += `
-                    <button class="btn-primary" style="padding: 5px 10px; font-size: 0.82rem; margin-left: 5px;" onclick="openConfirmChotLuongModal('${item.id_nhan_vien}', '${safeTenNV}', ${item.thuc_lanh})">
-                        <i class="fa-solid fa-lock"></i> Chốt lương
-                    </button>
-                `;
-            } else if (item.trang_thai === 'KhieuNai') {
-                actionHtml += `
-                    <button class="btn-primary" style="padding: 5px 10px; font-size: 0.82rem; margin-left: 5px; background: #ef4444; border-color: #ef4444;" onclick="openXuLyKhieuNaiModal('${item.id_nhan_vien}', '${currentBLThangNam}', '${safeLyDo}')">
-                        <i class="fa-solid fa-wrench"></i> Xử lý
-                    </button>
-                `;
-            } else if (item.trang_thai === 'ChoThanhToan') {
-                const safeBank = (item.thong_tin_ngan_hang || 'Chưa cung cấp').replace(/'/g, "\\'");
-                actionHtml += `
-                    <button class="btn-primary" style="padding: 5px 10px; font-size: 0.82rem; margin-left: 5px; background: #10b981; border-color: #10b981;" onclick="openConfirmThanhToanLuongModal('${item.bang_luong_id}', '${safeTenNV}', ${item.thuc_lanh}, '${safeBank}')">
-                        <i class="fa-solid fa-check"></i> Đã chuyển khoản
-                    </button>
-                `;
-            }
-        }
-
-        return `
-            <tr>
-                <td>
-                    <strong style="color: var(--text-dark);">${item.ten_nhan_vien}</strong><br>
-                    <span style="font-size: 0.8rem; color: var(--text-muted);"><i class="fa-solid fa-phone" style="font-size: 0.72rem;"></i> ${item.so_dien_thoai || 'N/A'}</span>
-                </td>
-                ${isAdmin ? `<td><span style="color: var(--primary); font-weight: 600; font-size: 0.88rem;"><i class="fa-solid fa-location-dot"></i> ${item.ten_cum_san}</span></td>` : ''}
-                <td style="text-align: center; font-weight: 600;">${item.tong_ca_lam} ca</td>
-                <td style="text-align: right; font-weight: 500;">${Number(item.tong_luong || 0).toLocaleString('vi-VN')}đ</td>
-                <td style="text-align: right; font-size: 0.85rem;">${thuongPhatHtml}</td>
-                <td style="text-align: right;"><strong style="color: #2563eb; font-size: 1.05rem;">${Number(item.thuc_lanh || 0).toLocaleString('vi-VN')}đ</strong></td>
-                <td>${bankHtml}</td>
-                <td style="text-align: center;">${badgeHtml}</td>
-                <td style="text-align: center; white-space: nowrap;">${actionHtml}</td>
-            </tr>
-        `;
-    }).join('');
-
-    renderBLPagination(totalPages);
-}
-
-function renderBLPagination(totalPages) {
-    const div = document.getElementById('admin-bl-pagination');
-    if (!div) return;
-    if (totalPages <= 1) {
-        div.innerHTML = '';
-        return;
-    }
-
-    let html = `<button class="btn-outline-sm" ${currentBLPage === 1 ? 'disabled style="opacity:0.5;"' : ''} onclick="currentBLPage--; applyBLFiltersAndRender()"><i class="fa-solid fa-chevron-left"></i></button>`;
-
-    const getPages = (current, total) => {
-        if (total <= 6) return Array.from({ length: total }, (_, i) => i + 1);
-        if (current <= 3) return [1, 2, 3, 4, '...', total];
-        if (current >= total - 2) return [1, '...', total - 3, total - 2, total - 1, total];
-        return [1, '...', current - 1, current, current + 1, '...', total];
-    };
-
-    getPages(currentBLPage, totalPages).forEach(i => {
-        if (i === '...') {
-            html += `<span style="padding: 6px 10px; color: var(--text-muted); font-weight: bold;">...</span>`;
-        } else {
-            html += `<button class="${i === currentBLPage ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="currentBLPage=${i}; applyBLFiltersAndRender()">${i}</button>`;
-        }
-    });
-
-    html += `<button class="btn-outline-sm" ${currentBLPage === totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="currentBLPage++; applyBLFiltersAndRender()"><i class="fa-solid fa-chevron-right"></i></button>`;
-    div.innerHTML = html;
-}
-
-function openConfirmChotLuongModal(idNhanVien, tenNhanVien, thucLanh) {
-    document.getElementById('confirm-chot-luong-nv-id').value = idNhanVien;
-    document.getElementById('confirm-chot-luong-msg').innerHTML = `
-        Xác nhận chốt bảng lương kỳ <strong>${currentBLThangNam}</strong> cho nhân viên <strong>${tenNhanVien}</strong> với số tiền thực lãnh là <strong style="color: #10b981;">${Number(thucLanh).toLocaleString('vi-VN')}đ</strong>?
-    `;
-    document.getElementById('confirm-chot-luong-modal').style.display = 'flex';
-}
-
-async function executeChotLuong() {
-    const idNhanVien = document.getElementById('confirm-chot-luong-nv-id').value;
-    const btn = document.getElementById('btn-agree-chot-luong');
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang chốt...';
-    btn.disabled = true;
-
-    try {
-        const response = await fetch(`${API_BASE_URL}/admin/bang-luong/chot`, {
-            method: 'POST',
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id_nhan_vien: idNhanVien, thang_nam: currentBLThangNam })
-        });
-        const data = await response.json();
-        document.getElementById('confirm-chot-luong-modal').style.display = 'none';
-
-        if (response.ok && data.success) {
-            showSystemModal('Thành công', data.message, 'success');
-            loadBangLuongAdminData();
-        } else {
-            showSystemModal('Lỗi', data.message || 'Không thể chốt lương', 'error');
-        }
-    } catch (e) {
-        showSystemModal('Lỗi mạng', 'Không thể kết nối máy chủ', 'error');
-    } finally {
-        btn.innerHTML = 'Đồng ý Chốt';
-        btn.disabled = false;
-    }
-}
-
-function openXuLyKhieuNaiModal(idNhanVien, thangNam, lyDo) {
-    document.getElementById('admin-khieu-nai-nv-id').value = idNhanVien;
-    document.getElementById('admin-khieu-nai-thang-nam').value = thangNam;
-    document.getElementById('admin-khieu-nai-msg').innerText = lyDo || 'Nhân viên không ghi lý do chi tiết.';
-    document.getElementById('admin-khieu-nai-modal').style.display = 'flex';
-}
-
-async function executeReChotLuong() {
-    const idNhanVien = document.getElementById('admin-khieu-nai-nv-id').value;
-    const thangNam = document.getElementById('admin-khieu-nai-thang-nam').value;
-    const btn = document.getElementById('btn-re-chot-luong');
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang cập nhật...';
-    btn.disabled = true;
-
-    try {
-        const response = await fetch(`${API_BASE_URL}/admin/bang-luong/chot`, {
-            method: 'POST',
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id_nhan_vien: idNhanVien, thang_nam: thangNam })
-        });
-        const data = await response.json();
-        document.getElementById('admin-khieu-nai-modal').style.display = 'none';
-
-        if (response.ok && data.success) {
-            showSystemModal('Thành công', 'Đã tính lại và gửi bảng lương mới cho nhân viên!', 'success');
-            loadBangLuongAdminData();
-        } else {
-            showSystemModal('Lỗi', data.message || 'Lỗi cập nhật', 'error');
-        }
-    } catch (e) {
-        showSystemModal('Lỗi mạng', 'Không thể kết nối máy chủ', 'error');
-    } finally {
-        btn.innerHTML = 'Đã sửa lỗi - Tính lại lương';
-        btn.disabled = false;
-    }
-}
-
-let pendingThanhToanBangLuongId = null;
-
-function openConfirmThanhToanLuongModal(bangLuongId, tenNhanVien, thucLanh, thongTinNganHang) {
-    pendingThanhToanBangLuongId = bangLuongId;
-
-    let modal = document.getElementById('confirm-thanh-toan-luong-modal');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'confirm-thanh-toan-luong-modal';
-        modal.className = 'modal-overlay';
-        modal.style.cssText = 'display: none; z-index: 10000; align-items: center; justify-content: center;';
-        modal.onclick = function(e) {
-            if (e.target === modal) closeConfirmThanhToanLuongModal();
-        };
-        document.body.appendChild(modal);
-    }
-
-    modal.innerHTML = `
-        <div class="modal-content" style="max-width: 420px; text-align: center; padding: 30px 24px; border-radius: 14px;">
-            <div style="font-size: 3.2rem; color: #10b981; margin-bottom: 12px;">
-                <i class="fa-solid fa-money-check-dollar"></i>
-            </div>
-            <h3 style="margin-bottom: 10px; font-size: 1.35rem; color: var(--text-dark);">Xác nhận Đã Chuyển Khoản?</h3>
-            <p style="color: var(--text-muted); margin-bottom: 16px; line-height: 1.5; font-size: 0.92rem;">
-                Bạn xác nhận đã chuyển khoản tiền lương kỳ <strong>${currentBLThangNam}</strong> cho nhân viên <strong>${tenNhanVien}</strong>?
-            </p>
-
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; margin-bottom: 24px; text-align: left; font-size: 0.88rem; line-height: 1.6;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                    <span style="color: #64748b;">Số tiền thực lãnh:</span>
-                    <strong style="color: #2563eb; font-size: 1rem;">${Number(thucLanh || 0).toLocaleString('vi-VN')}đ</strong>
-                </div>
-                <div style="border-top: 1px dashed #cbd5e1; padding-top: 6px; margin-top: 6px;">
-                    <span style="color: #64748b; display: block; font-size: 0.8rem;">Tài khoản thụ hưởng:</span>
-                    <strong style="color: #0f172a;">${thongTinNganHang}</strong>
-                </div>
-            </div>
-
-            <div style="display: flex; justify-content: center; gap: 12px;">
-                <button class="btn-outline" style="width: auto; padding: 10px 24px;" onclick="closeConfirmThanhToanLuongModal()">Hủy bỏ</button>
-                <button id="btn-agree-thanh-toan-luong" class="btn-primary" style="width: auto; padding: 10px 24px; background-color: #10b981; border-color: #10b981;" onclick="executeThanhToanLuong()">
-                    <i class="fa-solid fa-check"></i> Xác nhận Đã Chuyển
-                </button>
-            </div>
-        </div>
-    `;
-
-    modal.style.display = 'flex';
-}
-
-function closeConfirmThanhToanLuongModal() {
-    const modal = document.getElementById('confirm-thanh-toan-luong-modal');
-    if (modal) modal.style.display = 'none';
-    pendingThanhToanBangLuongId = null;
-}
-
-async function executeThanhToanLuong() {
-    if (!pendingThanhToanBangLuongId) return;
-
-    const btn = document.getElementById('btn-agree-thanh-toan-luong');
-    if (btn) {
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
-        btn.disabled = true;
-    }
-
-    try {
-        const response = await fetch(`${API_BASE_URL}/admin/bang-luong/${pendingThanhToanBangLuongId}/thanh-toan`, {
-            method: 'PUT',
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
-        });
-        const data = await response.json();
-
-        closeConfirmThanhToanLuongModal();
-
-        if (response.ok && data.success) {
-            showSystemModal('Thành công', data.message, 'success');
-            loadBangLuongAdminData();
-        } else {
-            showSystemModal('Lỗi', data.message || 'Không thể xác nhận thanh toán', 'error');
-        }
-    } catch (e) {
-        closeConfirmThanhToanLuongModal();
-        showSystemModal('Lỗi mạng', 'Không thể kết nối máy chủ', 'error');
-    }
-}
-
-// ======================================================
-// HÀM TIỆN ÍCH CHUNG: XEM LƯỚI LỊCH (Admin & Staff dùng chung)
-// ======================================================
-async function openLuoiLichLuongModal(idNhanVien, thangNam, tenNhanVien = '') {
-    const tbody = document.getElementById('luoi-lich-tbody');
-    const tongQuanDiv = document.getElementById('luoi-lich-tong-quan');
-    
-    document.getElementById('luoi-lich-title').innerText = `Lịch làm việc tháng ${thangNam} ${tenNhanVien ? '- '+tenNhanVien : ''}`;
-    tongQuanDiv.innerHTML = '<div style="text-align:center; width:100%;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải thông tin...</div>';
-    tbody.innerHTML = '';
-    
-    document.getElementById('luoi-lich-luong-modal').style.display = 'flex';
-
-    try {
-        const url = idNhanVien 
-            ? `${API_BASE_URL}/bang-luong/chi-tiet?id_nhan_vien=${idNhanVien}&thang_nam=${thangNam}` // Admin gọi
-            : `${API_BASE_URL}/bang-luong/chi-tiet?thang_nam=${thangNam}`; // Nhân viên tự gọi chính mình
-
-        const response = await fetch(url, {
-            headers: { 'Authorization': `Bearer ${sessionStorage.getItem('dn_football_token')}` }
-        });
-        const res = await response.json();
-
-        if (res.success) {
-            const tq = res.tong_quan;
-            const lichData = res.lich_thang;
-
-            // 1. Vẽ Khung Tổng Quan
-            // Tính lại thực lãnh để đảm bảo luôn đúng 100% (cộng dồn từ dữ liệu trả về của Backend)
-            const calculatedThucLanh = Number(tq.TongTienLuong) + Number(tq.TongTienThuong) - Number(tq.TongTienPhat);
-            const finalThucLanh = calculatedThucLanh > 0 ? calculatedThucLanh : 0;
-
-            tongQuanDiv.innerHTML = `
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                    <span style="font-size: 0.85rem; color: var(--text-muted);">Tổng số ca đi làm</span>
-                    <strong style="color: var(--text-dark); font-size: 1.1rem;">${tq.TongCaLam} ca</strong>
-                </div>
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                    <span style="font-size: 0.85rem; color: var(--text-muted);">Lương cơ bản</span>
-                    <strong style="color: var(--text-dark); font-size: 1.1rem;">${Number(tq.TongTienLuong).toLocaleString('vi-VN')}đ</strong>
-                </div>
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                    <span style="font-size: 0.85rem; color: var(--text-muted);">Tổng Thưởng / Phạt</span>
-                    <strong style="font-size: 1.1rem;"><span style="color: #10b981;">+${Number(tq.TongTienThuong).toLocaleString('vi-VN')}đ</span> / <span style="color: #ef4444;">-${Number(tq.TongTienPhat).toLocaleString('vi-VN')}đ</span></strong>
-                </div>
-                <div style="display: flex; flex-direction: column; gap: 4px; padding-left: 15px; border-left: 2px solid #cbd5e1;">
-                    <span style="font-size: 0.85rem; color: var(--text-muted);">Thực lãnh</span>
-                    <strong style="color: #2563eb; font-size: 1.3rem;">${finalThucLanh.toLocaleString('vi-VN')}đ</strong>
-                </div>
-            `;
-
-            // 2. Vẽ Lưới Lịch Chi Tiết
-            if (lichData.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted" style="padding: 30px;">Không có ca làm việc nào.</td></tr>`;
-            } else {
-                let html = '';
-                lichData.forEach(l => {
-                    const d = new Date(l.ngay_lam);
-                    const dateStr = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
-                    const dayName = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][d.getDay()];
-                    
-                    const role = l.cong_viec === 'ThuNgan' ? 'Thu Ngân' : 'Phục Vụ';
-                    
-                    let bgStatus = '', iconStatus = '', txtStatus = '';
-                    if (l.trang_thai_diem_danh === 'DaLam') {
-                        bgStatus = 'background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0;';
-                        iconStatus = '<i class="fa-solid fa-circle-check"></i>';
-                        txtStatus = 'Đã Đi Làm';
-                    } else if (l.trang_thai_diem_danh === 'VangMat') {
-                        bgStatus = 'background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;';
-                        iconStatus = '<i class="fa-solid fa-circle-xmark"></i>';
-                        txtStatus = 'Vắng Mặt';
-                    } else {
-                        bgStatus = 'background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;';
-                        iconStatus = '<i class="fa-solid fa-clock"></i>';
-                        txtStatus = 'Chờ làm';
-                    }
-
-                    let tienHtml = '';
-                    if (l.trang_thai_diem_danh === 'DaLam') {
-                        tienHtml += `<div style="font-size: 0.85rem; color: var(--text-dark);">LCB: <strong>${Number(l.luong_co_ban).toLocaleString('vi-VN')}đ</strong></div>`;
-                    }
-                    if (l.tien_thuong > 0) tienHtml += `<div style="font-size: 0.85rem; color: #10b981;">Thưởng: <strong>+${Number(l.tien_thuong).toLocaleString('vi-VN')}đ</strong></div>`;
-                    if (l.tien_phat > 0) tienHtml += `<div style="font-size: 0.85rem; color: #ef4444;">Phạt: <strong>-${Number(l.tien_phat).toLocaleString('vi-VN')}đ</strong></div>`;
-                    if (l.ly_do) tienHtml += `<div style="font-size: 0.8rem; color: var(--text-muted); font-style: italic; max-width: 200px; margin-left: auto;">${l.ly_do}</div>`;
-
-                    if (!tienHtml) tienHtml = '-';
-
-                    html += `
-                        <tr style="border-bottom: 1px solid #f1f5f9;">
-                            <td style="padding-left: 20px;">
-                                <strong style="color: var(--text-dark);">${dayName}</strong><br>
-                                <span style="font-size: 0.85rem; color: var(--text-muted);">${dateStr}</span>
-                            </td>
-                            <td>
-                                <strong style="color: var(--primary);">${l.ten_ca}</strong><br>
-                                <span style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-solid fa-user-tag"></i> ${role}</span>
-                            </td>
-                            <td style="text-align: center;">
-                                <span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; display: inline-block; white-space: nowrap; ${bgStatus}">${iconStatus} ${txtStatus}</span>
-                            </td>
-                            <td style="text-align: right; padding-right: 20px;">
-                                ${tienHtml}
-                            </td>
-                        </tr>
-                    `;
-                });
-                tbody.innerHTML = html;
-            }
-        } else {
-            tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger">${res.message}</td></tr>`;
-        }
-    } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger">Lỗi kết nối máy chủ!</td></tr>`;
-    }
-}
-
-// ======================================================
-// MODULE TIỆN ÍCH: XUẤT BÁO CÁO EXCEL (AUTOFIT + MÀU SẮC) & IN PHIẾU LƯƠNG
-// ======================================================
-
-/**
- * Hàm lõi xuất file Excel (.xls) có hỗ trợ:
- * 1. AutoFit Column Width (Tự động tính độ rộng cột theo nội dung dài nhất + bộ đệm pixel)
- * 2. Bôi màu tiêu đề, màu xen kẽ từng dòng (Zebra striping), màu trạng thái và màu tiền tệ
- * 3. Kẻ khung (Border) toàn bộ bảng và định dạng chuẩn tiếng Việt UTF-8
- */
-function exportStyledExcelFile(filename, reportTitle, subtitle, headers, rowsData, totalRowData = null) {
-    const colCount = headers.length;
-
-    // 1. THUẬT TOÁN AUTOFIT COLUMN WIDTH: Đo chiều dài chuỗi lớn nhất ở mỗi cột
-    const colWidthsPx = headers.map((h, colIdx) => {
-        let maxLen = String(h.label || h).length;
-
-        rowsData.forEach(row => {
-            const cell = row[colIdx];
-            const valStr = (cell && typeof cell === 'object') ? String(cell.value ?? '') : String(cell ?? '');
-            if (valStr.length > maxLen) maxLen = valStr.length;
-        });
-
-        if (totalRowData && totalRowData[colIdx] !== undefined) {
-            const totalCell = totalRowData[colIdx];
-            const totalStr = (totalCell && typeof totalCell === 'object') ? String(totalCell.value ?? '') : String(totalCell ?? '');
-            if (totalStr.length > maxLen) maxLen = totalStr.length;
-        }
-
-        // Quy đổi số ký tự sang Pixel (mỗi ký tự ~ 8.5px + 26px padding hai bên, tối thiểu 65px, tối đa 420px)
-        return Math.min(Math.max(Math.round(maxLen * 8.5) + 26, 65), 420);
-    });
-
-    const colGroupHtml = colWidthsPx.map(w => `<col width="${w}" style="width: ${w}px; mso-width-source: userset;">`).join('');
-
-    // 2. Render Header Bảng
-    const theadHtml = headers.map(h => {
-        const label = (h && typeof h === 'object') ? h.label : h;
-        return `<th style="background-color: #0b5d3b; color: #ffffff; font-weight: bold; text-align: center; vertical-align: middle; border: 1px solid #064e3b; padding: 10px 8px; height: 34px; white-space: nowrap;">${label}</th>`;
-    }).join('');
-
-    // 3. Render Các Dòng Dữ Liệu (Có bôi màu xen kẽ trắng / xanh nhạt và màu riêng của từng ô)
-    const tbodyHtml = rowsData.map((row, rowIdx) => {
-        const defaultRowBg = (rowIdx % 2 === 0) ? '#ffffff' : '#f8fafc';
-
-        const cellsHtml = row.map(cell => {
-            const isObj = (cell !== null && typeof cell === 'object');
-            const val = isObj ? (cell.value ?? '') : (cell ?? '');
-            const align = (isObj && cell.align) ? cell.align : 'left';
-            const color = (isObj && cell.color) ? cell.color : '#0f172a';
-            const bg = (isObj && cell.bg) ? cell.bg : defaultRowBg;
-            const bold = (isObj && cell.bold) ? 'font-weight: bold;' : '';
-            const numFormat = (isObj && cell.type === 'currency')
-                ? 'mso-number-format:"\\#\\,\\#\\#0\\" đ\\"";'
-                : ((isObj && cell.type === 'text') ? 'mso-number-format:"\\@";' : '');
-
-            return `<td style="background-color: ${bg}; color: ${color}; text-align: ${align}; vertical-align: middle; border: 1px solid #cbd5e1; padding: 7px 8px; height: 26px; white-space: nowrap; ${bold} ${numFormat}">${val}</td>`;
-        }).join('');
-
-        return `<tr>${cellsHtml}</tr>`;
-    }).join('');
-
-    // 4. Render Dòng Tổng Cộng Cuối Bảng (Bôi nền vàng nhạt nổi bật)
-    let tfootHtml = '';
-    if (totalRowData) {
-        const totalCells = totalRowData.map(cell => {
-            const isObj = (cell !== null && typeof cell === 'object');
-            const val = isObj ? (cell.value ?? '') : (cell ?? '');
-            const align = (isObj && cell.align) ? cell.align : 'center';
-            const color = (isObj && cell.color) ? cell.color : '#0f172a';
-            const bg = (isObj && cell.bg) ? cell.bg : '#fef3c7';
-            const numFormat = (isObj && cell.type === 'currency') ? 'mso-number-format:"\\#\\,\\#\\#0\\" đ\\"";' : '';
-
-            return `<td style="background-color: ${bg}; color: ${color}; font-weight: bold; text-align: ${align}; vertical-align: middle; border: 1px solid #94a3b8; padding: 9px 8px; height: 32px; white-space: nowrap; font-size: 11pt; ${numFormat}">${val}</td>`;
-        }).join('');
-        tfootHtml = `<tfoot><tr>${totalCells}</tr></tfoot>`;
-    }
-
-    const now = new Date();
-    const exportTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} - ${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
-
-    const excelTemplate = `
-        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-        <head>
-            <meta charset="UTF-8">
-            <!--[if gte mso 9]>
-            <xml>
-                <x:ExcelWorkbook>
-                    <x:ExcelWorksheets>
-                        <x:ExcelWorksheet>
-                            <x:Name>BaoCao_DNFootball</x:Name>
-                            <x:WorksheetOptions>
-                                <x:DisplayGridlines/>
-                            </x:WorksheetOptions>
-                        </x:ExcelWorksheet>
-                    </x:ExcelWorksheets>
-                </x:ExcelWorkbook>
-            </xml>
-            <![endif]-->
-            <style>
-                body, table { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; font-size: 10.5pt; }
-                table { border-collapse: collapse; }
-            </style>
-        </head>
-        <body>
-            <table>
-                ${colGroupHtml}
-                <thead>
-                    <tr>
-                        <th colspan="${colCount}" style="background-color: #ecfdf5; color: #0b5d3b; font-size: 15pt; font-weight: bold; text-align: center; vertical-align: middle; height: 42px; border: 1px solid #0b5d3b;">
-                            HỆ THỐNG SÂN BÓNG ĐÁ DN FOOTBALL - ${reportTitle.toUpperCase()}
-                        </th>
-                    </tr>
-                    <tr>
-                        <th colspan="${colCount}" style="background-color: #f8fafc; color: #475569; font-size: 10pt; font-style: italic; text-align: center; vertical-align: middle; height: 26px; border: 1px solid #cbd5e1;">
-                            ${subtitle} | Thời gian xuất: ${exportTimeStr}
-                        </th>
-                    </tr>
-                    <tr><td colspan="${colCount}" style="height: 10px;"></td></tr>
-                    <tr>${theadHtml}</tr>
-                </thead>
-                <tbody>
-                    ${tbodyHtml}
-                </tbody>
-                ${tfootHtml}
-            </table>
-        </body>
-        </html>
-    `;
-
-    const cleanFilename = filename.replace(/\.(csv|xlsx|xls)$/i, '') + '.xls';
-    const blob = new Blob(['\uFEFF' + excelTemplate], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', cleanFilename);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-}
-
-// 1. Xuất Excel Bảng Lương (Có AutoFit + Bôi màu Trạng thái & Tiền tệ)
-function exportBangLuongExcel() {
-    if (!allAdminBangLuongData || allAdminBangLuongData.length === 0) {
-        return showSystemModal('Thông báo', 'Không có dữ liệu bảng lương để xuất!', 'error');
-    }
-
-    const filtered = allAdminBangLuongData.filter(item => {
-        const matchCumSan = (currentBLCumSanFilter === 'All') || (String(item.id_cum_san) === String(currentBLCumSanFilter));
-        const matchStatus = (currentBLStatusFilter === 'All') || (item.trang_thai === currentBLStatusFilter);
-        const tenNV = (item.ten_nhan_vien || '').toLowerCase();
-        const sdtNV = (item.so_dien_thoai || '').toLowerCase();
-        const tenCS = (item.ten_cum_san || '').toLowerCase();
-        const matchSearch = !currentBLSearch || tenNV.includes(currentBLSearch) || sdtNV.includes(currentBLSearch) || tenCS.includes(currentBLSearch);
-        return matchCumSan && matchStatus && matchSearch;
-    });
-
-    if (filtered.length === 0) {
-        return showSystemModal('Thông báo', 'Danh sách lọc hiện tại đang trống!', 'error');
-    }
-
-    // Bảng màu riêng cho từng trạng thái lương
-    const statusStyleMap = {
-        'ChuaChot':     { text: 'Chưa chốt (Tạm tính)', bg: '#f1f5f9', color: '#475569' },
-        'ChoXacNhan':   { text: 'Chờ NV xác nhận',      bg: '#fef3c7', color: '#b45309' },
-        'KhieuNai':     { text: 'Đang khiếu nại',       bg: '#fee2e2', color: '#b91c1c' },
-        'ChoThanhToan': { text: 'Chờ chuyển khoản',     bg: '#e0e7ff', color: '#4338ca' },
-        'DaThanhToan':  { text: 'Đã thanh toán',        bg: '#d1fae5', color: '#047857' }
-    };
-
-    const headers = [
-        'STT', 'Kỳ Lương', 'Họ và Tên Nhân Viên', 'Số Điện Thoại', 'Cơ Sở Trực Thuộc',
-        'Số Ca Làm', 'Lương Cơ Bản', 'Tổng Thưởng (+)', 'Tổng Phạt (-)',
-        'Thực Lãnh', 'Thông Tin Ngân Hàng', 'Trạng Thái', 'Ngày Thanh Toán'
-    ];
-
-    let sumCa = 0, sumLuong = 0, sumThuong = 0, sumPhat = 0, sumThucLanh = 0;
-
-    const rowsData = filtered.map((item, idx) => {
-        const ca = Number(item.tong_ca_lam || 0);
-        const luong = Number(item.tong_luong || 0);
-        const thuong = Number(item.tong_thuong || 0);
-        const phat = Number(item.tong_phat || 0);
-        const thucLanh = Number(item.thuc_lanh || 0);
-
-        sumCa += ca;
-        sumLuong += luong;
-        sumThuong += thuong;
-        sumPhat += phat;
-        sumThucLanh += thucLanh;
-
-        const st = statusStyleMap[item.trang_thai] || { text: item.trang_thai, bg: '#f1f5f9', color: '#334155' };
-
-        return [
-            { value: idx + 1, align: 'center' },
-            { value: currentBLThangNam, align: 'center', type: 'text', bold: true },
-            { value: item.ten_nhan_vien || '', bold: true },
-            { value: item.so_dien_thoai || 'N/A', align: 'center', type: 'text' },
-            { value: item.ten_cum_san || '', color: '#0b5d3b', bold: true },
-            { value: `${ca} ca`, align: 'center', bold: true },
-            { value: luong, align: 'right', type: 'currency' },
-            { value: thuong, align: 'right', type: 'currency', color: thuong > 0 ? '#059669' : '#64748b', bg: thuong > 0 ? '#ecfdf5' : undefined, bold: thuong > 0 },
-            { value: phat, align: 'right', type: 'currency', color: phat > 0 ? '#dc2626' : '#64748b', bg: phat > 0 ? '#fef2f2' : undefined, bold: phat > 0 },
-            { value: thucLanh, align: 'right', type: 'currency', color: '#1d4ed8', bg: '#eff6ff', bold: true },
-            { value: item.thong_tin_ngan_hang || 'Chưa cung cấp', color: item.thong_tin_ngan_hang ? '#0f172a' : '#94a3b8' },
-            { value: st.text, align: 'center', bg: st.bg, color: st.color, bold: true },
-            { value: item.ngay_thanh_toan ? item.ngay_thanh_toan.substring(0, 16) : '-', align: 'center', type: 'text' }
-        ];
-    });
-
-    const totalRow = [
-        '',
-        { value: 'TỔNG CỘNG', align: 'center' },
-        { value: `${filtered.length} nhân sự`, align: 'left' },
-        '',
-        '',
-        { value: `${sumCa} ca`, align: 'center' },
-        { value: sumLuong, align: 'right', type: 'currency' },
-        { value: sumThuong, align: 'right', type: 'currency', color: '#059669' },
-        { value: sumPhat, align: 'right', type: 'currency', color: '#dc2626' },
-        { value: sumThucLanh, align: 'right', type: 'currency', color: '#1d4ed8', bg: '#dbeafe' },
-        '', '', ''
-    ];
-
-    exportStyledExcelFile(
-        `Bang_Luong_DN_Football_${currentBLThangNam}`,
-        `BẢNG LƯƠNG NHÂN VIÊN KỲ ${currentBLThangNam}`,
-        `Tổng số nhân sự: ${filtered.length} | Tổng quỹ lương thực lãnh: ${sumThucLanh.toLocaleString('vi-VN')} đ`,
-        headers,
-        rowsData,
-        totalRow
-    );
-}
-
-// 2. Xuất Excel Lịch sử Nhập hàng (Có AutoFit + Bôi màu Chi phí)
-function exportAdminPhieuNhapExcel() {
-    if (!adminPhieuNhapData || adminPhieuNhapData.length === 0) {
-        return showSystemModal('Thông báo', 'Không có dữ liệu phiếu nhập để xuất!', 'error');
-    }
-
-    const filtered = adminPhieuNhapData.filter(pn => {
-        const matchCumSan = (adminPhieuNhapCumSan === 'All' || String(pn.ID_CumSan) === String(adminPhieuNhapCumSan));
-        const dateOnly = pn.NgayNhap ? pn.NgayNhap.substring(0, 10) : '';
-        const matchDate = (adminPhieuNhapDate === '' || dateOnly === adminPhieuNhapDate);
-        const maPhieu = `pn${pn.ID}`.toLowerCase();
-        const tenNhanVien = pn.nhan_vien ? pn.nhan_vien.HoTen.toLowerCase() : '';
-        const tenMonStr = pn.ChiTietNhap ? pn.ChiTietNhap.map(i => i.ten_san_pham).join(' ').toLowerCase() : '';
-        const matchSearch = maPhieu.includes(adminPhieuNhapSearch) || tenNhanVien.includes(adminPhieuNhapSearch) || tenMonStr.includes(adminPhieuNhapSearch);
-        return matchCumSan && matchDate && matchSearch;
-    });
-
-    if (filtered.length === 0) {
-        return showSystemModal('Thông báo', 'Không có phiếu nhập nào khớp với bộ lọc hiện tại!', 'error');
-    }
-
-    const headers = ['STT', 'Mã Phiếu Nhập', 'Cơ Sở Nhập Kho', 'Người Lập Phiếu', 'Chi Tiết Hàng Hóa Nhập', 'Tổng Thanh Toán', 'Thời Gian Nhập'];
-    let totalCost = 0;
-
-    const rowsData = filtered.map((pn, idx) => {
-        const cost = Number(pn.TongTienThanhToan || 0);
-        totalCost += cost;
-        const chiTietStr = pn.ChiTietNhap ? pn.ChiTietNhap.map(i => `${i.ten_san_pham} (SL: ${i.so_luong})`).join(' | ') : '';
-
-        return [
-            { value: idx + 1, align: 'center' },
-            { value: `#PN${pn.ID}`, align: 'center', bold: true, color: '#334155', bg: '#f1f5f9' },
-            { value: pn.cum_san ? pn.cum_san.TenCumSan : 'N/A', bold: true, color: '#0b5d3b' },
-            { value: pn.nhan_vien ? pn.nhan_vien.HoTen : 'N/A' },
-            { value: chiTietStr },
-            { value: cost, align: 'right', type: 'currency', bold: true, color: '#b91c1c', bg: '#fef2f2' },
-            { value: pn.NgayNhap ? pn.NgayNhap.replace('T', ' ').substring(0, 16) : '', align: 'center', type: 'text' }
-        ];
-    });
-
-    const totalRow = [
-        '',
-        { value: 'TỔNG CHI NHẬP KHO', align: 'center' },
-        { value: `${filtered.length} phiếu nhập`, align: 'left' },
-        '',
-        '',
-        { value: totalCost, align: 'right', type: 'currency', color: '#b91c1c', bg: '#fee2e2' },
-        ''
-    ];
-
-    exportStyledExcelFile(
-        `Bao_Cao_Nhap_Kho_DN_Football`,
-        `BÁO CÁO LỊCH SỬ NHẬP KHO HÀNG HÓA`,
-        `Tổng số phiếu nhập: ${filtered.length} | Tổng chi thanh toán: ${totalCost.toLocaleString('vi-VN')} đ`,
-        headers,
-        rowsData,
-        totalRow
-    );
-}
-
-// 3. Xuất Excel Hóa đơn Bán hàng (Có AutoFit + Bôi màu Doanh thu)
-function exportAdminHoaDonExcel() {
-    if (!adminHoaDonData || adminHoaDonData.length === 0) {
-        return showSystemModal('Thông báo', 'Không có dữ liệu hóa đơn để xuất!', 'error');
-    }
-
-    const filtered = adminHoaDonData.filter(hd => {
-        const matchCumSan = (adminHoaDonCumSan === 'All' || String(hd.ID_CumSan) === String(adminHoaDonCumSan));
-        const dateOnly = hd.NgayTao ? hd.NgayTao.substring(0, 10) : '';
-        const matchDate = (adminHoaDonDate === '' || dateOnly === adminHoaDonDate);
-        const maHD = `hd${hd.ID}`.toLowerCase();
-        const thuNgan = hd.nhan_vien ? hd.nhan_vien.HoTen.toLowerCase() : '';
-        const tenMonStr = (hd.chi_tiet_hoa_dons && hd.chi_tiet_hoa_dons.length > 0)
-            ? hd.chi_tiet_hoa_dons.map(i => i.san_pham ? i.san_pham.TenSanPham : '').join(' ').toLowerCase() : '';
-        const matchSearch = maHD.includes(adminHoaDonSearch) || thuNgan.includes(adminHoaDonSearch) || tenMonStr.includes(adminHoaDonSearch);
-        return matchCumSan && matchDate && matchSearch;
-    });
-
-    if (filtered.length === 0) {
-        return showSystemModal('Thông báo', 'Không có hóa đơn nào khớp với bộ lọc hiện tại!', 'error');
-    }
-
-    const headers = ['STT', 'Mã Hóa Đơn', 'Cơ Sở Bán Hàng', 'Thu Ngân Lập Đơn', 'Chi Tiết Mặt Hàng Đã Bán', 'Tổng Doanh Thu', 'Thời Gian Giao Dịch'];
-    let totalRev = 0;
-
-    const rowsData = filtered.map((hd, idx) => {
-        const rev = Number(hd.TongTien || 0);
-        totalRev += rev;
-        const chiTietStr = (hd.chi_tiet_hoa_dons && hd.chi_tiet_hoa_dons.length > 0)
-            ? hd.chi_tiet_hoa_dons.map(ct => `${ct.san_pham ? ct.san_pham.TenSanPham : 'Món'} (SL: ${ct.SoLuong})`).join(' | ')
-            : 'Trống';
-
-        return [
-            { value: idx + 1, align: 'center' },
-            { value: `#HD${hd.ID}`, align: 'center', bold: true, color: '#1e40af', bg: '#eff6ff' },
-            { value: hd.cum_san ? hd.cum_san.TenCumSan : 'N/A', bold: true, color: '#0b5d3b' },
-            { value: hd.nhan_vien ? hd.nhan_vien.HoTen : 'N/A', color: '#2563eb', bold: true },
-            { value: chiTietStr },
-            { value: rev, align: 'right', type: 'currency', bold: true, color: '#047857', bg: '#ecfdf5' },
-            { value: hd.NgayTao ? hd.NgayTao.replace('T', ' ').substring(0, 16) : '', align: 'center', type: 'text' }
-        ];
-    });
-
-    const totalRow = [
-        '',
-        { value: 'TỔNG DOANH THU', align: 'center' },
-        { value: `${filtered.length} hóa đơn`, align: 'left' },
-        '',
-        '',
-        { value: totalRev, align: 'right', type: 'currency', color: '#047857', bg: '#d1fae5' },
-        ''
-    ];
-
-    exportStyledExcelFile(
-        `Bao_Cao_Hoa_Don_Ban_Hang_DN_Football`,
-        `BÁO CÁO DOANH THU HÓA ĐƠN BÁN HÀNG`,
-        `Tổng số hóa đơn: ${filtered.length} | Tổng doanh thu: ${totalRev.toLocaleString('vi-VN')} đ`,
-        headers,
-        rowsData,
-        totalRow
-    );
-}
-
-function printBangCongModal() {
-    const title = document.getElementById('luoi-lich-title')?.innerText || 'Phiếu Lương Nhân Viên';
-    const summaryHtml = document.getElementById('luoi-lich-tong-quan')?.innerHTML || '';
-    const tableBodyHtml = document.getElementById('luoi-lich-tbody')?.innerHTML || '';
-
-    const printWindow = window.open('', '_blank', 'width=900,height=700');
-    if (!printWindow) {
-        return showSystemModal('Cảnh báo', 'Trình duyệt đang chặn cửa sổ bật lên (Pop-up). Vui lòng cho phép Pop-up để in phiếu lương!', 'error');
-    }
-
-    const now = new Date();
-    const dateStr = `Ngày ${String(now.getDate()).padStart(2, '0')} tháng ${String(now.getMonth() + 1).padStart(2, '0')} năm ${now.getFullYear()}`;
-
-    printWindow.document.write(`
-        <!DOCTYPE html>
-        <html lang="vi">
-        <head>
-            <meta charset="UTF-8">
-            <title>${title} - DN FOOTBALL</title>
-            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-            <style>
-                body { font-family: 'Times New Roman', Times, serif; color: #0f172a; margin: 30px; line-height: 1.5; }
-                .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0b5d3b; padding-bottom: 15px; margin-bottom: 20px; }
-                .brand { font-size: 20px; font-weight: bold; color: #0b5d3b; }
-                .national { text-align: center; font-weight: bold; font-size: 14px; }
-                h2 { text-align: center; text-transform: uppercase; color: #0f172a; margin: 20px 0 15px 0; font-size: 22px; }
-                .summary-box { display: flex; justify-content: space-around; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 15px; margin-bottom: 20px; font-family: Arial, sans-serif; }
-                table { width: 100%; border-collapse: collapse; margin-bottom: 30px; font-family: Arial, sans-serif; font-size: 13px; }
-                th, td { border: 1px solid #cbd5e1; padding: 10px 12px; }
-                th { background: #f1f5f9; font-weight: bold; text-align: left; }
-                .signatures { display: flex; justify-content: space-around; text-align: center; margin-top: 40px; page-break-inside: avoid; }
-                @media print {
-                    body { margin: 15px; }
-                    .no-print { display: none; }
-                }
-            </style>
-        </head>
-        <body>
-            <div class="header">
-                <div>
-                    <div class="brand">HỆ THỐNG SÂN BÓNG ĐÁ DN FOOTBALL</div>
-                    <div style="font-size: 13px; color: #475569;">Đà Nẵng, Việt Nam | Hotline: 0899244124</div>
-                </div>
-                <div class="national">
-                    CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM<br>
-                    Độc lập - Tự do - Hạnh phúc
-                </div>
-            </div>
-
-            <h2>PHIẾU TỔNG HỢP CÔNG & LƯƠNG NHÂN VIÊN<br><span style="font-size: 16px; font-weight: normal; text-transform: none;">(${title})</span></h2>
-
-            <div class="summary-box">${summaryHtml}</div>
-
-            <table>
-                <thead>
-                    <tr>
-                        <th style="width: 15%;">Ngày</th>
-                        <th style="width: 30%;">Ca làm việc & Vị trí</th>
-                        <th style="width: 20%; text-align: center;">Trạng thái</th>
-                        <th style="width: 35%; text-align: right;">Chi tiết Lương / Thưởng / Phạt</th>
-                    </tr>
-                </thead>
-                <tbody>${tableBodyHtml}</tbody>
-            </table>
-
-            <div style="text-align: right; font-style: italic; margin-bottom: 10px;">Đà Nẵng, ${dateStr}</div>
-            <div class="signatures">
-                <div>
-                    <strong>NGƯỜI LẬP BIỂU / QUẢN LÝ</strong><br>
-                    <span style="font-size: 13px; font-style: italic;">(Ký và ghi rõ họ tên)</span>
-                </div>
-                <div>
-                    <strong>NHÂN VIÊN XÁC NHẬN</strong><br>
-                    <span style="font-size: 13px; font-style: italic;">(Ký và ghi rõ họ tên)</span>
-                </div>
-            </div>
-
-            <script>
-                window.onload = function() {
-                    setTimeout(() => { window.print(); }, 400);
-                };
-            </script>
-        </body>
-        </html>
-    `);
-    printWindow.document.close();
+    return remainMinutes === 0 ? `${hours}h` : `${hours}h${remainMinutes}p`;
 }
 
 // ======================================================
@@ -9850,17 +7533,21 @@ window.printAdminBookingInvoice = async function(maHoaDon) {
         const hd = json.data;
         const listDatSan = hd.dat_sans || hd.datSans || [];
         const first = listDatSan[0] || {};
-        const tenKhach = hd.nguoi_dung?.HoTen || first.TenKhachVangLai || 'Khách hàng';
-        const sdtKhach = hd.nguoi_dung?.SoDienThoai || first.SDTKhachVangLai || '';
+        const tenKhach = hd.nguoi_dung?.HoTen || first.TenNguoiDat || first.TenKhachVangLai || 'Khách hàng';
+        const sdtKhach = hd.nguoi_dung?.SoDienThoai || first.SDTNguoiDat || first.SDTKhachVangLai || '';
         const ngayLap = hd.NgayTao ? new Date(hd.NgayTao).toLocaleString('vi-VN') : '';
         const statusMap = { 'DaCoc': 'Đã đặt cọc', 'HoanThanh': 'Đã hoàn thành', 'DaHuy': 'Đã hủy', 'KhongDen': 'Không đến' };
 
+        let tongTienSanGoc = 0;
         const rowsHtml = listDatSan.map((ds, i) => {
             const tenSan = ds.san_bong?.TenSan || 'Sân bóng';
             const cumSan = ds.san_bong?.cum_san?.TenCumSan || '';
             const kg = ds.khung_gio ? `${ds.khung_gio.GioBatDau.substring(0,5)} - ${ds.khung_gio.GioKetThuc.substring(0,5)}` : '';
             const ngayDa = ds.NgayDa ? ds.NgayDa.split('-').reverse().join('/') : '';
             const maVe = (ds.MaGiaiDau || ds.ID_GiaiDau) ? `GD-${ds.MaGiaiDau || ds.ID_GiaiDau}` : `PT-${ds.MaDatSan || ds.ID}`;
+            const donGia = Number(ds.pivot?.DonGia ?? ds.TongTien ?? 0);
+            if (ds.TrangThai !== 'DaHuy') tongTienSanGoc += donGia;
+
             return `
                 <tr>
                     <td style="text-align:center;">${i + 1}</td>
@@ -9868,17 +7555,21 @@ window.printAdminBookingInvoice = async function(maHoaDon) {
                     <td><strong>${tenSan}</strong><br><small>${cumSan}</small></td>
                     <td style="text-align:center;">${kg}<br><small>${ngayDa}</small></td>
                     <td style="text-align:center;">${statusMap[ds.TrangThai] || ds.TrangThai}</td>
-                    <td style="text-align:right;">${Number(ds.TongTien).toLocaleString('vi-VN')}đ</td>
+                    <td style="text-align:right;">${donGia.toLocaleString('vi-VN')}đ</td>
                     <td style="text-align:right; color:#047857; font-weight:bold;">${Number(ds.TienCoc).toLocaleString('vi-VN')}đ</td>
                 </tr>
             `;
         }).join('');
 
-        const tongTien = Number(hd.TongTienSan || 0);
+        const tongTien = Number(hd.TongTien ?? hd.TongTienSan ?? 0);
+        const thueVAT = Number(hd.ThueVAT || 0);
+        const tienSauGiam = Math.max(0, tongTien - thueVAT);
+        const soTienGiam = Math.max(0, tongTienSanGoc - tienSauGiam);
+        const kmObj = hd.khuyen_mai || hd.khuyenMai || null;
         const tienCoc = Number(hd.TienDaCoc || 0);
         const conLai = Math.max(0, tongTien - tienCoc);
 
-        const printWin = window.open('', '_blank', 'width=880,height=720');
+        const printWin = window.open('', '_blank', 'width=880,height=740');
         if (!printWin) return showSystemModal('Cảnh báo', 'Vui lòng cho phép mở Pop-up để in hóa đơn!', 'error');
 
         printWin.document.write(`
@@ -9895,7 +7586,7 @@ window.printAdminBookingInvoice = async function(maHoaDon) {
                     table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 13px; }
                     th, td { border: 1px solid #cbd5e1; padding: 10px; }
                     th { background: #f1f5f9; }
-                    .summary { width: 340px; margin-left: auto; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px; }
+                    .summary { width: 360px; margin-left: auto; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px; font-size: 13.5px; }
                 </style>
             </head>
             <body>
@@ -9920,14 +7611,17 @@ window.printAdminBookingInvoice = async function(maHoaDon) {
                             <th>Sân Bóng & Cơ Sở</th>
                             <th>Khung Giờ & Ngày Đá</th>
                             <th>Trạng Thái</th>
-                            <th>Đơn Giá Sân</th>
+                            <th>Đơn Giá Khung Giờ</th>
                             <th>Tiền Đã Cọc</th>
                         </tr>
                     </thead>
                     <tbody>${rowsHtml}</tbody>
                 </table>
                 <div class="summary">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>Tổng tiền hóa đơn:</span><strong>${tongTien.toLocaleString('vi-VN')}đ</strong></div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>Tổng tiền sân gốc:</span><strong>${tongTienSanGoc.toLocaleString('vi-VN')}đ</strong></div>
+                    ${soTienGiam > 0 ? `<div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#2563eb;"><span>Khuyến mãi (${kmObj ? kmObj.TenKhuyenMai : 'Voucher'}):</span><strong>-${soTienGiam.toLocaleString('vi-VN')}đ</strong></div>` : ''}
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#475569;"><span>Thuế VAT (8%):</span><strong>+${thueVAT.toLocaleString('vi-VN')}đ</strong></div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px; border-top:1px solid #e2e8f0; padding-top:6px;"><span>Tổng tiền hóa đơn:</span><strong>${tongTien.toLocaleString('vi-VN')}đ</strong></div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#047857;"><span>Đã đặt cọc:</span><strong>${tienCoc.toLocaleString('vi-VN')}đ</strong></div>
                     <div style="display:flex; justify-content:space-between; border-top:1px dashed #cbd5e1; padding-top:8px; color:#e11d48; font-size:15px;"><strong>Còn thu tại sân:</strong><strong>${conLai.toLocaleString('vi-VN')}đ</strong></div>
                 </div>
@@ -10066,7 +7760,10 @@ window.sendAdminInvoiceGuestOtp = async function(maHoaDon) {
 };
 
 window.executeAdminCancelInvoice = async function(maHoaDon, needOtp = false, isOfflineInvoice = false) {
-    let payload = { phuong_thuc_hoan: 'vi' };
+    let payload = { 
+        phuong_thuc_hoan: 'vi',
+        return_url: window.location.origin + window.location.pathname
+    };
 
     if (needOtp) {
         const otp = document.getElementById('admin-inv-otp-input')?.value.trim();
@@ -10112,6 +7809,10 @@ window.executeAdminCancelInvoice = async function(maHoaDon, needOtp = false, isO
         });
         const data = await res.json();
         if (res.ok && data.success) {
+            if (data.vnpay_url) {
+                window.location.href = data.vnpay_url;
+                return;
+            }
             document.getElementById('admin-cancel-invoice-modal').style.display = 'none';
             showSystemModal('Thành công', data.message, 'success');
             if (typeof loadDanhSachDatSanAdmin === 'function' && document.getElementById('datsan-table-body')) {
@@ -10130,4 +7831,654 @@ window.executeAdminCancelInvoice = async function(maHoaDon, needOtp = false, isO
         btn.disabled = false;
         btn.innerHTML = 'Xác nhận Hủy & Hoàn tiền';
     }
+};
+
+// ======================================================
+// MODULE: ADMIN & QUẢN LÝ SÂN - QUẢN LÝ KHUYẾN MÃI (VOUCHER)
+// ======================================================
+let allAdminPromos = [];
+let adminCustomersListCache = [];
+let adminClusterManagersCache = [];
+let editingPromoId = null;
+let pendingDeletePromoId = null;
+
+// Biến quản lý Tìm kiếm, Bộ lọc & Phân trang cho Khuyến mãi
+let currentPromoSearch = '';
+let currentPromoScopeFilter = 'All';
+let currentPromoTypeFilter = 'All';
+let currentPromoStatusFilter = 'All';
+let currentPromoPage = 1;
+const itemsPerPromoPage = 6;
+
+async function renderQuanLyKhuyenMai() {
+    currentPromoSearch = '';
+    currentPromoScopeFilter = 'All';
+    currentPromoTypeFilter = 'All';
+    currentPromoStatusFilter = 'All';
+    currentPromoPage = 1;
+
+    document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+    const menuLink = document.getElementById('menu-khuyenmai');
+    if (menuLink) menuLink.classList.add('active');
+
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user')) || {};
+    const isQuanLy = currentUser.VaiTro === 'QuanLySan';
+    const subDesc = isQuanLy
+        ? 'Xem mã khuyến mãi Toàn hệ thống và quản lý mã giảm giá riêng cho Cụm sân của bạn'
+        : 'Quản lý chương trình khuyến mãi toàn hệ thống, theo từng cụm sân hoặc tặng riêng khách hàng';
+
+    // Quản lý sân được lọc xem: Tất cả, Toàn hệ thống, Cụm sân của tôi (Chỉ Admin mới có mục Tặng khách hàng)
+    const scopeFilterOptionsHtml = isQuanLy ? `
+        <option value="All">Tất cả phạm vi</option>
+        <option value="HE_THONG">Toàn hệ thống</option>
+        <option value="CUM_SAN">Cụm sân của tôi</option>
+    ` : `
+        <option value="All">Tất cả phạm vi</option>
+        <option value="HE_THONG">Toàn hệ thống</option>
+        <option value="CUM_SAN">Theo Cụm sân</option>
+        <option value="KHACH_HANG">Tặng khách hàng</option>
+    `;
+
+    const contentArea = document.querySelector('.admin-content');
+    contentArea.innerHTML = `
+        <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+            <div>
+                <h1 class="page-title">Quản lý Chương trình Khuyến mãi</h1>
+                <p class="text-muted">${subDesc}</p>
+            </div>
+            <button class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px;" onclick="openPromoModal()">
+                <i class="fa-solid fa-plus"></i> Tạo Mã Khuyến Mãi
+            </button>
+        </div>
+
+        <div class="panel">
+            <!-- Thanh Tìm kiếm & Bộ lọc -->
+            <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; align-items: center;">
+                <div style="position: relative; flex: 1; min-width: 240px;">
+                    <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
+                    <input type="text" id="promo-search-input" class="form-control" style="padding-left: 36px;" placeholder="Tìm theo Mã KM, tên chương trình, cụm sân..." oninput="handlePromoSearch(this.value)">
+                </div>
+                <select class="form-control" style="width: 175px;" onchange="handlePromoScopeFilter(this.value)">
+                    ${scopeFilterOptionsHtml}
+                </select>
+                <select class="form-control" style="width: 170px;" onchange="handlePromoTypeFilter(this.value)">
+                    <option value="All">Tất cả loại giảm</option>
+                    <option value="PhanTram">Giảm theo %</option>
+                    <option value="CoDinh">Giảm tiền cố định</option>
+                </select>
+                <select class="form-control" style="width: 175px;" onchange="handlePromoStatusFilter(this.value)">
+                    <option value="All">Tất cả trạng thái</option>
+                    <option value="DangApDung">Đang áp dụng</option>
+                    <option value="HetHan">Hết hạn / Khóa</option>
+                </select>
+            </div>
+
+            <!-- Bảng dữ liệu -->
+            <div class="table-responsive" style="min-height: 340px;">
+                <table class="admin-table" style="min-width: 1050px;">
+                    <thead style="background: #F8FAFC;">
+                        <tr>
+                            <th style="white-space: nowrap; width: 95px;">Mã KM</th>
+                            <th style="min-width: 220px;">Tên Chương Trình</th>
+                            <th style="white-space: nowrap;">Mức Giảm</th>
+                            <th style="white-space: nowrap;">Đơn Tối Thiểu</th>
+                            <th style="white-space: nowrap;">Phạm Vi Áp Dụng</th>
+                            <th style="text-align: center; white-space: nowrap;">Số Lượng Còn</th>
+                            <th style="white-space: nowrap;">Thời Hạn</th>
+                            <th style="text-align: center; white-space: nowrap;">Trạng Thái</th>
+                            <th style="text-align: center; white-space: nowrap; width: 130px;">Hành Động</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-promo-tbody">
+                        <tr><td colspan="9" class="text-center" style="padding: 40px; text-align: center;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải danh sách khuyến mãi...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Phân trang -->
+            <div id="admin-promo-pagination" style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);"></div>
+        </div>
+    `;
+
+    loadAdminPromosData();
+}
+
+window.handlePromoSearch = function(val) {
+    currentPromoSearch = val.toLowerCase().trim();
+    currentPromoPage = 1;
+    applyPromoFiltersAndRender();
+};
+
+window.handlePromoScopeFilter = function(val) {
+    currentPromoScopeFilter = val;
+    currentPromoPage = 1;
+    applyPromoFiltersAndRender();
+};
+
+window.handlePromoTypeFilter = function(val) {
+    currentPromoTypeFilter = val;
+    currentPromoPage = 1;
+    applyPromoFiltersAndRender();
+};
+
+window.handlePromoStatusFilter = function(val) {
+    currentPromoStatusFilter = val;
+    currentPromoPage = 1;
+    applyPromoFiltersAndRender();
+};
+
+async function loadAdminPromosData() {
+    const tbody = document.getElementById('admin-promo-tbody');
+    if (!tbody) return;
+
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user')) || {};
+    const isAdmin = currentUser.VaiTro === 'Admin';
+
+    try {
+        const promoRes = await fetch(`${API_BASE_URL}/admin/khuyen-mai`);
+        const promoJson = await promoRes.json();
+
+        if (isAdmin) {
+            const usersRes = await fetch(`${API_BASE_URL}/admin/khach-hang`);
+            const usersJson = await usersRes.json();
+            if (usersJson.success) {
+                adminCustomersListCache = (usersJson.data || []).filter(u => u.VaiTro === 'KhachHang');
+            }
+        }
+
+        if (promoJson.success) {
+            allAdminPromos = promoJson.data || [];
+            adminClusterManagersCache = promoJson.danh_sach_quan_ly_cum || [];
+            applyPromoFiltersAndRender();
+        }
+    } catch (e) {
+        if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger" style="padding: 30px; text-align: center;">Lỗi kết nối máy chủ!</td></tr>`;
+        }
+    }
+}
+
+function applyPromoFiltersAndRender() {
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user')) || {};
+    const isQuanLy = currentUser.VaiTro === 'QuanLySan';
+    const myCumSan = String(currentUser.MaCumSan || currentUser.ID_CumSan || '');
+
+    const filtered = allAdminPromos.filter(km => {
+        const phamVi = km.pham_vi || (!km.MaNguoiDung ? 'HE_THONG' : (km.nguoi_dung?.VaiTro === 'QuanLySan' ? 'CUM_SAN' : 'KHACH_HANG'));
+
+        // Quản lý sân chỉ xem được mã Toàn hệ thống (HE_THONG) và mã Cụm sân của mình (CUM_SAN)
+        if (isQuanLy) {
+            if (phamVi === 'KHACH_HANG') return false;
+            if (phamVi === 'CUM_SAN' && String(km.ma_cum_san_ap_dung || km.nguoi_dung?.MaCumSan) !== myCumSan) {
+                return false;
+            }
+        }
+
+        const matchScope = (currentPromoScopeFilter === 'All' || phamVi === currentPromoScopeFilter);
+        const matchType = (currentPromoTypeFilter === 'All' || km.LoaiKhuyenMai === currentPromoTypeFilter);
+        const matchStatus = (currentPromoStatusFilter === 'All' || km.TrangThai === currentPromoStatusFilter);
+
+        const maStr = String(km.MaKhuyenMai || '').toLowerCase();
+        const tenStr = String(km.TenKhuyenMai || '').toLowerCase();
+        const moTaStr = String(km.MoTa || '').toLowerCase();
+        const doiTuongStr = String(km.ten_cum_san_ap_dung || km.nguoi_dung?.HoTen || '').toLowerCase();
+
+        const matchSearch = currentPromoSearch === '' ||
+            maStr.includes(currentPromoSearch) ||
+            tenStr.includes(currentPromoSearch) ||
+            moTaStr.includes(currentPromoSearch) ||
+            doiTuongStr.includes(currentPromoSearch);
+
+        return matchScope && matchType && matchStatus && matchSearch;
+    });
+
+    const totalPages = Math.ceil(filtered.length / itemsPerPromoPage) || 1;
+    if (currentPromoPage > totalPages) currentPromoPage = totalPages;
+    const startIdx = (currentPromoPage - 1) * itemsPerPromoPage;
+    const pageData = filtered.slice(startIdx, startIdx + itemsPerPromoPage);
+
+    renderAdminPromosTable(pageData);
+    renderAdminPromosPagination(totalPages);
+}
+
+function renderAdminPromosTable(data) {
+    const tbody = document.getElementById('admin-promo-tbody');
+    if (!tbody) return;
+
+    if (data.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted" style="padding: 45px; text-align: center;">Không tìm thấy chương trình khuyến mãi nào phù hợp.</td></tr>`;
+        return;
+    }
+
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user')) || {};
+    const isQuanLy = currentUser.VaiTro === 'QuanLySan';
+    const myCumSan = String(currentUser.MaCumSan || currentUser.ID_CumSan || '');
+
+    tbody.innerHTML = data.map(km => {
+        const isPercent = km.LoaiKhuyenMai === 'PhanTram';
+        const giaTriStr = isPercent
+            ? `<div style="white-space: nowrap;"><strong style="color: #15803d; font-size: 0.92rem;">Giảm ${Number(km.GiaTri)}%</strong></div>
+               <div style="font-size: 0.76rem; color: #64748b; white-space: nowrap;">Tối đa: ${Number(km.GiaTriToiDa).toLocaleString('vi-VN')}đ</div>`
+            : `<div style="white-space: nowrap;"><strong style="color: #1d4ed8; font-size: 0.92rem;">-${Number(km.GiaTri).toLocaleString('vi-VN')}đ</strong></div>
+               <div style="font-size: 0.76rem; color: #64748b; white-space: nowrap;">Mức cố định</div>`;
+
+        let doiTuongHtml = '';
+        const phamVi = km.pham_vi || (!km.MaNguoiDung ? 'HE_THONG' : (km.nguoi_dung?.VaiTro === 'QuanLySan' ? 'CUM_SAN' : 'KHACH_HANG'));
+
+        if (phamVi === 'HE_THONG') {
+            doiTuongHtml = `<span style="background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; display: inline-block; white-space: nowrap;">Toàn hệ thống</span>`;
+        } else if (phamVi === 'CUM_SAN') {
+            const tenCS = km.ten_cum_san_ap_dung || km.nguoi_dung?.cum_san?.TenCumSan || ('Cụm sân #' + (km.nguoi_dung?.MaCumSan || ''));
+            doiTuongHtml = `<span style="background: #fffbeb; color: #b45309; border: 1px solid #fde68a; padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; display: inline-block; white-space: nowrap;">${tenCS}</span>`;
+        } else {
+            doiTuongHtml = `<span style="background: #faf5ff; color: #7e22ce; border: 1px solid #e9d5ff; padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; display: inline-block; white-space: nowrap;">KH: ${km.nguoi_dung?.HoTen || km.MaNguoiDung}</span>`;
+        }
+
+        const startStr = km.NgayBatDau ? km.NgayBatDau.substring(0, 10).split('-').reverse().join('/') : '';
+        const endStr = km.NgayKetThuc ? km.NgayKetThuc.substring(0, 10).split('-').reverse().join('/') : '';
+
+        const isActive = km.TrangThai === 'DangApDung';
+        const statusBadge = isActive
+            ? `<span class="badge badge-success" style="white-space: nowrap; display: inline-block;">Đang áp dụng</span>`
+            : `<span class="badge badge-danger" style="white-space: nowrap; display: inline-block;">Hết hạn / Khóa</span>`;
+
+        const conLai = Math.max(0, Number(km.SoLuong) - Number(km.SoLuongDaDung));
+        const safeJson = JSON.stringify(km).replace(/'/g, "\\'");
+        const safeTenKM = (km.TenKhuyenMai || '').replace(/'/g, "\\'");
+
+        // Quản lý sân chỉ được Sửa/Xóa mã của Cụm sân mình; với mã Toàn hệ thống chỉ được xem
+        let canModify = true;
+        if (isQuanLy) {
+            if (phamVi !== 'CUM_SAN' || String(km.ma_cum_san_ap_dung || km.nguoi_dung?.MaCumSan) !== myCumSan) {
+                canModify = false;
+            }
+        }
+
+        const actionHtml = canModify
+            ? `<div style="display: inline-flex; gap: 6px; align-items: center;">
+                    <button type="button" class="action-btn" style="white-space: nowrap;" onclick='openPromoModal(${safeJson})'>
+                        <i class="fa-solid fa-pen-to-square"></i> Sửa
+                    </button>
+                    <button type="button" class="action-btn" style="color: #ef4444; border-color: #fecaca; background: #fef2f2; white-space: nowrap;" onclick="openDeletePromoConfirmModal('${km.MaKhuyenMai}', '${safeTenKM}')">
+                        <i class="fa-solid fa-trash-can"></i> Xóa
+                    </button>
+               </div>`
+            : `<span style="font-size: 0.78rem; color: #94a3b8; font-weight: 600; white-space: nowrap;"><i class="fa-solid fa-lock"></i> Chỉ xem</span>`;
+
+        return `
+            <tr>
+                <td style="white-space: nowrap;">
+                    <span style="font-family: monospace; font-weight: 700; color: #334155; background: #f1f5f9; border: 1px solid #e2e8f0; padding: 4px 8px; border-radius: 6px; font-size: 0.86rem; display: inline-block;">#${km.MaKhuyenMai}</span>
+                </td>
+                <td>
+                    <div style="font-weight: 700; color: #0f172a; font-size: 0.92rem; line-height: 1.35;">${km.TenKhuyenMai}</div>
+                    ${km.MoTa ? `<div style="font-size: 0.8rem; color: #64748b; margin-top: 2px; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${km.MoTa}">${km.MoTa}</div>` : ''}
+                </td>
+                <td style="white-space: nowrap;">${giaTriStr}</td>
+                <td style="white-space: nowrap;"><strong style="color: #334155;">${Number(km.GiaTriHoaDonToiThieu).toLocaleString('vi-VN')}đ</strong></td>
+                <td style="white-space: nowrap;">${doiTuongHtml}</td>
+                <td style="text-align: center; white-space: nowrap;">
+                    <div style="font-weight: 700; color: ${conLai > 0 ? '#047857' : '#dc2626'}; font-size: 0.92rem;">${conLai} <span style="color: #94a3b8; font-weight: 500;">/ ${km.SoLuong}</span></div>
+                    <div style="font-size: 0.74rem; color: #64748b;">Đã dùng: ${km.SoLuongDaDung}</div>
+                </td>
+                <td style="font-size: 0.84rem; color: #475569; white-space: nowrap;">
+                    ${startStr} &rarr; ${endStr}
+                </td>
+                <td style="text-align: center; white-space: nowrap;">${statusBadge}</td>
+                <td style="text-align: center; white-space: nowrap;">${actionHtml}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function renderAdminPromosPagination(totalPages) {
+    const div = document.getElementById('admin-promo-pagination');
+    if (!div) return;
+    if (totalPages <= 1) {
+        div.innerHTML = '';
+        return;
+    }
+
+    let html = `<button class="btn-outline-sm" ${currentPromoPage === 1 ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''} onclick="currentPromoPage--; applyPromoFiltersAndRender()"><i class="fa-solid fa-chevron-left"></i></button>`;
+
+    for (let i = 1; i <= totalPages; i++) {
+        const isActive = i === currentPromoPage;
+        html += `<button class="${isActive ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="currentPromoPage=${i}; applyPromoFiltersAndRender()">${i}</button>`;
+    }
+
+    html += `<button class="btn-outline-sm" ${currentPromoPage === totalPages ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''} onclick="currentPromoPage++; applyPromoFiltersAndRender()"><i class="fa-solid fa-chevron-right"></i></button>`;
+    div.innerHTML = html;
+}
+
+window.togglePromoTypeInput = function() {
+    const type = document.getElementById('km-loai')?.value || 'PhanTram';
+    const maxGroup = document.getElementById('km-group-toida');
+    const valInput = document.getElementById('km-giatri');
+    const maxInput = document.getElementById('km-toida');
+
+    if (type === 'CoDinh') {
+        if (maxGroup) maxGroup.style.display = 'none';
+        if (maxInput && valInput) maxInput.value = valInput.value || 0;
+    } else {
+        if (maxGroup) maxGroup.style.display = 'block';
+    }
+};
+
+window.togglePromoTargetScope = function() {
+    const scope = document.getElementById('km-phamvi')?.value || 'HE_THONG';
+    const groupCumSan = document.getElementById('km-group-cumsan');
+    const groupKhachHang = document.getElementById('km-group-khachhang');
+
+    if (groupCumSan) groupCumSan.style.display = (scope === 'CUM_SAN') ? 'block' : 'none';
+    if (groupKhachHang) groupKhachHang.style.display = (scope === 'KHACH_HANG') ? 'block' : 'none';
+};
+
+window.openPromoModal = function(km = null) {
+    editingPromoId = km ? km.MaKhuyenMai : null;
+
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user')) || {};
+    const isAdmin = currentUser.VaiTro === 'Admin';
+    const myManagerId = currentUser.MaNguoiDung || currentUser.ID;
+
+    let modal = document.getElementById('admin-promo-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'admin-promo-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 10000; align-items: center; justify-content: center;';
+        document.body.appendChild(modal);
+    }
+
+    const todayStr = new Date().toISOString().substring(0, 10);
+    const nextMonth = new Date();
+    nextMonth.setDate(nextMonth.getDate() + 30);
+    const nextMonthStr = nextMonth.toISOString().substring(0, 10);
+
+    let currentScope = isAdmin ? 'HE_THONG' : 'CUM_SAN';
+    if (km && isAdmin) {
+        currentScope = km.pham_vi || (!km.MaNguoiDung ? 'HE_THONG' : (km.nguoi_dung?.VaiTro === 'QuanLySan' ? 'CUM_SAN' : 'KHACH_HANG'));
+    }
+
+    // Chỉ Admin mới được chọn 3 phạm vi (bao gồm tặng riêng cá nhân); Quản lý sân mặc định cố định là Cụm sân của mình
+    let scopeSectionHtml = '';
+    if (isAdmin) {
+        const clusterOpts = adminClusterManagersCache.map(ql => {
+            const maQL = ql.MaNguoiDung || ql.ID;
+            const tenCS = ql.cum_san ? ql.cum_san.TenCumSan : ('Cụm sân #' + ql.MaCumSan);
+            const selected = (km && km.MaNguoiDung === maQL) ? 'selected' : '';
+            return `<option value="${maQL}" ${selected}>${tenCS} (Quản lý: ${ql.HoTen} - #${maQL})</option>`;
+        }).join('');
+
+        const customerOptions = `<option value="">-- Chọn khách hàng nhận mã --</option>` +
+            adminCustomersListCache.map(c => {
+                const ma = c.MaNguoiDung || c.ID;
+                const selected = (km && km.MaNguoiDung === ma) ? 'selected' : '';
+                return `<option value="${ma}" ${selected}>${c.HoTen} (${c.SoDienThoai} - Mã: ${ma})</option>`;
+            }).join('');
+
+        scopeSectionHtml = `
+            <div class="form-group">
+                <label>Phạm vi áp dụng khuyến mãi <span style="color:red;">*</span></label>
+                <select id="km-phamvi" class="form-control" onchange="togglePromoTargetScope()" style="font-weight: 600;">
+                    <option value="HE_THONG" ${currentScope === 'HE_THONG' ? 'selected' : ''}>Toàn hệ thống (Áp dụng mọi cụm sân)</option>
+                    <option value="CUM_SAN" ${currentScope === 'CUM_SAN' ? 'selected' : ''}>Riêng cho từng Cụm sân</option>
+                    <option value="KHACH_HANG" ${currentScope === 'KHACH_HANG' ? 'selected' : ''}>Tặng riêng cho 1 Khách hàng cá nhân</option>
+                </select>
+            </div>
+
+            <div class="form-group" id="km-group-cumsan" style="display: none;">
+                <label>Chọn Cụm sân áp dụng <span style="color:red;">*</span></label>
+                <select id="km-cumsan-manager" class="form-control">
+                    <option value="">-- Chọn Cụm sân được hưởng mã --</option>
+                    ${clusterOpts}
+                </select>
+            </div>
+
+            <div class="form-group" id="km-group-khachhang" style="display: none;">
+                <label>Chọn Khách hàng được tặng riêng <span style="color:red;">*</span></label>
+                <select id="km-nguoidung" class="form-control">
+                    ${customerOptions}
+                </select>
+                <small style="color: #64748b;">Hệ thống sẽ tự động gửi thông báo ưu đãi đến khách hàng được chọn.</small>
+            </div>
+        `;
+    } else {
+        // Quản lý sân: Mặc định khóa cứng phạm vi là Cụm sân của mình
+        scopeSectionHtml = `
+            <div class="form-group">
+                <label>Phạm vi áp dụng khuyến mãi</label>
+                <input type="text" class="form-control" value="Áp dụng riêng cho Cụm sân của bạn" disabled style="background: #f1f5f9; font-weight: 600; color: var(--primary);">
+                <input type="hidden" id="km-phamvi" value="CUM_SAN">
+                <input type="hidden" id="km-cumsan-manager" value="${myManagerId}">
+            </div>
+        `;
+    }
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 560px; width: 94%;">
+            <div class="modal-header">
+                <h3>${km ? `Chỉnh sửa Khuyến mãi #${km.MaKhuyenMai}` : 'Tạo Chương trình Khuyến mãi mới'}</h3>
+                <i class="fa-solid fa-xmark" style="cursor: pointer;" onclick="document.getElementById('admin-promo-modal').style.display='none'"></i>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Tên chương trình khuyến mãi <span style="color:red;">*</span></label>
+                    <input type="text" id="km-ten" class="form-control" placeholder="VD: Giảm 10% đặt sân cuối tuần" value="${km ? km.TenKhuyenMai : ''}">
+                </div>
+
+                ${scopeSectionHtml}
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                    <div class="form-group">
+                        <label>Loại khuyến mãi <span style="color:red;">*</span></label>
+                        <select id="km-loai" class="form-control" onchange="togglePromoTypeInput()">
+                            <option value="PhanTram" ${(!km || km.LoaiKhuyenMai === 'PhanTram') ? 'selected' : ''}>Theo Phần trăm (%)</option>
+                            <option value="CoDinh" ${(km && km.LoaiKhuyenMai === 'CoDinh') ? 'selected' : ''}>Số tiền cố định (VNĐ)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Giá trị giảm (% hoặc VNĐ) <span style="color:red;">*</span></label>
+                        <input type="number" id="km-giatri" class="form-control" placeholder="VD: 10 hoặc 50000" value="${km ? Number(km.GiaTri) : ''}">
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                    <div class="form-group" id="km-group-toida">
+                        <label>Giảm tối đa (VNĐ)</label>
+                        <input type="number" id="km-toida" class="form-control" placeholder="VD: 100000" value="${km ? Number(km.GiaTriToiDa) : '100000'}">
+                    </div>
+                    <div class="form-group">
+                        <label>Giá trị đơn tối thiểu (VNĐ) <span style="color:red;">*</span></label>
+                        <input type="number" id="km-toithieu" class="form-control" placeholder="VD: 300000" value="${km ? Number(km.GiaTriHoaDonToiThieu) : '0'}">
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label>Tổng số lượng mã <span style="color:red;">*</span></label>
+                        <input type="number" id="km-soluong" class="form-control" min="1" value="${km ? km.SoLuong : '50'}">
+                    </div>
+                    <div class="form-group">
+                        <label>Ngày bắt đầu <span style="color:red;">*</span></label>
+                        <input type="date" id="km-batdau" class="form-control" value="${km && km.NgayBatDau ? km.NgayBatDau.substring(0, 10) : todayStr}">
+                    </div>
+                    <div class="form-group">
+                        <label>Ngày kết thúc <span style="color:red;">*</span></label>
+                        <input type="date" id="km-ketthuc" class="form-control" value="${km && km.NgayKetThuc ? km.NgayKetThuc.substring(0, 10) : nextMonthStr}">
+                    </div>
+                </div>
+
+                ${km ? `
+                <div class="form-group">
+                    <label>Trạng thái</label>
+                    <select id="km-trangthai" class="form-control">
+                        <option value="DangApDung" ${km.TrangThai === 'DangApDung' ? 'selected' : ''}>Đang áp dụng</option>
+                        <option value="HetHan" ${km.TrangThai === 'HetHan' ? 'selected' : ''}>Hết hạn / Tạm ngưng</option>
+                    </select>
+                </div>` : ''}
+
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label>Mô tả điều kiện</label>
+                    <textarea id="km-mota" class="form-control" rows="2" placeholder="VD: Áp dụng cho đơn đặt sân từ 300.000đ trở lên...">${km && km.MoTa ? km.MoTa : ''}</textarea>
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn-outline" style="width: auto; padding: 9px 20px;" onclick="document.getElementById('admin-promo-modal').style.display='none'">Hủy bỏ</button>
+                <button type="button" id="btn-save-promo" class="btn-primary" style="width: auto; padding: 9px 22px;" onclick="savePromoAdmin()">Lưu Khuyến Mãi</button>
+            </div>
+        </div>
+    `;
+
+    togglePromoTypeInput();
+    if (isAdmin) togglePromoTargetScope();
+    modal.style.display = 'flex';
+};
+
+window.savePromoAdmin = async function() {
+    const ten = document.getElementById('km-ten')?.value.trim();
+    const phamVi = document.getElementById('km-phamvi')?.value || 'CUM_SAN';
+    const loai = document.getElementById('km-loai')?.value || 'PhanTram';
+    const giaTri = Number(document.getElementById('km-giatri')?.value || 0);
+    const toiDa = (loai === 'CoDinh') ? giaTri : Number(document.getElementById('km-toida')?.value || 0);
+    const toiThieu = Number(document.getElementById('km-toithieu')?.value || 0);
+    const soLuong = Number(document.getElementById('km-soluong')?.value || 1);
+    const batDau = document.getElementById('km-batdau')?.value;
+    const ketThuc = document.getElementById('km-ketthuc')?.value;
+    const trangThai = document.getElementById('km-trangthai')?.value || 'DangApDung';
+    const moTa = document.getElementById('km-mota')?.value.trim() || '';
+
+    if (!ten || giaTri <= 0 || !batDau || !ketThuc) {
+        return showSystemModal('Thiếu thông tin', 'Vui lòng nhập đầy đủ Tên khuyến mãi, Giá trị giảm và Thời hạn áp dụng!', 'error');
+    }
+
+    let maND = null;
+    if (phamVi === 'CUM_SAN') {
+        maND = document.getElementById('km-cumsan-manager')?.value || null;
+        if (!maND) {
+            return showSystemModal('Chưa chọn Cụm sân', 'Vui lòng chọn Cụm sân áp dụng khuyến mãi!', 'error');
+        }
+    } else if (phamVi === 'KHACH_HANG') {
+        maND = document.getElementById('km-nguoidung')?.value || null;
+        if (!maND) {
+            return showSystemModal('Chưa chọn Khách hàng', 'Vui lòng chọn Khách hàng được tặng mã khuyến mãi!', 'error');
+        }
+    }
+
+    const btn = document.getElementById('btn-save-promo');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang lưu...';
+
+    const url = editingPromoId
+        ? `${API_BASE_URL}/admin/khuyen-mai/${editingPromoId}`
+        : `${API_BASE_URL}/admin/khuyen-mai`;
+    const method = editingPromoId ? 'PUT' : 'POST';
+
+    try {
+        const res = await fetch(url, {
+            method,
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                loai_doi_tuong: phamVi,
+                TenKhuyenMai: ten,
+                MaNguoiDung: maND,
+                LoaiKhuyenMai: loai,
+                GiaTri: giaTri,
+                GiaTriToiDa: toiDa,
+                GiaTriHoaDonToiThieu: toiThieu,
+                SoLuong: soLuong,
+                NgayBatDau: batDau + ' 00:00:00',
+                NgayKetThuc: ketThuc + ' 23:59:59',
+                TrangThai: trangThai,
+                MoTa: moTa
+            })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            document.getElementById('admin-promo-modal').style.display = 'none';
+            showSystemModal('Thành công', data.message, 'success');
+            loadAdminPromosData();
+        } else {
+            showSystemModal('Lỗi', data.message || 'Không thể lưu khuyến mãi!', 'error');
+        }
+    } catch (e) {
+        showSystemModal('Lỗi', 'Mất kết nối máy chủ!', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Lưu Khuyến Mãi';
+    }
+};
+
+window.openDeletePromoConfirmModal = function(maKhuyenMai, tenKhuyenMai = '') {
+    pendingDeletePromoId = maKhuyenMai;
+
+    let modal = document.getElementById('admin-delete-promo-confirm-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'admin-delete-promo-confirm-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 10050; align-items: center; justify-content: center;';
+        modal.onclick = function(e) {
+            if (e.target === modal) closeDeletePromoConfirmModal();
+        };
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 420px; width: 92%; text-align: center; padding: 28px 24px; border-radius: 16px;">
+            <div style="width: 64px; height: 64px; border-radius: 50%; background: #fef2f2; color: #ef4444; border: 2px solid #fecaca; display: inline-flex; align-items: center; justify-content: center; font-size: 1.8rem; margin-bottom: 14px;">
+                <i class="fa-solid fa-trash-can"></i>
+            </div>
+            <h3 style="margin: 0 0 10px 0; font-size: 1.25rem; font-weight: 800; color: #0f172a;">Xác nhận xóa khuyến mãi</h3>
+            <p style="color: #475569; font-size: 0.92rem; line-height: 1.6; margin: 0 0 22px 0;">
+                Bạn có chắc chắn muốn xóa mã khuyến mãi <strong style="color: #0f172a;">#${maKhuyenMai}</strong>${tenKhuyenMai ? ` (${tenKhuyenMai})` : ''} không?
+            </p>
+            <div style="display: flex; justify-content: center; gap: 12px;">
+                <button type="button" class="btn-outline" style="flex: 1; padding: 10px 18px; border-radius: 10px;" onclick="closeDeletePromoConfirmModal()">Hủy bỏ</button>
+                <button type="button" id="btn-confirm-delete-promo" class="btn-primary" style="flex: 1; padding: 10px 18px; border-radius: 10px; background: #ef4444; border-color: #ef4444;" onclick="executeDeletePromoAdmin()">
+                    <i class="fa-solid fa-check" style="margin-right: 5px;"></i> Đồng ý xóa
+                </button>
+            </div>
+        </div>
+    `;
+
+    modal.style.display = 'flex';
+};
+
+window.closeDeletePromoConfirmModal = function() {
+    const modal = document.getElementById('admin-delete-promo-confirm-modal');
+    if (modal) modal.style.display = 'none';
+    pendingDeletePromoId = null;
+};
+
+window.executeDeletePromoAdmin = async function() {
+    if (!pendingDeletePromoId) return;
+
+    const btn = document.getElementById('btn-confirm-delete-promo');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xóa...';
+    }
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/admin/khuyen-mai/${pendingDeletePromoId}`, {
+            method: 'DELETE',
+            headers: { 'Accept': 'application/json' }
+        });
+        const data = await res.json();
+        closeDeletePromoConfirmModal();
+
+        if (res.ok && data.success) {
+            showSystemModal('Thành công', data.message, 'success');
+            loadAdminPromosData();
+        } else {
+            showSystemModal('Lỗi', data.message || 'Không thể xóa!', 'error');
+        }
+    } catch (e) {
+        closeDeletePromoConfirmModal();
+        showSystemModal('Lỗi', 'Mất kết nối máy chủ!', 'error');
+    }
+};
+
+window.deletePromoAdmin = function(maKhuyenMai, tenKhuyenMai = '') {
+    openDeletePromoConfirmModal(maKhuyenMai, tenKhuyenMai);
 };

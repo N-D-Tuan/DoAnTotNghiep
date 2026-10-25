@@ -66,6 +66,11 @@ class NguoiDung extends Authenticatable
         return $this->hasMany(HoaDonDatSan::class, 'MaNguoiDung', 'MaNguoiDung');
     }
 
+    public function khuyenMais()
+    {
+        return $this->hasMany(KhuyenMai::class, 'MaNguoiDung', 'MaNguoiDung');
+    }
+
     public function giaoDichs()
     {
         return $this->hasMany(GiaoDich::class, 'MaNguoiDung', 'MaNguoiDung');
@@ -96,21 +101,6 @@ class NguoiDung extends Authenticatable
         return $this->hasMany(LichLamViec::class, 'MaNhanVien', 'MaNguoiDung');
     }
 
-    public function bangLuongs()
-    {
-        return $this->hasMany(BangLuong::class, 'MaNhanVien', 'MaNguoiDung');
-    }
-
-    public function banGiaoCasNhan()
-    {
-        return $this->hasMany(BanGiaoCa::class, 'MaNhanVienNhan', 'MaNguoiDung');
-    }
-
-    public function banGiaoCasGiao()
-    {
-        return $this->hasMany(BanGiaoCa::class, 'MaNhanVienGiao', 'MaNguoiDung');
-    }
-
     public function datSansXuLy()
     {
         return $this->hasMany(DatSan::class, 'MaNhanVienXuLy', 'MaNguoiDung');
@@ -119,16 +109,6 @@ class NguoiDung extends Authenticatable
     public function giaoDichsXuLy()
     {
         return $this->hasMany(GiaoDich::class, 'MaNhanVienXuLy', 'MaNguoiDung');
-    }
-
-    public function hoaDonBanHangs()
-    {
-        return $this->hasMany(HoaDonBanHang::class, 'MaNhanVien', 'MaNguoiDung');
-    }
-
-    public function phieuNhapHangs()
-    {
-        return $this->hasMany(PhieuNhapHang::class, 'MaNhanVien', 'MaNguoiDung');
     }
 
     public function danhGias()

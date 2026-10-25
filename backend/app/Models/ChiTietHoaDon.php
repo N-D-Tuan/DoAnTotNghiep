@@ -8,31 +8,24 @@ class ChiTietHoaDon extends Model
 {
     protected $table = 'ChiTietHoaDon';
     public $incrementing = false;
-    protected $primaryKey = null;
     protected $keyType = 'string';
     public $timestamps = false;
 
     protected $fillable = [
-        'MaHoaDon',
-        'MaSanPham',
-        'SoLuong',
-        'DonGia'
+        'MaHoaDonDatSan',
+        'MaDatSan',
+        'DonGia',
     ];
 
-    protected $appends = ['ThanhTien'];
-
-    public function getThanhTienAttribute()
+    // Quan hệ N-1 với HoaDonDatSan
+    public function hoaDonDatSan()
     {
-        return $this->SoLuong * $this->DonGia;
+        return $this->belongsTo(HoaDonDatSan::class, 'MaHoaDonDatSan', 'MaHoaDonDatSan');
     }
 
-    public function hoaDon()
+    // Quan hệ 1-1 với DatSan
+    public function datSan()
     {
-        return $this->belongsTo(HoaDonBanHang::class, 'MaHoaDon', 'MaHoaDonBanHang');
-    }
-
-    public function sanPham()
-    {
-        return $this->belongsTo(SanPham::class, 'MaSanPham', 'MaSanPham');
+        return $this->belongsTo(DatSan::class, 'MaDatSan', 'MaDatSan');
     }
 }
