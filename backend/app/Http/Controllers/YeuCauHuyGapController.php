@@ -96,6 +96,9 @@ class YeuCauHuyGapController extends Controller
 
     public function xuLyYeuCau(Request $request, $id)
     {
+        $userDangNhap = auth()->user();
+        $maNhanVienXuLy = $userDangNhap ? $userDangNhap->MaNguoiDung : null;
+
         $request->validate([
             'trang_thai' => 'required|in:DaDuyet,TuChoi',
             'ly_do_huy'  => 'required_if:trang_thai,TuChoi|string|nullable'
@@ -105,7 +108,8 @@ class YeuCauHuyGapController extends Controller
 
         DB::beginTransaction();
         try {
-            $yeuCau = YeuCauHuyGap::with('datSan.sanBong')->find($id);
+            // Nạp sẵn cả sanBong và chiTietHoaDon để lấy MaHoaDonDatSan chính xác
+            $yeuCau = YeuCauHuyGap::with(['datSan.sanBong', 'datSan.chiTietHoaDon'])->find($id);
             if (!$yeuCau || $yeuCau->TrangThai !== 'ChoDuyet') {
                 return response()->json(['success' => false, 'message' => 'Yêu cầu không tồn tại hoặc đã được xử lý trước đó!']);
             }
@@ -121,80 +125,114 @@ class YeuCauHuyGapController extends Controller
 
             if ($request->trang_thai === 'DaDuyet') {
                 if ($datSan->MaGiaiDau != null) {
-                    $danhSachDat = DatSan::where('MaGiaiDau', $datSan->MaGiaiDau)
+                    // 1. Lấy danh sách các trận đang Đã cọc thuộc Giải đấu kèm chiTietHoaDon
+                    $danhSachDat = DatSan::with('chiTietHoaDon')
+                                         ->where('MaGiaiDau', $datSan->MaGiaiDau)
                                          ->where('TrangThai', 'DaCoc')
                                          ->get();
-                    $tongHoan = $danhSachDat->sum('TienCoc');
-                    $maHoaDonIds = $danhSachDat->pluck('MaHoaDonDatSan')->filter()->unique();
 
+                    $tongHoan = (float) $danhSachDat->sum('TienCoc');
+
+                    // Lấy toàn bộ MaHoaDonDatSan liên quan (từ accessor hoặc trực tiếp từ quan hệ chiTietHoaDon)
+                    $maHoaDonIds = $danhSachDat->map(function ($item) {
+                        return $item->MaHoaDonDatSan ?? $item->chiTietHoaDon?->MaHoaDonDatSan;
+                    })->filter()->unique()->values();
+
+                    // 2. Cập nhật trạng thái các trận Đã cọc sang Đã hủy và lưu MaNhanVienXuLy
                     DatSan::where('MaGiaiDau', $datSan->MaGiaiDau)
                           ->where('TrangThai', 'DaCoc')
-                          ->update(['TrangThai' => 'DaHuy']);
+                          ->update([
+                              'TrangThai'      => 'DaHuy',
+                              'MaNhanVienXuLy' => $maNhanVienXuLy
+                          ]);
 
-                    $daCoTranHoanThanh = DatSan::where('MaGiaiDau', $datSan->MaGiaiDau)
-                                               ->where('TrangThai', 'HoanThanh')
-                                               ->exists();
+                    // 3. Đồng bộ trạng thái Giải đấu (giống bên DatSanController)
+                    $coTranDaXong = DatSan::where('MaGiaiDau', $datSan->MaGiaiDau)
+                                          ->whereIn('TrangThai', ['HoanThanh', 'KhongDen'])
+                                          ->exists();
                     GiaiDau::where('MaGiaiDau', $datSan->MaGiaiDau)->update([
-                        'TrangThai' => $daCoTranHoanThanh ? 'HoanThanh' : 'DaHuy'
+                        'TrangThai' => $coTranDaXong ? 'HoanThanh' : 'DaHuy'
                     ]);
 
+                    // 4. Đồng bộ lại toàn bộ các Hóa đơn đặt sân liên quan (Tính lại Tổng tiền, VAT, Khuyến mãi, Trạng thái HĐ)
                     foreach ($maHoaDonIds as $maHD) {
                         \App\Http\Controllers\DatSanController::dongBoHoaDonDatSan($maHD);
                     }
 
-                    if ($tongHoan > 0) {
-                        $soDuSau = $user->SoDuVi + $tongHoan;
+                    // 5. Hoàn tiền cọc vào ví cho khách hàng
+                    if ($tongHoan > 0 && $user) {
+                        $soDuTruoc = (float) $user->SoDuVi;
+                        $soDuSau = $soDuTruoc + $tongHoan;
 
                         GiaoDich::create([
-                            'MaNguoiDung'  => $user->MaNguoiDung,
-                            'LoaiGiaoDich' => 'HoanTienHuyGap',
-                            'DongTien'     => 'Cong',
-                            'SoTien'       => $tongHoan,
-                            'SoDuTruoc'    => $user->SoDuVi,
-                            'SoDuSau'      => $soDuSau,
-                            'NoiDung'      => "Hoàn cọc hủy gấp toàn bộ Giải đấu (Admin phê duyệt)"
+                            'MaNguoiDung'    => $user->MaNguoiDung,
+                            'MaNhanVienXuLy' => $maNhanVienXuLy,
+                            'LoaiGiaoDich'   => 'HoanTienHuyGap',
+                            'DongTien'       => 'Cong',
+                            'SoTien'         => $tongHoan,
+                            'SoDuTruoc'      => $soDuTruoc,
+                            'SoDuSau'        => $soDuSau,
+                            'NoiDung'        => "Hoàn cọc hủy gấp toàn bộ Giải đấu (Admin phê duyệt)"
                         ]);
                         $user->update(['SoDuVi' => $soDuSau]);
                     }
                 } else {
-                    $datSan->update(['TrangThai' => 'DaHuy']);
+                    // TRƯỜNG HỢP SÂN PHONG TRÀO LẺ
+                    $maHoaDon = $datSan->MaHoaDonDatSan ?? $datSan->chiTietHoaDon?->MaHoaDonDatSan;
+                    $tienHoan = (float) $datSan->TienCoc;
 
-                    if ($datSan->MaHoaDonDatSan) {
-                        \App\Http\Controllers\DatSanController::dongBoHoaDonDatSan($datSan->MaHoaDonDatSan);
+                    // 1. Cập nhật trạng thái Đặt sân sang Đã hủy và lưu MaNhanVienXuLy
+                    $datSan->update([
+                        'TrangThai'      => 'DaHuy',
+                        'MaNhanVienXuLy' => $maNhanVienXuLy
+                    ]);
+
+                    // 2. Đồng bộ lại Hóa đơn đặt sân (Tính lại Tổng tiền, VAT, Khuyến mãi, Trạng thái HĐ)
+                    if ($maHoaDon) {
+                        \App\Http\Controllers\DatSanController::dongBoHoaDonDatSan($maHoaDon);
                     }
 
-                    $tienHoan = $datSan->TienCoc;
-                    $soDuSau = $user->SoDuVi + $tienHoan;
+                    // 3. Hoàn tiền cọc vào ví cho khách hàng
+                    if ($tienHoan > 0 && $user) {
+                        $soDuTruoc = (float) $user->SoDuVi;
+                        $soDuSau = $soDuTruoc + $tienHoan;
+                        $tenSan = $datSan->sanBong ? $datSan->sanBong->TenSan : 'Sân bóng';
 
-                    GiaoDich::create([
-                        'MaNguoiDung'  => $user->MaNguoiDung,
-                        'LoaiGiaoDich' => 'HoanTienHuyGap',
-                        'DongTien'     => 'Cong',
-                        'SoTien'       => $tienHoan,
-                        'SoDuTruoc'    => $user->SoDuVi,
-                        'SoDuSau'      => $soDuSau,
-                        'NoiDung'      => "Hoàn cọc hủy gấp: Sân " . $datSan->sanBong->TenSan . " (Admin phê duyệt)"
-                    ]);
-                    $user->update(['SoDuVi' => $soDuSau]);
+                        GiaoDich::create([
+                            'MaNguoiDung'    => $user->MaNguoiDung,
+                            'MaNhanVienXuLy' => $maNhanVienXuLy,
+                            'LoaiGiaoDich'   => 'HoanTienHuyGap',
+                            'DongTien'       => 'Cong',
+                            'SoTien'         => $tienHoan,
+                            'SoDuTruoc'      => $soDuTruoc,
+                            'SoDuSau'        => $soDuSau,
+                            'NoiDung'        => "Hoàn cọc hủy gấp: Sân " . $tenSan . " (Admin phê duyệt)"
+                        ]);
+                        $user->update(['SoDuVi' => $soDuSau]);
+                    }
                 }
 
                 $tieuDeTB = "Yêu cầu hủy sân được phê duyệt";
-                $noiDungTB = "Yêu cầu hủy sân gấp của bạn đã được Admin duyệt. Tiền cọc đã được cộng lại vào ví.";
+                $noiDungTB = "Yêu cầu hủy sân gấp của bạn đã được phê duyệt. Tiền cọc đã được cộng lại vào ví.";
             } else {
                 $tieuDeTB = "Yêu cầu hủy sân bị từ chối";
-                $noiDungTB = "Yêu cầu hủy sân gấp của bạn không được Admin chấp thuận. Lý do: " . $request->ly_do_huy . ". Lịch đặt vẫn được giữ nguyên.";
+                $noiDungTB = "Yêu cầu hủy sân gấp của bạn không được chấp thuận. Lý do: " . $request->ly_do_huy . ". Lịch đặt vẫn được giữ nguyên.";
             }
 
-            ThongBao::create([
-                'MaNguoiDung'  => $user->MaNguoiDung,
-                'TieuDe'       => $tieuDeTB,
-                'NoiDung'      => $noiDungTB,
-                'LoaiThongBao' => 'DatSan'
-            ]);
+            if ($user) {
+                ThongBao::create([
+                    'MaNguoiDung'  => $user->MaNguoiDung,
+                    'TieuDe'       => $tieuDeTB,
+                    'NoiDung'      => $noiDungTB,
+                    'LoaiThongBao' => 'DatSan'
+                ]);
+            }
 
             DB::commit();
 
-            broadcast(new \App\Events\UserDataUpdated($user->MaNguoiDung))->toOthers();
+            if ($user) {
+                broadcast(new \App\Events\UserDataUpdated($user->MaNguoiDung))->toOthers();
+            }
             broadcast(new \App\Events\SystemDataUpdated())->toOthers();
             broadcast(new \App\Events\AdminDataUpdated())->toOthers();
 
