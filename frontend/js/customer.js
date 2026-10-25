@@ -2788,54 +2788,78 @@ function applyBookingFiltersAndRender() {
 
     let html = '';
 
-    // LUỒNG 1: TAB PHONG TRÀO (GOM NHÓM THEO HÓA ĐƠN ĐẶT SÂN)
+    // LUỒNG 1: TAB PHONG TRÀO (GOM NHÓM THEO HÓA ĐƠN ĐẶT SÂN TRƯỚC, LỌC THEO TRẠNG THÁI HÓA ĐƠN)
     if (currentBookingTab === 'phong_trao') {
-        const filteredList = allMyBookingsData.filter(item => {
-            if (item.ID_GiaiDau !== null && item.MaGiaiDau !== null) return false;
+        const invoiceGroupsMap = new Map();
 
-            const matchStatus = currentBookingStatus === 'All' || item.TrangThai === currentBookingStatus;
-            const sanBong = item.san_bong ? item.san_bong.TenSan.toLowerCase() : '';
-            const cumSan = (item.san_bong && item.san_bong.cum_san) ? item.san_bong.cum_san.TenCumSan.toLowerCase() : '';
-            const maHD = String(item.MaHoaDonDatSan || '').toLowerCase();
-            const maVe = `pt-${item.MaDatSan || item.ID}`.toLowerCase();
-            const matchSearch = sanBong.includes(currentBookingSearch) || cumSan.includes(currentBookingSearch) || maHD.includes(currentBookingSearch) || maVe.includes(currentBookingSearch);
-            const matchDate = currentBookingDate ? (item.NgayDa === currentBookingDate) : true;
+        allMyBookingsData.forEach(item => {
+            if (item.ID_GiaiDau !== null && item.MaGiaiDau !== null && item.ID_GiaiDau !== undefined) return;
 
-            return matchStatus && matchSearch && matchDate;
+            const key = item.MaHoaDonDatSan || ('LE_' + (item.MaDatSan || item.ID));
+            if (!invoiceGroupsMap.has(key)) {
+                invoiceGroupsMap.set(key, {
+                    maHoaDon: item.MaHoaDonDatSan || null,
+                    hoaDonObj: item.hoa_don_dat_san || item.hoaDonDatSan || null,
+                    matches: []
+                });
+            }
+            const grp = invoiceGroupsMap.get(key);
+            if (!grp.hoaDonObj && (item.hoa_don_dat_san || item.hoaDonDatSan)) {
+                grp.hoaDonObj = item.hoa_don_dat_san || item.hoaDonDatSan;
+            }
+            grp.matches.push(item);
         });
 
-        if (filteredList.length === 0) {
+        const filteredInvoiceGroups = Array.from(invoiceGroupsMap.values()).filter(group => {
+            const hd = group.hoaDonObj;
+            // Sắp xếp các trận trong hóa đơn theo ngày đá và giờ bắt đầu
+            group.matches.sort((a, b) => {
+                const dateCmp = String(a.NgayDa || '').localeCompare(String(b.NgayDa || ''));
+                if (dateCmp !== 0) return dateCmp;
+                const timeA = a.khung_gio?.GioBatDau || '';
+                const timeB = b.khung_gio?.GioBatDau || '';
+                return timeA.localeCompare(timeB);
+            });
+
+            // Xác định trạng thái của Hóa đơn đặt sân
+            const trangThaiHD = hd?.TrangThai || (group.matches.some(m => m.TrangThai === 'DaCoc') ? 'DaCoc' : group.matches[0]?.TrangThai);
+            group.trangThaiHD = trangThaiHD;
+
+            // 1. Lọc theo Trạng thái Hóa đơn đặt sân
+            const matchStatus = currentBookingStatus === 'All' || trangThaiHD === currentBookingStatus;
+
+            // 2. Lọc theo Ngày đá (Giữ nguyên cả hóa đơn nếu có trận trùng ngày)
+            const matchDate = currentBookingDate
+                ? group.matches.some(item => item.NgayDa === currentBookingDate)
+                : true;
+
+            // 3. Lọc theo Từ khóa tìm kiếm
+            const maHD = String(group.maHoaDon || '').toLowerCase();
+            const matchSearch = currentBookingSearch === '' || maHD.includes(currentBookingSearch) || group.matches.some(item => {
+                const sanBong = item.san_bong ? item.san_bong.TenSan.toLowerCase() : '';
+                const cumSan = (item.san_bong && item.san_bong.cum_san) ? item.san_bong.cum_san.TenCumSan.toLowerCase() : '';
+                const maVe = `pt-${item.MaDatSan || item.ID}`.toLowerCase();
+                return sanBong.includes(currentBookingSearch) || cumSan.includes(currentBookingSearch) || maVe.includes(currentBookingSearch);
+            });
+
+            return matchStatus && matchDate && matchSearch;
+        });
+
+        if (filteredInvoiceGroups.length === 0) {
             container.innerHTML = `<div class="schedule-container" style="padding: 50px 20px; text-align: center; background: white; border-radius: 16px; border: 1px dashed #cbd5e1;"><i class="fa-regular fa-calendar-xmark" style="font-size: 3rem; color: #cbd5e1; margin-bottom: 14px;"></i><p style="color: var(--text-muted); font-size: 1rem; font-weight: 500;">Không có hóa đơn đặt sân phong trào nào phù hợp.</p></div>`;
             return;
         }
 
-        // Gom nhóm các trận theo MaHoaDonDatSan
-        const invoiceGroups = {};
-        filteredList.forEach(item => {
-            const key = item.MaHoaDonDatSan || ('LE_' + (item.MaDatSan || item.ID));
-            if (!invoiceGroups[key]) {
-                invoiceGroups[key] = {
-                    maHoaDon: item.MaHoaDonDatSan || null,
-                    hoaDonObj: item.hoa_don_dat_san || item.hoaDonDatSan || null,
-                    matches: []
-                };
-            }
-            invoiceGroups[key].matches.push(item);
-        });
-
-        Object.values(invoiceGroups).forEach(group => {
+        filteredInvoiceGroups.forEach(group => {
             const hd = group.hoaDonObj;
             const maHDDisplay = group.maHoaDon ? `#${group.maHoaDon}` : `#PT-${group.matches[0].ID}`;
-            const allInvoiceMatches = group.maHoaDon
-                ? allMyBookingsData.filter(m => m.MaHoaDonDatSan === group.maHoaDon)
-                : group.matches;
+            const allInvoiceMatches = group.matches;
 
-            const trangThaiHD = hd?.TrangThai || (allInvoiceMatches.some(m => m.TrangThai === 'DaCoc') ? 'DaCoc' : group.matches[0].TrangThai);
+            const trangThaiHD = group.trangThaiHD;
             const tongTienHD = hd ? Number(hd.TongTien ?? hd.TongTienSan) : allInvoiceMatches.reduce((s, m) => s + Number(m.TongTien), 0);
             const thueVATHD = hd ? Number(hd.ThueVAT || 0) : 0;
             const tenKMHD = hd?.khuyen_mai?.TenKhuyenMai || hd?.khuyenMai?.TenKhuyenMai || null;
 
-            // Tính tổng tiền sân gốc của các trận còn hiệu lực để suy ra số tiền khuyến mãi đã giảm thực tế
             const activeMatchesForKM = trangThaiHD === 'DaHuy'
                 ? allInvoiceMatches
                 : allInvoiceMatches.filter(m => m.TrangThai !== 'DaHuy');
@@ -2845,8 +2869,8 @@ function applyBookingFiltersAndRender() {
             const tienSauGiamHD = Math.max(0, tongTienHD - thueVATHD);
             const soTienGiamHD = Math.max(0, tongTienSanGocHD - tienSauGiamHD);
 
-            const tienCocHD = hd ? Number(hd.TienDaCoc) : allInvoiceMatches.reduce((s, m) => s + Number(m.TienCoc), 0);
-            const conLaiHD = Math.max(0, tongTienHD - tienCocHD);
+            const tienCocHD = (hd && hd.TienDaCoc !== undefined) ? Number(hd.TienDaCoc) : allInvoiceMatches.reduce((s, m) => s + Number(m.TienCoc), 0);
+            const conLaiHD = (trangThaiHD === 'DaHuy') ? 0 : Math.max(0, tongTienHD - tienCocHD);
             const soTranDaCoc = allInvoiceMatches.filter(m => m.TrangThai === 'DaCoc').length;
 
             const ngayTaoStr = hd?.NgayTao ? new Date(hd.NgayTao).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : formatDate(group.matches[0].NgayDa);
@@ -2964,25 +2988,18 @@ function applyBookingFiltersAndRender() {
             `;
         });
     } 
-    // LUỒNG 2: TAB GIẢI ĐẤU (Bổ sung thêm Mã Hóa Đơn + nút Xuất Hóa Đơn)
+    // LUỒNG 2: TAB GIẢI ĐẤU (GOM NHÓM TRƯỚC, LỌC THEO TRẠNG THÁI HÓA ĐƠN ĐẶT SÂN)
     else {
         const giaiDauMap = {};
 
         allMyBookingsData.forEach(item => {
-            if (item.ID_GiaiDau === null) return;
-
-            const sanBong = item.san_bong ? item.san_bong.TenSan.toLowerCase() : '';
-            const cumSan = (item.san_bong && item.san_bong.cum_san) ? item.san_bong.cum_san.TenCumSan.toLowerCase() : '';
-            const tenGiai = item.giai_dau ? item.giai_dau.TenGiaiDau.toLowerCase() : '';
-            const matchSearch = sanBong.includes(currentBookingSearch) || cumSan.includes(currentBookingSearch) || tenGiai.includes(currentBookingSearch);
-            const matchStatus = currentBookingStatus === 'All' || item.TrangThai === currentBookingStatus;
-
-            if (!matchSearch || !matchStatus) return;
+            if (item.ID_GiaiDau === null || item.ID_GiaiDau === undefined) return;
 
             if (!giaiDauMap[item.ID_GiaiDau]) {
                 giaiDauMap[item.ID_GiaiDau] = {
                     idGiaiDau: item.ID_GiaiDau,
                     maHoaDon: item.MaHoaDonDatSan || null,
+                    hoaDonObj: item.hoa_don_dat_san || item.hoaDonDatSan || null,
                     tenGiaiDau: item.giai_dau ? item.giai_dau.TenGiaiDau : 'Giải đấu không xác định',
                     cumSan: (item.san_bong && item.san_bong.cum_san) ? item.san_bong.cum_san.TenCumSan : 'Cụm sân chưa xác định',
                     ngayBatDau: item.giai_dau ? item.giai_dau.NgayBatDau : null,
@@ -2992,15 +3009,29 @@ function applyBookingFiltersAndRender() {
                     canCancel: true 
                 };
             }
+            if (!giaiDauMap[item.ID_GiaiDau].hoaDonObj && (item.hoa_don_dat_san || item.hoaDonDatSan)) {
+                giaiDauMap[item.ID_GiaiDau].hoaDonObj = item.hoa_don_dat_san || item.hoaDonDatSan;
+            }
             giaiDauMap[item.ID_GiaiDau].matches.push(item);
             giaiDauMap[item.ID_GiaiDau].totalCoc += Number(item.TienCoc);
             if(item.TrangThai !== 'DaCoc') giaiDauMap[item.ID_GiaiDau].canCancel = false;
         });
 
         const validTournaments = Object.values(giaiDauMap).filter(gd => {
-            if (!currentBookingDate) return true;
-            if (!gd.ngayBatDau || !gd.ngayKetThuc) return false;
-            return currentBookingDate >= gd.ngayBatDau && currentBookingDate <= gd.ngayKetThuc;
+            const trangThaiHD = gd.hoaDonObj?.TrangThai || (gd.matches.some(m => m.TrangThai === 'DaCoc') ? 'DaCoc' : gd.matches[0]?.TrangThai);
+            const matchStatus = currentBookingStatus === 'All' || trangThaiHD === currentBookingStatus;
+
+            const matchSearch = currentBookingSearch === '' || gd.matches.some(item => {
+                const sanBong = item.san_bong ? item.san_bong.TenSan.toLowerCase() : '';
+                const cumSan = (item.san_bong && item.san_bong.cum_san) ? item.san_bong.cum_san.TenCumSan.toLowerCase() : '';
+                const tenGiai = item.giai_dau ? item.giai_dau.TenGiaiDau.toLowerCase() : '';
+                const maHD = String(item.MaHoaDonDatSan || '').toLowerCase();
+                return sanBong.includes(currentBookingSearch) || cumSan.includes(currentBookingSearch) || tenGiai.includes(currentBookingSearch) || maHD.includes(currentBookingSearch);
+            });
+
+            const matchDate = !currentBookingDate || (gd.ngayBatDau && gd.ngayKetThuc && currentBookingDate >= gd.ngayBatDau && currentBookingDate <= gd.ngayKetThuc);
+
+            return matchStatus && matchSearch && matchDate;
         });
 
         if (validTournaments.length === 0) {
@@ -3062,14 +3093,8 @@ function applyBookingFiltersAndRender() {
                 actionTourHtml = `<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">${btnExportInvoiceTour}<div class="cancel-tour-disabled"><i class="fa-solid fa-lock"></i><span>Không thể hủy tự động</span></div></div>`;
             }
 
-            let statusBadgeHtml = '';
-            if (trangThaiGiaiDauGoc === 'HetHan') {
-                statusBadgeHtml = `<span style="padding: 4px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; background: #d1fae5; color: #047857; margin-left: 10px;">Đã chốt lịch</span>`;
-            } else if (trangThaiGiaiDauGoc === 'HoanThanh') {
-                statusBadgeHtml = `<span style="padding: 4px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; background: #dbeafe; color: #1d4ed8; margin-left: 10px;">Đã hoàn thành</span>`;
-            } else if (trangThaiGiaiDauGoc === 'DaHuy' || trangThaiGiaiDauGoc === 'TuChoi') {
-                statusBadgeHtml = `<span style="padding: 4px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; background: #fee2e2; color: #b91c1c; margin-left: 10px;">Đã hủy</span>`;
-            }
+            const trangThaiHDTour = gd.hoaDonObj?.TrangThai || (gd.matches.some(m => m.TrangThai === 'DaCoc') ? 'DaCoc' : gd.matches[0]?.TrangThai);
+            const statusBadgeHtml = `<span style="margin-left: 10px;">${renderBadge(trangThaiHDTour)}</span>`;
 
             gd.matches.sort((a, b) => {
                 const timeA = new Date(a.NgayDa + 'T' + (a.khung_gio ? a.khung_gio.GioBatDau : '00:00:00')).getTime();

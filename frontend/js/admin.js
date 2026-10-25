@@ -2317,7 +2317,7 @@ async function markAsRead(id, element) {
 // ======================================================
 let allDatSanData = [];
 let currentDSPage = 1;
-const itemsPerDSPage = 8;
+const itemsPerDSPage = 5; // Phân trang theo đơn vị 5 Hóa đơn / 1 trang (giữ trọn vẹn các trận trong cùng 1 hóa đơn)
 let currentDSFilter = 'DaCoc';
 let currentDSDate = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10); // Mặc định hiển thị ngày hôm nay
 let currentDSSearch = '';
@@ -2339,7 +2339,7 @@ function renderQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = null) {
     contentArea.innerHTML = `
         <div class="page-header" style="margin-bottom: 24px;">
             <h1 class="page-title">Quản lý Lịch Đặt Sân</h1>
-            <p class="text-muted">Chốt trạng thái khách đến sân cho ngày hôm nay.</p>
+            <p class="text-muted">Chốt trạng thái khách đến sân và quản lý theo từng Hóa đơn đặt sân.</p>
         </div>
 
         <div id="datsan-alert" class="modal-alert" style="display: none; margin-bottom: 16px;"></div>
@@ -2348,14 +2348,14 @@ function renderQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = null) {
             <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
                 <div style="position: relative; flex: 1; min-width: 250px;">
                     <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
-                    <input type="text" id="ds-search-input" class="form-control" style="padding-left: 35px;" placeholder="Tìm Mã vé (PT-..., GD-...), SĐT, Tên khách..." oninput="handleDSSearch(this.value)">
+                    <input type="text" id="ds-search-input" class="form-control" style="padding-left: 35px;" placeholder="Tìm Mã HĐ, Mã vé (PT-..., GD-...), SĐT, Tên khách..." oninput="handleDSSearch(this.value)">
                 </div>
                 <button type="button" class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 0 18px; background: #0f172a; border-color: #0f172a; white-space: nowrap;" onclick="openAdminQrScannerModal()">
                     <i class="fa-solid fa-qrcode"></i> Quét mã vé
                 </button>
                 <input type="date" class="form-control" style="width: 150px;" id="ds-date-input" onchange="handleDSDate(this.value)">
-                <select class="form-control" id="ds-status-select" style="width: 180px;" onchange="handleDSFilter(this.value)">
-                    <option value="All" ${defaultStatus === 'All' ? 'selected' : ''}>Tất cả trạng thái</option>
+                <select class="form-control" id="ds-status-select" style="width: 210px;" onchange="handleDSFilter(this.value)" title="Lọc theo trạng thái Hóa đơn đặt sân">
+                    <option value="All" ${defaultStatus === 'All' ? 'selected' : ''}>Tất cả trạng thái HĐ</option>
                     <option value="DaCoc" ${defaultStatus === 'DaCoc' ? 'selected' : ''}>Đã cọc</option>
                     <option value="HoanThanh" ${defaultStatus === 'HoanThanh' ? 'selected' : ''}>Hoàn thành</option>
                     <option value="DaHuy" ${defaultStatus === 'DaHuy' ? 'selected' : ''}>Đã hủy</option>
@@ -2451,90 +2451,143 @@ function getBookingCodeVariants(item) {
     return variants;
 }
 
+// Hàm lấy Trạng thái của Hóa đơn đặt sân (Ưu tiên lấy từ HoaDonDatSan.TrangThai)
+function getInvoiceStatusAdmin(hoaDonObj, items = []) {
+    if (hoaDonObj && hoaDonObj.TrangThai) {
+        return hoaDonObj.TrangThai;
+    }
+    if (!items || items.length === 0) return 'DaCoc';
+    if (items.some(i => i.TrangThai === 'DaCoc')) return 'DaCoc';
+    if (items.some(i => i.TrangThai === 'HoanThanh')) return 'HoanThanh';
+    if (items.every(i => i.TrangThai === 'DaHuy')) return 'DaHuy';
+    if (items.every(i => i.TrangThai === 'KhongDen')) return 'KhongDen';
+    return items[0].TrangThai || 'DaCoc';
+}
+
 function applyDSFiltersAndRender() {
     const searchTerm = currentDSSearch.toLowerCase().trim().replace(/^#/, '');
 
-    let filteredData = allDatSanData.filter(item => {
-        const matchStatus = (currentDSFilter === 'All' || item.TrangThai === currentDSFilter);
-
-        // Kiểm tra khớp mã vé (Hỗ trợ cả PT-DS100, PT-100, DS100, GD-GDAU011, GD-GDAU11, GD-11...)
-        const codeVariants = getBookingCodeVariants(item);
-        const matchCode = searchTerm !== '' && codeVariants.some(v => v.includes(searchTerm));
-
-        const sdt = item.ID_NguoiDung ? (item.nguoi_dung?.SoDienThoai?.toLowerCase() || '') : (item.SDTKhachVangLai?.toLowerCase() || '');
-        const tenKhach = item.ID_NguoiDung ? (item.nguoi_dung?.HoTen?.toLowerCase() || '') : (item.TenKhachVangLai?.toLowerCase() || '');
-        const tenSan = item.san_bong ? item.san_bong.TenSan.toLowerCase() : '';
-        const cumSan = (item.san_bong && item.san_bong.cum_san) ? item.san_bong.cum_san.TenCumSan.toLowerCase() : '';
-        const tenGiai = (item.ID_GiaiDau !== null && item.giai_dau) ? item.giai_dau.TenGiaiDau.toLowerCase() : '';
-
-        const matchSearch = searchTerm === ''
-                        || matchCode
-                        || sdt.includes(searchTerm) 
-                        || tenKhach.includes(searchTerm) 
-                        || tenSan.includes(searchTerm)
-                        || cumSan.includes(searchTerm)
-                        || tenGiai.includes(searchTerm);
-        
-        // Lọc ngày chính xác
-        const matchDate = currentDSDate ? (item.NgayDa === currentDSDate) : true;
-        
-        return matchStatus && matchSearch && matchDate;
-    });
-
-    const totalPages = Math.ceil(filteredData.length / itemsPerDSPage) || 1;
-    if (currentDSPage > totalPages) currentDSPage = totalPages;
-    const startIdx = (currentDSPage - 1) * itemsPerDSPage;
-    
-    renderDSTable(filteredData.slice(startIdx, startIdx + itemsPerDSPage));
-    renderDSPagination(totalPages);
-}
-
-function renderDSTable(data) {
-    const tbody = document.getElementById('datsan-table-body');
-    if (data.length === 0) return tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="text-align: center; padding: 40px;">Không có dữ liệu.</td></tr>`;
-
-    // Gom nhóm theo MaHoaDonDatSan trên trang hiện tại
-    const invoiceGroups = {};
-    data.forEach(item => {
-        const key = item.MaHoaDonDatSan || ('LE_' + item.ID);
-        if (!invoiceGroups[key]) {
-            invoiceGroups[key] = {
+    // BƯỚC 1: Gom nhóm toàn bộ các đặt sân theo MaHoaDonDatSan TRƯỚC KHI lọc và phân trang
+    const invoiceMap = new Map();
+    allDatSanData.forEach(item => {
+        const key = item.MaHoaDonDatSan ? String(item.MaHoaDonDatSan) : ('LE_' + (item.MaDatSan || item.ID));
+        if (!invoiceMap.has(key)) {
+            invoiceMap.set(key, {
+                key: key,
                 maHoaDon: item.MaHoaDonDatSan || null,
                 hoaDonObj: item.hoa_don_dat_san || item.hoaDonDatSan || null,
                 items: []
-            };
+            });
         }
-        invoiceGroups[key].items.push(item);
+        const group = invoiceMap.get(key);
+        if (!group.hoaDonObj && (item.hoa_don_dat_san || item.hoaDonDatSan)) {
+            group.hoaDonObj = item.hoa_don_dat_san || item.hoaDonDatSan;
+        }
+        group.items.push(item);
     });
+
+    // Sắp xếp các trận bên trong mỗi hóa đơn theo Ngày đá và Giờ bắt đầu tăng dần
+    const allInvoiceGroups = Array.from(invoiceMap.values()).map(group => {
+        group.items.sort((a, b) => {
+            const dateCmp = String(a.NgayDa || '').localeCompare(String(b.NgayDa || ''));
+            if (dateCmp !== 0) return dateCmp;
+            const timeA = a.khung_gio?.GioBatDau || '';
+            const timeB = b.khung_gio?.GioBatDau || '';
+            return timeA.localeCompare(timeB);
+        });
+        group.trangThaiHoaDon = getInvoiceStatusAdmin(group.hoaDonObj, group.items);
+        return group;
+    });
+
+    // BƯỚC 2: Lọc theo cấp độ HÓA ĐƠN ĐẶT SÂN
+    const filteredGroups = allInvoiceGroups.filter(group => {
+        // 2.1. Lọc theo Trạng thái của Hóa đơn đặt sân
+        const matchStatus = (currentDSFilter === 'All' || group.trangThaiHoaDon === currentDSFilter);
+
+        // 2.2. Lọc theo Ngày đá (Nếu hóa đơn có ít nhất 1 trận đá trong ngày đang chọn -> Hiển thị trọn vẹn hóa đơn đó)
+        const matchDate = currentDSDate
+            ? group.items.some(item => item.NgayDa === currentDSDate)
+            : true;
+
+        // 2.3. Lọc theo Từ khóa tìm kiếm (Khớp mã HĐ hoặc bất kỳ trận nào trong HĐ)
+        const maHDLower = String(group.maHoaDon || '').toLowerCase();
+        const matchInvoiceCode = searchTerm !== '' && (maHDLower.includes(searchTerm) || (`#${maHDLower}`).includes(searchTerm));
+
+        const matchAnyItemSearch = group.items.some(item => {
+            const codeVariants = getBookingCodeVariants(item);
+            const matchCode = searchTerm !== '' && codeVariants.some(v => v.includes(searchTerm));
+
+            const sdt = item.ID_NguoiDung ? (item.nguoi_dung?.SoDienThoai?.toLowerCase() || '') : ((item.SDTNguoiDat || item.SDTKhachVangLai || '').toLowerCase());
+            const tenKhach = item.ID_NguoiDung ? (item.nguoi_dung?.HoTen?.toLowerCase() || '') : ((item.TenNguoiDat || item.TenKhachVangLai || '').toLowerCase());
+            const tenSan = item.san_bong ? item.san_bong.TenSan.toLowerCase() : '';
+            const cumSan = (item.san_bong && item.san_bong.cum_san) ? item.san_bong.cum_san.TenCumSan.toLowerCase() : '';
+            const tenGiai = (item.ID_GiaiDau !== null && item.giai_dau) ? item.giai_dau.TenGiaiDau.toLowerCase() : '';
+
+            return matchCode
+                || sdt.includes(searchTerm)
+                || tenKhach.includes(searchTerm)
+                || tenSan.includes(searchTerm)
+                || cumSan.includes(searchTerm)
+                || tenGiai.includes(searchTerm);
+        });
+
+        const matchSearch = searchTerm === '' || matchInvoiceCode || matchAnyItemSearch;
+
+        return matchStatus && matchDate && matchSearch;
+    });
+
+    // BƯỚC 3: Phân trang theo số lượng HÓA ĐƠN (Không cắt lẻ các trận trong cùng 1 hóa đơn)
+    const totalPages = Math.ceil(filteredGroups.length / itemsPerDSPage) || 1;
+    if (currentDSPage > totalPages) currentDSPage = totalPages;
+    const startIdx = (currentDSPage - 1) * itemsPerDSPage;
+
+    renderDSTable(filteredGroups.slice(startIdx, startIdx + itemsPerDSPage));
+    renderDSPagination(totalPages);
+}
+
+function renderDSTable(invoiceGroups) {
+    const tbody = document.getElementById('datsan-table-body');
+    if (!invoiceGroups || invoiceGroups.length === 0) {
+        return tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="text-align: center; padding: 40px;">Không có dữ liệu.</td></tr>`;
+    }
 
     let html = '';
 
-    Object.values(invoiceGroups).forEach(group => {
+    invoiceGroups.forEach(group => {
         const first = group.items[0];
-        const tenKhach = first.ID_NguoiDung ? (first.nguoi_dung?.HoTen || 'N/A') : (first.TenKhachVangLai || 'N/A');
-        const sdtKhach = first.ID_NguoiDung ? (first.nguoi_dung?.SoDienThoai || '') : (first.SDTKhachVangLai || '');
+        const tenKhach = first.ID_NguoiDung ? (first.nguoi_dung?.HoTen || 'N/A') : (first.TenNguoiDat || first.TenKhachVangLai || 'N/A');
+        const sdtKhach = first.ID_NguoiDung ? (first.nguoi_dung?.SoDienThoai || '') : (first.SDTNguoiDat || first.SDTKhachVangLai || '');
+        const emailKhach = first.EmailNguoiDat || first.EmailKhachVangLai || '';
         const isMember = Boolean(first.ID_NguoiDung);
 
-        const allMatchesInInvoice = group.maHoaDon
-            ? allDatSanData.filter(d => d.MaHoaDonDatSan === group.maHoaDon)
-            : group.items;
-
+        const allMatchesInInvoice = group.items;
         const activeDaCocCount = allMatchesInInvoice.filter(d => d.TrangThai === 'DaCoc').length;
         const hdObj = group.hoaDonObj;
         const tongHD = hdObj ? Number(hdObj.TongTien ?? hdObj.TongTienSan) : allMatchesInInvoice.reduce((s, d) => s + Number(d.TongTien), 0);
-        const cocHD = hdObj ? Number(hdObj.TienDaCoc) : allMatchesInInvoice.reduce((s, d) => s + Number(d.TienCoc), 0);
-        const conPhaiThuHD = (hdObj && hdObj.TrangThai === 'DaHuy') ? 0 : Math.max(0, tongHD - cocHD);
+        const cocHD = (hdObj && hdObj.TienDaCoc !== undefined) ? Number(hdObj.TienDaCoc) : allMatchesInInvoice.reduce((s, d) => s + Number(d.TienCoc), 0);
+        const trangThaiHD = group.trangThaiHoaDon || getInvoiceStatusAdmin(hdObj, allMatchesInInvoice);
+        const conPhaiThuHD = (trangThaiHD === 'DaHuy') ? 0 : Math.max(0, tongHD - cocHD);
 
-        // Vẽ thanh Header của Hóa Đơn Đặt Sân (Hiển thị rõ Tổng HĐ, Đã cọc và Còn phải thu)
+        // Badge trạng thái của Hóa đơn đặt sân
+        let hdBadgeColor = '#6b7280', hdBadgeBg = '#f3f4f6', hdViStatus = trangThaiHD;
+        if (trangThaiHD === 'DaCoc') { hdBadgeColor = '#b45309'; hdBadgeBg = '#fef3c7'; hdViStatus = 'Đã cọc'; }
+        else if (trangThaiHD === 'DaHuy') { hdBadgeColor = '#b91c1c'; hdBadgeBg = '#fee2e2'; hdViStatus = 'Đã hủy'; }
+        else if (trangThaiHD === 'HoanThanh') { hdBadgeColor = '#047857'; hdBadgeBg = '#d1fae5'; hdViStatus = 'Hoàn thành'; }
+        else if (trangThaiHD === 'KhongDen') { hdBadgeColor = '#475569'; hdBadgeBg = '#e2e8f0'; hdViStatus = 'Không đến'; }
+
+        const hdStatusBadgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 700; background: ${hdBadgeBg}; color: ${hdBadgeColor}; border: 1px solid rgba(0,0,0,0.06); white-space: nowrap;">${hdViStatus}</span>`;
+
+        // Vẽ thanh Header của Hóa Đơn Đặt Sân
         if (group.maHoaDon) {
             html += `
                 <tr style="background: #f0fdf4; border-top: 2px solid #86efac; border-bottom: 1px solid #bbf7d0;">
                     <td colspan="7" style="padding: 10px 16px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                                 <span style="background: #0b5d3b; color: #fff; font-family: monospace; font-weight: 700; padding: 4px 10px; border-radius: 6px; font-size: 0.88rem;">
                                     <i class="fa-solid fa-file-invoice-dollar"></i> Hóa đơn #${group.maHoaDon}
                                 </span>
+                                ${hdStatusBadgeHtml}
                                 <span style="font-size: 0.88rem; color: #0f172a;">Khách: <strong>${tenKhach}</strong> (${sdtKhach})</span>
                                 <span style="font-size: 0.84rem; color: #475569;">
                                     &bull; Tổng HĐ (${allMatchesInInvoice.length} trận): <strong style="color:#0f172a;">${tongHD.toLocaleString('vi-VN')}đ</strong> 
@@ -2547,7 +2600,7 @@ function renderDSTable(data) {
                                     <i class="fa-solid fa-print"></i> Xuất hóa đơn
                                 </button>
                                 ${activeDaCocCount > 0 ? `
-                                <button type="button" class="btn-outline-sm" style="background: #fef2f2; color: #dc2626; border-color: #fca5a5; padding: 5px 11px; font-size: 0.8rem; font-weight: 700;" onclick="openAdminCancelInvoiceModal('${group.maHoaDon}', ${activeDaCocCount}, ${isMember}, '${tenKhach.replace(/'/g, "\\'")}', '${first.EmailKhachVangLai || ''}', ${cocHD})">
+                                <button type="button" class="btn-outline-sm" style="background: #fef2f2; color: #dc2626; border-color: #fca5a5; padding: 5px 11px; font-size: 0.8rem; font-weight: 700;" onclick="openAdminCancelInvoiceModal('${group.maHoaDon}', ${activeDaCocCount}, ${isMember}, '${tenKhach.replace(/'/g, "\\'")}', '${emailKhach}', ${cocHD})">
                                     <i class="fa-solid fa-ban"></i> Hủy cả hóa đơn (${activeDaCocCount} trận)
                                 </button>` : ''}
                             </div>
@@ -2557,7 +2610,7 @@ function renderDSTable(data) {
             `;
         }
 
-        // Vẽ các dòng trận đấu thuộc hóa đơn
+        // Vẽ toàn bộ các dòng trận đấu thuộc hóa đơn này ngay bên dưới
         group.items.forEach(item => {
             let badgeColor = '#6b7280', badgeBg = '#f3f4f6', viStatus = item.TrangThai;
             if(item.TrangThai === 'DaCoc') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; viStatus = 'Đã cọc'; }
@@ -2588,8 +2641,8 @@ function renderDSTable(data) {
                 actionHtml = `<span style="color: var(--text-muted); font-size: 0.85rem; white-space: nowrap;">Đã xử lý</span>`;
             }
 
-            const tenKhachHienThi = item.ID_NguoiDung ? (item.nguoi_dung?.HoTen || 'N/A') : (item.TenKhachVangLai || 'N/A');
-            const sdtKhachHienThi = item.ID_NguoiDung ? (item.nguoi_dung?.SoDienThoai || '') : (item.SDTKhachVangLai || '');
+            const tenKhachHienThi = item.ID_NguoiDung ? (item.nguoi_dung?.HoTen || 'N/A') : (item.TenNguoiDat || item.TenKhachVangLai || 'N/A');
+            const sdtKhachHienThi = item.ID_NguoiDung ? (item.nguoi_dung?.SoDienThoai || '') : (item.SDTNguoiDat || item.SDTKhachVangLai || '');
 
             html += `<tr onclick="openBookingDetailModalAdmin('${item.ID}')" style="cursor: pointer; transition: background-color 0.15s;" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor=''">
                 <td style="text-align: center; padding-left: 20px;">
