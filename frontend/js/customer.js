@@ -3239,6 +3239,8 @@ window.printCustomerBookingInvoice = async function(maHoaDon) {
         const statusMap = { 'DaCoc': 'Đã đặt cọc', 'HoanThanh': 'Đã hoàn thành', 'DaHuy': 'Đã hủy', 'KhongDen': 'Không đến' };
 
         let tongTienSanGoc = 0;
+        let tongCocKhongDen = 0;
+
         const rowsHtml = listDatSan.map((ds, i) => {
             const tenSan = ds.san_bong?.TenSan || 'Sân bóng';
             const cumSan = ds.san_bong?.cum_san?.TenCumSan || '';
@@ -3246,7 +3248,13 @@ window.printCustomerBookingInvoice = async function(maHoaDon) {
             const ngayDa = ds.NgayDa ? ds.NgayDa.split('-').reverse().join('/') : '';
             const maVe = (ds.MaGiaiDau || ds.ID_GiaiDau) ? `GD-${ds.MaGiaiDau || ds.ID_GiaiDau}` : `PT-${ds.MaDatSan || ds.ID}`;
             const donGia = Number(ds.pivot?.DonGia ?? ds.TongTien ?? 0);
-            if (ds.TrangThai !== 'DaHuy') tongTienSanGoc += donGia;
+            const tienCocTran = Number(ds.TienCoc || 0);
+
+            if (ds.TrangThai === 'DaCoc' || ds.TrangThai === 'HoanThanh') {
+                tongTienSanGoc += donGia;
+            } else if (ds.TrangThai === 'KhongDen') {
+                tongCocKhongDen += tienCocTran;
+            }
 
             return `
                 <tr>
@@ -3256,18 +3264,23 @@ window.printCustomerBookingInvoice = async function(maHoaDon) {
                     <td style="text-align:center;">${kg}<br><small>${ngayDa}</small></td>
                     <td style="text-align:center;">${statusMap[ds.TrangThai] || ds.TrangThai}</td>
                     <td style="text-align:right;">${donGia.toLocaleString('vi-VN')}đ</td>
-                    <td style="text-align:right; color:#047857; font-weight:bold;">${Number(ds.TienCoc).toLocaleString('vi-VN')}đ</td>
+                    <td style="text-align:right; color:#047857; font-weight:bold;">${tienCocTran.toLocaleString('vi-VN')}đ</td>
                 </tr>
             `;
         }).join('');
 
         const tongTien = Number(hd.TongTien ?? hd.TongTienSan ?? 0);
         const thueVAT = Number(hd.ThueVAT || 0);
-        const tienSauGiam = Math.max(0, tongTien - thueVAT);
-        const soTienGiam = Math.max(0, tongTienSanGoc - tienSauGiam);
         const kmObj = hd.khuyen_mai || hd.khuyenMai || null;
+
+        // Tiền sau giảm của các trận (DaCoc + HoanThanh) = Tổng hóa đơn - Thuế VAT - Tiền cọc các trận Không đến
+        const tienSauGiamChiuThue = Math.max(0, tongTien - thueVAT - tongCocKhongDen);
+        const soTienGiam = (hd.MaKhuyenMai && tongTienSanGoc > 0)
+            ? Math.max(0, tongTienSanGoc - tienSauGiamChiuThue)
+            : 0;
+
         const tienCoc = Number(hd.TienDaCoc || 0);
-        const conLai = Math.max(0, tongTien - tienCoc);
+        const conLai = (hd.TrangThai === 'DaHuy') ? 0 : Math.max(0, tongTien - tienCoc);
 
         const printWin = window.open('', '_blank', 'width=880,height=740');
         if (!printWin) return showToast('Vui lòng cho phép mở cửa sổ Pop-up để in hóa đơn!');
@@ -3318,7 +3331,8 @@ window.printCustomerBookingInvoice = async function(maHoaDon) {
                     <tbody>${rowsHtml}</tbody>
                 </table>
                 <div class="summary">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>Tổng tiền sân gốc:</span><strong>${tongTienSanGoc.toLocaleString('vi-VN')}đ</strong></div>
+                    ${tongTienSanGoc > 0 ? `<div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>Tổng tiền sân gốc:</span><strong>${tongTienSanGoc.toLocaleString('vi-VN')}đ</strong></div>` : ''}
+                    ${tongCocKhongDen > 0 ? `<div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#64748b;"><span>Tiền cọc trận không đến:</span><strong>${tongCocKhongDen.toLocaleString('vi-VN')}đ</strong></div>` : ''} 
                     ${soTienGiam > 0 ? `<div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#2563eb;"><span>Khuyến mãi (${kmObj ? kmObj.TenKhuyenMai : 'Voucher'}):</span><strong>-${soTienGiam.toLocaleString('vi-VN')}đ</strong></div>` : ''}
                     <div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#475569;"><span>Thuế VAT (8%):</span><strong>+${thueVAT.toLocaleString('vi-VN')}đ</strong></div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:6px; border-top:1px solid #e2e8f0; padding-top:6px;"><span>Tổng tiền hóa đơn:</span><strong>${tongTien.toLocaleString('vi-VN')}đ</strong></div>
