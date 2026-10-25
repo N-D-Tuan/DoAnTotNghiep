@@ -843,7 +843,7 @@ async function renderManHinhThuNgan() {
                 <div class="panel">
                     <div class="panel-header" style="display:flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 15px; border-bottom: 1px solid #f1f5f9; padding-bottom: 20px;">
                         <div>
-                            <div style="font-size: 1.1rem; color: var(--text-dark); margin-bottom: 6px; font-weight: 700;">Biểu đồ doanh thu & chi phí</div>
+                            <div style="font-size: 1.1rem; color: var(--text-dark); margin-bottom: 6px; font-weight: 700;">Biểu đồ doanh thu đặt sân</div>
                             <div style="display: flex; align-items: baseline; gap: 8px;">
                                 <span id="staff-chart-total-amount" style="font-size: 1.5rem; font-weight: 800; color: #16A34A; letter-spacing: -0.5px;">Đang tải...</span>
                                 <span style="font-size: 0.85rem; color: #64748b; background: #f8fafc; padding: 4px 10px; border-radius: 12px; border: 1px solid #e2e8f0;">
@@ -902,35 +902,31 @@ async function updateStaffDailyStats(cumSanId) {
     let soTranHomNay = 0;
     let choNhanSan = 0; 
     let hoanThanh = 0;  
-    let tongDoanhThu = 0;
 
     try {
-        const dsResponse = await fetch(`${API_BASE_URL}/admin/dat-san`);
+        const [dsResponse, tkResponse] = await Promise.all([
+            fetch(`${API_BASE_URL}/admin/dat-san`),
+            fetch(`${API_BASE_URL}/admin/thong-ke?id_cum_san=${cumSanId}&time_filter=hom_nay`)
+        ]);
         const dsRes = await dsResponse.json();
+        const tkRes = await tkResponse.json();
         
         if (dsRes.success) {
             const datSanHnay = dsRes.data.filter(item => 
                 item.NgayDa === todayStr && 
                 item.san_bong && 
-                item.san_bong.ID_CumSan === cumSanId
+                String(item.san_bong.MaCumSan || item.san_bong.ID_CumSan) === String(cumSanId)
             );
             
-            // Tính số lượng trận
             soTranHomNay = datSanHnay.filter(i => i.TrangThai === 'DaCoc').length + datSanHnay.filter(i => i.TrangThai === 'HoanThanh').length;
             choNhanSan = datSanHnay.filter(i => i.TrangThai === 'DaCoc').length;
             hoanThanh = datSanHnay.filter(i => i.TrangThai === 'HoanThanh').length;
             
-            // Tính tổng tiền
-            datSanHnay.forEach(i => {
-                const isGiaiDau = i.ID_GiaiDau !== null;
-                if (i.TrangThai === 'HoanThanh' || isGiaiDau) {
-                    tongDoanhThu += Number(i.TongTien);
-                } else if (i.TrangThai === 'KhongDen') {
-                    tongDoanhThu += Number(i.TienCoc || 0);
-                }
-            });
+            // Lấy doanh thu thực thu hôm nay từ API thống kê (đã tính Khuyến mãi + VAT 8% trên Hóa đơn)
+            const tongDoanhThu = (tkRes && tkRes.success && tkRes.data)
+                ? Number(tkRes.data.doanh_thu_hom_nay || 0)
+                : 0;
 
-            // Ghi đè số liệu mới lên giao diện (Nếu các thẻ HTML này đang hiển thị)
             const elSoTran = document.getElementById('staff-stat-sotran');
             const elChoNhan = document.getElementById('staff-stat-chonhan');
             const elHoanThanh = document.getElementById('staff-stat-hoanthanh');
@@ -947,15 +943,15 @@ async function updateStaffDailyStats(cumSanId) {
 }
 
 // ======================================================
-// HÀM VẼ BIỂU ĐỒ NHÂN VIÊN
+// HÀM VẼ BIỂU ĐỒ DOANH THU NHÂN VIÊN
 // ======================================================
 async function updateStaffDashboardStats() {
     const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
     if (!document.getElementById('staffRevenueChart')) return;
 
     try {
-        // Truyền chính xác ID Cụm Sân của Nhân viên để lấy thống kê
-        const response = await fetch(`${API_BASE_URL}/admin/thong-ke?id_cum_san=${currentUser.ID_CumSan}&time_filter=${staffDashboardFilterTime}`);
+        const cumSanId = currentUser.MaCumSan || currentUser.ID_CumSan;
+        const response = await fetch(`${API_BASE_URL}/admin/thong-ke?id_cum_san=${cumSanId}&time_filter=${staffDashboardFilterTime}`);
         const res = await response.json();
 
         if (!res.success) return;
@@ -963,22 +959,13 @@ async function updateStaffDashboardStats() {
 
         const labels = data.chart.map(c => c.ngay);
         const revenueData = data.chart.map(c => c.doanh_thu);
-        const expenseData = data.chart.map(c => c.chi_phi);
 
-        // Tính Toán Thu - Chi - Lợi Nhuận
         const totalRevenue = revenueData.reduce((sum, amount) => sum + Number(amount), 0);
-        const totalExpense = expenseData.reduce((sum, amount) => sum + Number(amount), 0);
-        const netProfit = totalRevenue - totalExpense;
-        const profitColor = netProfit >= 0 ? '#10b981' : '#ef4444';
 
-        // Ghi ra giao diện
         document.getElementById('staff-chart-total-amount').innerHTML = `
-            Thu: ${totalRevenue.toLocaleString('vi-VN')}đ 
-            <span style="font-size: 1rem; font-weight: 600; color: #ef4444; margin-left: 10px;">(Chi: ${totalExpense.toLocaleString('vi-VN')}đ)</span>
-            <span style="font-size: 1rem; font-weight: 600; color: ${profitColor}; margin-left: 10px;">(Lãi: ${netProfit.toLocaleString('vi-VN')}đ)</span>
+            Tổng thu: ${totalRevenue.toLocaleString('vi-VN')}đ
         `;
 
-        // Vẽ biểu đồ
         const ctx = document.getElementById('staffRevenueChart').getContext('2d');
         if (staffChartInstance) {
             staffChartInstance.destroy();
@@ -992,20 +979,10 @@ async function updateStaffDashboardStats() {
                 labels: labels,
                 datasets: [
                     {
-                        label: 'Tổng thu (VNĐ)',
+                        label: 'Doanh thu đặt sân (VNĐ)',
                         data: revenueData,
                         borderColor: '#16A34A',
                         backgroundColor: 'rgba(22, 163, 74, 0.4)',
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.3,
-                        borderRadius: 4
-                    },
-                    {
-                        label: 'Tổng chi (VNĐ)',
-                        data: expenseData,
-                        borderColor: '#ef4444',
-                        backgroundColor: 'rgba(239, 68, 68, 0.4)',
                         borderWidth: 2,
                         fill: true,
                         tension: 0.3,
@@ -3570,7 +3547,9 @@ window.printAdminBookingInvoice = async function(maHoaDon) {
         const ngayLap = hd.NgayTao ? new Date(hd.NgayTao).toLocaleString('vi-VN') : '';
         const statusMap = { 'DaCoc': 'Đã đặt cọc', 'HoanThanh': 'Đã hoàn thành', 'DaHuy': 'Đã hủy', 'KhongDen': 'Không đến' };
 
-        let tongTienSanGoc = 0;
+        let tongTienSanGoc = 0;       // Tổng đơn giá gốc của các trận (DaCoc + HoanThanh)
+        let tongCocKhongDen = 0;      // Tổng tiền cọc giữ lại của các trận (KhongDen)
+
         const rowsHtml = listDatSan.map((ds, i) => {
             const tenSan = ds.san_bong?.TenSan || 'Sân bóng';
             const cumSan = ds.san_bong?.cum_san?.TenCumSan || '';
@@ -3578,7 +3557,13 @@ window.printAdminBookingInvoice = async function(maHoaDon) {
             const ngayDa = ds.NgayDa ? ds.NgayDa.split('-').reverse().join('/') : '';
             const maVe = (ds.MaGiaiDau || ds.ID_GiaiDau) ? `GD-${ds.MaGiaiDau || ds.ID_GiaiDau}` : `PT-${ds.MaDatSan || ds.ID}`;
             const donGia = Number(ds.pivot?.DonGia ?? ds.TongTien ?? 0);
-            if (ds.TrangThai !== 'DaHuy') tongTienSanGoc += donGia;
+            const tienCocTran = Number(ds.TienCoc || 0);
+
+            if (ds.TrangThai === 'DaCoc' || ds.TrangThai === 'HoanThanh') {
+                tongTienSanGoc += donGia;
+            } else if (ds.TrangThai === 'KhongDen') {
+                tongCocKhongDen += tienCocTran;
+            }
 
             return `
                 <tr>
@@ -3588,18 +3573,23 @@ window.printAdminBookingInvoice = async function(maHoaDon) {
                     <td style="text-align:center;">${kg}<br><small>${ngayDa}</small></td>
                     <td style="text-align:center;">${statusMap[ds.TrangThai] || ds.TrangThai}</td>
                     <td style="text-align:right;">${donGia.toLocaleString('vi-VN')}đ</td>
-                    <td style="text-align:right; color:#047857; font-weight:bold;">${Number(ds.TienCoc).toLocaleString('vi-VN')}đ</td>
+                    <td style="text-align:right; color:#047857; font-weight:bold;">${tienCocTran.toLocaleString('vi-VN')}đ</td>
                 </tr>
             `;
         }).join('');
 
         const tongTien = Number(hd.TongTien ?? hd.TongTienSan ?? 0);
         const thueVAT = Number(hd.ThueVAT || 0);
-        const tienSauGiam = Math.max(0, tongTien - thueVAT);
-        const soTienGiam = Math.max(0, tongTienSanGoc - tienSauGiam);
         const kmObj = hd.khuyen_mai || hd.khuyenMai || null;
+
+        // Tiền sau giảm của các trận (DaCoc + HoanThanh) = Tổng hóa đơn - Thuế VAT - Tiền cọc các trận Không đến
+        const tienSauGiamChiuThue = Math.max(0, tongTien - thueVAT - tongCocKhongDen);
+        const soTienGiam = (hd.MaKhuyenMai && tongTienSanGoc > 0)
+            ? Math.max(0, tongTienSanGoc - tienSauGiamChiuThue)
+            : 0;
+
         const tienCoc = Number(hd.TienDaCoc || 0);
-        const conLai = Math.max(0, tongTien - tienCoc);
+        const conLai = (hd.TrangThai === 'DaHuy') ? 0 : Math.max(0, tongTien - tienCoc);
 
         const printWin = window.open('', '_blank', 'width=880,height=740');
         if (!printWin) return showSystemModal('Cảnh báo', 'Vui lòng cho phép mở Pop-up để in hóa đơn!', 'error');
@@ -3650,7 +3640,8 @@ window.printAdminBookingInvoice = async function(maHoaDon) {
                     <tbody>${rowsHtml}</tbody>
                 </table>
                 <div class="summary">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>Tổng tiền sân gốc:</span><strong>${tongTienSanGoc.toLocaleString('vi-VN')}đ</strong></div>
+                    ${tongTienSanGoc > 0 ? `<div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>Tổng tiền sân gốc:</span><strong>${tongTienSanGoc.toLocaleString('vi-VN')}đ</strong></div>` : ''}
+                    ${tongCocKhongDen > 0 ? `<div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#64748b;"><span>Tiền cọc trận không đến:</span><strong>${tongCocKhongDen.toLocaleString('vi-VN')}đ</strong></div>` : ''}
                     ${soTienGiam > 0 ? `<div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#2563eb;"><span>Khuyến mãi (${kmObj ? kmObj.TenKhuyenMai : 'Voucher'}):</span><strong>-${soTienGiam.toLocaleString('vi-VN')}đ</strong></div>` : ''}
                     <div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#475569;"><span>Thuế VAT (8%):</span><strong>+${thueVAT.toLocaleString('vi-VN')}đ</strong></div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:6px; border-top:1px solid #e2e8f0; padding-top:6px;"><span>Tổng tiền hóa đơn:</span><strong>${tongTien.toLocaleString('vi-VN')}đ</strong></div>

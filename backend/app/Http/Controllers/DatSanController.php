@@ -1366,10 +1366,11 @@ class DatSanController extends Controller
 
     /**
      * Đồng bộ lại TongTien, ThueVAT, MaKhuyenMai và TrangThai của HoaDonDatSan khi có trận bị hủy / chốt
-     * - Nếu sau khi hủy lẻ 1 sân mà không còn đủ điều kiện tối thiểu của Khuyến mãi:
+     * - Trận 'KhongDen' (bùng sân): Chỉ thu đúng TienCoc (KHÔNG tính Thuế VAT 8%, KHÔNG tính vào điều kiện Khuyến mãi)
+     * - Trận 'DaCoc' / 'HoanThanh': Tính Khuyến mãi và Thuế VAT 8% (làm tròn dưới về hàng nghìn)
+     * - Nếu sau khi hủy/bùng sân mà tổng tiền các trận (DaCoc + HoanThanh) không còn đủ điều kiện tối thiểu của Khuyến mãi:
      *   + Tự động hoàn lại 1 lượt dùng (decrement SoLuongDaDung)
-     *   + Gỡ MaKhuyenMai = null khỏi HoaDonDatSan để ẩn khỏi lịch sử đặt sân
-     * - Thuế VAT 8% luôn làm tròn dưới về hàng nghìn
+     *   + Gỡ MaKhuyenMai = null khỏi HoaDonDatSan
      */
     public static function dongBoHoaDonDatSan($maHoaDon)
     {
@@ -1389,8 +1390,9 @@ class DatSanController extends Controller
                 ->get();
 
             if ($cacHoaDonCungGiaoDich->count() > 1) {
-                $tongTienHieuLucToanGio = 0;
-                $tienTheoTungHD = [];
+                $tongTienChiuThueToanGio = 0; // Chỉ tính các trận DaCoc và HoanThanh
+                $tienChiuThueTheoHD = [];
+                $tienCocKhongDenTheoHD = [];
                 $trangThaiTheoTungHD = [];
 
                 foreach ($cacHoaDonCungGiaoDich as $hdItem) {
@@ -1403,21 +1405,22 @@ class DatSanController extends Controller
                     $trangThaiTheoTungHD[$hdItem->MaHoaDonDatSan] = $st;
 
                     if ($st === 'DaHuy') {
-                        $tienTheoTungHD[$hdItem->MaHoaDonDatSan] = 0;
+                        $tienChiuThueTheoHD[$hdItem->MaHoaDonDatSan] = 0;
+                        $tienCocKhongDenTheoHD[$hdItem->MaHoaDonDatSan] = 0;
                     } else {
-                        $sub = 0;
-                        foreach ($dsList->where('TrangThai', '!=', 'DaHuy') as $d) {
-                            $sub += ($d->TrangThai === 'KhongDen') ? (float) $d->TienCoc : (float) $d->TongTien;
-                        }
-                        $tienTheoTungHD[$hdItem->MaHoaDonDatSan] = $sub;
-                        $tongTienHieuLucToanGio += $sub;
+                        $subTaxable = (float) $dsList->whereIn('TrangThai', ['DaCoc', 'HoanThanh'])->sum('TongTien');
+                        $subNoShow  = (float) $dsList->where('TrangThai', 'KhongDen')->sum('TienCoc');
+
+                        $tienChiuThueTheoHD[$hdItem->MaHoaDonDatSan] = $subTaxable;
+                        $tienCocKhongDenTheoHD[$hdItem->MaHoaDonDatSan] = $subNoShow;
+                        $tongTienChiuThueToanGio += $subTaxable;
                     }
                 }
 
                 $tatCaDaHuy = collect($trangThaiTheoTungHD)->every(fn($st) => $st === 'DaHuy');
-                $khongDuDieuKienNua = ($tongTienHieuLucToanGio < (float) $km->GiaTriHoaDonToiThieu);
+                $khongDuDieuKienNua = ($tongTienChiuThueToanGio <= 0 || $tongTienChiuThueToanGio < (float) $km->GiaTriHoaDonToiThieu);
 
-                // Nếu tất cả bị hủy HOẶC tổng tiền còn hiệu lực không còn đủ điều kiện tối thiểu của mã -> Hoàn lại 1 lượt dùng & gỡ mã!
+                // Nếu tất cả bị hủy HOẶC tổng tiền sân (DaCoc + HoanThanh) không còn đủ điều kiện tối thiểu -> Hoàn lại 1 lượt dùng & gỡ mã!
                 if ($tatCaDaHuy || $khongDuDieuKienNua) {
                     if ($km->SoLuongDaDung > 0) {
                         $km->decrement('SoLuongDaDung');
@@ -1429,17 +1432,27 @@ class DatSanController extends Controller
                     foreach ($cacHoaDonCungGiaoDich as $hdItem) {
                         $idHD = $hdItem->MaHoaDonDatSan;
                         $stHD = $trangThaiTheoTungHD[$idHD];
-                        $tienGocHD = ($stHD === 'DaHuy')
-                            ? (float) $hdItem->datSans->sum('TongTien')
-                            : $tienTheoTungHD[$idHD];
-                        $vatMoi = self::tinhThueVATLamTronDuoi($tienGocHD);
-
-                        $hdItem->update([
-                            'MaKhuyenMai' => null,
-                            'TongTien'    => $tienGocHD + $vatMoi,
-                            'ThueVAT'     => $vatMoi,
-                            'TrangThai'   => $stHD
-                        ]);
+                        if ($stHD === 'DaHuy') {
+                            $tienGocHD = (float) $hdItem->datSans->sum('TongTien');
+                            $vatMoi = self::tinhThueVATLamTronDuoi($tienGocHD);
+                            $hdItem->update([
+                                'MaKhuyenMai' => null,
+                                'TongTien'    => $tienGocHD + $vatMoi,
+                                'ThueVAT'     => $vatMoi,
+                                'TrangThai'   => 'DaHuy'
+                            ]);
+                        } else {
+                            // VAT chỉ tính trên phần tiền chịu thuế (DaCoc + HoanThanh), KHÔNG tính VAT trên phần tiền cọc KhongDen
+                            $taxable = $tienChiuThueTheoHD[$idHD];
+                            $noShow  = $tienCocKhongDenTheoHD[$idHD];
+                            $vatMoi  = self::tinhThueVATLamTronDuoi($taxable);
+                            $hdItem->update([
+                                'MaKhuyenMai' => null,
+                                'TongTien'    => $taxable + $vatMoi + $noShow,
+                                'ThueVAT'     => $vatMoi,
+                                'TrangThai'   => $stHD
+                            ]);
+                        }
                     }
                     return;
                 }
@@ -1447,17 +1460,17 @@ class DatSanController extends Controller
                 // Nếu vẫn đủ điều kiện tối thiểu -> Tính lại tổng giảm giá và phân bổ lại
                 $tongGiamMoi = 0;
                 if ($km->LoaiKhuyenMai === 'PhanTram') {
-                    $tongGiamMoi = round($tongTienHieuLucToanGio * ((float) $km->GiaTri / 100));
+                    $tongGiamMoi = round($tongTienChiuThueToanGio * ((float) $km->GiaTri / 100));
                     if ((float) $km->GiaTriToiDa > 0 && $tongGiamMoi > (float) $km->GiaTriToiDa) {
                         $tongGiamMoi = (float) $km->GiaTriToiDa;
                     }
                 } else {
                     $tongGiamMoi = (float) $km->GiaTri;
                 }
-                $tongGiamMoi = min($tongTienHieuLucToanGio, $tongGiamMoi);
+                $tongGiamMoi = min($tongTienChiuThueToanGio, $tongGiamMoi);
 
                 $daPhanBo = 0;
-                $activeHDIds = array_keys(array_filter($tienTheoTungHD, fn($v) => $v > 0));
+                $activeHDIds = array_keys(array_filter($tienChiuThueTheoHD, fn($v) => $v > 0));
                 $lastActiveId = end($activeHDIds);
 
                 foreach ($cacHoaDonCungGiaoDich as $hdItem) {
@@ -1467,7 +1480,6 @@ class DatSanController extends Controller
                     if ($stHD === 'DaHuy') {
                         $tienGocHuy = (float) $hdItem->datSans->sum('TongTien');
                         $vatHuy = self::tinhThueVATLamTronDuoi($tienGocHuy);
-                        // Hóa đơn cụm sân bị hủy hết thì gỡ MaKhuyenMai khỏi hóa đơn bị hủy đó
                         $hdItem->update([
                             'MaKhuyenMai' => null,
                             'TongTien'    => $tienGocHuy + $vatHuy,
@@ -1475,23 +1487,28 @@ class DatSanController extends Controller
                             'TrangThai'   => 'DaHuy'
                         ]);
                     } else {
-                        $tienCum = $tienTheoTungHD[$idHD];
+                        $tienCum = $tienChiuThueTheoHD[$idHD];
+                        $noShow  = $tienCocKhongDenTheoHD[$idHD];
                         $giamCum = 0;
-                        if ($tongGiamMoi > 0 && $tongTienHieuLucToanGio > 0) {
+
+                        if ($tongGiamMoi > 0 && $tongTienChiuThueToanGio > 0 && $tienCum > 0) {
                             if ($idHD === $lastActiveId) {
                                 $giamCum = max(0, $tongGiamMoi - $daPhanBo);
                             } else {
-                                $giamCum = round($tongGiamMoi * ($tienCum / $tongTienHieuLucToanGio));
+                                $giamCum = round($tongGiamMoi * ($tienCum / $tongTienChiuThueToanGio));
                                 $daPhanBo += $giamCum;
                             }
                             $giamCum = min($tienCum, $giamCum);
                         }
+
                         $sauGiam = max(0, $tienCum - $giamCum);
                         $vatMoi  = self::tinhThueVATLamTronDuoi($sauGiam);
+
                         $hdItem->update([
-                            'TongTien'  => $sauGiam + $vatMoi,
-                            'ThueVAT'   => $vatMoi,
-                            'TrangThai' => $stHD
+                            'MaKhuyenMai' => ($tienCum > 0) ? $km->MaKhuyenMai : null,
+                            'TongTien'    => $sauGiam + $vatMoi + $noShow,
+                            'ThueVAT'     => $vatMoi,
+                            'TrangThai'   => $stHD
                         ]);
                     }
                 }
@@ -1513,12 +1530,11 @@ class DatSanController extends Controller
             $trangThaiHoaDon = 'DaHuy';
         }
 
-        $tienXetKhuyenMai = 0;
         $maKhuyenMaiMoi = $hoaDon->MaKhuyenMai;
 
         if ($trangThaiHoaDon === 'DaHuy') {
             $tongTienSanGoc = (float) $cacDatSan->sum('TongTien');
-            $tienXetKhuyenMai = 0;
+            $vatHuy = self::tinhThueVATLamTronDuoi($tongTienSanGoc);
 
             if ($trangThaiCu !== 'DaHuy' && $hoaDon->MaKhuyenMai && $km) {
                 if ($km->SoLuongDaDung > 0) {
@@ -1528,46 +1544,48 @@ class DatSanController extends Controller
                     }
                 }
             }
-            $maKhuyenMaiMoi = null;
-        } else {
-            $cacSanHieuLuc = $cacDatSan->where('TrangThai', '!=', 'DaHuy');
-            $tongTienSanGoc = 0;
 
-            foreach ($cacSanHieuLuc as $ds) {
-                $tienTran = ($ds->TrangThai === 'KhongDen') ? (float) $ds->TienCoc : (float) $ds->TongTien;
-                $tongTienSanGoc += $tienTran;
-                $tienXetKhuyenMai += $tienTran;
-            }
+            $hoaDon->update([
+                'MaKhuyenMai' => null,
+                'TongTien'    => $tongTienSanGoc + $vatHuy,
+                'ThueVAT'     => $vatHuy,
+                'TrangThai'   => 'DaHuy',
+            ]);
+            return;
+        }
 
-            // Nếu Hóa đơn có gắn mã Khuyến mãi nhưng sau khi hủy bớt sân thì không còn đủ điều kiện tối thiểu nữa:
-            // -> Hoàn trả 1 lượt dùng khuyến mãi VÀ gỡ MaKhuyenMai = null khỏi hóa đơn!
-            if ($hoaDon->MaKhuyenMai && $km && $tienXetKhuyenMai < (float) $km->GiaTriHoaDonToiThieu) {
-                if ($km->SoLuongDaDung > 0) {
-                    $km->decrement('SoLuongDaDung');
-                    if ($km->TrangThai === 'HetHan' && now()->lte(Carbon::parse($km->NgayKetThuc))) {
-                        $km->update(['TrangThai' => 'DangApDung']);
-                    }
+        // Tách riêng:
+        // 1. Các trận DaCoc + HoanThanh -> Được xét Khuyến mãi và tính Thuế VAT 8%
+        // 2. Các trận KhongDen -> Chỉ thu đúng TienCoc (KHÔNG tính Thuế VAT, KHÔNG xét Khuyến mãi)
+        $tienSanChiuThue = (float) $cacDatSan->whereIn('TrangThai', ['DaCoc', 'HoanThanh'])->sum('TongTien');
+        $tienCocKhongDen = (float) $cacDatSan->where('TrangThai', 'KhongDen')->sum('TienCoc');
+
+        if ($hoaDon->MaKhuyenMai && $km && ($tienSanChiuThue <= 0 || $tienSanChiuThue < (float) $km->GiaTriHoaDonToiThieu)) {
+            if ($km->SoLuongDaDung > 0) {
+                $km->decrement('SoLuongDaDung');
+                if ($km->TrangThai === 'HetHan' && now()->lte(Carbon::parse($km->NgayKetThuc))) {
+                    $km->update(['TrangThai' => 'DangApDung']);
                 }
-                $maKhuyenMaiMoi = null;
             }
+            $maKhuyenMaiMoi = null;
         }
 
         $soTienGiam = 0;
-        if ($maKhuyenMaiMoi && $km && $tienXetKhuyenMai >= (float) $km->GiaTriHoaDonToiThieu) {
+        if ($maKhuyenMaiMoi && $km && $tienSanChiuThue >= (float) $km->GiaTriHoaDonToiThieu) {
             if ($km->LoaiKhuyenMai === 'PhanTram') {
-                $soTienGiam = round($tienXetKhuyenMai * ((float) $km->GiaTri / 100));
+                $soTienGiam = round($tienSanChiuThue * ((float) $km->GiaTri / 100));
                 if ((float) $km->GiaTriToiDa > 0 && $soTienGiam > (float) $km->GiaTriToiDa) {
                     $soTienGiam = (float) $km->GiaTriToiDa;
                 }
             } else {
                 $soTienGiam = (float) $km->GiaTri;
             }
-            $soTienGiam = min($tienXetKhuyenMai, $soTienGiam);
+            $soTienGiam = min($tienSanChiuThue, $soTienGiam);
         }
 
-        $tienSauGiam = max(0, $tongTienSanGoc - $soTienGiam);
+        $tienSauGiam = max(0, $tienSanChiuThue - $soTienGiam);
         $thueVATMoi  = self::tinhThueVATLamTronDuoi($tienSauGiam);
-        $tongTienMoi = $tienSauGiam + $thueVATMoi;
+        $tongTienMoi = $tienSauGiam + $thueVATMoi + $tienCocKhongDen;
 
         $hoaDon->update([
             'MaKhuyenMai' => $maKhuyenMaiMoi,

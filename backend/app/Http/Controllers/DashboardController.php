@@ -8,31 +8,52 @@ use App\Models\DatSan;
 use App\Models\GiaiDau;
 use App\Models\NguoiDung;
 use App\Models\YeuCauHuyGap;
-use App\Models\LichLamViec;
 use Carbon\Carbon;
 
 class DashboardController extends Controller
 {
     /**
-     * Hàm phụ trợ tính chi phí nhân sự của 1 ca làm việc đã điểm danh ('DaLam')
-     * Dựa trên bảng LichLamViec + CaLamViec (vì đã bỏ bảng BangLuong, PhieuNhapHang, ChiPhiPhatSinh)
+     * Tính số tiền doanh thu thực tế thu vào của 1 lịch đặt sân ($ds) đã chốt ('HoanThanh' hoặc 'KhongDen')
+     * 1. Nếu 'KhongDen' (Cả Phong trào & Giải đấu):
+     *    -> Chỉ tính đúng tiền cọc ($ds->TienCoc), KHÔNG có Thuế VAT.
+     * 2. Nếu 'HoanThanh' (Cả Phong trào & Giải đấu):
+     *    -> Tính số tiền thực thu của trận đó sau khi đã trừ Khuyến mãi (nếu có) và cộng Thuế VAT 8% trên Hóa đơn.
      */
-    private function tinhChiPhiCaLam($lich)
+    public static function tinhDoanhThuThucTeDatSan($ds)
     {
-        if ($lich->TrangThaiDiemDanh !== 'DaLam') {
+        if (!in_array($ds->TrangThai, ['HoanThanh', 'KhongDen'])) {
             return 0;
         }
-        $ca = $lich->caLamViec;
-        $luongCa = 0;
-        if ($ca) {
-            $luongCa = ($lich->CongViec === 'ThuNgan')
-                ? (float) $ca->LuongThuNgan
-                : (float) $ca->LuongPhucVu;
-        }
-        $thuong = (float) ($lich->TienThuong ?? 0);
-        $phat   = (float) ($lich->TienPhat ?? 0);
 
-        return max(0, $luongCa + $thuong - $phat);
+        // TRƯỜNG HỢP 1: Khách KHÔNG ĐẾN -> Chỉ thu đúng tiền cọc (30% phong trào hoặc 50% giải đấu), không tính VAT
+        if ($ds->TrangThai === 'KhongDen') {
+            return (float) $ds->TienCoc;
+        }
+
+        // TRƯỜNG HỢP 2: Khách HOÀN THÀNH trận đấu
+        $tienGocTranNay = (float) $ds->TongTien;
+        $hoaDon = $ds->hoaDonDatSan;
+
+        if (!$hoaDon) {
+            $vatLe = floor(($tienGocTranNay * 0.08) / 1000) * 1000;
+            return $tienGocTranNay + $vatLe;
+        }
+
+        $cacTranTrongHD = $hoaDon->datSans ?? collect([]);
+
+        // Tổng tiền gốc của các trận chịu thuế (DaCoc + HoanThanh) và tổng tiền cọc của các trận KhongDen trong cùng Hóa đơn
+        $tongGocChiuThue = (float) $cacTranTrongHD->whereIn('TrangThai', ['DaCoc', 'HoanThanh'])->sum('TongTien');
+        $tongCocKhongDen = (float) $cacTranTrongHD->where('TrangThai', 'KhongDen')->sum('TienCoc');
+
+        if ($tongGocChiuThue <= 0) {
+            return $tienGocTranNay;
+        }
+
+        // Phần tổng tiền Hóa đơn thực tế thuộc về các trận (DaCoc + HoanThanh) = TongTien Hóa đơn - Tổng cọc các trận KhongDen
+        $tongThucThuCacTranChiuThue = max(0, (float) $hoaDon->TongTien - $tongCocKhongDen);
+
+        // Phân bổ cho trận Hoàn thành này theo đúng tỷ lệ giá sân gốc
+        return round($tongThucThuCacTranChiuThue * ($tienGocTranNay / $tongGocChiuThue));
     }
 
     public function layThongKe(Request $request)
@@ -44,8 +65,9 @@ class DashboardController extends Controller
         $idCumSan = $isQuanLy ? $userDangNhap->MaCumSan : ($request->input('ma_cum_san', $request->input('id_cum_san', 'all')));
         $timeFilter = $request->time_filter ?? 'hom_nay';
 
-        // 1. DOANH THU HÔM NAY (Chỉ tính các trận HoanThanh lấy TongTien, KhongDen lấy TienCoc)
-        $queryDatSansHomNay = DatSan::whereDate('NgayDa', $today)
+        // 1. DOANH THU HÔM NAY (Tính theo số tiền thực thu từ các trận HoanThanh / KhongDen trong hôm nay)
+        $queryDatSansHomNay = DatSan::with(['hoaDonDatSan.datSans'])
+            ->whereDate('NgayDa', $today)
             ->whereIn('TrangThai', ['HoanThanh', 'KhongDen']);
 
         if ($idCumSan !== 'all') {
@@ -56,7 +78,7 @@ class DashboardController extends Controller
 
         $doanhThuHomNay = 0;
         foreach ($queryDatSansHomNay->get() as $ds) {
-            $doanhThuHomNay += ($ds->TrangThai === 'HoanThanh') ? (float) $ds->TongTien : (float) $ds->TienCoc;
+            $doanhThuHomNay += self::tinhDoanhThuThucTeDatSan($ds);
         }
 
         // 2. TỔNG BOOKING ĐÁ TRONG HÔM NAY
@@ -109,9 +131,8 @@ class DashboardController extends Controller
         }
         $soSanQuenChot = $queryQuenChot->count();
 
-        // 6. BIỂU ĐỒ DOANH THU (ĐẶT SÂN) & CHI PHÍ (CA LÀM NHÂN VIÊN)
+        // 6. BIỂU ĐỒ DOANH THU / LỢI NHUẬN THU VÀO TỪ ĐẶT SÂN (ĐÃ BỎ CHI PHÍ)
         $doanhThuChart = [];
-        $chiPhiChart = [];
 
         if ($timeFilter === 'hom_nay' || $timeFilter === 'hom_truoc') {
             $targetDate = $timeFilter === 'hom_nay' ? Carbon::today() : Carbon::yesterday();
@@ -119,22 +140,14 @@ class DashboardController extends Controller
             for ($i = 0; $i < 24; $i++) {
                 $timeKey = sprintf("%02d:00", $i);
                 $doanhThuChart[$timeKey] = 0;
-                $chiPhiChart[$timeKey] = 0;
             }
 
-            $queryDS = DatSan::with('khungGio')
+            $queryDS = DatSan::with(['khungGio', 'hoaDonDatSan.datSans'])
                 ->whereDate('NgayDa', $targetDate)
                 ->whereIn('TrangThai', ['HoanThanh', 'KhongDen']);
 
-            $queryLich = LichLamViec::with('caLamViec')
-                ->whereDate('NgayLam', $targetDate)
-                ->where('TrangThaiDiemDanh', 'DaLam');
-
             if ($idCumSan !== 'all') {
                 $queryDS->whereHas('sanBong', function ($q) use ($idCumSan) {
-                    $q->where('MaCumSan', $idCumSan);
-                });
-                $queryLich->whereHas('caLamViec', function ($q) use ($idCumSan) {
                     $q->where('MaCumSan', $idCumSan);
                 });
             }
@@ -142,18 +155,9 @@ class DashboardController extends Controller
             foreach ($queryDS->get() as $ds) {
                 if ($ds->khungGio) {
                     $hour = substr($ds->khungGio->GioBatDau, 0, 2) . ':00';
-                    $dt = ($ds->TrangThai === 'HoanThanh') ? (float) $ds->TongTien : (float) $ds->TienCoc;
+                    $dt = self::tinhDoanhThuThucTeDatSan($ds);
                     if (isset($doanhThuChart[$hour])) {
                         $doanhThuChart[$hour] += $dt;
-                    }
-                }
-            }
-
-            foreach ($queryLich->get() as $lich) {
-                if ($lich->caLamViec) {
-                    $hour = substr($lich->caLamViec->GioBatDau, 0, 2) . ':00';
-                    if (isset($chiPhiChart[$hour])) {
-                        $chiPhiChart[$hour] += $this->tinhChiPhiCaLam($lich);
                     }
                 }
             }
@@ -162,46 +166,32 @@ class DashboardController extends Controller
             foreach ($doanhThuChart as $hour => $amount) {
                 $formattedChart[] = [
                     'ngay'      => $hour,
-                    'doanh_thu' => $amount,
-                    'chi_phi'   => $chiPhiChart[$hour]
+                    'doanh_thu' => $amount
                 ];
             }
             $doanhThuChart = $formattedChart;
 
         } elseif ($timeFilter === 'nam') {
             for ($i = 1; $i <= 12; $i++) {
-                $queryDS = DatSan::whereYear('NgayDa', $today->year)
+                $queryDS = DatSan::with(['hoaDonDatSan.datSans'])
+                    ->whereYear('NgayDa', $today->year)
                     ->whereMonth('NgayDa', $i)
                     ->whereIn('TrangThai', ['HoanThanh', 'KhongDen']);
 
-                $queryLich = LichLamViec::with('caLamViec')
-                    ->whereYear('NgayLam', $today->year)
-                    ->whereMonth('NgayLam', $i)
-                    ->where('TrangThaiDiemDanh', 'DaLam');
-
                 if ($idCumSan !== 'all') {
                     $queryDS->whereHas('sanBong', function ($q) use ($idCumSan) {
-                        $q->where('MaCumSan', $idCumSan);
-                    });
-                    $queryLich->whereHas('caLamViec', function ($q) use ($idCumSan) {
                         $q->where('MaCumSan', $idCumSan);
                     });
                 }
 
                 $dt = 0;
                 foreach ($queryDS->get() as $ds) {
-                    $dt += ($ds->TrangThai === 'HoanThanh') ? (float) $ds->TongTien : (float) $ds->TienCoc;
-                }
-
-                $cp = 0;
-                foreach ($queryLich->get() as $lich) {
-                    $cp += $this->tinhChiPhiCaLam($lich);
+                    $dt += self::tinhDoanhThuThucTeDatSan($ds);
                 }
 
                 $doanhThuChart[] = [
                     'ngay'      => "Tháng $i",
-                    'doanh_thu' => $dt,
-                    'chi_phi'   => $cp
+                    'doanh_thu' => $dt
                 ];
             }
         } else {
@@ -209,36 +199,24 @@ class DashboardController extends Controller
             for ($i = $days - 1; $i >= 0; $i--) {
                 $date = Carbon::today()->subDays($i);
 
-                $queryDS = DatSan::whereDate('NgayDa', $date)
+                $queryDS = DatSan::with(['hoaDonDatSan.datSans'])
+                    ->whereDate('NgayDa', $date)
                     ->whereIn('TrangThai', ['HoanThanh', 'KhongDen']);
-
-                $queryLich = LichLamViec::with('caLamViec')
-                    ->whereDate('NgayLam', $date)
-                    ->where('TrangThaiDiemDanh', 'DaLam');
 
                 if ($idCumSan !== 'all') {
                     $queryDS->whereHas('sanBong', function ($q) use ($idCumSan) {
-                        $q->where('MaCumSan', $idCumSan);
-                    });
-                    $queryLich->whereHas('caLamViec', function ($q) use ($idCumSan) {
                         $q->where('MaCumSan', $idCumSan);
                     });
                 }
 
                 $dt = 0;
                 foreach ($queryDS->get() as $ds) {
-                    $dt += ($ds->TrangThai === 'HoanThanh') ? (float) $ds->TongTien : (float) $ds->TienCoc;
-                }
-
-                $cp = 0;
-                foreach ($queryLich->get() as $lich) {
-                    $cp += $this->tinhChiPhiCaLam($lich);
+                    $dt += self::tinhDoanhThuThucTeDatSan($ds);
                 }
 
                 $doanhThuChart[] = [
                     'ngay'      => $date->format('d/m'),
-                    'doanh_thu' => $dt,
-                    'chi_phi'   => $cp
+                    'doanh_thu' => $dt
                 ];
             }
         }
