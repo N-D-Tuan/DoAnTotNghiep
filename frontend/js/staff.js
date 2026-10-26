@@ -1540,10 +1540,22 @@ function applyStaffDSFiltersAndRender() {
 
     const searchTerm = staffDSSearch.toLowerCase().trim().replace(/^#/, '');
 
-    // 2. Gom nhóm toàn bộ các đặt sân thuộc cụm sân theo MaHoaDonDatSan TRƯỚC KHI lọc và phân trang
+    // 2. Gom nhóm toàn bộ các đặt sân thuộc cụm sân theo Hóa đơn (Nếu là Giải đấu thì đảm bảo gom chung toàn bộ các trận của giải đó vào 1 Hóa đơn)
     const invoiceMap = new Map();
+    const tournamentKeyMap = new Map();
+
     clusterBookings.forEach(item => {
-        const key = item.MaHoaDonDatSan ? String(item.MaHoaDonDatSan) : ('LE_' + (item.MaDatSan || item.ID));
+        const maGiai = item.MaGiaiDau || item.ID_GiaiDau || null;
+        let key = item.MaHoaDonDatSan ? String(item.MaHoaDonDatSan) : ('LE_' + (item.MaDatSan || item.ID));
+
+        if (maGiai) {
+            if (tournamentKeyMap.has(String(maGiai))) {
+                key = tournamentKeyMap.get(String(maGiai));
+            } else {
+                tournamentKeyMap.set(String(maGiai), key);
+            }
+        }
+
         if (!invoiceMap.has(key)) {
             invoiceMap.set(key, {
                 key: key,
@@ -1553,6 +1565,9 @@ function applyStaffDSFiltersAndRender() {
             });
         }
         const group = invoiceMap.get(key);
+        if (!group.maHoaDon && item.MaHoaDonDatSan) {
+            group.maHoaDon = item.MaHoaDonDatSan;
+        }
         if (!group.hoaDonObj && (item.hoa_don_dat_san || item.hoaDonDatSan)) {
             group.hoaDonObj = item.hoa_don_dat_san || item.hoaDonDatSan;
         }
@@ -3596,15 +3611,25 @@ window.printAdminBookingInvoice = async function(maHoaDon) {
             return showSystemModal('Lỗi', json.message || 'Không tìm thấy hóa đơn!', 'error');
         }
         const hd = json.data;
-        const listDatSan = hd.dat_sans || hd.datSans || [];
+        const listDatSan = [...(hd.dat_sans || hd.datSans || [])].sort((a, b) => {
+            const dateCmp = String(a.NgayDa || '').localeCompare(String(b.NgayDa || ''));
+            if (dateCmp !== 0) return dateCmp;
+            const timeA = a.khung_gio?.GioBatDau || '';
+            const timeB = b.khung_gio?.GioBatDau || '';
+            return timeA.localeCompare(timeB);
+        });
+
         const first = listDatSan[0] || {};
         const tenKhach = hd.nguoi_dung?.HoTen || first.TenNguoiDat || first.TenKhachVangLai || 'Khách hàng';
         const sdtKhach = hd.nguoi_dung?.SoDienThoai || first.SDTNguoiDat || first.SDTKhachVangLai || '';
         const ngayLap = hd.NgayTao ? new Date(hd.NgayTao).toLocaleString('vi-VN') : '';
+        const tenGiaiDau = first.giai_dau?.TenGiaiDau || null;
         const statusMap = { 'DaCoc': 'Đã đặt cọc', 'HoanThanh': 'Đã hoàn thành', 'DaHuy': 'Đã hủy', 'KhongDen': 'Không đến' };
 
-        let tongTienSanGoc = 0;       // Tổng đơn giá gốc của các trận (DaCoc + HoanThanh)
-        let tongCocKhongDen = 0;      // Tổng tiền cọc giữ lại của các trận (KhongDen)
+        let tongTienSanGoc = 0;       // Chỉ cộng đơn giá các trận Đã cọc + Hoàn thành
+        let tongCocKhongDen = 0;      // Chỉ cộng tiền cọc (30% hoặc 50%) của các trận Không đến
+        let soTranTinhTienGoc = 0;    // Số trận thực tế tính vào Tổng tiền sân gốc
+        let soTranKhongDen = 0;       // Số trận Không đến
 
         const rowsHtml = listDatSan.map((ds, i) => {
             const tenSan = ds.san_bong?.TenSan || 'Sân bóng';
@@ -3617,8 +3642,10 @@ window.printAdminBookingInvoice = async function(maHoaDon) {
 
             if (ds.TrangThai === 'DaCoc' || ds.TrangThai === 'HoanThanh') {
                 tongTienSanGoc += donGia;
+                soTranTinhTienGoc++;
             } else if (ds.TrangThai === 'KhongDen') {
                 tongCocKhongDen += tienCocTran;
+                soTranKhongDen++;
             }
 
             return `
@@ -3634,17 +3661,29 @@ window.printAdminBookingInvoice = async function(maHoaDon) {
             `;
         }).join('');
 
-        const tongTien = Number(hd.TongTien ?? hd.TongTienSan ?? 0);
-        const thueVAT = Number(hd.ThueVAT || 0);
         const kmObj = hd.khuyen_mai || hd.khuyenMai || null;
+        let soTienGiam = 0;
+        if (hd.MaKhuyenMai && kmObj && tongTienSanGoc >= Number(kmObj.GiaTriHoaDonToiThieu || 0)) {
+            if (kmObj.LoaiKhuyenMai === 'PhanTram') {
+                soTienGiam = Math.round(tongTienSanGoc * (Number(kmObj.GiaTri || 0) / 100));
+                if (Number(kmObj.GiaTriToiDa || 0) > 0 && soTienGiam > Number(kmObj.GiaTriToiDa)) {
+                    soTienGiam = Number(kmObj.GiaTriToiDa);
+                }
+            } else {
+                soTienGiam = Number(kmObj.GiaTri || 0);
+            }
+            soTienGiam = Math.min(tongTienSanGoc, soTienGiam);
+        }
 
-        // Tiền sau giảm của các trận (DaCoc + HoanThanh) = Tổng hóa đơn - Thuế VAT - Tiền cọc các trận Không đến
-        const tienSauGiamChiuThue = Math.max(0, tongTien - thueVAT - tongCocKhongDen);
-        const soTienGiam = (hd.MaKhuyenMai && tongTienSanGoc > 0)
-            ? Math.max(0, tongTienSanGoc - tienSauGiamChiuThue)
-            : 0;
+        const tienSauGiam = Math.max(0, tongTienSanGoc - soTienGiam);
+        const thueVAT = Math.floor((tienSauGiam * 0.08) / 1000) * 1000;
+        const tongTien = (hd.TrangThai === 'DaHuy')
+            ? Number(hd.TongTien ?? 0)
+            : (tienSauGiam + thueVAT + tongCocKhongDen);
 
-        const tienCoc = Number(hd.TienDaCoc || 0);
+        const tienCoc = listDatSan
+            .filter(d => d.TrangThai !== 'DaHuy')
+            .reduce((s, d) => s + Number(d.TienCoc || 0), 0);
         const conLai = (hd.TrangThai === 'DaHuy') ? 0 : Math.max(0, tongTien - tienCoc);
 
         const printWin = window.open('', '_blank', 'width=880,height=740');
@@ -3680,7 +3719,10 @@ window.printAdminBookingInvoice = async function(maHoaDon) {
                     </div>
                 </div>
                 <h2>HÓA ĐƠN ĐẶT SÂN</h2>
-                <p><strong>Khách hàng:</strong> ${tenKhach} &bull; <strong>Số điện thoại:</strong> ${sdtKhach}</p>
+                <p>
+                    <strong>Khách hàng:</strong> ${tenKhach} &bull; <strong>Số điện thoại:</strong> ${sdtKhach}
+                    ${tenGiaiDau ? `<br><strong>Giải đấu:</strong> ${tenGiaiDau} (${listDatSan.length} trận)` : ` &bull; <strong>Tổng số trận:</strong> ${listDatSan.length} trận`}
+                </p>
                 <table>
                     <thead>
                         <tr>
@@ -3696,8 +3738,8 @@ window.printAdminBookingInvoice = async function(maHoaDon) {
                     <tbody>${rowsHtml}</tbody>
                 </table>
                 <div class="summary">
-                    ${tongTienSanGoc > 0 ? `<div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>Tổng tiền sân gốc:</span><strong>${tongTienSanGoc.toLocaleString('vi-VN')}đ</strong></div>` : ''}
-                    ${tongCocKhongDen > 0 ? `<div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#64748b;"><span>Tiền cọc trận không đến:</span><strong>${tongCocKhongDen.toLocaleString('vi-VN')}đ</strong></div>` : ''}
+                    ${tongTienSanGoc > 0 ? `<div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>Tổng tiền sân gốc (${soTranTinhTienGoc} trận):</span><strong>${tongTienSanGoc.toLocaleString('vi-VN')}đ</strong></div>` : ''}
+                    ${tongCocKhongDen > 0 ? `<div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#64748b;"><span>Tiền cọc trận không đến (${soTranKhongDen} trận):</span><strong>${tongCocKhongDen.toLocaleString('vi-VN')}đ</strong></div>` : ''}
                     ${soTienGiam > 0 ? `<div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#2563eb;"><span>Khuyến mãi (${kmObj ? kmObj.TenKhuyenMai : 'Voucher'}):</span><strong>-${soTienGiam.toLocaleString('vi-VN')}đ</strong></div>` : ''}
                     <div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#475569;"><span>Thuế VAT (8%):</span><strong>+${thueVAT.toLocaleString('vi-VN')}đ</strong></div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:6px; border-top:1px solid #e2e8f0; padding-top:6px;"><span>Tổng tiền hóa đơn:</span><strong>${tongTien.toLocaleString('vi-VN')}đ</strong></div>
