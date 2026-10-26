@@ -493,6 +493,9 @@ class DatSanController extends Controller
 
     public function layDanhSachCuaToi(Request $request)
     {
+        // Tự động gộp các hóa đơn giải đấu bị tách lẻ thành 1 hóa đơn duy nhất
+        self::gopHoaDonGiaiDauBiTach();
+
         $user = NguoiDung::find(Auth::id() ?? $request->user()->MaNguoiDung);
 
         $danhSach = DatSan::with(['sanBong.cumSan', 'khungGio', 'giaiDau', 'danhGia', 'chiTietHoaDon', 'hoaDonDatSan.khuyenMai'])
@@ -624,6 +627,9 @@ class DatSanController extends Controller
 
     public function layDanhSachAdmin(Request $request)
     {
+        // Tự động gộp các hóa đơn giải đấu bị tách lẻ thành 1 hóa đơn duy nhất
+        self::gopHoaDonGiaiDauBiTach();
+
         $userDangNhap = auth()->user();
 
         $query = DatSan::with(['nguoiDung', 'nhanVienXuLy', 'sanBong.cumSan', 'khungGio', 'giaiDau', 'chiTietHoaDon', 'hoaDonDatSan.khuyenMai']);
@@ -1666,15 +1672,135 @@ class DatSanController extends Controller
         ";
     }
 
+    /**
+     * Tự động gộp các Hóa đơn đặt sân bị tách lẻ của cùng 1 Giải đấu (MaGiaiDau) về 1 Hóa đơn duy nhất
+     */
+    public static function gopHoaDonGiaiDauBiTach()
+    {
+        $danhSachMaGiaiDau = DatSan::whereNotNull('MaGiaiDau')
+            ->distinct()
+            ->pluck('MaGiaiDau');
+
+        if ($danhSachMaGiaiDau->isEmpty()) {
+            return;
+        }
+
+        foreach ($danhSachMaGiaiDau as $maGiaiDau) {
+            $cacDatSan = DatSan::with('chiTietHoaDon')
+                ->where('MaGiaiDau', $maGiaiDau)
+                ->orderBy('MaDatSan', 'asc')
+                ->get();
+
+            if ($cacDatSan->isEmpty()) {
+                continue;
+            }
+
+            // Lấy danh sách các MaHoaDonDatSan đang gắn với các trận của giải đấu này
+            $maHoaDonIds = $cacDatSan->map(function ($ds) {
+                return $ds->chiTietHoaDon ? $ds->chiTietHoaDon->MaHoaDonDatSan : null;
+            })->filter()->unique()->values();
+
+            $chuaDuChiTiet = $cacDatSan->contains(function ($ds) {
+                return $ds->chiTietHoaDon === null;
+            });
+
+            // Nếu tất cả các trận của giải đã nằm chung trong đúng 1 Hóa đơn và đủ ChiTietHoaDon
+            if ($maHoaDonIds->count() === 1 && !$chuaDuChiTiet) {
+                $maHD = $maHoaDonIds->first();
+                self::dongBoHoaDonDatSan($maHD);
+                continue;
+            }
+
+            DB::beginTransaction();
+            try {
+                $firstDS = $cacDatSan->first();
+                $maHoaDonChinh = $maHoaDonIds->first();
+
+                // Nếu giải đấu chưa có hóa đơn nào thì tạo mới 1 hóa đơn chính
+                if (!$maHoaDonChinh) {
+                    $tongGoc = (float) $cacDatSan->sum('TongTien');
+                    $vat = self::tinhThueVATLamTronDuoi($tongGoc);
+                    $hdMoi = HoaDonDatSan::create([
+                        'MaNguoiDung'         => $firstDS->MaNguoiDung,
+                        'MaGiaoDich'          => null,
+                        'MaKhuyenMai'         => null,
+                        'TongTien'            => $tongGoc + $vat,
+                        'ThueVAT'             => $vat,
+                        'PhuongThucThanhToan' => 'ViDienTu',
+                        'TrangThai'           => 'DaCoc'
+                    ]);
+                    $maHoaDonChinh = $hdMoi->MaHoaDonDatSan;
+                }
+
+                // Gom toàn bộ ChiTietHoaDon của tất cả các trận trong giải đấu về $maHoaDonChinh
+                foreach ($cacDatSan as $ds) {
+                    DB::table('ChiTietHoaDon')->updateOrInsert(
+                        ['MaDatSan' => $ds->MaDatSan],
+                        [
+                            'MaHoaDonDatSan' => $maHoaDonChinh,
+                            'DonGia'         => $ds->TongTien ?? 0
+                        ]
+                    );
+                }
+
+                // Xóa các hóa đơn bị tách lẻ dư thừa của giải đấu này
+                $maHoaDonThua = $maHoaDonIds->filter(fn($id) => $id !== $maHoaDonChinh)->values();
+                if ($maHoaDonThua->isNotEmpty()) {
+                    foreach ($maHoaDonThua as $idThua) {
+                        $conTranKhac = DB::table('ChiTietHoaDon')
+                            ->where('MaHoaDonDatSan', $idThua)
+                            ->exists();
+                        if (!$conTranKhac) {
+                            HoaDonDatSan::where('MaHoaDonDatSan', $idThua)->delete();
+                        }
+                    }
+                }
+
+                // Đồng bộ lại Tổng tiền, Thuế VAT (8%) và Trạng thái của Hóa đơn chính sau khi đã gộp đủ các trận
+                self::dongBoHoaDonDatSan($maHoaDonChinh);
+
+                DB::commit();
+            } catch (\Exception $e) {
+                DB::rollBack();
+            }
+        }
+    }
+
     public function layChiTietHoaDonDatSan($maHoaDon)
     {
+        // Ghi nhận MaGiaiDau (nếu $maHoaDon thuộc về 1 trận giải đấu trước khi gộp)
+        $datSanThuocHD = DatSan::whereHas('chiTietHoaDon', function ($q) use ($maHoaDon) {
+            $q->where('MaHoaDonDatSan', $maHoaDon);
+        })->first();
+        $maGiaiDauLienQuan = $datSanThuocHD ? $datSanThuocHD->MaGiaiDau : null;
+
+        // Tự động gộp các hóa đơn giải đấu bị tách lẻ
+        self::gopHoaDonGiaiDauBiTach();
+
         $hoaDon = HoaDonDatSan::with(['nguoiDung', 'khuyenMai', 'chiTietHoaDons', 'datSans.sanBong.cumSan', 'datSans.khungGio', 'datSans.giaiDau'])
             ->where('MaHoaDonDatSan', $maHoaDon)
             ->first();
 
+        // Nếu người dùng bấm vào mã hóa đơn lẻ cũ đã được gộp sang hóa đơn chính của giải đấu
+        if (!$hoaDon && $maGiaiDauLienQuan) {
+            $hoaDon = HoaDonDatSan::with(['nguoiDung', 'khuyenMai', 'chiTietHoaDons', 'datSans.sanBong.cumSan', 'datSans.khungGio', 'datSans.giaiDau'])
+                ->whereHas('datSans', function ($q) use ($maGiaiDauLienQuan) {
+                    $q->where('MaGiaiDau', $maGiaiDauLienQuan);
+                })
+                ->first();
+        }
+
         if (!$hoaDon) {
             return response()->json(['success' => false, 'message' => 'Không tìm thấy hóa đơn đặt sân!'], 404);
         }
+
+        // Sắp xếp toàn bộ các trận trong hóa đơn theo Ngày đá và Khung giờ tăng dần
+        $sortedDatSans = $hoaDon->datSans->sortBy(function ($ds) {
+            $ngay = $ds->NgayDa ?? '';
+            $gio  = $ds->khungGio ? $ds->khungGio->GioBatDau : '';
+            return $ngay . ' ' . $gio;
+        })->values();
+        $hoaDon->setRelation('datSans', $sortedDatSans);
 
         return response()->json(['success' => true, 'data' => $hoaDon]);
     }
