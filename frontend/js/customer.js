@@ -724,6 +724,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                     refreshOpenCustomerReviewsModal();
                 }
 
+                // 3b. REALTIME: Nếu khách đang mở Modal Dời Lịch -> Tự động cập nhật ngay các ô giờ trống/đã đặt trong Modal!
+                if (typeof refreshCustomerRescheduleSlotsRealtime === 'function') {
+                    refreshCustomerRescheduleSlotsRealtime();
+                }
+
                 // 4. TRẠNG THÁI A: Khách đang đứng ở bảng Lịch Sân
                 if (currentPitchId !== null && document.querySelector('.schedule-table')) {
                     try {
@@ -2903,7 +2908,16 @@ function applyBookingFiltersAndRender() {
                 let ticketHint = '';
 
                 if (item.TrangThai === 'DaCoc') {
-                    actionHtml = `<button class="btn-outline-sm cancel-booking-btn" onclick="event.stopPropagation(); openCancelModal('${item.ID}')"><i class="fa-solid fa-ban"></i><span>Hủy trận này</span></button>`;
+                    actionHtml = `
+                        <div style="display: flex; gap: 8px; margin-top: 12px;">
+                            <button type="button" class="btn-outline-sm" style="flex: 1; padding: 9px 10px; border-radius: 10px; background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;" onclick="event.stopPropagation(); openCustomerRescheduleModal('${item.ID}')">
+                                <i class="fa-solid fa-calendar-day"></i><span>Dời lịch</span>
+                            </button>
+                            <button type="button" class="btn-outline-sm cancel-booking-btn" style="flex: 1; margin-top: 0;" onclick="event.stopPropagation(); openCancelModal('${item.ID}')">
+                                <i class="fa-solid fa-ban"></i><span>Hủy trận</span>
+                            </button>
+                        </div>
+                    `;
                     cardClick = `onclick="openTicketModal('phong_trao', '${item.ID}')" title="Nhấn vào để xem Vé điện tử"`;
                     cursorStyle = 'pointer';
                     ticketHint = `<div style="margin-top: 10px; text-align: center; font-size: 0.78rem; color: var(--primary); font-weight: 600;"><i class="fa-solid fa-qrcode"></i> Bấm để xem Vé Điện Tử (#PT-${item.ID})</div>`;
@@ -3127,14 +3141,19 @@ function applyBookingFiltersAndRender() {
                 const isExtra = index >= 4;
                 const displayStyle = isExtra ? 'display: none;' : '';
                 const rowClass = `tour-match-${gd.idGiaiDau} ${isExtra ? 'extra-match' : ''}`;
+                const rescheduleBtnHtml = m.TrangThai === 'DaCoc'
+                    ? `<button type="button" class="btn-outline-sm" style="background:#eff6ff; color:#2563eb; border-color:#bfdbfe; padding:5px 10px; border-radius:8px; font-size:0.8rem; font-weight:700; white-space:nowrap;" onclick="event.stopPropagation(); openCustomerRescheduleModal('${m.ID}')"><i class="fa-solid fa-calendar-day"></i> Dời lịch</button>`
+                    : `<span style="font-size:0.8rem; color:#94a3b8;">-</span>`;
                 
                 rowsHtml += `
                 <tr class="${rowClass}" style="${displayStyle}">
                     <td style="text-align: center;"><strong>${m.san_bong ? m.san_bong.TenSan : ''}</strong><br><span style="font-size: 0.8rem; color: var(--text-muted);">${m.san_bong && m.san_bong.cum_san ? m.san_bong.cum_san.TenCumSan : ''}</span></td>
                     <td style="text-align: center; font-weight: 500;">${formatDate(m.NgayDa)}</td>
                     <td style="text-align: center;"><strong style="color: var(--primary);">${timeStr}</strong></td>
+                    <td style="text-align: center; font-weight: 600; color: #0f172a;">${Number(m.TongTien).toLocaleString('vi-VN')}đ</td>
                     <td style="text-align: center; font-weight: 700; color: #ea580c;">${Number(m.TienCoc).toLocaleString('vi-VN')}đ</td>
                     <td style="text-align: center;">${renderBadge(m.TrangThai)}</td>
+                    <td style="text-align: center;">${rescheduleBtnHtml}</td>
                 </tr>
                 `;
             });
@@ -3181,8 +3200,10 @@ function applyBookingFiltersAndRender() {
                                     <th style="text-align: center;">Sân bóng</th>
                                     <th style="text-align: center;">Ngày đá</th>
                                     <th style="text-align: center;">Khung giờ</th>
+                                    <th style="text-align: center;">Đơn giá</th>
                                     <th style="text-align: center;">Tiền cọc</th>
                                     <th style="text-align: center;">Trạng thái</th>
+                                    <th style="text-align: center;">Thao tác</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -5897,3 +5918,616 @@ function renderCustomerModalReviewsList() {
         }
     }
 }
+
+// ======================================================
+// MODULE: DỜI LỊCH ĐẶT SÂN DÀNH CHO KHÁCH HÀNG (REALTIME + CONFIRM MODAL)
+// ======================================================
+let customerRescheduleState = {
+    booking: null,
+    clusterId: null,
+    clusterName: '',
+    gioMoCua: '06:00',
+    gioDongCua: '22:00',
+    pitches: [],
+    khungGios: [],
+    giaTiens: [],
+    bookedSlots: [],
+    selectedPitchId: null,
+    selectedDate: null,
+    selectedKhungGioId: null,
+    selectedPrice: 0,
+    minDate: '',
+    maxDate: ''
+};
+
+function getLocalTodayYmdCustomer() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+window.openCustomerRescheduleModal = async function(bookingId) {
+    const item = allMyBookingsData.find(b => String(b.ID) === String(bookingId) || String(b.MaDatSan) === String(bookingId));
+    if (!item) return;
+
+    // Kiểm tra điều kiện trước giờ bóng lăn tối thiểu 10 tiếng
+    const gioBD = item.khung_gio ? item.khung_gio.GioBatDau : '00:00:00';
+    const matchTime = new Date(`${item.NgayDa}T${gioBD}`);
+    const hoursDiff = (matchTime.getTime() - new Date().getTime()) / (1000 * 3600);
+
+    if (hoursDiff < 10) {
+        showCustomerBookingModal(
+            'Không thể tự dời lịch',
+            'Theo quy định, bạn chỉ có thể tự dời lịch trước giờ bóng lăn tối thiểu <strong>10 tiếng</strong>. Vui lòng liên hệ Hotline hoặc Quản lý sân để được hỗ trợ dời lịch!',
+            false
+        );
+        return;
+    }
+
+    const clusterId = item.san_bong ? (item.san_bong.MaCumSan || item.san_bong.ID_CumSan) : null;
+    const clusterName = item.san_bong?.cum_san?.TenCumSan || 'Cụm sân';
+    const todayYmd = getLocalTodayYmdCustomer();
+
+    // Tính khoảng ngày hợp lệ:
+    // - Nếu là trận thuộc Giải đấu: cho phép chọn mọi ngày từ max(Hôm nay, NgayBatDau) đến NgayKetThuc của giải (kể cả giải ở sau hơn 7 ngày)
+    // - Nếu là Đá phong trào: cho phép chọn trong vòng 7 ngày kể từ hôm nay
+    let minDate = todayYmd;
+    let maxDate = '';
+    const isTour = Boolean(item.MaGiaiDau || item.ID_GiaiDau);
+
+    if (isTour && item.giai_dau) {
+        const startTour = item.giai_dau.NgayBatDau;
+        const endTour = item.giai_dau.NgayKetThuc;
+        minDate = startTour > todayYmd ? startTour : todayYmd;
+        maxDate = endTour;
+    } else {
+        const dMax = new Date();
+        dMax.setDate(dMax.getDate() + 6);
+        maxDate = `${dMax.getFullYear()}-${String(dMax.getMonth() + 1).padStart(2, '0')}-${String(dMax.getDate()).padStart(2, '0')}`;
+    }
+
+    let defaultDate = item.NgayDa;
+    if (defaultDate < minDate) defaultDate = minDate;
+    if (maxDate && defaultDate > maxDate) defaultDate = minDate;
+
+    customerRescheduleState = {
+        booking: item,
+        clusterId: clusterId,
+        clusterName: clusterName,
+        gioMoCua: item.san_bong?.cum_san?.GioMoCua ? item.san_bong.cum_san.GioMoCua.substring(0, 5) : '06:00',
+        gioDongCua: item.san_bong?.cum_san?.GioDongCua ? item.san_bong.cum_san.GioDongCua.substring(0, 5) : '22:00',
+        pitches: [],
+        khungGios: [],
+        giaTiens: [],
+        bookedSlots: [],
+        selectedPitchId: String(item.MaSanBong || item.ID_SanBong || item.san_bong?.ID),
+        selectedDate: defaultDate,
+        selectedKhungGioId: null,
+        selectedPrice: 0,
+        minDate: minDate,
+        maxDate: maxDate
+    };
+
+    let modal = document.getElementById('customer-reschedule-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'customer-reschedule-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 10020; align-items: center; justify-content: center;';
+        modal.onclick = function(e) {
+            if (e.target === modal) closeCustomerRescheduleModal();
+        };
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 680px; width: 95%; padding: 0; border-radius: 18px; overflow: hidden; background: #fff; max-height: 90vh; display: flex; flex-direction: column;">
+            <div style="padding: 18px 24px; background: linear-gradient(135deg, #0b5d3b 0%, #15803d 100%); color: #fff; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800;">
+                        <i class="fa-solid fa-calendar-day" style="color: #fde047; margin-right: 8px;"></i>Dời lịch đặt sân (${isTour ? `#GD-${item.MaGiaiDau || item.ID_GiaiDau}` : `#PT-${item.ID}`})
+                    </h3>
+                    <div style="font-size: 0.82rem; opacity: 0.92; margin-top: 3px;">Cơ sở: <strong>${clusterName}</strong> (Chỉ dời sang sân trong cùng cụm sân)</div>
+                </div>
+                <i class="fa-solid fa-xmark" style="cursor: pointer; font-size: 1.25rem;" onclick="closeCustomerRescheduleModal()"></i>
+            </div>
+
+            <div id="customer-reschedule-body" style="padding: 20px 24px; overflow-y: auto; flex: 1;">
+                <div style="text-align: center; padding: 40px;"><i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem; color: var(--primary);"></i><p style="margin-top: 10px; color: var(--text-muted);">Đang tải dữ liệu lịch trống...</p></div>
+            </div>
+
+            <div style="padding: 14px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 12px;">
+                <button type="button" class="btn-outline" style="width: auto; padding: 10px 22px; border-radius: 10px;" onclick="closeCustomerRescheduleModal()">Hủy bỏ</button>
+                <button type="button" id="btn-customer-open-reschedule-confirm" class="btn-primary btn-disabled" disabled style="width: auto; padding: 10px 24px; border-radius: 10px; font-weight: 700;" onclick="openCustomerRescheduleConfirmModal()">
+                    <i class="fa-solid fa-check" style="margin-right: 6px;"></i> Tiếp tục xác nhận
+                </button>
+            </div>
+        </div>
+    `;
+
+    modal.style.display = 'flex';
+
+    try {
+        const [sbRes, gtRes, kgRes, csRes] = await Promise.all([
+            fetch(`${API_BASE_URL}/san-bong?cum_san_id=${clusterId}`),
+            fetch(`${API_BASE_URL}/gia-tien?cum_san_id=${clusterId}`),
+            fetch(`${API_BASE_URL}/khung-gio`),
+            fetch(`${API_BASE_URL}/cum-san/${clusterId}`)
+        ]);
+
+        const sbData = await sbRes.json();
+        const gtData = await gtRes.json();
+        const kgData = await kgRes.json();
+        const csData = await csRes.json();
+
+        if (csData.success && csData.data) {
+            customerRescheduleState.gioMoCua = csData.data.GioMoCua.substring(0, 5);
+            customerRescheduleState.gioDongCua = csData.data.GioDongCua.substring(0, 5);
+        }
+
+        customerRescheduleState.pitches = (sbData.data || []).filter(p => p.TrangThai === 'HoatDong');
+        customerRescheduleState.giaTiens = gtData.data || [];
+        customerRescheduleState.khungGios = kgData.data || [];
+
+        await loadCustomerRescheduleBookedSlots(customerRescheduleState.selectedPitchId);
+        renderCustomerRescheduleBody();
+    } catch (e) {
+        const bodyEl = document.getElementById('customer-reschedule-body');
+        if (bodyEl) bodyEl.innerHTML = `<div style="color:red; text-align:center; padding:30px;">Lỗi kết nối máy chủ khi tải lịch sân!</div>`;
+    }
+};
+
+async function loadCustomerRescheduleBookedSlots(pitchId) {
+    const cacheBuster = new Date().getTime();
+    const dsRes = await fetch(`${API_BASE_URL}/dat-san/da-dat?id_san_bong=${pitchId}&_t=${cacheBuster}`);
+    const dsJson = await dsRes.json();
+    customerRescheduleState.bookedSlots = dsJson.data || [];
+}
+
+function renderCustomerRescheduleBody() {
+    const bodyEl = document.getElementById('customer-reschedule-body');
+    if (!bodyEl || !customerRescheduleState.booking) return;
+
+    const item = customerRescheduleState.booking;
+    const isTour = Boolean(item.MaGiaiDau || item.ID_GiaiDau);
+    const oldPitchName = item.san_bong ? item.san_bong.TenSan : 'Sân';
+    const oldDateStr = item.NgayDa ? item.NgayDa.split('-').reverse().join('/') : '';
+    const oldTimeStr = item.khung_gio ? `${item.khung_gio.GioBatDau.substring(0,5)} - ${item.khung_gio.GioKetThuc.substring(0,5)}` : '';
+    const oldPrice = Number(item.TongTien || 0);
+    const tienCoc = Number(item.TienCoc || 0);
+
+    const pitchOptionsHtml = customerRescheduleState.pitches.map(p => {
+        const pId = String(p.MaSanBong || p.ID);
+        const loaiName = p.loaiSan?.TenLoaiSan || p.loai_san?.TenLoaiSan || '';
+        const selected = pId === String(customerRescheduleState.selectedPitchId) ? 'selected' : '';
+        return `<option value="${pId}" ${selected}>${p.TenSan} (${loaiName})</option>`;
+    }).join('');
+
+    const rangeHint = isTour && item.giai_dau
+        ? `Phạm vi ngày giải đấu: <strong>${customerRescheduleState.minDate.split('-').reverse().join('/')} &rarr; ${customerRescheduleState.maxDate.split('-').reverse().join('/')}</strong>`
+        : `Phạm vi đổi lịch phong trào: <strong>${customerRescheduleState.minDate.split('-').reverse().join('/')} &rarr; ${customerRescheduleState.maxDate.split('-').reverse().join('/')}</strong> (7 ngày)`;
+
+    bodyEl.innerHTML = `
+        <div id="customer-reschedule-alert" class="modal-alert" style="display: none; margin-bottom: 14px;"></div>
+
+        <!-- Thông tin lịch hiện tại -->
+        <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-left: 4px solid #3b82f6; border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; font-size: 0.88rem;">
+            <div style="font-weight: 700; color: #1e3a8a; margin-bottom: 4px;"><i class="fa-solid fa-clock-rotate-left"></i> Lịch hiện tại của bạn:</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 14px; color: #334155;">
+                <span>Sân: <strong>${oldPitchName}</strong></span>
+                <span>Ngày: <strong>${oldDateStr}</strong></span>
+                <span>Giờ: <strong style="color: var(--primary);">${oldTimeStr}</strong></span>
+                <span>Đơn giá cũ: <strong>${oldPrice.toLocaleString('vi-VN')}đ</strong></span>
+                <span>Đã cọc (Giữ nguyên): <strong style="color: #047857;">${tienCoc.toLocaleString('vi-VN')}đ</strong></span>
+            </div>
+        </div>
+
+        <!-- Bộ chọn Sân bóng mới & Ngày đá mới -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
+            <div>
+                <label style="font-size: 0.85rem; font-weight: 700; color: #0f172a; display: block; margin-bottom: 6px;">1. Chọn Sân bóng (Cùng cụm sân)</label>
+                <select id="cust-resched-pitch" class="form-control" style="font-weight: 600; height: 42px;" onchange="handleCustomerReschedulePitchChange(this.value)">
+                    ${pitchOptionsHtml}
+                </select>
+            </div>
+            <div>
+                <label style="font-size: 0.85rem; font-weight: 700; color: #0f172a; display: block; margin-bottom: 6px;">2. Chọn Ngày đá mới</label>
+                <input type="date" id="cust-resched-date" class="form-control" style="font-weight: 600; height: 42px;" value="${customerRescheduleState.selectedDate}" min="${customerRescheduleState.minDate}" max="${customerRescheduleState.maxDate}" onchange="handleCustomerRescheduleDateChange(this.value)">
+                <div style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">${rangeHint}</div>
+            </div>
+        </div>
+
+        <!-- Lưới chọn Khung giờ -->
+        <div style="margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                <label style="font-size: 0.85rem; font-weight: 700; color: #0f172a; margin: 0;">3. Chọn Khung giờ trống (Cập nhật Realtime)</label>
+                <div style="display: flex; gap: 12px; font-size: 0.76rem; font-weight: 600; color: #475569;">
+                    <span><span style="display:inline-block; width:10px; height:10px; background:#f0fdf4; border:1px solid #86efac; border-radius:3px;"></span> Còn trống</span>
+                    <span><span style="display:inline-block; width:10px; height:10px; background:var(--primary); border-radius:3px;"></span> Đang chọn</span>
+                    <span><span style="display:inline-block; width:10px; height:10px; background:#e2e8f0; border-radius:3px;"></span> Đã đặt / Quá giờ</span>
+                </div>
+            </div>
+            <div id="cust-resched-slots-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 10px; max-height: 230px; overflow-y: auto; padding: 4px;"></div>
+        </div>
+
+        <!-- Khung tạm tính Hóa đơn sau khi đổi lịch -->
+        <div id="cust-resched-price-summary"></div>
+    `;
+
+    renderCustomerRescheduleSlotsGrid();
+    renderCustomerReschedulePriceSummary();
+}
+
+window.handleCustomerReschedulePitchChange = async function(newPitchId) {
+    customerRescheduleState.selectedPitchId = String(newPitchId);
+    customerRescheduleState.selectedKhungGioId = null;
+    customerRescheduleState.selectedPrice = 0;
+
+    const gridEl = document.getElementById('cust-resched-slots-grid');
+    if (gridEl) gridEl.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải lịch sân...</div>`;
+
+    await loadCustomerRescheduleBookedSlots(newPitchId);
+    renderCustomerRescheduleSlotsGrid();
+    renderCustomerReschedulePriceSummary();
+};
+
+window.handleCustomerRescheduleDateChange = function(newDate) {
+    if (!newDate) return;
+    if (customerRescheduleState.minDate && newDate < customerRescheduleState.minDate) {
+        showToast(`Ngày chọn không được nhỏ hơn ${customerRescheduleState.minDate.split('-').reverse().join('/')}!`);
+        newDate = customerRescheduleState.minDate;
+        document.getElementById('cust-resched-date').value = newDate;
+    }
+    if (customerRescheduleState.maxDate && newDate > customerRescheduleState.maxDate) {
+        showToast(`Ngày chọn không được vượt quá ${customerRescheduleState.maxDate.split('-').reverse().join('/')}!`);
+        newDate = customerRescheduleState.maxDate;
+        document.getElementById('cust-resched-date').value = newDate;
+    }
+    customerRescheduleState.selectedDate = newDate;
+    customerRescheduleState.selectedKhungGioId = null;
+    customerRescheduleState.selectedPrice = 0;
+
+    renderCustomerRescheduleSlotsGrid();
+    renderCustomerReschedulePriceSummary();
+};
+
+function renderCustomerRescheduleSlotsGrid() {
+    const gridEl = document.getElementById('cust-resched-slots-grid');
+    if (!gridEl || !customerRescheduleState.booking) return;
+
+    const item = customerRescheduleState.booking;
+    const pitchObj = customerRescheduleState.pitches.find(p => String(p.MaSanBong || p.ID) === String(customerRescheduleState.selectedPitchId));
+    if (!pitchObj) {
+        gridEl.innerHTML = `<div style="grid-column:1/-1; text-align:center; color:#64748b; padding:20px;">Không tìm thấy thông tin sân.</div>`;
+        return;
+    }
+
+    const loaiSanId = pitchObj.MaLoaiSan || pitchObj.ID_LoaiSan;
+    const validPrices = customerRescheduleState.giaTiens.filter(gt => String(gt.MaLoaiSan || gt.ID_LoaiSan) === String(loaiSanId));
+    const moCua = customerRescheduleState.gioMoCua;
+    const dongCua = customerRescheduleState.gioDongCua;
+    const now = new Date();
+    const [y, m, d] = customerRescheduleState.selectedDate.split('-').map(Number);
+
+    const oldPitchId = String(item.MaSanBong || item.ID_SanBong || item.san_bong?.ID);
+    const oldKhungGioId = String(item.MaKhungGio || item.ID_KhungGio || item.khung_gio?.ID);
+    const oldDate = item.NgayDa;
+
+    let html = '';
+    customerRescheduleState.khungGios.forEach(kg => {
+        const maKG = String(kg.MaKhungGio || kg.ID);
+        const start = kg.GioBatDau.substring(0, 5);
+        const end = kg.GioKetThuc.substring(0, 5);
+        const priceObj = validPrices.find(p => String(p.MaKhungGio || p.ID_KhungGio) === maKG);
+
+        if (!priceObj || Number(priceObj.SoTien) <= 0 || start < moCua || end > dongCua) {
+            return;
+        }
+
+        const priceVal = Number(priceObj.SoTien);
+        const timeStr = `${start} - ${end}`;
+        const [startH, startM] = start.split(':').map(Number);
+        const slotDateTime = new Date(y, m - 1, d, startH, startM);
+        const isPast = slotDateTime <= now;
+
+        const isCurrentBookingSlot = (
+            String(customerRescheduleState.selectedPitchId) === oldPitchId &&
+            customerRescheduleState.selectedDate === oldDate &&
+            maKG === oldKhungGioId
+        );
+
+        const isBookedByOther = !isCurrentBookingSlot && customerRescheduleState.bookedSlots.some(b =>
+            String(b.NgayDa).substring(0, 10) === customerRescheduleState.selectedDate &&
+            String(b.MaKhungGio || b.ID_KhungGio) === maKG
+        );
+
+        const isSelected = String(customerRescheduleState.selectedKhungGioId) === maKG;
+
+        if (isCurrentBookingSlot) {
+            html += `
+                <div style="padding: 10px 8px; border-radius: 10px; background: #eff6ff; border: 1.5px dashed #60a5fa; color: #1d4ed8; text-align: center; opacity: 0.85; cursor: not-allowed;">
+                    <div style="font-weight: 800; font-size: 0.86rem;">${timeStr}</div>
+                    <div style="font-size: 0.75rem; font-weight: 700; margin-top: 2px;">Ca hiện tại</div>
+                </div>
+            `;
+        } else if (isPast || isBookedByOther) {
+            html += `
+                <div style="padding: 10px 8px; border-radius: 10px; background: #e2e8f0; border: 1px solid #cbd5e1; color: #64748b; text-align: center; cursor: not-allowed;">
+                    <div style="font-weight: 700; font-size: 0.86rem;">${timeStr}</div>
+                    <div style="font-size: 0.75rem; margin-top: 2px;">${isPast ? 'Quá giờ' : 'Đã đặt'}</div>
+                </div>
+            `;
+        } else {
+            const boxStyle = isSelected
+                ? 'background: var(--primary); border: 2px solid var(--primary); color: #ffffff; box-shadow: 0 4px 10px rgba(22, 163, 74, 0.25);'
+                : 'background: #f0fdf4; border: 1.5px solid #86efac; color: #0f172a;';
+            const priceColor = isSelected ? '#fde047' : 'var(--primary)';
+
+            html += `
+                <div onclick="selectCustomerRescheduleSlot('${maKG}', ${priceVal})" style="padding: 10px 8px; border-radius: 10px; text-align: center; cursor: pointer; transition: 0.15s; ${boxStyle}">
+                    <div style="font-weight: 800; font-size: 0.86rem;">${timeStr}</div>
+                    <div style="font-size: 0.8rem; font-weight: 700; color: ${priceColor}; margin-top: 2px;">${priceVal.toLocaleString('vi-VN')}đ</div>
+                </div>
+            `;
+        }
+    });
+
+    gridEl.innerHTML = html || `<div style="grid-column:1/-1; text-align:center; color:#64748b; padding:20px;">Không có khung giờ hoạt động nào.</div>`;
+
+    const btnConfirm = document.getElementById('btn-customer-open-reschedule-confirm');
+    if (btnConfirm) {
+        if (customerRescheduleState.selectedKhungGioId) {
+            btnConfirm.disabled = false;
+            btnConfirm.classList.remove('btn-disabled');
+        } else {
+            btnConfirm.disabled = true;
+            btnConfirm.classList.add('btn-disabled');
+        }
+    }
+}
+
+window.selectCustomerRescheduleSlot = function(maKhungGio, priceVal) {
+    customerRescheduleState.selectedKhungGioId = String(maKhungGio);
+    customerRescheduleState.selectedPrice = Number(priceVal);
+    renderCustomerRescheduleSlotsGrid();
+    renderCustomerReschedulePriceSummary();
+};
+
+function calculateCustomerInvoiceAfterReschedule(newSlotPrice) {
+    const item = customerRescheduleState.booking;
+    const maHD = item.MaHoaDonDatSan;
+    const hdObj = item.hoa_don_dat_san || item.hoaDonDatSan || null;
+    const invoiceMatches = maHD
+        ? allMyBookingsData.filter(m => m.MaHoaDonDatSan === maHD)
+        : [item];
+
+    let tongTienSanGocMoi = 0;
+    let tongCocKhongDen = 0;
+    let tongDaCoc = 0;
+
+    invoiceMatches.forEach(m => {
+        const isTarget = String(m.ID) === String(item.ID);
+        const donGia = isTarget ? Number(newSlotPrice) : Number(m.TongTien || 0);
+        const coc = Number(m.TienCoc || 0);
+
+        if (m.TrangThai !== 'DaHuy') {
+            tongDaCoc += coc;
+        }
+        if (m.TrangThai === 'DaCoc' || m.TrangThai === 'HoanThanh') {
+            tongTienSanGocMoi += donGia;
+        } else if (m.TrangThai === 'KhongDen') {
+            tongCocKhongDen += coc;
+        }
+    });
+
+    const km = hdObj ? (hdObj.khuyen_mai || hdObj.khuyenMai || null) : null;
+    let soTienGiam = 0;
+    if (hdObj && hdObj.MaKhuyenMai && km && tongTienSanGocMoi >= Number(km.GiaTriHoaDonToiThieu || 0)) {
+        if (km.LoaiKhuyenMai === 'PhanTram') {
+            soTienGiam = Math.round(tongTienSanGocMoi * (Number(km.GiaTri || 0) / 100));
+            if (Number(km.GiaTriToiDa || 0) > 0 && soTienGiam > Number(km.GiaTriToiDa)) {
+                soTienGiam = Number(km.GiaTriToiDa);
+            }
+        } else {
+            soTienGiam = Number(km.GiaTri || 0);
+        }
+        soTienGiam = Math.min(tongTienSanGocMoi, soTienGiam);
+    }
+
+    const tienSauGiam = Math.max(0, tongTienSanGocMoi - soTienGiam);
+    const thueVATMoi = Math.floor((tienSauGiam * 0.08) / 1000) * 1000;
+    const tongHoaDonMoi = tienSauGiam + thueVATMoi + tongCocKhongDen;
+    const conThuTaiSanMoi = Math.max(0, tongHoaDonMoi - tongDaCoc);
+
+    return {
+        tongTienSanGocMoi,
+        soTienGiam,
+        thueVATMoi,
+        tongHoaDonMoi,
+        tongDaCoc,
+        conThuTaiSanMoi,
+        isInvalidBelowDeposit: tongHoaDonMoi < tongDaCoc
+    };
+}
+
+function renderCustomerReschedulePriceSummary() {
+    const summaryEl = document.getElementById('cust-resched-price-summary');
+    if (!summaryEl || !customerRescheduleState.booking) return;
+
+    if (!customerRescheduleState.selectedKhungGioId) {
+        summaryEl.innerHTML = `
+            <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 12px; padding: 12px 16px; text-align: center; color: #64748b; font-size: 0.86rem;">
+                Vui lòng chọn một khung giờ trống ở trên để xem chi tiết giá và hóa đơn cập nhật.
+            </div>
+        `;
+        return;
+    }
+
+    const item = customerRescheduleState.booking;
+    const oldPrice = Number(item.TongTien || 0);
+    const newPrice = Number(customerRescheduleState.selectedPrice || 0);
+    const diff = newPrice - oldPrice;
+    const diffStr = diff === 0
+        ? '<span style="color:#64748b;">Không đổi (0đ)</span>'
+        : (diff > 0
+            ? `<span style="color:#ea580c; font-weight:700;">+${diff.toLocaleString('vi-VN')}đ</span>`
+            : `<span style="color:#16a34a; font-weight:700;">${diff.toLocaleString('vi-VN')}đ</span>`);
+
+    const calc = calculateCustomerInvoiceAfterReschedule(newPrice);
+
+    summaryEl.innerHTML = `
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 14px 16px; font-size: 0.88rem;">
+            <div style="font-weight: 800; color: #065f46; margin-bottom: 8px;"><i class="fa-solid fa-calculator"></i> Tạm tính Hóa đơn sau khi dời lịch:</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <div>Đơn giá ca mới: <strong>${newPrice.toLocaleString('vi-VN')}đ</strong> (${diffStr})</div>
+                <div>Thuế VAT (8% HĐ): <strong>${calc.thueVATMoi.toLocaleString('vi-VN')}đ</strong></div>
+                <div>Tổng hóa đơn mới: <strong style="color:#0f172a;">${calc.tongHoaDonMoi.toLocaleString('vi-VN')}đ</strong></div>
+                <div>Đã đặt cọc (Giữ nguyên): <strong style="color:#047857;">${calc.tongDaCoc.toLocaleString('vi-VN')}đ</strong></div>
+            </div>
+            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed #86efac; display: flex; justify-content: space-between; align-items: center; font-size: 0.95rem;">
+                <span style="font-weight: 700; color: #0f172a;">Còn thu tại sân (Đã tính chênh lệch):</span>
+                <strong style="color: #ea580c; font-size: 1.08rem;">${calc.conThuTaiSanMoi.toLocaleString('vi-VN')}đ</strong>
+            </div>
+            ${calc.isInvalidBelowDeposit ? `<div style="margin-top:6px; color:#dc2626; font-weight:700; font-size:0.82rem;"><i class="fa-solid fa-triangle-exclamation"></i> Tổng hóa đơn mới thấp hơn số tiền đã cọc, vui lòng chọn khung giờ khác!</div>` : ''}
+        </div>
+    `;
+}
+
+// Hàm cập nhật Realtime ngay bên trong Modal Dời lịch khi có người khác vừa đặt hoặc dời lịch
+window.refreshCustomerRescheduleSlotsRealtime = async function() {
+    const modal = document.getElementById('customer-reschedule-modal');
+    if (!modal || modal.style.display !== 'flex' || !customerRescheduleState.selectedPitchId) return;
+
+    await loadCustomerRescheduleBookedSlots(customerRescheduleState.selectedPitchId);
+
+    // Nếu khung giờ khách đang chọn vừa bị người khác đặt mất -> Bỏ chọn & báo Toast
+    if (customerRescheduleState.selectedKhungGioId) {
+        const isTakenNow = customerRescheduleState.bookedSlots.some(b =>
+            String(b.NgayDa).substring(0, 10) === customerRescheduleState.selectedDate &&
+            String(b.MaKhungGio || b.ID_KhungGio) === String(customerRescheduleState.selectedKhungGioId)
+        );
+        if (isTakenNow) {
+            customerRescheduleState.selectedKhungGioId = null;
+            customerRescheduleState.selectedPrice = 0;
+            showToast('Khung giờ bạn đang chọn vừa có khách khác đặt mất!');
+        }
+    }
+
+    renderCustomerRescheduleSlotsGrid();
+    renderCustomerReschedulePriceSummary();
+};
+
+window.closeCustomerRescheduleModal = function() {
+    const modal = document.getElementById('customer-reschedule-modal');
+    if (modal) modal.style.display = 'none';
+};
+
+// Mở Modal Xác nhận (Confirm Modal) trước khi gọi API dời lịch
+window.openCustomerRescheduleConfirmModal = function() {
+    if (!customerRescheduleState.booking || !customerRescheduleState.selectedKhungGioId) return;
+
+    const calc = calculateCustomerInvoiceAfterReschedule(customerRescheduleState.selectedPrice);
+    if (calc.isInvalidBelowDeposit) {
+        const alertBox = document.getElementById('customer-reschedule-alert');
+        if (alertBox) {
+            alertBox.textContent = 'Tổng tiền hóa đơn sau khi đổi không được nhỏ hơn số tiền bạn đã đặt cọc!';
+            alertBox.className = 'modal-alert error';
+            alertBox.style.display = 'block';
+        }
+        return;
+    }
+
+    const item = customerRescheduleState.booking;
+    const oldPitchName = item.san_bong ? item.san_bong.TenSan : 'Sân';
+    const oldDateStr = item.NgayDa ? item.NgayDa.split('-').reverse().join('/') : '';
+    const oldTimeStr = item.khung_gio ? `${item.khung_gio.GioBatDau.substring(0,5)} - ${item.khung_gio.GioKetThuc.substring(0,5)}` : '';
+
+    const newPitchObj = customerRescheduleState.pitches.find(p => String(p.MaSanBong || p.ID) === String(customerRescheduleState.selectedPitchId));
+    const newKgObj = customerRescheduleState.khungGios.find(k => String(k.MaKhungGio || k.ID) === String(customerRescheduleState.selectedKhungGioId));
+    const newPitchName = newPitchObj ? newPitchObj.TenSan : 'Sân mới';
+    const newDateStr = customerRescheduleState.selectedDate.split('-').reverse().join('/');
+    const newTimeStr = newKgObj ? `${newKgObj.GioBatDau.substring(0,5)} - ${newKgObj.GioKetThuc.substring(0,5)}` : '';
+
+    let confirmModal = document.getElementById('customer-reschedule-confirm-modal');
+    if (!confirmModal) {
+        confirmModal = document.createElement('div');
+        confirmModal.id = 'customer-reschedule-confirm-modal';
+        confirmModal.className = 'modal-overlay';
+        confirmModal.style.cssText = 'display: none; z-index: 10050; align-items: center; justify-content: center;';
+        document.body.appendChild(confirmModal);
+    }
+
+    confirmModal.innerHTML = `
+        <div class="modal-content" style="max-width: 450px; width: 92%; text-align: center; padding: 28px 24px; border-radius: 16px;">
+            <div style="font-size: 3.2rem; color: #2563eb; margin-bottom: 12px;"><i class="fa-solid fa-circle-question"></i></div>
+            <h3 style="margin-bottom: 10px; font-size: 1.3rem; font-weight: 800; color: #0f172a;">Xác nhận Dời Lịch Đặt Sân?</h3>
+            <p style="color: #475569; font-size: 0.9rem; margin-bottom: 14px;">Bạn có chắc chắn muốn dời lịch đặt sân với thông tin dưới đây không?</p>
+            
+            <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 12px; padding: 12px 14px; text-align: left; font-size: 0.86rem; line-height: 1.65; margin-bottom: 20px;">
+                <div><span style="color:#64748b;">Lịch cũ:</span> <strong>${oldPitchName}</strong> &bull; ${oldTimeStr} (${oldDateStr})</div>
+                <div style="color:#059669;"><span style="color:#64748b;">Lịch mới:</span> <strong>${newPitchName} &bull; ${newTimeStr} (${newDateStr})</strong></div>
+                <div><span style="color:#64748b;">Đơn giá khung giờ mới:</span> <strong>${customerRescheduleState.selectedPrice.toLocaleString('vi-VN')}đ</strong></div>
+                <div style="border-top:1px dashed #cbd5e1; margin-top:6px; padding-top:6px;"><span style="color:#64748b;">Còn thu tại sân (HĐ):</span> <strong style="color:#ea580c;">${calc.conThuTaiSanMoi.toLocaleString('vi-VN')}đ</strong></div>
+            </div>
+
+            <div style="display: flex; gap: 12px; justify-content: center;">
+                <button type="button" class="btn-outline" style="flex: 1; padding: 10px;" onclick="document.getElementById('customer-reschedule-confirm-modal').style.display='none'">Quay lại</button>
+                <button type="button" id="btn-exec-customer-reschedule" class="btn-primary" style="flex: 1.3; padding: 10px; background: #2563eb; border-color: #2563eb;" onclick="executeCustomerReschedule()">Đồng ý dời lịch</button>
+            </div>
+        </div>
+    `;
+
+    confirmModal.style.display = 'flex';
+};
+
+window.executeCustomerReschedule = async function() {
+    const item = customerRescheduleState.booking;
+    if (!item) return;
+
+    const btn = document.getElementById('btn-exec-customer-reschedule');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+    }
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/dat-san/${item.ID}/doi-lich`, {
+            method: 'PUT',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'X-Socket-ID': window.Echo ? window.Echo.socketId() : ''
+            },
+            body: JSON.stringify({
+                ma_san_bong_moi: customerRescheduleState.selectedPitchId,
+                ma_khung_gio_moi: customerRescheduleState.selectedKhungGioId,
+                ngay_da_moi: customerRescheduleState.selectedDate
+            })
+        });
+
+        const data = await res.json();
+        document.getElementById('customer-reschedule-confirm-modal').style.display = 'none';
+
+        if (res.ok && data.success) {
+            closeCustomerRescheduleModal();
+            showToast(data.message || 'Dời lịch đặt sân thành công!');
+            loadMyBookingsData();
+            loadNotifications();
+        } else {
+            const alertBox = document.getElementById('customer-reschedule-alert');
+            if (alertBox) {
+                alertBox.textContent = data.message || 'Không thể dời lịch!';
+                alertBox.className = 'modal-alert error';
+                alertBox.style.display = 'block';
+            }
+            await refreshCustomerRescheduleSlotsRealtime();
+        }
+    } catch (e) {
+        document.getElementById('customer-reschedule-confirm-modal').style.display = 'none';
+        showToast('Lỗi kết nối máy chủ!');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = 'Đồng ý dời lịch';
+        }
+    }
+};

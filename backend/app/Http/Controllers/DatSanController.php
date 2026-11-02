@@ -2352,4 +2352,529 @@ class DatSanController extends Controller
             return redirect($returnPage . '?vnpay_refund=error');
         }
     }
+
+    /**
+     * Hàm dùng chung: Gửi Email xác nhận dời lịch đặt sân (kèm QR Code vé điện tử & thông tin hóa đơn cập nhật)
+     * Áp dụng cho cả lúc Khách hàng tự dời lịch lẫn lúc Quản lý sân / Nhân viên dời lịch hộ khách
+     */
+    private static function guiEmailXacNhanDoiLich(
+        $emailNhan,
+        $tenKhach,
+        $maVeRaw,
+        $maHoaDon,
+        $tenCumSan,
+        $tenSanCu,
+        $gioCuStr,
+        $ngayCuStr,
+        $tenSanMoi,
+        $gioMoiStr,
+        $ngayMoiStr,
+        $donGiaMoi,
+        $tienCocVe,
+        $conThuTaiSanHD = null,
+        $laAdminHoTro = false
+    ) {
+        if (!$emailNhan || str_ends_with($emailNhan, '.offline')) {
+            return;
+        }
+
+        try {
+            $qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=6&data=" . urlencode($maVeRaw);
+            $donGiaMoiFormat = number_format((float) $donGiaMoi, 0, ',', '.') . 'đ';
+            $tienCocFormat   = number_format((float) $tienCocVe, 0, ',', '.') . 'đ';
+            $conThuHtml      = ($conThuTaiSanHD !== null)
+                ? "<li><strong>Còn thu tại sân (Hóa đơn #{$maHoaDon}):</strong> <span style='color:#e11d48; font-weight:bold;'>" . number_format((float) $conThuTaiSanHD, 0, ',', '.') . "đ</span></li>"
+                : "";
+
+            $loiMoDau = $laAdminHoTro
+                ? "Theo yêu cầu của bạn, Ban quản lý <strong>{$tenCumSan}</strong> đã hỗ trợ dời lịch đặt sân cho vé <strong>#{$maVeRaw}</strong>:"
+                : "Hệ thống DN Football xác nhận bạn đã thực hiện dời lịch đặt sân thành công cho vé <strong>#{$maVeRaw}</strong> tại <strong>{$tenCumSan}</strong>:";
+
+            $noiDungMail = "
+                <div style='font-family:Arial,sans-serif; color:#0f172a; line-height:1.6; max-width:640px;'>
+                    <h2 style='color:#0b5d3b; margin-bottom:10px;'>Xác nhận dời lịch đặt sân #{$maVeRaw} - DN Football</h2>
+                    <p>Chào <strong>{$tenKhach}</strong>,</p>
+                    <p>{$loiMoDau}</p>
+                    <div style='background:#f8fafc; border:1px solid #cbd5e1; border-left:4px solid #10b981; border-radius:10px; padding:14px 18px; margin:16px 0;'>
+                        <ul style='margin:0; padding-left:18px;'>
+                            <li><strong>Cụm sân:</strong> {$tenCumSan}</li>
+                            <li><strong>Lịch cũ:</strong> <span style='color:#64748b; text-decoration:line-through;'>{$tenSanCu} — {$gioCuStr} ngày {$ngayCuStr}</span></li>
+                            <li><strong>Lịch mới:</strong> <span style='color:#059669; font-weight:bold;'>{$tenSanMoi} — {$gioMoiStr} ngày {$ngayMoiStr}</span></li>
+                            <li><strong>Đơn giá khung giờ mới:</strong> <strong>{$donGiaMoiFormat}</strong></li>
+                            <li><strong>Tiền đã đặt cọc (Giữ nguyên):</strong> <span style='color:#047857; font-weight:bold;'>{$tienCocFormat}</span></li>
+                            {$conThuHtml}
+                        </ul>
+                    </div>
+                    <div style='border:1px solid #cbd5e1; padding:16px; margin-top:16px; border-radius:10px; display:flex; align-items:center; justify-content:space-between; background:#ffffff;'>
+                        <div style='padding-right:15px;'>
+                            <h3 style='margin:0 0 8px 0; color:#10B981; font-size:17px;'>Vé điện tử cập nhật: #{$maVeRaw} " . ($maHoaDon ? "<span style='font-size:13px; color:#475569;'>(HĐ #{$maHoaDon})</span>" : "") . "</h3>
+                            <p style='margin:4px 0;'><strong>Sân mới:</strong> {$tenSanMoi} ({$tenCumSan})</p>
+                            <p style='margin:4px 0;'><strong>Ngày mới:</strong> {$ngayMoiStr} | <strong>Giờ mới:</strong> {$gioMoiStr}</p>
+                            <p style='margin:4px 0; font-size:13px; color:#64748b;'><em>* Mã QR Code của bạn vẫn giữ nguyên hiệu lực để Check-in tại sân.</em></p>
+                        </div>
+                        <div style='text-align:center; border-left:1px dashed #cbd5e1; padding-left:15px;'>
+                            <img src='{$qrUrl}' alt='QR {$maVeRaw}' style='width:115px; height:115px; display:block; margin:0 auto; border:1px solid #e2e8f0; border-radius:8px;' />
+                            <div style='font-size:11px; color:#64748b; margin-top:5px;'>Quét mã khi đến sân</div>
+                        </div>
+                    </div>
+                    <p style='margin-top:16px;'>Cảm ơn bạn đã tin tưởng và sử dụng dịch vụ của <strong>DN Football</strong>!</p>
+                </div>
+            ";
+
+            Mail::html($noiDungMail, function ($message) use ($emailNhan, $maVeRaw) {
+                $message->to($emailNhan)
+                        ->subject("Xác nhận dời lịch vé #{$maVeRaw} - DN Football");
+            });
+        } catch (\Exception $mailEx) {
+            \Illuminate\Support\Facades\Log::error('Lỗi gửi email xác nhận dời lịch: ' . $mailEx->getMessage());
+        }
+    }
+
+    /**
+     * 4. KHÁCH HÀNG TỰ DỜI LỊCH ĐẶT SÂN (Áp dụng cho cả Đá phong trào & Trận lẻ trong Giải đấu)
+     * - Chỉ cho phép dời sang các sân thuộc CÙNG CỤM SÂN
+     * - Giữ nguyên tiền đã đặt cọc (TienCoc), cập nhật lại TongTien, ChiTietHoaDon.DonGia và đồng bộ HoaDonDatSan
+     */
+    public function doiLichKhachHang(Request $request, $id)
+    {
+        $user = NguoiDung::find(Auth::id() ?? $request->user()->MaNguoiDung);
+
+        $request->validate([
+            'ma_san_bong_moi'  => 'required',
+            'ma_khung_gio_moi' => 'required',
+            'ngay_da_moi'      => 'required|date_format:Y-m-d',
+        ]);
+
+        $datSan = DatSan::with(['sanBong.cumSan', 'khungGio', 'giaiDau', 'chiTietHoaDon', 'hoaDonDatSan'])
+                        ->where('MaDatSan', $id)
+                        ->where('MaNguoiDung', $user->MaNguoiDung)
+                        ->first();
+
+        if (!$datSan) {
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy lịch đặt sân!']);
+        }
+
+        if ($datSan->TrangThai !== 'DaCoc') {
+            return response()->json(['success' => false, 'message' => 'Chỉ có thể dời lịch đối với trận đấu đang ở trạng thái Đã cọc!']);
+        }
+
+        // Kiểm tra điều kiện thời gian trước trận cũ tối thiểu 10 tiếng
+        $thoiGianDaCu = Carbon::parse($datSan->NgayDa . ' ' . $datSan->khungGio->GioBatDau);
+        if (now()->diffInHours($thoiGianDaCu, false) < 10) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Đã quá hạn tự dời lịch (phải thực hiện trước giờ bóng lăn tối thiểu 10 tiếng). Vui lòng liên hệ Quản lý/Nhân viên sân để được hỗ trợ!'
+            ]);
+        }
+
+        $maSanMoi = $request->input('ma_san_bong_moi');
+        $maKhungGioMoi = $request->input('ma_khung_gio_moi');
+        $ngayDaMoi = $request->input('ngay_da_moi');
+
+        if ((string) $datSan->MaSanBong === (string) $maSanMoi &&
+            (string) $datSan->MaKhungGio === (string) $maKhungGioMoi &&
+            $datSan->NgayDa === $ngayDaMoi) {
+            return response()->json(['success' => false, 'message' => 'Lịch mới trùng với lịch hiện tại của bạn!']);
+        }
+
+        // Kiểm tra Sân mới phải thuộc cùng Cụm sân và đang Hoạt động
+        $sanMoi = SanBong::with('cumSan')->find($maSanMoi);
+        if (!$sanMoi || $sanMoi->TrangThai !== 'HoatDong') {
+            return response()->json(['success' => false, 'message' => 'Sân bóng mới không tồn tại hoặc đang bảo trì!']);
+        }
+
+        $cumSanCuId = $datSan->sanBong ? $datSan->sanBong->MaCumSan : null;
+        if ((string) $sanMoi->MaCumSan !== (string) $cumSanCuId) {
+            return response()->json(['success' => false, 'message' => 'Chỉ được phép dời lịch sang các sân bóng trong cùng một Cụm sân!']);
+        }
+
+        if (!$sanMoi->cumSan || $sanMoi->cumSan->TrangThai === 'BaoTri' || $sanMoi->cumSan->deleted_at !== null) {
+            return response()->json(['success' => false, 'message' => 'Cụm sân này hiện đang tạm ngưng hoặc bảo trì!']);
+        }
+
+        // Kiểm tra Khung giờ mới và Giờ hoạt động của cụm sân
+        $khungGioMoi = KhungGio::find($maKhungGioMoi);
+        if (!$khungGioMoi) {
+            return response()->json(['success' => false, 'message' => 'Khung giờ mới không hợp lệ!']);
+        }
+
+        $moCua = substr($sanMoi->cumSan->GioMoCua, 0, 5);
+        $dongCua = substr($sanMoi->cumSan->GioDongCua, 0, 5);
+        $gioBD = substr($khungGioMoi->GioBatDau, 0, 5);
+        $gioKT = substr($khungGioMoi->GioKetThuc, 0, 5);
+
+        if ($gioBD < $moCua || $gioKT > $dongCua) {
+            return response()->json(['success' => false, 'message' => 'Khung giờ mới nằm ngoài giờ hoạt động của cụm sân!']);
+        }
+
+        // Kiểm tra thời điểm mới không được ở quá khứ
+        $thoiGianDaMoi = Carbon::parse($ngayDaMoi . ' ' . $khungGioMoi->GioBatDau);
+        if ($thoiGianDaMoi->lte(now())) {
+            return response()->json(['success' => false, 'message' => 'Không thể dời lịch sang khung giờ đã qua!']);
+        }
+
+        // Kiểm tra phạm vi ngày đá (Phong trào: 7 ngày tới | Giải đấu: nằm trong NgayBatDau -> NgayKetThuc)
+        if ($datSan->MaGiaiDau !== null && $datSan->giaiDau) {
+            $ngayBDGiai = Carbon::parse($datSan->giaiDau->NgayBatDau)->startOfDay();
+            $ngayKTGiai = Carbon::parse($datSan->giaiDau->NgayKetThuc)->endOfDay();
+            $ngayMoiCheck = Carbon::parse($ngayDaMoi);
+            if ($ngayMoiCheck->lt($ngayBDGiai) || $ngayMoiCheck->gt($ngayKTGiai)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ngày đá mới của trận giải đấu phải nằm trong thời gian diễn ra giải (' . $ngayBDGiai->format('d/m/Y') . ' - ' . $ngayKTGiai->format('d/m/Y') . ')!'
+                ]);
+            }
+        } else {
+            $maxDatePhongTrao = Carbon::today()->addDays(6)->endOfDay();
+            if (Carbon::parse($ngayDaMoi)->gt($maxDatePhongTrao)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Đặt sân phong trào chỉ được phép dời lịch trong phạm vi 7 ngày tính từ hôm nay!'
+                ]);
+            }
+        }
+
+        // Lấy đơn giá mới từ bảng GiaTien
+        $giaTienRecord = DB::table('GiaTien')
+            ->where('MaCumSan', $sanMoi->MaCumSan)
+            ->where('MaLoaiSan', $sanMoi->MaLoaiSan)
+            ->where('MaKhungGio', $khungGioMoi->MaKhungGio)
+            ->first();
+
+        if (!$giaTienRecord || (float) $giaTienRecord->SoTien <= 0) {
+            return response()->json(['success' => false, 'message' => 'Khung giờ này chưa được cấu hình giá hoặc đang đóng!']);
+        }
+
+        $donGiaMoi = (float) $giaTienRecord->SoTien;
+
+        DB::beginTransaction();
+        try {
+            // Kiểm tra trùng lịch có lockForUpdate (loại trừ chính bản ghi $datSan->MaDatSan)
+            $daDat = DatSan::where('MaSanBong', $maSanMoi)
+                           ->where('NgayDa', $ngayDaMoi)
+                           ->where('MaKhungGio', $maKhungGioMoi)
+                           ->where('TrangThai', '!=', 'DaHuy')
+                           ->where('MaDatSan', '!=', $datSan->MaDatSan)
+                           ->lockForUpdate()
+                           ->first();
+
+            if ($daDat) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Rất tiếc! Khung giờ bạn chọn vừa có khách hàng khác đặt mất. Vui lòng chọn khung giờ khác!'
+                ]);
+            }
+
+            $tenSanCu = $datSan->sanBong ? $datSan->sanBong->TenSan : 'Sân';
+            $tenCumSan = $sanMoi->cumSan ? $sanMoi->cumSan->TenCumSan : 'DN Football';
+            $ngayCuStr = Carbon::parse($datSan->NgayDa)->format('d/m/Y');
+            $gioCuStr = substr($datSan->khungGio->GioBatDau, 0, 5) . ' - ' . substr($datSan->khungGio->GioKetThuc, 0, 5);
+
+            $tenSanMoi = $sanMoi->TenSan;
+            $ngayMoiStr = Carbon::parse($ngayDaMoi)->format('d/m/Y');
+            $gioMoiStr = $gioBD . ' - ' . $gioKT;
+
+            $maHoaDon = $datSan->MaHoaDonDatSan;
+            $conThuTaiSanHD = null;
+
+            // Cập nhật DatSan (Giữ nguyên TienCoc theo Cách 2A, cập nhật TongTien mới)
+            $datSan->update([
+                'MaSanBong'  => $maSanMoi,
+                'MaKhungGio' => $maKhungGioMoi,
+                'NgayDa'     => $ngayDaMoi,
+                'TongTien'   => $donGiaMoi,
+            ]);
+
+            // Cập nhật DonGia trong ChiTietHoaDon
+            if ($maHoaDon) {
+                DB::table('ChiTietHoaDon')
+                    ->where('MaHoaDonDatSan', $maHoaDon)
+                    ->where('MaDatSan', $datSan->MaDatSan)
+                    ->update(['DonGia' => $donGiaMoi]);
+
+                self::dongBoHoaDonDatSan($maHoaDon);
+
+                // Kiểm tra Tổng tiền hóa đơn sau khi đổi không được nhỏ hơn Tổng tiền đã cọc của hóa đơn
+                $hdSauDongBo = HoaDonDatSan::with('datSans')->find($maHoaDon);
+                if ($hdSauDongBo) {
+                    $tongCocHD = (float) $hdSauDongBo->datSans->where('TrangThai', '!=', 'DaHuy')->sum('TienCoc');
+                    if ((float) $hdSauDongBo->TongTien < $tongCocHD) {
+                        DB::rollBack();
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Tổng tiền hóa đơn sau khi đổi (' . number_format($hdSauDongBo->TongTien, 0, ',', '.') . 'đ) không được nhỏ hơn số tiền đã đặt cọc (' . number_format($tongCocHD, 0, ',', '.') . 'đ). Vui lòng chọn khung giờ/sân khác!'
+                        ]);
+                    }
+                    $conThuTaiSanHD = max(0, (float) $hdSauDongBo->TongTien - $tongCocHD);
+                }
+            }
+
+            // Gửi thông báo trên hệ thống
+            $maVeRaw = $datSan->MaGiaiDau ? ('GD-' . $datSan->MaGiaiDau) : ('PT-' . $datSan->MaDatSan);
+            $maVeThongBao = '#' . $maVeRaw;
+
+            $quanLyCum = NguoiDung::where('VaiTro', 'QuanLySan')->where('MaCumSan', $sanMoi->MaCumSan)->first();
+            if ($quanLyCum) {
+                ThongBao::create([
+                    'MaNguoiDung'  => $quanLyCum->MaNguoiDung,
+                    'TieuDe'       => "Khách hàng dời lịch đặt sân ({$maVeThongBao})",
+                    'NoiDung'      => "Khách hàng {$user->HoTen} ({$user->SoDienThoai}) vừa dời lịch vé {$maVeThongBao} từ [{$tenSanCu} | {$gioCuStr} ngày {$ngayCuStr}] sang [{$tenSanMoi} | {$gioMoiStr} ngày {$ngayMoiStr}].",
+                    'LoaiThongBao' => 'DatSan'
+                ]);
+            }
+
+            ThongBao::create([
+                'MaNguoiDung'  => $user->MaNguoiDung,
+                'TieuDe'       => "Dời lịch đặt sân thành công ({$maVeThongBao})",
+                'NoiDung'      => "Bạn đã dời lịch thành công từ [{$tenSanCu} | {$gioCuStr} ngày {$ngayCuStr}] sang [{$tenSanMoi} | {$gioMoiStr} ngày {$ngayMoiStr}].",
+                'LoaiThongBao' => 'DatSan'
+            ]);
+
+            DB::commit();
+
+            // GỬI EMAIL XÁC NHẬN DỜI LỊCH CHO KHÁCH HÀNG
+            self::guiEmailXacNhanDoiLich(
+                $user->Email,
+                $user->HoTen,
+                $maVeRaw,
+                $maHoaDon,
+                $tenCumSan,
+                $tenSanCu,
+                $gioCuStr,
+                $ngayCuStr,
+                $tenSanMoi,
+                $gioMoiStr,
+                $ngayMoiStr,
+                $donGiaMoi,
+                $datSan->TienCoc,
+                $conThuTaiSanHD,
+                false
+            );
+
+            if ($quanLyCum) {
+                broadcast(new \App\Events\UserDataUpdated($quanLyCum->MaNguoiDung))->toOthers();
+            }
+            broadcast(new \App\Events\UserDataUpdated($user->MaNguoiDung))->toOthers();
+            broadcast(new \App\Events\AdminDataUpdated())->toOthers();
+            broadcast(new \App\Events\SystemDataUpdated())->toOthers();
+
+            return response()->json([
+                'success' => true,
+                'message' => "Dời lịch thành công sang {$tenSanMoi} ({$gioMoiStr} ngày {$ngayMoiStr})!"
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => 'Lỗi hệ thống: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * 5. QUẢN LÝ SÂN / NHÂN VIÊN DỜI LỊCH ĐẶT SÂN HỘ KHÁCH (Hỗ trợ cả Khách thành viên & Khách vãng lai, Phong trào & Giải đấu)
+     */
+    public function doiLichAdmin(Request $request, $id)
+    {
+        $userDangNhap = auth()->user();
+        if (!in_array($userDangNhap->VaiTro, ['Admin', 'QuanLySan', 'NhanVien'])) {
+            return response()->json(['success' => false, 'message' => 'Không có quyền thực hiện!'], 403);
+        }
+
+        $request->validate([
+            'ma_san_bong_moi'  => 'required',
+            'ma_khung_gio_moi' => 'required',
+            'ngay_da_moi'      => 'required|date_format:Y-m-d',
+        ]);
+
+        $datSan = DatSan::with(['sanBong.cumSan', 'khungGio', 'giaiDau', 'chiTietHoaDon', 'hoaDonDatSan', 'nguoiDung'])->find($id);
+        if (!$datSan) {
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy dữ liệu đặt sân!']);
+        }
+
+        if ($datSan->TrangThai !== 'DaCoc') {
+            return response()->json(['success' => false, 'message' => 'Chỉ có thể dời lịch đối với sân đang ở trạng thái Đã cọc!']);
+        }
+
+        $maSanMoi = $request->input('ma_san_bong_moi');
+        $maKhungGioMoi = $request->input('ma_khung_gio_moi');
+        $ngayDaMoi = $request->input('ngay_da_moi');
+
+        if ((string) $datSan->MaSanBong === (string) $maSanMoi &&
+            (string) $datSan->MaKhungGio === (string) $maKhungGioMoi &&
+            $datSan->NgayDa === $ngayDaMoi) {
+            return response()->json(['success' => false, 'message' => 'Lịch mới trùng với lịch hiện tại!']);
+        }
+
+        $sanMoi = SanBong::with('cumSan')->find($maSanMoi);
+        if (!$sanMoi || $sanMoi->TrangThai !== 'HoatDong') {
+            return response()->json(['success' => false, 'message' => 'Sân bóng mới không tồn tại hoặc đang bảo trì!']);
+        }
+
+        $cumSanCuId = $datSan->sanBong ? $datSan->sanBong->MaCumSan : null;
+        if ((string) $sanMoi->MaCumSan !== (string) $cumSanCuId) {
+            return response()->json(['success' => false, 'message' => 'Chỉ được phép dời lịch sang các sân bóng trong cùng một Cụm sân!']);
+        }
+
+        if (in_array($userDangNhap->VaiTro, ['QuanLySan', 'NhanVien']) && (string) $userDangNhap->MaCumSan !== (string) $sanMoi->MaCumSan) {
+            return response()->json(['success' => false, 'message' => 'Bạn chỉ được phép dời lịch cho các sân thuộc cơ sở của mình!']);
+        }
+
+        $khungGioMoi = KhungGio::find($maKhungGioMoi);
+        if (!$khungGioMoi) {
+            return response()->json(['success' => false, 'message' => 'Khung giờ mới không hợp lệ!']);
+        }
+
+        $moCua = substr($sanMoi->cumSan->GioMoCua, 0, 5);
+        $dongCua = substr($sanMoi->cumSan->GioDongCua, 0, 5);
+        $gioBD = substr($khungGioMoi->GioBatDau, 0, 5);
+        $gioKT = substr($khungGioMoi->GioKetThuc, 0, 5);
+
+        if ($gioBD < $moCua || $gioKT > $dongCua) {
+            return response()->json(['success' => false, 'message' => 'Khung giờ mới nằm ngoài giờ hoạt động của cụm sân!']);
+        }
+
+        $thoiGianDaMoi = Carbon::parse($ngayDaMoi . ' ' . $khungGioMoi->GioBatDau);
+        if ($thoiGianDaMoi->lte(now())) {
+            return response()->json(['success' => false, 'message' => 'Không thể dời lịch sang khung giờ đã qua!']);
+        }
+
+        // Lấy đơn giá mới từ bảng GiaTien
+        $giaTienRecord = DB::table('GiaTien')
+            ->where('MaCumSan', $sanMoi->MaCumSan)
+            ->where('MaLoaiSan', $sanMoi->MaLoaiSan)
+            ->where('MaKhungGio', $khungGioMoi->MaKhungGio)
+            ->first();
+
+        if (!$giaTienRecord || (float) $giaTienRecord->SoTien <= 0) {
+            return response()->json(['success' => false, 'message' => 'Khung giờ này chưa được cấu hình giá hoặc đang đóng!']);
+        }
+
+        $donGiaMoi = (float) $giaTienRecord->SoTien;
+
+        DB::beginTransaction();
+        try {
+            $daDat = DatSan::where('MaSanBong', $maSanMoi)
+                           ->where('NgayDa', $ngayDaMoi)
+                           ->where('MaKhungGio', $maKhungGioMoi)
+                           ->where('TrangThai', '!=', 'DaHuy')
+                           ->where('MaDatSan', '!=', $datSan->MaDatSan)
+                           ->lockForUpdate()
+                           ->first();
+
+            if ($daDat) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Khung giờ mới vừa có người đặt mất. Vui lòng chọn khung giờ khác!'
+                ]);
+            }
+
+            $tenSanCu = $datSan->sanBong ? $datSan->sanBong->TenSan : 'Sân';
+            $tenCumSan = ($datSan->sanBong && $datSan->sanBong->cumSan) ? $datSan->sanBong->cumSan->TenCumSan : ($sanMoi->cumSan ? $sanMoi->cumSan->TenCumSan : 'DN Football');
+            $ngayCuStr = Carbon::parse($datSan->NgayDa)->format('d/m/Y');
+            $gioCuStr = substr($datSan->khungGio->GioBatDau, 0, 5) . ' - ' . substr($datSan->khungGio->GioKetThuc, 0, 5);
+
+            $tenSanMoi = $sanMoi->TenSan;
+            $ngayMoiStr = Carbon::parse($ngayDaMoi)->format('d/m/Y');
+            $gioMoiStr = $gioBD . ' - ' . $gioKT;
+
+            $maHoaDon = $datSan->MaHoaDonDatSan;
+            $conThuTaiSanHD = null;
+
+            $datSan->update([
+                'MaSanBong'      => $maSanMoi,
+                'MaKhungGio'     => $maKhungGioMoi,
+                'NgayDa'         => $ngayDaMoi,
+                'TongTien'       => $donGiaMoi,
+                'MaNhanVienXuLy' => $userDangNhap->MaNguoiDung
+            ]);
+
+            // Nếu là trận thuộc Giải đấu và ngày đá mới nằm ngoài NgayBatDau..NgayKetThuc (ví dụ đá bù do mưa bão), tự động mở rộng khoảng ngày giải đấu
+            if ($datSan->MaGiaiDau !== null && $datSan->giaiDau) {
+                $gd = $datSan->giaiDau;
+                if ($ngayDaMoi < $gd->NgayBatDau) {
+                    $gd->update(['NgayBatDau' => $ngayDaMoi]);
+                } elseif ($ngayDaMoi > $gd->NgayKetThuc) {
+                    $gd->update(['NgayKetThuc' => $ngayDaMoi]);
+                }
+            }
+
+            if ($maHoaDon) {
+                DB::table('ChiTietHoaDon')
+                    ->where('MaHoaDonDatSan', $maHoaDon)
+                    ->where('MaDatSan', $datSan->MaDatSan)
+                    ->update(['DonGia' => $donGiaMoi]);
+
+                self::dongBoHoaDonDatSan($maHoaDon);
+
+                $hdSauDongBo = HoaDonDatSan::with('datSans')->find($maHoaDon);
+                if ($hdSauDongBo) {
+                    $tongCocHD = (float) $hdSauDongBo->datSans->where('TrangThai', '!=', 'DaHuy')->sum('TienCoc');
+                    if ((float) $hdSauDongBo->TongTien < $tongCocHD) {
+                        DB::rollBack();
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Tổng tiền hóa đơn sau khi đổi (' . number_format($hdSauDongBo->TongTien, 0, ',', '.') . 'đ) không được nhỏ hơn số tiền khách đã cọc (' . number_format($tongCocHD, 0, ',', '.') . 'đ)!'
+                        ]);
+                    }
+                    $conThuTaiSanHD = max(0, (float) $hdSauDongBo->TongTien - $tongCocHD);
+                }
+            }
+
+            $maVeRaw = $datSan->MaGiaiDau ? ('GD-' . $datSan->MaGiaiDau) : ('PT-' . $datSan->MaDatSan);
+            $maVeStr = '#' . $maVeRaw;
+
+            if ($datSan->MaNguoiDung !== null) {
+                ThongBao::create([
+                    'MaNguoiDung'  => $datSan->MaNguoiDung,
+                    'TieuDe'       => "Lịch đặt sân {$maVeStr} đã được dời lịch",
+                    'NoiDung'      => "Ban quản lý sân đã hỗ trợ dời lịch vé {$maVeStr} tại {$tenCumSan} từ [{$tenSanCu} | {$gioCuStr} ngày {$ngayCuStr}] sang [{$tenSanMoi} | {$gioMoiStr} ngày {$ngayMoiStr}]. Đơn giá khung giờ mới: " . number_format($donGiaMoi, 0, ',', '.') . "đ.",
+                    'LoaiThongBao' => 'DatSan'
+                ]);
+            }
+
+            DB::commit();
+
+            // Lấy email & họ tên của khách (Hỗ trợ cả Khách thành viên có tài khoản VÀ Khách vãng lai)
+            $emailKhach = ($datSan->MaNguoiDung !== null && $datSan->nguoiDung)
+                ? $datSan->nguoiDung->Email
+                : $datSan->EmailNguoiDat;
+
+            $tenKhach = ($datSan->MaNguoiDung !== null && $datSan->nguoiDung)
+                ? $datSan->nguoiDung->HoTen
+                : ($datSan->TenNguoiDat ?: 'Quý khách');
+
+            // GỬI EMAIL XÁC NHẬN DỜI LỊCH CHO KHÁCH HÀNG (Cả Thành viên & Vãng lai)
+            self::guiEmailXacNhanDoiLich(
+                $emailKhach,
+                $tenKhach,
+                $maVeRaw,
+                $maHoaDon,
+                $tenCumSan,
+                $tenSanCu,
+                $gioCuStr,
+                $ngayCuStr,
+                $tenSanMoi,
+                $gioMoiStr,
+                $ngayMoiStr,
+                $donGiaMoi,
+                $datSan->TienCoc,
+                $conThuTaiSanHD,
+                true
+            );
+
+            if ($datSan->MaNguoiDung !== null) {
+                broadcast(new \App\Events\UserDataUpdated($datSan->MaNguoiDung))->toOthers();
+            }
+            broadcast(new \App\Events\AdminDataUpdated())->toOthers();
+            broadcast(new \App\Events\SystemDataUpdated())->toOthers();
+
+            return response()->json([
+                'success' => true,
+                'message' => "Đã dời lịch vé {$maVeStr} sang {$tenSanMoi} ({$gioMoiStr} ngày {$ngayMoiStr}) thành công!"
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => 'Lỗi hệ thống: ' . $e->getMessage()]);
+        }
+    }
 }
