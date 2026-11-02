@@ -182,6 +182,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (currentUserStaff && currentUserStaff.ID_CumSan) {
                 syncStaffClusterRatingRealtime(currentUserStaff.ID_CumSan);
             }
+
+            // 8. CẬP NHẬT REALTIME MODAL DỜI LỊCH ĐẶT SÂN (NẾU NHÂN VIÊN ĐANG MỞ)
+            if (typeof refreshAdminRescheduleSlotsRealtime === 'function') {
+                refreshAdminRescheduleSlotsRealtime();
+            }
         });
 
     // Lắng nghe kênh CÁ NHÂN của chính nhân viên này
@@ -1010,11 +1015,28 @@ async function updateStaffDashboardStats() {
 }
 
 // Render Lưới Lịch cho một Sân cụ thể
-async function loadStaffSchedule(clusterId, pitchName, pitchId, loaiSanId) {
+let staffScheduleStartDate = null;
+
+window.changeStaffScheduleStartDate = function(newStartYmd) {
+    staffScheduleStartDate = newStartYmd || null;
+    loadStaffSchedule(currentCumSanId, window.currentPitchNameStaff, currentPitchId, currentLoaiSanId, staffScheduleStartDate);
+};
+
+window.shiftStaffScheduleDays = function(offsetDays) {
+    const base = staffScheduleStartDate ? new Date(staffScheduleStartDate + 'T00:00:00') : new Date();
+    base.setDate(base.getDate() + offsetDays);
+    const pad = n => n < 10 ? '0' + n : n;
+    const nextYmd = `${base.getFullYear()}-${pad(base.getMonth() + 1)}-${pad(base.getDate())}`;
+    changeStaffScheduleStartDate(nextYmd);
+};
+
+// Render Lưới Lịch cho một Sân cụ thể
+async function loadStaffSchedule(clusterId, pitchName, pitchId, loaiSanId, customStartDate = null) {
     currentPitchId = pitchId;
     currentCumSanId = clusterId;
     currentLoaiSanId = loaiSanId;
     window.currentPitchNameStaff = pitchName;
+    staffScheduleStartDate = customStartDate;
     
     const container = document.getElementById('staff-schedule-container');
     if(!container) return;
@@ -1039,11 +1061,13 @@ async function loadStaffSchedule(clusterId, pitchName, pitchId, loaiSanId) {
         }
 
         let dateArray = [];
-        const today = new Date();
+        const baseDate = customStartDate ? new Date(customStartDate + 'T00:00:00') : new Date();
+        const pad = n => n < 10 ? '0' + n : n;
+        const startInputVal = `${baseDate.getFullYear()}-${pad(baseDate.getMonth() + 1)}-${pad(baseDate.getDate())}`;
+
         for(let i = 0; i < 7; i++) {
-            let d = new Date(today); 
-            d.setDate(today.getDate() + i);
-            const pad = n => n < 10 ? '0' + n : n;
+            let d = new Date(baseDate); 
+            d.setDate(baseDate.getDate() + i);
             dateArray.push({
                 short: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`,
                 dbFormat: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
@@ -1053,7 +1077,15 @@ async function loadStaffSchedule(clusterId, pitchName, pitchId, loaiSanId) {
 
         let html = `
             <div class="panel">
-                <div class="panel-header"><i class="fa-solid fa-calendar-days"></i> ${pitchName}</div>
+                <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <div><i class="fa-solid fa-calendar-days"></i> ${pitchName}</div>
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <button type="button" class="btn-outline-sm" onclick="shiftStaffScheduleDays(-7)"><i class="fa-solid fa-chevron-left"></i> 7 ngày trước</button>
+                        <button type="button" class="btn-outline-sm" onclick="changeStaffScheduleStartDate(null)">Hôm nay</button>
+                        <input type="date" class="form-control" style="width: 150px; height: 34px; font-weight: 600;" value="${startInputVal}" onchange="changeStaffScheduleStartDate(this.value)" title="Chọn ngày bắt đầu xem lịch">
+                        <button type="button" class="btn-outline-sm" onclick="shiftStaffScheduleDays(7)">7 ngày tiếp <i class="fa-solid fa-chevron-right"></i></button>
+                    </div>
+                </div>
                 <div style="width: 100%; max-height: 500px; overflow-y: auto; overflow-x: auto;"> 
                     <table class="schedule-table" style="margin: 0; border: none;">
                         <thead>
@@ -1713,9 +1745,9 @@ function renderStaffDSTable(invoiceGroups) {
             const isGiaiDau = item.ID_GiaiDau !== null;
             const tenGiaiDau = isGiaiDau && item.giai_dau ? item.giai_dau.TenGiaiDau : '';
             const tagLoai = isGiaiDau 
-                ? `<span style="font-size: 0.75rem; background: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: 4px;"><i class="fa-solid fa-trophy"></i> Giải đấu</span>` 
-                : `<span style="font-size: 0.75rem; background: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px;">Phong trào</span>`;
-            const htmlTenGiai = isGiaiDau ? `<div style="font-size: 0.85rem; color: #4338ca; margin-top: 4px; font-weight: 600;"><i class="fa-solid fa-medal"></i> ${tenGiaiDau}</div>` : '';
+                ? `<span style="font-size: 0.75rem; background: #e0e7ff; color: #4338ca; padding: 2px 8px; border-radius: 4px; white-space: nowrap; display: inline-block;"><i class="fa-solid fa-trophy"></i> Giải đấu</span>` 
+                : `<span style="font-size: 0.75rem; background: #f1f5f9; color: #475569; padding: 2px 8px; border-radius: 4px; white-space: nowrap; display: inline-block;">Phong trào</span>`;
+            const htmlTenGiai = isGiaiDau ? `<div style="font-size: 0.85rem; color: #4338ca; margin-top: 4px; font-weight: 600; white-space: nowrap;"><i class="fa-solid fa-medal"></i> ${tenGiaiDau}</div>` : '';
 
             const d = new Date(item.NgayDa);
             const dateStr = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth()+1).toString().padStart(2, '0')}/${d.getFullYear()}`;
@@ -1723,7 +1755,14 @@ function renderStaffDSTable(invoiceGroups) {
 
             let actionHtml = '';
             if (item.TrangThai === 'DaCoc') {
-                actionHtml = `<button class="btn-primary" style="padding: 6px 12px; font-size: 0.85rem; white-space: nowrap;" onclick="event.stopPropagation(); openStaffDSConfirmModal('${item.ID}')">Chốt sân</button>`;
+                actionHtml = `
+                    <div style="display: inline-flex; gap: 6px; align-items: center;">
+                        <button type="button" class="btn-outline-sm" style="padding: 6px 10px; font-size: 0.82rem; white-space: nowrap; color: #2563eb; border-color: #bfdbfe; background: #eff6ff; font-weight: 700;" onclick="event.stopPropagation(); openAdminRescheduleModal('${item.ID}')">
+                            <i class="fa-solid fa-calendar-day"></i> Dời lịch
+                        </button>
+                        <button type="button" class="btn-primary" style="padding: 6px 12px; font-size: 0.85rem; white-space: nowrap;" onclick="event.stopPropagation(); openStaffDSConfirmModal('${item.ID}')">Chốt sân</button>
+                    </div>
+                `;
             } else {
                 actionHtml = `<span style="color: var(--text-muted); font-size: 0.85rem; white-space: nowrap;">Đã xử lý</span>`;
             }
@@ -1738,8 +1777,12 @@ function renderStaffDSTable(invoiceGroups) {
                     </span>
                 </td>
                 <td><strong>${tenKhachHienThi}</strong><br><span style="font-size: 0.85rem; color: var(--text-muted);">${sdtKhachHienThi}</span></td>
-                <td>
-                    <strong style="color: var(--text-dark);">${item.san_bong ? item.san_bong.TenSan : 'N/A'}</strong> ${tagLoai}
+                <td style="white-space: nowrap;">
+                    <div style="display: flex; align-items: center; gap: 6px; white-space: nowrap; margin-bottom: 3px;">
+                        <strong style="color: var(--text-dark);">${item.san_bong ? item.san_bong.TenSan : 'N/A'}</strong>
+                        ${tagLoai}
+                    </div>
+                    <div style="font-size: 0.85rem; color: var(--text-muted); white-space: nowrap;"><i class="fa-solid fa-location-dot"></i> ${item.san_bong?.cum_san?.TenCumSan || (window.currentClusterNameStaff || '')}</div>
                     ${htmlTenGiai}
                 </td>
                 <td><span style="font-size: 0.9rem;">Ngày: ${dateStr}</span><br><strong style="color: var(--primary);">Giờ: ${timeStr}</strong></td>
@@ -1937,26 +1980,64 @@ function openStaffDSConfirmModal(id) {
     }
 
     modal.innerHTML = `
-        <div class="modal-content" style="max-width: 640px; width: 94%; text-align: center; padding: 28px 24px; border-radius: 16px;">
+        <div class="modal-content" style="max-width: 720px; width: 95%; text-align: center; padding: 28px 24px; border-radius: 16px;">
             <h3 style="margin-bottom: 8px; font-size: 1.35rem; font-weight: 800; color: #0f172a;">Chốt trạng thái sân</h3>
-            <p style="color: #64748b; margin-bottom: 24px; line-height: 1.5; font-size: 0.94rem;">Vui lòng xác nhận trạng thái cho khách hàng này.</p>
+            <p style="color: #64748b; margin-bottom: 24px; line-height: 1.5; font-size: 0.94rem;">Vui lòng chọn thao tác xử lý cho lịch đặt sân này.</p>
             <div style="display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap;">
-                <button type="button" onclick="closeStaffDSConfirmModal()" style="padding: 10px 18px; border-radius: 10px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-weight: 600; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; transition: all 0.2s ease;" onmouseover="this.style.background='#f1f5f9'; this.style.borderColor='#94a3b8'; this.style.color='#0f172a';" onmouseout="this.style.background='#ffffff'; this.style.borderColor='#cbd5e1'; this.style.color='#475569';">
-                    Hủy bỏ
+                <button type="button" onclick="closeStaffDSConfirmModal()" style="padding: 10px 16px; border-radius: 10px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-weight: 600; font-size: 0.9rem; cursor: pointer;">
+                    Đóng
                 </button>
-                <button type="button" onclick="openStaffCancelConfirmModal()" style="padding: 10px 16px; border-radius: 10px; border: 1px solid #fecaca; background: #fef2f2; color: #ef4444; font-weight: 600; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; transition: all 0.2s ease;" onmouseover="this.style.background='#fee2e2'; this.style.borderColor='#fca5a5';" onmouseout="this.style.background='#fef2f2'; this.style.borderColor='#fecaca';">
+                <button type="button" onclick="closeStaffDSConfirmModal(); openAdminRescheduleModal('${id}')" style="padding: 10px 16px; border-radius: 10px; border: 1px solid #bfdbfe; background: #eff6ff; color: #2563eb; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-calendar-day"></i> Dời lịch
+                </button>
+                <button type="button" onclick="openStaffCancelConfirmModal()" style="padding: 10px 16px; border-radius: 10px; border: 1px solid #fecaca; background: #fef2f2; color: #ef4444; font-weight: 600; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
                     <i class="fa-solid fa-ban"></i> Hủy sân & Hoàn tiền
                 </button>
-                <button type="button" onclick="executeStaffCapNhatDatSan('KhongDen')" style="padding: 10px 16px; border-radius: 10px; border: 1px solid #cbd5e1; background: #f8fafc; color: #475569; font-weight: 600; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; transition: all 0.2s ease;" onmouseover="this.style.background='#e2e8f0'; this.style.color='#1e293b';" onmouseout="this.style.background='#f8fafc'; this.style.color='#475569';">
+                <button type="button" onclick="openConfirmStatusActionStaff('KhongDen')" style="padding: 10px 16px; border-radius: 10px; border: 1px solid #cbd5e1; background: #f8fafc; color: #475569; font-weight: 600; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
                     <i class="fa-solid fa-user-slash"></i> Không đến
                 </button>
-                <button type="button" onclick="executeStaffCapNhatDatSan('HoanThanh')" style="padding: 10px 20px; border-radius: 10px; border: 1px solid #10b981; background: #10b981; color: #ffffff; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.25); transition: all 0.2s ease;" onmouseover="this.style.background='#059669'; this.style.borderColor='#059669';" onmouseout="this.style.background='#10b981'; this.style.borderColor='#10b981';">
+                <button type="button" onclick="openConfirmStatusActionStaff('HoanThanh')" style="padding: 10px 20px; border-radius: 10px; border: 1px solid #10b981; background: #10b981; color: #ffffff; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.25);">
                     <i class="fa-solid fa-check"></i> Hoàn thành
                 </button>
             </div>
         </div>`;
     modal.style.display = 'flex';
 }
+
+window.openConfirmStatusActionStaff = function(trangThai) {
+    closeStaffDSConfirmModal();
+    let modal = document.getElementById('staff-final-status-confirm-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'staff-final-status-confirm-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 10020; align-items: center; justify-content: center;';
+        document.body.appendChild(modal);
+    }
+    const isComplete = trangThai === 'HoanThanh';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 420px; width: 92%; text-align: center; padding: 26px 22px; border-radius: 16px;">
+            <div style="font-size: 3rem; color: ${isComplete ? '#10b981' : '#f59e0b'}; margin-bottom: 10px;">
+                <i class="fa-solid ${isComplete ? 'fa-circle-check' : 'fa-user-slash'}"></i>
+            </div>
+            <h3 style="margin-bottom: 8px; font-size: 1.25rem; font-weight: 800; color: #0f172a;">
+                Xác nhận chốt "${isComplete ? 'Hoàn thành' : 'Không đến'}"?
+            </h3>
+            <p style="color: #64748b; font-size: 0.9rem; line-height: 1.5; margin-bottom: 20px;">
+                ${isComplete
+                    ? 'Xác nhận khách đã hoàn thành trận đấu và thanh toán đủ phần còn lại tại sân?'
+                    : 'Xác nhận khách không đến nhận sân (vé sẽ chuyển sang Không đến và giữ lại tiền cọc)?'}
+            </p>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button type="button" class="btn-outline" style="flex: 1; padding: 10px;" onclick="document.getElementById('staff-final-status-confirm-modal').style.display='none'">Hủy bỏ</button>
+                <button type="button" class="btn-primary" style="flex: 1.2; padding: 10px; background: ${isComplete ? '#10b981' : '#ea580c'}; border-color: ${isComplete ? '#10b981' : '#ea580c'};" onclick="document.getElementById('staff-final-status-confirm-modal').style.display='none'; executeStaffCapNhatDatSan('${trangThai}');">
+                    Đồng ý xác nhận
+                </button>
+            </div>
+        </div>
+    `;
+    modal.style.display = 'flex';
+};
 
 function closeStaffDSConfirmModal() { 
     const modal = document.getElementById('staff-ds-confirm-modal');
@@ -3951,5 +4032,562 @@ window.executeAdminCancelInvoice = async function(maHoaDon, needOtp = false, isO
         showSystemModal('Lỗi', 'Mất kết nối máy chủ!', 'error');
         btn.disabled = false;
         btn.innerHTML = 'Xác nhận Hủy & Hoàn tiền';
+    }
+};
+
+// ======================================================
+// MODULE: DỜI LỊCH ĐẶT SÂN DÀNH CHO NHÂN VIÊN (REALTIME + CONFIRM MODAL)
+// ======================================================
+let adminRescheduleState = {
+    booking: null,
+    clusterId: null,
+    clusterName: '',
+    gioMoCua: '06:00',
+    gioDongCua: '22:00',
+    pitches: [],
+    khungGios: [],
+    giaTiens: [],
+    bookedSlots: [],
+    selectedPitchId: null,
+    selectedDate: null,
+    selectedKhungGioId: null,
+    selectedPrice: 0,
+    minDate: ''
+};
+
+function getLocalTodayYmdAdmin() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+window.openAdminRescheduleModal = async function(bookingId) {
+    const item = staffDatSanData.find(b => String(b.ID) === String(bookingId) || String(b.MaDatSan) === String(bookingId));
+    if (!item) return;
+
+    const clusterId = item.san_bong ? (item.san_bong.MaCumSan || item.san_bong.ID_CumSan) : null;
+    const clusterName = item.san_bong?.cum_san?.TenCumSan || (window.currentClusterNameStaff || 'Cơ sở hiện tại');
+    const todayYmd = getLocalTodayYmdAdmin();
+    const defaultDate = item.NgayDa >= todayYmd ? item.NgayDa : todayYmd;
+
+    adminRescheduleState = {
+        booking: item,
+        clusterId: clusterId,
+        clusterName: clusterName,
+        gioMoCua: item.san_bong?.cum_san?.GioMoCua ? item.san_bong.cum_san.GioMoCua.substring(0, 5) : '06:00',
+        gioDongCua: item.san_bong?.cum_san?.GioDongCua ? item.san_bong.cum_san.GioDongCua.substring(0, 5) : '22:00',
+        pitches: [],
+        khungGios: [],
+        giaTiens: [],
+        bookedSlots: [],
+        selectedPitchId: String(item.MaSanBong || item.ID_SanBong || item.san_bong?.ID),
+        selectedDate: defaultDate,
+        selectedKhungGioId: null,
+        selectedPrice: 0,
+        minDate: todayYmd
+    };
+
+    let modal = document.getElementById('admin-reschedule-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'admin-reschedule-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 10020; align-items: center; justify-content: center;';
+        modal.onclick = function(e) {
+            if (e.target === modal) closeAdminRescheduleModal();
+        };
+        document.body.appendChild(modal);
+    }
+
+    const isTour = Boolean(item.MaGiaiDau || item.ID_GiaiDau);
+    const maVeStr = isTour ? `#GD-${item.MaGiaiDau || item.ID_GiaiDau}` : `#PT-${item.ID}`;
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 680px; width: 95%; padding: 0; border-radius: 18px; overflow: hidden; background: #fff; max-height: 90vh; display: flex; flex-direction: column;">
+            <div style="padding: 18px 24px; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #fff; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800;">
+                        <i class="fa-solid fa-calendar-day" style="color: #38bdf8; margin-right: 8px;"></i>Hỗ trợ Dời lịch đặt sân (${maVeStr})
+                    </h3>
+                    <div style="font-size: 0.82rem; opacity: 0.9; margin-top: 3px;">Cơ sở: <strong>${clusterName}</strong> (Dời sang sân/khung giờ trống trong cùng cụm sân)</div>
+                </div>
+                <i class="fa-solid fa-xmark" style="cursor: pointer; font-size: 1.25rem; color: #94a3b8;" onclick="closeAdminRescheduleModal()"></i>
+            </div>
+
+            <div id="admin-reschedule-body" style="padding: 20px 24px; overflow-y: auto; flex: 1;">
+                <div style="text-align: center; padding: 40px;"><i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem; color: var(--primary);"></i><p style="margin-top: 10px; color: var(--text-muted);">Đang tải dữ liệu lịch trống...</p></div>
+            </div>
+
+            <div style="padding: 14px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 12px;">
+                <button type="button" class="btn-outline" style="width: auto; padding: 10px 22px; border-radius: 10px;" onclick="closeAdminRescheduleModal()">Hủy bỏ</button>
+                <button type="button" id="btn-admin-open-reschedule-confirm" class="btn-primary btn-disabled" disabled style="width: auto; padding: 10px 24px; border-radius: 10px; font-weight: 700;" onclick="openAdminRescheduleConfirmModal()">
+                    <i class="fa-solid fa-check" style="margin-right: 6px;"></i> Tiếp tục xác nhận
+                </button>
+            </div>
+        </div>
+    `;
+
+    modal.style.display = 'flex';
+
+    try {
+        const [sbRes, gtRes, kgRes, csRes] = await Promise.all([
+            fetch(`${API_BASE_URL}/san-bong?cum_san_id=${clusterId}`),
+            fetch(`${API_BASE_URL}/gia-tien?cum_san_id=${clusterId}`),
+            fetch(`${API_BASE_URL}/khung-gio`),
+            fetch(`${API_BASE_URL}/cum-san/${clusterId}`)
+        ]);
+
+        const sbData = await sbRes.json();
+        const gtData = await gtRes.json();
+        const kgData = await kgRes.json();
+        const csData = await csRes.json();
+
+        if (csData.success && csData.data) {
+            adminRescheduleState.gioMoCua = csData.data.GioMoCua.substring(0, 5);
+            adminRescheduleState.gioDongCua = csData.data.GioDongCua.substring(0, 5);
+        }
+
+        adminRescheduleState.pitches = (sbData.data || []).filter(p => p.TrangThai === 'HoatDong');
+        adminRescheduleState.giaTiens = gtData.data || [];
+        adminRescheduleState.khungGios = kgData.data || [];
+
+        await loadAdminRescheduleBookedSlots(adminRescheduleState.selectedPitchId);
+        renderAdminRescheduleBody();
+    } catch (e) {
+        const bodyEl = document.getElementById('admin-reschedule-body');
+        if (bodyEl) bodyEl.innerHTML = `<div style="color:red; text-align:center; padding:30px;">Lỗi tải dữ liệu lịch sân!</div>`;
+    }
+};
+
+async function loadAdminRescheduleBookedSlots(pitchId) {
+    const cacheBuster = new Date().getTime();
+    const dsRes = await fetch(`${API_BASE_URL}/dat-san/da-dat?id_san_bong=${pitchId}&_t=${cacheBuster}`);
+    const dsJson = await dsRes.json();
+    adminRescheduleState.bookedSlots = dsJson.data || [];
+}
+
+function renderAdminRescheduleBody() {
+    const bodyEl = document.getElementById('admin-reschedule-body');
+    if (!bodyEl || !adminRescheduleState.booking) return;
+
+    const item = adminRescheduleState.booking;
+    const isTour = Boolean(item.MaGiaiDau || item.ID_GiaiDau);
+    const tenKhach = item.ID_NguoiDung ? (item.nguoi_dung?.HoTen || 'Khách hàng') : (item.TenNguoiDat || item.TenKhachVangLai || 'Khách vãng lai');
+    const sdtKhach = item.ID_NguoiDung ? (item.nguoi_dung?.SoDienThoai || '') : (item.SDTNguoiDat || item.SDTKhachVangLai || '');
+    const oldPitchName = item.san_bong ? item.san_bong.TenSan : 'Sân';
+    const oldDateStr = item.NgayDa ? item.NgayDa.split('-').reverse().join('/') : '';
+    const oldTimeStr = item.khung_gio ? `${item.khung_gio.GioBatDau.substring(0,5)} - ${item.khung_gio.GioKetThuc.substring(0,5)}` : '';
+    const oldPrice = Number(item.TongTien || 0);
+    const tienCoc = Number(item.TienCoc || 0);
+
+    const pitchOptionsHtml = adminRescheduleState.pitches.map(p => {
+        const pId = String(p.MaSanBong || p.ID);
+        const loaiName = p.loaiSan?.TenLoaiSan || p.loai_san?.TenLoaiSan || '';
+        const selected = pId === String(adminRescheduleState.selectedPitchId) ? 'selected' : '';
+        return `<option value="${pId}" ${selected}>${p.TenSan} (${loaiName})</option>`;
+    }).join('');
+
+    const tourNoteHtml = (isTour && item.giai_dau)
+        ? `<div style="font-size: 0.76rem; color: #4338ca; margin-top: 4px; font-weight: 600;"><i class="fa-solid fa-trophy"></i> Giải: ${item.giai_dau.TenGiaiDau} (${item.giai_dau.NgayBatDau.split('-').reverse().join('/')} - ${item.giai_dau.NgayKetThuc.split('-').reverse().join('/')})</div>`
+        : '';
+
+    bodyEl.innerHTML = `
+        <div id="admin-reschedule-alert" class="modal-alert" style="display: none; margin-bottom: 14px;"></div>
+
+        <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-left: 4px solid #2563eb; border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; font-size: 0.88rem;">
+            <div style="font-weight: 700; color: #0f172a; margin-bottom: 4px;">Khách hàng: <span style="color:#2563eb;">${tenKhach} (${sdtKhach})</span></div>
+            <div style="display: flex; flex-wrap: wrap; gap: 14px; color: #334155;">
+                <span>Sân cũ: <strong>${oldPitchName}</strong></span>
+                <span>Ngày cũ: <strong>${oldDateStr}</strong></span>
+                <span>Giờ cũ: <strong style="color: var(--primary);">${oldTimeStr}</strong></span>
+                <span>Giá cũ: <strong>${oldPrice.toLocaleString('vi-VN')}đ</strong></span>
+                <span>Đã cọc: <strong style="color: #047857;">${tienCoc.toLocaleString('vi-VN')}đ</strong></span>
+            </div>
+            ${tourNoteHtml}
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
+            <div>
+                <label style="font-size: 0.85rem; font-weight: 700; color: #0f172a; display: block; margin-bottom: 6px;">1. Chọn Sân bóng mới (Cùng cơ sở)</label>
+                <select class="form-control" style="font-weight: 600; height: 42px;" onchange="handleAdminReschedulePitchChange(this.value)">
+                    ${pitchOptionsHtml}
+                </select>
+            </div>
+            <div>
+                <label style="font-size: 0.85rem; font-weight: 700; color: #0f172a; display: block; margin-bottom: 6px;">2. Chọn Ngày đá mới</label>
+                <input type="date" id="adm-resched-date" class="form-control" style="font-weight: 600; height: 42px;" value="${adminRescheduleState.selectedDate}" min="${adminRescheduleState.minDate}" onchange="handleAdminRescheduleDateChange(this.value)">
+            </div>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+            <label style="font-size: 0.85rem; font-weight: 700; color: #0f172a; display: block; margin-bottom: 8px;">3. Chọn Khung giờ trống (Cập nhật Realtime)</label>
+            <div id="adm-resched-slots-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 10px; max-height: 230px; overflow-y: auto; padding: 4px;"></div>
+        </div>
+
+        <div id="adm-resched-price-summary"></div>
+    `;
+
+    renderAdminRescheduleSlotsGrid();
+    renderAdminReschedulePriceSummary();
+}
+
+window.handleAdminReschedulePitchChange = async function(newPitchId) {
+    adminRescheduleState.selectedPitchId = String(newPitchId);
+    adminRescheduleState.selectedKhungGioId = null;
+    adminRescheduleState.selectedPrice = 0;
+
+    const gridEl = document.getElementById('adm-resched-slots-grid');
+    if (gridEl) gridEl.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải lịch sân...</div>`;
+
+    await loadAdminRescheduleBookedSlots(newPitchId);
+    renderAdminRescheduleSlotsGrid();
+    renderAdminReschedulePriceSummary();
+};
+
+window.handleAdminRescheduleDateChange = function(newDate) {
+    if (!newDate) return;
+    if (adminRescheduleState.minDate && newDate < adminRescheduleState.minDate) {
+        newDate = adminRescheduleState.minDate;
+        document.getElementById('adm-resched-date').value = newDate;
+    }
+    adminRescheduleState.selectedDate = newDate;
+    adminRescheduleState.selectedKhungGioId = null;
+    adminRescheduleState.selectedPrice = 0;
+
+    renderAdminRescheduleSlotsGrid();
+    renderAdminReschedulePriceSummary();
+};
+
+function renderAdminRescheduleSlotsGrid() {
+    const gridEl = document.getElementById('adm-resched-slots-grid');
+    if (!gridEl || !adminRescheduleState.booking) return;
+
+    const item = adminRescheduleState.booking;
+    const pitchObj = adminRescheduleState.pitches.find(p => String(p.MaSanBong || p.ID) === String(adminRescheduleState.selectedPitchId));
+    if (!pitchObj) {
+        gridEl.innerHTML = `<div style="grid-column:1/-1; text-align:center; color:#64748b; padding:20px;">Không tìm thấy sân.</div>`;
+        return;
+    }
+
+    const loaiSanId = pitchObj.MaLoaiSan || pitchObj.ID_LoaiSan;
+    const validPrices = adminRescheduleState.giaTiens.filter(gt => String(gt.MaLoaiSan || gt.ID_LoaiSan) === String(loaiSanId));
+    const moCua = adminRescheduleState.gioMoCua;
+    const dongCua = adminRescheduleState.gioDongCua;
+    const now = new Date();
+    const [y, m, d] = adminRescheduleState.selectedDate.split('-').map(Number);
+
+    const oldPitchId = String(item.MaSanBong || item.ID_SanBong || item.san_bong?.ID);
+    const oldKhungGioId = String(item.MaKhungGio || item.ID_KhungGio || item.khung_gio?.ID);
+    const oldDate = item.NgayDa;
+
+    let html = '';
+    adminRescheduleState.khungGios.forEach(kg => {
+        const maKG = String(kg.MaKhungGio || kg.ID);
+        const start = kg.GioBatDau.substring(0, 5);
+        const end = kg.GioKetThuc.substring(0, 5);
+        const priceObj = validPrices.find(p => String(p.MaKhungGio || p.ID_KhungGio) === maKG);
+
+        if (!priceObj || Number(priceObj.SoTien) <= 0 || start < moCua || end > dongCua) {
+            return;
+        }
+
+        const priceVal = Number(priceObj.SoTien);
+        const timeStr = `${start} - ${end}`;
+        const [startH, startM] = start.split(':').map(Number);
+        const slotDateTime = new Date(y, m - 1, d, startH, startM);
+        const isPast = slotDateTime <= now;
+
+        const isCurrentBookingSlot = (
+            String(adminRescheduleState.selectedPitchId) === oldPitchId &&
+            adminRescheduleState.selectedDate === oldDate &&
+            maKG === oldKhungGioId
+        );
+
+        const isBookedByOther = !isCurrentBookingSlot && adminRescheduleState.bookedSlots.some(b =>
+            String(b.NgayDa).substring(0, 10) === adminRescheduleState.selectedDate &&
+            String(b.MaKhungGio || b.ID_KhungGio) === maKG
+        );
+
+        const isSelected = String(adminRescheduleState.selectedKhungGioId) === maKG;
+
+        if (isCurrentBookingSlot) {
+            html += `
+                <div style="padding: 10px 8px; border-radius: 10px; background: #eff6ff; border: 1.5px dashed #60a5fa; color: #1d4ed8; text-align: center; opacity: 0.85; cursor: not-allowed;">
+                    <div style="font-weight: 800; font-size: 0.86rem;">${timeStr}</div>
+                    <div style="font-size: 0.75rem; font-weight: 700; margin-top: 2px;">Ca hiện tại</div>
+                </div>
+            `;
+        } else if (isPast || isBookedByOther) {
+            html += `
+                <div style="padding: 10px 8px; border-radius: 10px; background: #e2e8f0; border: 1px solid #cbd5e1; color: #64748b; text-align: center; cursor: not-allowed;">
+                    <div style="font-weight: 700; font-size: 0.86rem;">${timeStr}</div>
+                    <div style="font-size: 0.75rem; margin-top: 2px;">${isPast ? 'Quá giờ' : 'Đã đặt'}</div>
+                </div>
+            `;
+        } else {
+            const boxStyle = isSelected
+                ? 'background: var(--primary); border: 2px solid var(--primary); color: #ffffff; box-shadow: 0 4px 10px rgba(22, 163, 74, 0.25);'
+                : 'background: #f0fdf4; border: 1.5px solid #86efac; color: #0f172a;';
+            const priceColor = isSelected ? '#fde047' : 'var(--primary)';
+
+            html += `
+                <div onclick="selectAdminRescheduleSlot('${maKG}', ${priceVal})" style="padding: 10px 8px; border-radius: 10px; text-align: center; cursor: pointer; transition: 0.15s; ${boxStyle}">
+                    <div style="font-weight: 800; font-size: 0.86rem;">${timeStr}</div>
+                    <div style="font-size: 0.8rem; font-weight: 700; color: ${priceColor}; margin-top: 2px;">${priceVal.toLocaleString('vi-VN')}đ</div>
+                </div>
+            `;
+        }
+    });
+
+    gridEl.innerHTML = html || `<div style="grid-column:1/-1; text-align:center; color:#64748b; padding:20px;">Không có khung giờ hoạt động nào.</div>`;
+
+    const btnConfirm = document.getElementById('btn-admin-open-reschedule-confirm');
+    if (btnConfirm) {
+        if (adminRescheduleState.selectedKhungGioId) {
+            btnConfirm.disabled = false;
+            btnConfirm.classList.remove('btn-disabled');
+        } else {
+            btnConfirm.disabled = true;
+            btnConfirm.classList.add('btn-disabled');
+        }
+    }
+}
+
+window.selectAdminRescheduleSlot = function(maKhungGio, priceVal) {
+    adminRescheduleState.selectedKhungGioId = String(maKhungGio);
+    adminRescheduleState.selectedPrice = Number(priceVal);
+    renderAdminRescheduleSlotsGrid();
+    renderAdminReschedulePriceSummary();
+};
+
+function calculateAdminInvoiceAfterReschedule(newSlotPrice) {
+    const item = adminRescheduleState.booking;
+    const maHD = item.MaHoaDonDatSan;
+    const hdObj = item.hoa_don_dat_san || item.hoaDonDatSan || null;
+    const invoiceMatches = maHD
+        ? staffDatSanData.filter(m => m.MaHoaDonDatSan === maHD)
+        : [item];
+
+    let tongTienSanGocMoi = 0;
+    let tongCocKhongDen = 0;
+    let tongDaCoc = 0;
+
+    invoiceMatches.forEach(m => {
+        const isTarget = String(m.ID) === String(item.ID);
+        const donGia = isTarget ? Number(newSlotPrice) : Number(m.TongTien || 0);
+        const coc = Number(m.TienCoc || 0);
+
+        if (m.TrangThai !== 'DaHuy') {
+            tongDaCoc += coc;
+        }
+        if (m.TrangThai === 'DaCoc' || m.TrangThai === 'HoanThanh') {
+            tongTienSanGocMoi += donGia;
+        } else if (m.TrangThai === 'KhongDen') {
+            tongCocKhongDen += coc;
+        }
+    });
+
+    const km = hdObj ? (hdObj.khuyen_mai || hdObj.khuyenMai || null) : null;
+    let soTienGiam = 0;
+    if (hdObj && hdObj.MaKhuyenMai && km && tongTienSanGocMoi >= Number(km.GiaTriHoaDonToiThieu || 0)) {
+        if (km.LoaiKhuyenMai === 'PhanTram') {
+            soTienGiam = Math.round(tongTienSanGocMoi * (Number(km.GiaTri || 0) / 100));
+            if (Number(km.GiaTriToiDa || 0) > 0 && soTienGiam > Number(km.GiaTriToiDa)) {
+                soTienGiam = Number(km.GiaTriToiDa);
+            }
+        } else {
+            soTienGiam = Number(km.GiaTri || 0);
+        }
+        soTienGiam = Math.min(tongTienSanGocMoi, soTienGiam);
+    }
+
+    const tienSauGiam = Math.max(0, tongTienSanGocMoi - soTienGiam);
+    const thueVATMoi = Math.floor((tienSauGiam * 0.08) / 1000) * 1000;
+    const tongHoaDonMoi = tienSauGiam + thueVATMoi + tongCocKhongDen;
+    const conThuTaiSanMoi = Math.max(0, tongHoaDonMoi - tongDaCoc);
+
+    return {
+        tongTienSanGocMoi,
+        soTienGiam,
+        thueVATMoi,
+        tongHoaDonMoi,
+        tongDaCoc,
+        conThuTaiSanMoi,
+        isInvalidBelowDeposit: tongHoaDonMoi < tongDaCoc
+    };
+}
+
+function renderAdminReschedulePriceSummary() {
+    const summaryEl = document.getElementById('adm-resched-price-summary');
+    if (!summaryEl || !adminRescheduleState.booking) return;
+
+    if (!adminRescheduleState.selectedKhungGioId) {
+        summaryEl.innerHTML = `
+            <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 12px; padding: 12px 16px; text-align: center; color: #64748b; font-size: 0.86rem;">
+                Vui lòng chọn một khung giờ trống ở trên để xem chi tiết giá và hóa đơn cập nhật.
+            </div>
+        `;
+        return;
+    }
+
+    const item = adminRescheduleState.booking;
+    const oldPrice = Number(item.TongTien || 0);
+    const newPrice = Number(adminRescheduleState.selectedPrice || 0);
+    const diff = newPrice - oldPrice;
+    const diffStr = diff === 0
+        ? '<span style="color:#64748b;">Không đổi (0đ)</span>'
+        : (diff > 0
+            ? `<span style="color:#ea580c; font-weight:700;">+${diff.toLocaleString('vi-VN')}đ</span>`
+            : `<span style="color:#16a34a; font-weight:700;">${diff.toLocaleString('vi-VN')}đ</span>`);
+
+    const calc = calculateAdminInvoiceAfterReschedule(newPrice);
+
+    summaryEl.innerHTML = `
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 14px 16px; font-size: 0.88rem;">
+            <div style="font-weight: 800; color: #065f46; margin-bottom: 8px;"><i class="fa-solid fa-calculator"></i> Tạm tính Hóa đơn sau khi dời lịch:</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <div>Đơn giá ca mới: <strong>${newPrice.toLocaleString('vi-VN')}đ</strong> (${diffStr})</div>
+                <div>Thuế VAT (8% HĐ): <strong>${calc.thueVATMoi.toLocaleString('vi-VN')}đ</strong></div>
+                <div>Tổng hóa đơn mới: <strong style="color:#0f172a;">${calc.tongHoaDonMoi.toLocaleString('vi-VN')}đ</strong></div>
+                <div>Đã đặt cọc (Giữ nguyên): <strong style="color:#047857;">${calc.tongDaCoc.toLocaleString('vi-VN')}đ</strong></div>
+            </div>
+            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed #86efac; display: flex; justify-content: space-between; align-items: center; font-size: 0.95rem;">
+                <span style="font-weight: 700; color: #0f172a;">Còn thu tại sân (Đã tính chênh lệch):</span>
+                <strong style="color: #ea580c; font-size: 1.08rem;">${calc.conThuTaiSanMoi.toLocaleString('vi-VN')}đ</strong>
+            </div>
+            ${calc.isInvalidBelowDeposit ? `<div style="margin-top:6px; color:#dc2626; font-weight:700; font-size:0.82rem;"><i class="fa-solid fa-triangle-exclamation"></i> Tổng hóa đơn mới thấp hơn số tiền khách đã cọc!</div>` : ''}
+        </div>
+    `;
+}
+
+window.refreshAdminRescheduleSlotsRealtime = async function() {
+    const modal = document.getElementById('admin-reschedule-modal');
+    if (!modal || modal.style.display !== 'flex' || !adminRescheduleState.selectedPitchId) return;
+
+    await loadAdminRescheduleBookedSlots(adminRescheduleState.selectedPitchId);
+
+    if (adminRescheduleState.selectedKhungGioId) {
+        const isTakenNow = adminRescheduleState.bookedSlots.some(b =>
+            String(b.NgayDa).substring(0, 10) === adminRescheduleState.selectedDate &&
+            String(b.MaKhungGio || b.ID_KhungGio) === String(adminRescheduleState.selectedKhungGioId)
+        );
+        if (isTakenNow) {
+            adminRescheduleState.selectedKhungGioId = null;
+            adminRescheduleState.selectedPrice = 0;
+        }
+    }
+
+    renderAdminRescheduleSlotsGrid();
+    renderAdminReschedulePriceSummary();
+};
+
+window.closeAdminRescheduleModal = function() {
+    const modal = document.getElementById('admin-reschedule-modal');
+    if (modal) modal.style.display = 'none';
+};
+
+window.openAdminRescheduleConfirmModal = function() {
+    if (!adminRescheduleState.booking || !adminRescheduleState.selectedKhungGioId) return;
+
+    const calc = calculateAdminInvoiceAfterReschedule(adminRescheduleState.selectedPrice);
+    if (calc.isInvalidBelowDeposit) {
+        const alertBox = document.getElementById('admin-reschedule-alert');
+        if (alertBox) {
+            alertBox.textContent = 'Tổng tiền hóa đơn sau khi đổi không được nhỏ hơn số tiền khách đã đặt cọc!';
+            alertBox.className = 'modal-alert error';
+            alertBox.style.display = 'block';
+        }
+        return;
+    }
+
+    const item = adminRescheduleState.booking;
+    const oldPitchName = item.san_bong ? item.san_bong.TenSan : 'Sân';
+    const oldDateStr = item.NgayDa ? item.NgayDa.split('-').reverse().join('/') : '';
+    const oldTimeStr = item.khung_gio ? `${item.khung_gio.GioBatDau.substring(0,5)} - ${item.khung_gio.GioKetThuc.substring(0,5)}` : '';
+
+    const newPitchObj = adminRescheduleState.pitches.find(p => String(p.MaSanBong || p.ID) === String(adminRescheduleState.selectedPitchId));
+    const newKgObj = adminRescheduleState.khungGios.find(k => String(k.MaKhungGio || k.ID) === String(adminRescheduleState.selectedKhungGioId));
+    const newPitchName = newPitchObj ? newPitchObj.TenSan : 'Sân mới';
+    const newDateStr = adminRescheduleState.selectedDate.split('-').reverse().join('/');
+    const newTimeStr = newKgObj ? `${newKgObj.GioBatDau.substring(0,5)} - ${newKgObj.GioKetThuc.substring(0,5)}` : '';
+
+    let confirmModal = document.getElementById('admin-reschedule-confirm-modal');
+    if (!confirmModal) {
+        confirmModal = document.createElement('div');
+        confirmModal.id = 'admin-reschedule-confirm-modal';
+        confirmModal.className = 'modal-overlay';
+        confirmModal.style.cssText = 'display: none; z-index: 10050; align-items: center; justify-content: center;';
+        document.body.appendChild(confirmModal);
+    }
+
+    confirmModal.innerHTML = `
+        <div class="modal-content" style="max-width: 450px; width: 92%; text-align: center; padding: 28px 24px; border-radius: 16px;">
+            <div style="font-size: 3.2rem; color: #2563eb; margin-bottom: 12px;"><i class="fa-solid fa-circle-question"></i></div>
+            <h3 style="margin-bottom: 10px; font-size: 1.3rem; font-weight: 800; color: #0f172a;">Xác nhận Dời Lịch Đặt Sân?</h3>
+            <p style="color: #475569; font-size: 0.9rem; margin-bottom: 14px;">Hệ thống sẽ cập nhật lịch mới và thông báo cho khách hàng:</p>
+            
+            <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 12px; padding: 12px 14px; text-align: left; font-size: 0.86rem; line-height: 1.65; margin-bottom: 20px;">
+                <div><span style="color:#64748b;">Lịch cũ:</span> <strong>${oldPitchName}</strong> &bull; ${oldTimeStr} (${oldDateStr})</div>
+                <div style="color:#059669;"><span style="color:#64748b;">Lịch mới:</span> <strong>${newPitchName} &bull; ${newTimeStr} (${newDateStr})</strong></div>
+                <div><span style="color:#64748b;">Đơn giá khung giờ mới:</span> <strong>${adminRescheduleState.selectedPrice.toLocaleString('vi-VN')}đ</strong></div>
+                <div style="border-top:1px dashed #cbd5e1; margin-top:6px; padding-top:6px;"><span style="color:#64748b;">Còn thu tại sân (HĐ):</span> <strong style="color:#ea580c;">${calc.conThuTaiSanMoi.toLocaleString('vi-VN')}đ</strong></div>
+            </div>
+
+            <div style="display: flex; gap: 12px; justify-content: center;">
+                <button type="button" class="btn-outline" style="flex: 1; padding: 10px;" onclick="document.getElementById('admin-reschedule-confirm-modal').style.display='none'">Quay lại</button>
+                <button type="button" id="btn-exec-admin-reschedule" class="btn-primary" style="flex: 1.3; padding: 10px; background: #2563eb; border-color: #2563eb;" onclick="executeAdminReschedule()">Đồng ý dời lịch</button>
+            </div>
+        </div>
+    `;
+
+    confirmModal.style.display = 'flex';
+};
+
+window.executeAdminReschedule = async function() {
+    const item = adminRescheduleState.booking;
+    if (!item) return;
+
+    const btn = document.getElementById('btn-exec-admin-reschedule');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+    }
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/admin/dat-san/${item.ID}/doi-lich`, {
+            method: 'PUT',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                ma_san_bong_moi: adminRescheduleState.selectedPitchId,
+                ma_khung_gio_moi: adminRescheduleState.selectedKhungGioId,
+                ngay_da_moi: adminRescheduleState.selectedDate
+            })
+        });
+
+        const data = await res.json();
+        document.getElementById('admin-reschedule-confirm-modal').style.display = 'none';
+
+        if (res.ok && data.success) {
+            closeAdminRescheduleModal();
+            showSystemModal('Thành công', data.message, 'success');
+            if (typeof loadStaffDanhSachDatSan === 'function' && document.getElementById('staff-datsan-table-body')) {
+                loadStaffDanhSachDatSan();
+            }
+        } else {
+            const alertBox = document.getElementById('admin-reschedule-alert');
+            if (alertBox) {
+                alertBox.textContent = data.message || 'Không thể dời lịch!';
+                alertBox.className = 'modal-alert error';
+                alertBox.style.display = 'block';
+            }
+            await refreshAdminRescheduleSlotsRealtime();
+        }
+    } catch (e) {
+        document.getElementById('admin-reschedule-confirm-modal').style.display = 'none';
+        showSystemModal('Lỗi', 'Mất kết nối máy chủ!', 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = 'Đồng ý dời lịch';
+        }
     }
 };

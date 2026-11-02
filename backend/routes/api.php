@@ -75,6 +75,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/dat-san', [DatSanController::class, 'datSan']);
     Route::get('/dat-san/cua-toi', [DatSanController::class, 'layDanhSachCuaToi']);
     Route::put('/dat-san/{id}/huy', [DatSanController::class, 'huySanPhongTrao']);
+    Route::put('/dat-san/{id}/doi-lich', [DatSanController::class, 'doiLichKhachHang']);
     Route::put('/hoa-don-dat-san/{maHoaDon}/huy', [DatSanController::class, 'huyHoaDonKhachHang']);
 
     Route::post('/yeu-cau-huy-gap', [YeuCauHuyGapController::class, 'taoYeuCau']);
@@ -117,6 +118,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // 7. Admin: Duyệt yêu cầu & Quản lý Đặt sân
     Route::get('/admin/dat-san', [DatSanController::class, 'layDanhSachAdmin']);
     Route::put('/admin/dat-san/{id}/chot', [DatSanController::class, 'chotTrangThaiAdmin']);
+    Route::put('/admin/dat-san/{id}/doi-lich', [DatSanController::class, 'doiLichAdmin']);
     Route::post('/admin/dat-san/{id}/gui-otp-huy-guest', [DatSanController::class, 'guiOtpHuySanGuest']);
     Route::put('/admin/hoa-don-dat-san/{maHoaDon}/huy', [DatSanController::class, 'huyHoaDonAdmin']);
     Route::post('/admin/hoa-don-dat-san/{maHoaDon}/gui-otp-huy-guest', [DatSanController::class, 'guiOtpHuyHoaDonGuest']);
