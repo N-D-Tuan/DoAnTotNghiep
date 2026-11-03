@@ -606,7 +606,7 @@
                     { name: 'KinhDo', type: 'decimal(10,7)', input: 'number', step: 'any', placeholder: 'VD: 108.202167' },
                     { name: 'GioMoCua', type: 'time', input: 'time', required: true, default: '06:00' },
                     { name: 'GioDongCua', type: 'time', input: 'time', required: true, default: '22:00' },
-                    { name: 'HinhAnh', type: 'varchar(255)', placeholder: '/storage/cumsan/...' },
+                    { name: 'HinhAnh', type: 'varchar(255) [File ảnh]', input: 'file' },
                     { name: 'TrangThai', type: 'enum', options: ['HoatDong', 'BaoTri'], default: 'HoatDong' }
                 ]
             },
@@ -929,6 +929,14 @@
                             ${f.options.map(opt => `<option value="${opt}" ${opt === f.default ? 'selected' : ''}>${opt || '-- Trống --'}</option>`).join('')}
                         </select>
                     `;
+                } else if (f.input === 'file') {
+                    inputHtml = `
+                        <input type="file" name="${f.name}" id="field-${f.name}" class="form-input" style="padding: 5px 10px;" accept="image/*" onchange="previewTableFormImage(this, '${f.name}')">
+                        <div id="preview-box-${f.name}" style="display: none; margin-top: 6px; align-items: center; gap: 10px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 6px 10px; border-radius: 8px;">
+                            <img id="preview-img-${f.name}" src="" alt="Preview" style="width: 56px; height: 40px; object-fit: cover; border-radius: 6px; border: 1px solid #cbd5e1;">
+                            <span id="preview-path-${f.name}" style="font-size: 12px; color: #475569; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></span>
+                        </div>
+                    `;
                 } else if (f.type === 'text') {
                     inputHtml = `<input type="text" name="${f.name}" id="field-${f.name}" class="form-input" placeholder="${f.placeholder || ''}" ${f.required ? 'required' : ''}>`;
                 } else {
@@ -996,6 +1004,20 @@
             }).join('');
         }
 
+        window.previewTableFormImage = function(inputEl, fieldName) {
+            const box = document.getElementById(`preview-box-${fieldName}`);
+            const img = document.getElementById(`preview-img-${fieldName}`);
+            const label = document.getElementById(`preview-path-${fieldName}`);
+            if (!box || !img || !label) return;
+
+            if (inputEl.files && inputEl.files[0]) {
+                const file = inputEl.files[0];
+                img.src = URL.createObjectURL(file);
+                label.textContent = `Ảnh mới chọn: ${file.name}`;
+                box.style.display = 'flex';
+            }
+        };
+
         window.loadRowToForm = function(encodedRow) {
             const row = JSON.parse(decodeURIComponent(encodedRow));
             const schema = DB_SCHEMAS[currentTableIndex];
@@ -1010,6 +1032,24 @@
                 if (!el) return;
 
                 let val = row[f.name] ?? '';
+                if (f.input === 'file') {
+                    el.value = ''; // Reset input file
+                    const box = document.getElementById(`preview-box-${f.name}`);
+                    const img = document.getElementById(`preview-img-${f.name}`);
+                    const label = document.getElementById(`preview-path-${f.name}`);
+                    if (box && img && label) {
+                        if (val) {
+                            const fullImgUrl = val.startsWith('http') ? val : `http://127.0.0.1:8000${val}`;
+                            img.src = fullImgUrl;
+                            label.textContent = `Đang có: ${val}`;
+                            box.style.display = 'flex';
+                        } else {
+                            box.style.display = 'none';
+                        }
+                    }
+                    return;
+                }
+
                 if (f.input === 'datetime-local' && val) {
                     val = String(val).replace(' ', 'T').substring(0, 16);
                 } else if (f.input === 'time' && val) {
@@ -1040,16 +1080,26 @@
         async function handleFormSubmit(e) {
             e.preventDefault();
             const schema = DB_SCHEMAS[currentTableIndex];
-            const formData = {};
+            const plainData = {};
+            const formDataObj = new FormData();
+            let hasFileField = false;
 
             schema.fields.forEach(f => {
                 const el = document.getElementById(`field-${f.name}`);
-                if (el) {
+                if (!el) return;
+
+                if (f.input === 'file') {
+                    hasFileField = true;
+                    if (el.files && el.files[0]) {
+                        formDataObj.append(f.name, el.files[0]);
+                    }
+                } else {
                     let val = el.value;
                     if (f.input === 'datetime-local' && val) {
                         val = val.replace('T', ' ') + (val.length === 16 ? ':00' : '');
                     }
-                    formData[f.name] = val;
+                    plainData[f.name] = val;
+                    formDataObj.append(f.name, val);
                 }
             });
 
@@ -1057,18 +1107,37 @@
                 let res;
                 if (editingPkObject === null) {
                     // THÊM MỚI (INSERT)
-                    res = await fetch(`${API_DB_URL}/${schema.table}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                        body: JSON.stringify(formData)
-                    });
+                    if (hasFileField) {
+                        res = await fetch(`${API_DB_URL}/${schema.table}`, {
+                            method: 'POST',
+                            headers: { 'Accept': 'application/json' },
+                            body: formDataObj
+                        });
+                    } else {
+                        res = await fetch(`${API_DB_URL}/${schema.table}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                            body: JSON.stringify(plainData)
+                        });
+                    }
                 } else {
                     // CẬP NHẬT (UPDATE)
-                    res = await fetch(`${API_DB_URL}/${schema.table}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                        body: JSON.stringify({ _pk: editingPkObject, data: formData })
-                    });
+                    if (hasFileField) {
+                        formDataObj.append('_method', 'PUT');
+                        formDataObj.append('_pk', JSON.stringify(editingPkObject));
+                        formDataObj.append('data', JSON.stringify(plainData));
+                        res = await fetch(`${API_DB_URL}/${schema.table}`, {
+                            method: 'POST',
+                            headers: { 'Accept': 'application/json' },
+                            body: formDataObj
+                        });
+                    } else {
+                        res = await fetch(`${API_DB_URL}/${schema.table}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                            body: JSON.stringify({ _pk: editingPkObject, data: plainData })
+                        });
+                    }
                 }
 
                 const data = await res.json();

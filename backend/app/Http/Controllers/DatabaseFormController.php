@@ -102,7 +102,11 @@ class DatabaseFormController extends Controller
         $payload = [];
 
         foreach ($columns as $col) {
-            if ($request->has($col)) {
+            if ($col === 'HinhAnh' && $request->hasFile('HinhAnh')) {
+                $folder = ($table === 'CumSan') ? 'cumsan' : strtolower($table);
+                $path = $request->file('HinhAnh')->store($folder, 'public');
+                $payload['HinhAnh'] = '/storage/' . $path;
+            } elseif ($request->has($col)) {
                 $val = $request->input($col);
                 $payload[$col] = ($val === '' || $val === null) ? null : $val;
             }
@@ -154,17 +158,33 @@ class DatabaseFormController extends Controller
 
         $cfg = $configs[$table];
         $pkValues = $request->input('_pk', []);
+        if (is_string($pkValues)) {
+            $pkValues = json_decode($pkValues, true) ?? [];
+        }
         if (empty($pkValues)) {
             return response()->json(['success' => false, 'message' => 'Thiếu thông tin khóa chính để cập nhật!'], 400);
         }
 
         $columns = Schema::getColumnListing($table);
         $data = $request->input('data', []);
+        if (is_string($data)) {
+            $data = json_decode($data, true) ?? [];
+        }
+        if (empty($data)) {
+            $data = $request->except(['_pk', '_method']);
+        }
         $payload = [];
 
         foreach ($columns as $col) {
-            if (array_key_exists($col, $data)) {
+            if ($col === 'HinhAnh' && $request->hasFile('HinhAnh')) {
+                $folder = ($table === 'CumSan') ? 'cumsan' : strtolower($table);
+                $path = $request->file('HinhAnh')->store($folder, 'public');
+                $payload['HinhAnh'] = '/storage/' . $path;
+            } elseif (array_key_exists($col, $data)) {
                 $val = $data[$col];
+                if ($col === 'HinhAnh' && ($val === '' || $val === null)) {
+                    continue;
+                }
                 $payload[$col] = ($val === '' || $val === null) ? null : $val;
             }
         }
