@@ -421,7 +421,7 @@ class DatSanController extends Controller
 
             DB::commit();
 
-            if ($user->Email && !str_ends_with($user->Email, '.offline')) {
+            if ($user->Email) {
                 try {
                     $htmlVe = '';
                     foreach ($cacVeVuaTao as $ve) {
@@ -723,67 +723,31 @@ class DatSanController extends Controller
             $ngayDa = date('d/m/Y', strtotime($datSan->NgayDa));
             $gioDa = $datSan->khungGio ? substr($datSan->khungGio->GioBatDau, 0, 5) . ' - ' . substr($datSan->khungGio->GioKetThuc, 0, 5) : '';
 
-            $phuongThucHoan = $request->input('phuong_thuc_hoan', 'vi'); // 'vi' | 'chuyen_khoan'
-            $thongTinCK = '';
-
             if ($request->trang_thai === 'DaHuy') {
                 if ($datSan->MaNguoiDung !== null) {
+                    // Khách thành viên -> Hoàn 100% cọc về Ví
                     $user = NguoiDung::find($datSan->MaNguoiDung);
                     if ($user) {
                         $tienHoan = $datSan->TienCoc;
                         $soDuTruoc = $user->SoDuVi;
+                        $soDuSau = $soDuTruoc + $tienHoan;
+                        $user->update(['SoDuVi' => $soDuSau]);
 
-                        if ($phuongThucHoan === 'chuyen_khoan') {
-                            $nganHang = trim($request->input('ngan_hang', ''));
-                            $soTaiKhoan = trim($request->input('so_tai_khoan', ''));
-                            $chuTaiKhoan = strtoupper(trim($request->input('chu_tai_khoan', '')));
-
-                            if (!$nganHang || !$soTaiKhoan || !$chuTaiKhoan) {
-                                DB::rollBack();
-                                return response()->json([
-                                    'success' => false,
-                                    'message' => 'Vui lòng nhập đầy đủ Tên ngân hàng, Số tài khoản và Tên chủ tài khoản để hoàn tiền chuyển khoản!'
-                                ]);
-                            }
-
-                            if ($tienHoan > 0) {
-                                DB::rollBack(); // Chưa hủy sân ngay, chờ VNPay trả về thành công mới hủy!
-                                $returnPage = $request->input('return_url') ?: 'http://127.0.0.1:5500/html/admin.html';
-                                $vnpayUrl = self::taoUrlVnPayHoanTienDatHo($request, [
-                                    'type'               => 'single',
-                                    'ma_dat_san'         => $datSan->MaDatSan,
-                                    'ma_nhan_vien_xu_ly' => $userDangNhap->MaNguoiDung,
-                                    'ngan_hang'          => $nganHang,
-                                    'so_tai_khoan'       => $soTaiKhoan,
-                                    'chu_tai_khoan'      => $chuTaiKhoan,
-                                    'return_page'        => $returnPage,
-                                ], $tienHoan, "Hoan tien coc dat san " . $datSan->MaDatSan);
-
-                                return response()->json([
-                                    'success'   => true,
-                                    'vnpay_url' => $vnpayUrl,
-                                    'message'   => 'Đang chuyển hướng sang cổng VNPay để hoàn tiền...'
-                                ]);
-                            }
-                        } else {
-                            $soDuSau = $soDuTruoc + $tienHoan;
-                            $user->update(['SoDuVi' => $soDuSau]);
-
-                            if ($tienHoan > 0) {
-                                GiaoDich::create([
-                                    'MaNguoiDung'    => $user->MaNguoiDung,
-                                    'MaNhanVienXuLy' => $userDangNhap->MaNguoiDung,
-                                    'LoaiGiaoDich'   => 'HoanTienHuySan',
-                                    'DongTien'       => 'Cong',
-                                    'SoTien'         => $tienHoan,
-                                    'SoDuTruoc'      => $soDuTruoc,
-                                    'SoDuSau'        => $soDuSau,
-                                    'NoiDung'        => "Hỗ trợ hủy lịch gấp và hoàn cọc vào ví: " . $tenSan
-                                ]);
-                            }
+                        if ($tienHoan > 0) {
+                            GiaoDich::create([
+                                'MaNguoiDung'    => $user->MaNguoiDung,
+                                'MaNhanVienXuLy' => $userDangNhap->MaNguoiDung,
+                                'LoaiGiaoDich'   => 'HoanTienHuySan',
+                                'DongTien'       => 'Cong',
+                                'SoTien'         => $tienHoan,
+                                'SoDuTruoc'      => $soDuTruoc,
+                                'SoDuSau'        => $soDuSau,
+                                'NoiDung'        => "Hỗ trợ hủy lịch gấp và hoàn cọc vào ví: " . $tenSan
+                            ]);
                         }
                     }
                 } else {
+                    // Khách vãng lai & Đặt sân hộ -> Kiểm tra OTP gửi qua EmailNguoiDat
                     $otpInput = trim($request->input('otp', ''));
                     $cachedOtp = \Illuminate\Support\Facades\Cache::get('guest_cancel_otp_' . $datSan->MaDatSan);
 
@@ -837,10 +801,7 @@ class DatSanController extends Controller
                     $noiDung = "Hệ thống ghi nhận bạn đã không đến nhận sân tại {$tenSan} lúc {$gioDa} ngày {$ngayDa}. Tiền cọc của lịch đặt này sẽ không được hoàn lại theo quy định.";
                 } else if ($request->trang_thai === 'DaHuy') {
                     $tieuDe = 'Lịch đặt sân đã bị hủy';
-                    $hinhThucStr = ($phuongThucHoan === 'chuyen_khoan')
-                        ? "đã được hoàn trả qua chuyển khoản ngân hàng{$thongTinCK}."
-                        : "đã được hoàn lại vào ví của bạn.";
-                    $noiDung = "Ban quản lý đã hỗ trợ hủy lịch đặt sân tại {$tenSan} lúc {$gioDa} ngày {$ngayDa}. Số tiền cọc " . number_format($datSan->TienCoc, 0, ',', '.') . "đ {$hinhThucStr}";
+                    $noiDung = "Ban quản lý đã hỗ trợ hủy lịch đặt sân tại {$tenSan} lúc {$gioDa} ngày {$ngayDa}. Số tiền cọc " . number_format($datSan->TienCoc, 0, ',', '.') . "đ đã được hoàn lại vào ví của bạn.";
                 }
 
                 ThongBao::create([
@@ -884,7 +845,7 @@ class DatSanController extends Controller
     }
 
     /**
-     * 2. ADMIN / QUẢN LÝ / NHÂN VIÊN ĐẶT SÂN HỘ (Tự động tách Hóa đơn theo từng Cụm sân)
+     * 2. ADMIN / QUẢN LÝ / NHÂN VIÊN ĐẶT SÂN HỘ (Lưu trực tiếp vào TenNguoiDat, SDTNguoiDat, EmailNguoiDat như Khách vãng lai - Không tạo tài khoản)
      */
     public function datSanOffline(Request $request)
     {
@@ -894,10 +855,21 @@ class DatSanController extends Controller
         }
 
         $request->validate([
-            'sdt_khach' => 'required|string|max:20',
-            'ho_ten'    => 'nullable|string|max:255',
-            'tien_coc'  => 'required|numeric|min:0',
-            'slots'     => 'required|array|min:1'
+            'ho_ten'      => ['required', 'string', 'min:2', 'max:100', 'regex:/^[\p{L}\s]+$/u'],
+            'sdt_khach'   => ['required', 'regex:/^0[0-9]{9}$/'],
+            'email_khach' => ['required', 'email', 'max:100'],
+            'tien_coc'    => ['required', 'numeric', 'min:0'],
+            'slots'       => ['required', 'array', 'min:1']
+        ], [
+            'ho_ten.required'      => 'Vui lòng nhập họ và tên khách hàng!',
+            'ho_ten.min'           => 'Họ và tên phải có ít nhất 2 ký tự!',
+            'ho_ten.regex'         => 'Họ và tên chỉ được chứa chữ cái và khoảng trắng!',
+            'sdt_khach.required'   => 'Vui lòng nhập số điện thoại khách hàng!',
+            'sdt_khach.regex'      => 'Số điện thoại không hợp lệ (phải gồm 10 chữ số, bắt đầu bằng số 0)!',
+            'email_khach.required' => 'Vui lòng nhập địa chỉ Email khách hàng!',
+            'email_khach.email'    => 'Địa chỉ Email không đúng định dạng!',
+            'tien_coc.required'    => 'Vui lòng nhập số tiền đặt cọc!',
+            'slots.required'       => 'Giỏ hàng đặt sân đang trống!'
         ]);
 
         DB::beginTransaction();
@@ -930,44 +902,20 @@ class DatSanController extends Controller
                 ]);
             }
 
-            $khachHang = NguoiDung::where('SoDienThoai', $request->sdt_khach)->first();
-
-            if (!$khachHang) {
-                $tenKhach = $request->ho_ten ? $request->ho_ten : 'Khách Offline';
-                $emailAo = $request->sdt_khach . '@dnfootball.offline';
-                $khachHang = NguoiDung::create([
-                    'HoTen'       => $tenKhach,
-                    'SoDienThoai' => $request->sdt_khach,
-                    'Email'       => $emailAo,
-                    'MatKhau'     => \Illuminate\Support\Facades\Hash::make('123456'),
-                    'VaiTro'      => 'KhachHang',
-                    'SoDuVi'      => 0
-                ]);
-            }
+            $hoTenKhach = trim($request->ho_ten);
+            $sdtKhach   = trim($request->sdt_khach);
+            $emailKhach = trim($request->email_khach);
 
             $tongTienGocToanBo = array_reduce($request->slots, function ($carry, $s) {
                 return $carry + (float) ($s['price'] ?? 0);
             }, 0);
 
             $clusterGroups = self::gomNhomSlotsTheoCumSan($request->slots);
-            $soCumSan = count($clusterGroups);
 
-            $giaoDich = null;
-            if ($request->tien_coc > 0) {
-                $giaoDich = GiaoDich::create([
-                    'MaNguoiDung'    => $khachHang->MaNguoiDung,
-                    'MaNhanVienXuLy' => $userDangNhap->MaNguoiDung,
-                    'LoaiGiaoDich'   => 'DatSan',
-                    'DongTien'       => 'Tru',
-                    'SoTien'         => $request->tien_coc,
-                    'SoDuTruoc'      => $khachHang->SoDuVi,
-                    'SoDuSau'        => $khachHang->SoDuVi,
-                    'NoiDung'        => "Thu tiền cọc trực tiếp tại sân (" . count($request->slots) . " khung giờ" . ($soCumSan > 1 ? " - {$soCumSan} cụm sân" : "") . ")"
-                ]);
-            }
-
-            // BƯỚC B: Tách Hóa đơn theo từng Cụm sân và phân bổ tiền cọc theo đúng tỷ lệ
+            // BƯỚC B: Tách Hóa đơn theo từng Cụm sân và lưu thông tin vào TenNguoiDat, SDTNguoiDat, EmailNguoiDat (MaNguoiDung = null)
             $danhSachMaHoaDon = [];
+            $cacVeVuaTao = [];
+            $htmlTatCaHoaDonEmail = '';
             $tongCocDaPhanBo = 0;
             $groupKeys = array_keys($clusterGroups);
             $lastGroupKey = end($groupKeys);
@@ -987,11 +935,11 @@ class DatSanController extends Controller
                 }
 
                 // Tính thuế VAT 8% cho riêng Hóa đơn Cụm sân này
-                $calc = self::tinhToanKhuyenMaiVaVAT($tongTienGocCum, null, $khachHang->MaNguoiDung, $clusterSlots, $maCumSan);
+                $calc = self::tinhToanKhuyenMaiVaVAT($tongTienGocCum, null, null, $clusterSlots, $maCumSan);
 
                 $hoaDon = HoaDonDatSan::create([
-                    'MaNguoiDung'         => $khachHang->MaNguoiDung,
-                    'MaGiaoDich'          => $giaoDich ? $giaoDich->MaGiaoDich : null,
+                    'MaNguoiDung'         => null,
+                    'MaGiaoDich'          => null,
                     'MaKhuyenMai'         => null,
                     'TongTien'            => $calc['tong_tien_hoa_don'],
                     'ThueVAT'             => $calc['thue_vat'],
@@ -1000,6 +948,7 @@ class DatSanController extends Controller
                 ]);
 
                 $danhSachMaHoaDon[] = $hoaDon->MaHoaDonDatSan;
+                $cacVeCuaHoaDonNay = [];
 
                 $soLuongSlotCum = count($clusterSlots);
                 $tienCocMoiSlot = ($tienCocCumNay > 0 && $soLuongSlotCum > 0) ? round($tienCocCumNay / $soLuongSlotCum) : 0;
@@ -1012,7 +961,10 @@ class DatSanController extends Controller
                     }
 
                     $veMoi = DatSan::create([
-                        'MaNguoiDung'    => $khachHang->MaNguoiDung,
+                        'MaNguoiDung'    => null,
+                        'TenNguoiDat'    => $hoTenKhach,
+                        'SDTNguoiDat'    => $sdtKhach,
+                        'EmailNguoiDat'  => $emailKhach,
                         'MaSanBong'      => $slot['pitchId'],
                         'MaKhungGio'     => $slot['kgId'],
                         'MaGiaiDau'      => null,
@@ -1028,10 +980,70 @@ class DatSanController extends Controller
                         'MaDatSan'       => $veMoi->MaDatSan,
                         'DonGia'         => $giaKhungGio,
                     ]);
+
+                    $thongTinVe = [
+                        'maHoaDon' => $hoaDon->MaHoaDonDatSan,
+                        'maVe'     => 'PT-' . $veMoi->MaDatSan,
+                        'tenSan'   => $slot['pitchName'] ?? 'Sân bóng',
+                        'cumSan'   => $slot['clusterName'] ?? $groupInfo['ten_cum_san'],
+                        'ngay'     => $slot['dateDisplay'] ?? date('d/m/Y', strtotime($slot['dateDb'])),
+                        'gio'      => $slot['timeStr'] ?? '',
+                        'donGia'   => number_format($giaKhungGio, 0, ',', '.') . 'đ',
+                        'tienCoc'  => number_format($cocThucTe, 0, ',', '.') . 'đ',
+                        'conLai'   => number_format(max(0, $giaKhungGio - $cocThucTe), 0, ',', '.') . 'đ'
+                    ];
+
+                    $cacVeCuaHoaDonNay[] = $thongTinVe;
+                    $cacVeVuaTao[] = $thongTinVe;
                 }
+
+                $hoaDon->load('datSans');
+                $htmlTatCaHoaDonEmail .= self::buildEmailHoaDonHtml($hoaDon, $hoTenKhach, $sdtKhach, $cacVeCuaHoaDonNay, 0);
             }
 
             DB::commit();
+
+            // Gửi Email Hóa đơn điện tử & Vé QR Code tới Email khách
+            if ($emailKhach) {
+                try {
+                    $htmlVe = '';
+                    foreach ($cacVeVuaTao as $ve) {
+                        $qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=6&data=" . urlencode($ve['maVe']);
+                        $htmlVe .= "
+                            <div style='border:1px solid #cbd5e1; padding:16px; margin-bottom:15px; border-radius:10px; display:flex; align-items:center; justify-content:space-between; background:#ffffff;'>
+                                <div style='padding-right:15px;'>
+                                    <h3 style='margin:0 0 10px 0; color:#10B981; font-size:18px;'>Mã vé: #{$ve['maVe']} <span style='font-size:13px; color:#475569;'>(HĐ #{$ve['maHoaDon']})</span></h3>
+                                    <p style='margin:4px 0;'><strong>Sân:</strong> {$ve['tenSan']} ({$ve['cumSan']})</p>
+                                    <p style='margin:4px 0;'><strong>Ngày:</strong> {$ve['ngay']} | <strong>Giờ:</strong> {$ve['gio']}</p>
+                                    <hr style='border:0; border-top:1px dashed #cbd5e1; margin:10px 0;'/>
+                                    <p style='margin:4px 0;'><strong>Đã cọc:</strong> {$ve['tienCoc']}</p>
+                                </div>
+                                <div style='text-align:center; border-left:1px dashed #cbd5e1; padding-left:15px;'>
+                                    <img src='{$qrUrl}' alt='QR {$ve['maVe']}' style='width:120px; height:120px; display:block; margin:0 auto; border:1px solid #e2e8f0; border-radius:8px;' />
+                                    <div style='font-size:11px; color:#64748b; margin-top:5px;'>Quét mã khi đến sân</div>
+                                </div>
+                            </div>
+                        ";
+                    }
+
+                    $dsMaHDStr = implode(', #', $danhSachMaHoaDon);
+                    $noiDungMail = "
+                        <h2>Xác nhận đặt sân & Hóa đơn điện tử - DN Football</h2>
+                        <p>Chào <strong>{$hoTenKhach}</strong>,</p>
+                        <p>Cảm ơn bạn đã đặt sân trực tiếp tại quầy DN Football. Dưới đây là <strong>Hóa đơn đặt sân (#{$dsMaHDStr})</strong> và <strong>Vé điện tử QR Code</strong> của bạn:</p>
+                        {$htmlTatCaHoaDonEmail}
+                        <h3 style='margin-top:24px; color:#0f172a;'>Danh sách Vé Điện Tử (Check-in tại sân):</h3>
+                        {$htmlVe}
+                    ";
+
+                    Mail::html($noiDungMail, function ($message) use ($emailKhach, $dsMaHDStr) {
+                        $message->to($emailKhach)
+                                ->subject("Hóa Đơn #{$dsMaHDStr} & Vé Đặt Sân - DN Football");
+                    });
+                } catch (\Exception $mailEx) {
+                    \Illuminate\Support\Facades\Log::error('Lỗi gửi mail đặt sân hộ: ' . $mailEx->getMessage());
+                }
+            }
 
             broadcast(new \App\Events\SystemDataUpdated())->toOthers();
             broadcast(new \App\Events\AdminDataUpdated())->toOthers();
@@ -1946,78 +1958,39 @@ class DatSanController extends Controller
         $first = $cacTranDaCoc->first();
         $tongTienHoan = $cacTranDaCoc->sum('TienCoc');
         $soTranHuy = $cacTranDaCoc->count();
-        $phuongThucHoan = $request->input('phuong_thuc_hoan', 'vi');
-        $thongTinCK = '';
 
         DB::beginTransaction();
         try {
             if ($first->MaNguoiDung !== null) {
+                // LUỒNG 1: KHÁCH THÀNH VIÊN -> Hoàn cọc vào Ví điện tử
                 $khach = NguoiDung::find($first->MaNguoiDung);
                 if ($khach) {
                     $soDuTruoc = $khach->SoDuVi;
+                    $soDuSau = $soDuTruoc + $tongTienHoan;
+                    $khach->update(['SoDuVi' => $soDuSau]);
 
-                    if ($phuongThucHoan === 'chuyen_khoan') {
-                        $nganHang = trim($request->input('ngan_hang', ''));
-                        $soTaiKhoan = trim($request->input('so_tai_khoan', ''));
-                        $chuTaiKhoan = strtoupper(trim($request->input('chu_tai_khoan', '')));
-
-                        if (!$nganHang || !$soTaiKhoan || !$chuTaiKhoan) {
-                            DB::rollBack();
-                            return response()->json([
-                                'success' => false,
-                                'message' => 'Vui lòng nhập đầy đủ Tên ngân hàng, Số tài khoản và Tên chủ tài khoản để hoàn tiền chuyển khoản!'
-                            ]);
-                        }
-
-                        if ($tongTienHoan > 0) {
-                            DB::rollBack(); // Chờ VNPay thanh toán thành công mới hoàn tất hủy hóa đơn!
-                            $returnPage = $request->input('return_url') ?: 'http://127.0.0.1:5500/html/admin.html';
-                            $vnpayUrl = self::taoUrlVnPayHoanTienDatHo($request, [
-                                'type'               => 'invoice',
-                                'ma_hoa_don'         => $maHoaDon,
-                                'ma_nhan_vien_xu_ly' => $userDangNhap->MaNguoiDung,
-                                'ngan_hang'          => $nganHang,
-                                'so_tai_khoan'       => $soTaiKhoan,
-                                'chu_tai_khoan'      => $chuTaiKhoan,
-                                'return_page'        => $returnPage,
-                            ], $tongTienHoan, "Hoan tien coc hoa don " . $maHoaDon);
-
-                            return response()->json([
-                                'success'   => true,
-                                'vnpay_url' => $vnpayUrl,
-                                'message'   => 'Đang chuyển hướng sang cổng VNPay để hoàn tiền hóa đơn...'
-                            ]);
-                        }
-                    } else {
-                        $soDuSau = $soDuTruoc + $tongTienHoan;
-                        $khach->update(['SoDuVi' => $soDuSau]);
-
-                        if ($tongTienHoan > 0) {
-                            GiaoDich::create([
-                                'MaNguoiDung'    => $khach->MaNguoiDung,
-                                'MaNhanVienXuLy' => $userDangNhap->MaNguoiDung,
-                                'LoaiGiaoDich'   => 'HoanTienHuySan',
-                                'DongTien'       => 'Cong',
-                                'SoTien'         => $tongTienHoan,
-                                'SoDuTruoc'      => $soDuTruoc,
-                                'SoDuSau'        => $soDuSau,
-                                'NoiDung'        => "Hỗ trợ hủy toàn bộ hóa đơn đặt sân #{$maHoaDon} ({$soTranHuy} trận) - Hoàn vào ví"
-                            ]);
-                        }
+                    if ($tongTienHoan > 0) {
+                        GiaoDich::create([
+                            'MaNguoiDung'    => $khach->MaNguoiDung,
+                            'MaNhanVienXuLy' => $userDangNhap->MaNguoiDung,
+                            'LoaiGiaoDich'   => 'HoanTienHuySan',
+                            'DongTien'       => 'Cong',
+                            'SoTien'         => $tongTienHoan,
+                            'SoDuTruoc'      => $soDuTruoc,
+                            'SoDuSau'        => $soDuSau,
+                            'NoiDung'        => "Hỗ trợ hủy toàn bộ hóa đơn đặt sân #{$maHoaDon} ({$soTranHuy} trận) - Hoàn vào ví"
+                        ]);
                     }
-
-                    $hinhThucStr = ($phuongThucHoan === 'chuyen_khoan')
-                        ? "đã được hoàn trả qua chuyển khoản ngân hàng{$thongTinCK}."
-                        : "đã được hoàn lại vào ví của bạn.";
 
                     ThongBao::create([
                         'MaNguoiDung'  => $khach->MaNguoiDung,
                         'TieuDe'       => "Hóa đơn đặt sân #{$maHoaDon} đã được hủy",
-                        'NoiDung'      => "Ban quản lý đã hỗ trợ hủy toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon}. Số tiền cọc " . number_format($tongTienHoan, 0, ',', '.') . "đ {$hinhThucStr}",
+                        'NoiDung'      => "Ban quản lý đã hỗ trợ hủy toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon}. Số tiền cọc " . number_format($tongTienHoan, 0, ',', '.') . "đ đã được hoàn lại vào ví của bạn.",
                         'LoaiThongBao' => 'DatSan'
                     ]);
                 }
             } else {
+                // LUỒNG 2: KHÁCH VÃNG LAI & ĐẶT SÂN HỘ -> Xác thực OTP qua Email
                 $otpInput = trim($request->input('otp', ''));
                 $cachedOtp = \Illuminate\Support\Facades\Cache::get('guest_cancel_invoice_otp_' . $maHoaDon);
 
@@ -2053,7 +2026,7 @@ class DatSanController extends Controller
                 }
             }
 
-            // GỬI EMAIL XÁC NHẬN HỦY HÓA ĐƠN & HOÀN CỌC CHO KHÁCH VÃNG LAI
+            // GỬI EMAIL XÁC NHẬN HỦY HÓA ĐƠN & HOÀN CỌC CHO KHÁCH VÃNG LAI / ĐẶT SÂN HỘ
             if ($first->MaNguoiDung === null && $first->EmailNguoiDat) {
                 try {
                     $tongCocStr = number_format($tongTienHoan, 0, ',', '.') . 'đ';
@@ -2102,10 +2075,8 @@ class DatSanController extends Controller
             broadcast(new \App\Events\SystemDataUpdated())->toOthers();
 
             $msgSuccess = ($first->MaNguoiDung === null)
-                ? "Đã hủy toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon} của khách vãng lai và gửi Email xác nhận hoàn cọc!"
-                : (($phuongThucHoan === 'chuyen_khoan')
-                    ? "Đã hủy toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon} và ghi nhận hoàn cọc qua Chuyển khoản!"
-                    : "Đã hủy toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon} và hoàn cọc vào ví khách hàng!");
+                ? "Đã hủy toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon} và gửi Email xác nhận hoàn cọc!"
+                : "Đã hủy toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon} và hoàn cọc vào ví khách hàng!";
 
             return response()->json([
                 'success' => true,
@@ -2114,242 +2085,6 @@ class DatSanController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['success' => false, 'message' => 'Lỗi hệ thống: ' . $e->getMessage()]);
-        }
-    }
-
-    /**
-     * Tạo URL cổng thanh toán VNPay để Admin / Quản lý / Nhân viên chuyển khoản hoàn tiền cọc đơn đặt hộ
-     */
-    private static function taoUrlVnPayHoanTienDatHo(Request $request, array $cachePayload, $soTienHoan, $noiDungOrder)
-    {
-        $vnp_TxnRef = 'REFUND_' . time() . '_' . rand(1000, 9999);
-        \Illuminate\Support\Facades\Cache::put('admin_refund_' . $vnp_TxnRef, $cachePayload, now()->addMinutes(15));
-
-        $vnp_TmnCode    = config('vnpay.tmn_code');
-        $vnp_HashSecret = config('vnpay.hash_secret');
-        $vnp_Url        = config('vnpay.url');
-        $vnp_Returnurl  = url('/api/admin/hoan-tien-vnpay-return');
-
-        $inputData = [
-            "vnp_Version"    => "2.1.0",
-            "vnp_TmnCode"    => $vnp_TmnCode,
-            "vnp_Amount"     => (int) round($soTienHoan * 100),
-            "vnp_Command"    => "pay",
-            "vnp_CreateDate" => date('YmdHis'),
-            "vnp_CurrCode"   => "VND",
-            "vnp_IpAddr"     => $request->ip(),
-            "vnp_Locale"     => 'vn',
-            "vnp_OrderInfo"  => $noiDungOrder,
-            "vnp_OrderType"  => 'billpayment',
-            "vnp_ReturnUrl"  => $vnp_Returnurl,
-            "vnp_TxnRef"     => $vnp_TxnRef,
-        ];
-
-        ksort($inputData);
-        $query = "";
-        $i = 0;
-        $hashdata = "";
-        foreach ($inputData as $key => $value) {
-            if ($i == 1) {
-                $hashdata .= '&' . urlencode($key) . "=" . urlencode($value);
-            } else {
-                $hashdata .= urlencode($key) . "=" . urlencode($value);
-                $i = 1;
-            }
-            $query .= urlencode($key) . "=" . urlencode($value) . '&';
-        }
-
-        $vnp_Url = $vnp_Url . "?" . $query;
-        if (isset($vnp_HashSecret)) {
-            $vnpSecureHash = hash_hmac('sha512', $hashdata, $vnp_HashSecret);
-            $vnp_Url .= 'vnp_SecureHash=' . $vnpSecureHash;
-        }
-
-        return $vnp_Url;
-    }
-
-    /**
-     * Callback VNPay trả về sau khi Admin / Quản lý / Nhân viên thanh toán hoàn cọc đơn đặt hộ
-     */
-    public function vnpayReturnHoanTienAdmin(Request $request)
-    {
-        $vnp_HashSecret = config('vnpay.hash_secret');
-        $inputData = [];
-
-        foreach ($request->all() as $key => $value) {
-            if (substr($key, 0, 4) == "vnp_") {
-                $inputData[$key] = $value;
-            }
-        }
-
-        $vnp_SecureHash = $inputData['vnp_SecureHash'] ?? '';
-        unset($inputData['vnp_SecureHash']);
-        ksort($inputData);
-        $i = 0;
-        $hashData = "";
-
-        foreach ($inputData as $key => $value) {
-            if ($i == 1) {
-                $hashData .= '&' . urlencode($key) . "=" . urlencode($value);
-            } else {
-                $hashData .= urlencode($key) . "=" . urlencode($value);
-                $i = 1;
-            }
-        }
-
-        $secureHash = hash_hmac('sha512', $hashData, $vnp_HashSecret);
-        $refundData = \Illuminate\Support\Facades\Cache::pull('admin_refund_' . $request->vnp_TxnRef);
-
-        $returnPage = $refundData['return_page'] ?? 'http://127.0.0.1:5500/html/admin.html';
-
-        if ($secureHash !== $vnp_SecureHash) {
-            return redirect($returnPage . '?vnpay_refund=invalid_signature');
-        }
-
-        if ($request->vnp_ResponseCode !== '00' || !$refundData) {
-            return redirect($returnPage . '?vnpay_refund=failed');
-        }
-
-        DB::beginTransaction();
-        try {
-            $type           = $refundData['type']; // 'single' | 'invoice'
-            $maNhanVienXuLy = $refundData['ma_nhan_vien_xu_ly'];
-            $nganHang       = $refundData['ngan_hang'];
-            $soTaiKhoan     = $refundData['so_tai_khoan'];
-            $chuTaiKhoan    = $refundData['chu_tai_khoan'];
-            $thongTinCK     = " ({$nganHang} - {$soTaiKhoan} - {$chuTaiKhoan})";
-
-            if ($type === 'single') {
-                $datSan = DatSan::with(['sanBong.cumSan', 'khungGio', 'chiTietHoaDon'])->find($refundData['ma_dat_san']);
-                if (!$datSan || $datSan->TrangThai !== 'DaCoc') {
-                    throw new \Exception('Lịch đặt sân không còn ở trạng thái Đã cọc!');
-                }
-
-                $tenSan = $datSan->sanBong ? $datSan->sanBong->TenSan : 'Sân bóng';
-                $ngayDa = date('d/m/Y', strtotime($datSan->NgayDa));
-                $gioDa  = $datSan->khungGio ? substr($datSan->khungGio->GioBatDau, 0, 5) . ' - ' . substr($datSan->khungGio->GioKetThuc, 0, 5) : '';
-                $tienHoan = (float) $datSan->TienCoc;
-
-                $user = NguoiDung::find($datSan->MaNguoiDung);
-                if ($user) {
-                    if (!$user->TenNganHang || !$user->STKNganHang || !$user->TenTaiKhoan) {
-                        $user->update([
-                            'TenNganHang' => $nganHang,
-                            'STKNganHang' => $soTaiKhoan,
-                            'TenTaiKhoan' => $chuTaiKhoan
-                        ]);
-                    }
-
-                    if ($tienHoan > 0) {
-                        GiaoDich::create([
-                            'MaNguoiDung'    => $user->MaNguoiDung,
-                            'MaNhanVienXuLy' => $maNhanVienXuLy,
-                            'LoaiGiaoDich'   => 'HoanTienHuySan',
-                            'DongTien'       => 'Cong',
-                            'SoTien'         => $tienHoan,
-                            'SoDuTruoc'      => $user->SoDuVi,
-                            'SoDuSau'        => $user->SoDuVi,
-                            'NoiDung'        => "Hoàn cọc hủy sân đặt hộ qua VNPay{$thongTinCK}: {$tenSan}"
-                        ]);
-                    }
-
-                    ThongBao::create([
-                        'MaNguoiDung'  => $user->MaNguoiDung,
-                        'TieuDe'       => 'Lịch đặt sân đã bị hủy & hoàn cọc',
-                        'NoiDung'      => "Ban quản lý đã hỗ trợ hủy lịch đặt sân tại {$tenSan} lúc {$gioDa} ngày {$ngayDa}. Số tiền cọc " . number_format($tienHoan, 0, ',', '.') . "đ đã được hoàn trả qua cổng VNPay{$thongTinCK}.",
-                        'LoaiThongBao' => 'DatSan'
-                    ]);
-                }
-
-                $maHoaDon = $datSan->MaHoaDonDatSan;
-                $datSan->update([
-                    'TrangThai'      => 'DaHuy',
-                    'MaNhanVienXuLy' => $maNhanVienXuLy
-                ]);
-
-                if ($maHoaDon) {
-                    self::dongBoHoaDonDatSan($maHoaDon);
-                }
-
-                DB::commit();
-
-                if ($datSan->MaNguoiDung !== null) {
-                    broadcast(new \App\Events\UserDataUpdated($datSan->MaNguoiDung))->toOthers();
-                }
-            } else {
-                // Hủy toàn bộ Hóa đơn đặt hộ
-                $maHoaDon = $refundData['ma_hoa_don'];
-                $cacTranDaCoc = DatSan::with(['sanBong.cumSan', 'khungGio'])
-                    ->whereHas('chiTietHoaDon', function ($q) use ($maHoaDon) {
-                        $q->where('MaHoaDonDatSan', $maHoaDon);
-                    })
-                    ->where('TrangThai', 'DaCoc')
-                    ->get();
-
-                if ($cacTranDaCoc->isEmpty()) {
-                    throw new \Exception('Hóa đơn không còn trận Đã cọc nào!');
-                }
-
-                $first = $cacTranDaCoc->first();
-                $tongTienHoan = (float) $cacTranDaCoc->sum('TienCoc');
-                $soTranHuy = $cacTranDaCoc->count();
-
-                $khach = NguoiDung::find($first->MaNguoiDung);
-                if ($khach) {
-                    if (!$khach->TenNganHang || !$khach->STKNganHang || !$khach->TenTaiKhoan) {
-                        $khach->update([
-                            'TenNganHang' => $nganHang,
-                            'STKNganHang' => $soTaiKhoan,
-                            'TenTaiKhoan' => $chuTaiKhoan
-                        ]);
-                    }
-
-                    if ($tongTienHoan > 0) {
-                        GiaoDich::create([
-                            'MaNguoiDung'    => $khach->MaNguoiDung,
-                            'MaNhanVienXuLy' => $maNhanVienXuLy,
-                            'LoaiGiaoDich'   => 'HoanTienHuySan',
-                            'DongTien'       => 'Cong',
-                            'SoTien'         => $tongTienHoan,
-                            'SoDuTruoc'      => $khach->SoDuVi,
-                            'SoDuSau'        => $khach->SoDuVi,
-                            'NoiDung'        => "Hoàn cọc hủy hóa đơn đặt hộ #{$maHoaDon} ({$soTranHuy} trận) qua VNPay{$thongTinCK}"
-                        ]);
-                    }
-
-                    ThongBao::create([
-                        'MaNguoiDung'  => $khach->MaNguoiDung,
-                        'TieuDe'       => "Hóa đơn đặt sân #{$maHoaDon} đã được hủy",
-                        'NoiDung'      => "Ban quản lý đã hỗ trợ hủy toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon}. Số tiền cọc " . number_format($tongTienHoan, 0, ',', '.') . "đ đã được hoàn trả qua cổng VNPay{$thongTinCK}.",
-                        'LoaiThongBao' => 'DatSan'
-                    ]);
-                }
-
-                DatSan::whereHas('chiTietHoaDon', function ($q) use ($maHoaDon) {
-                        $q->where('MaHoaDonDatSan', $maHoaDon);
-                    })
-                    ->where('TrangThai', 'DaCoc')
-                    ->update([
-                        'TrangThai'      => 'DaHuy',
-                        'MaNhanVienXuLy' => $maNhanVienXuLy
-                    ]);
-
-                self::dongBoHoaDonDatSan($maHoaDon);
-
-                DB::commit();
-
-                if ($first->MaNguoiDung !== null) {
-                    broadcast(new \App\Events\UserDataUpdated($first->MaNguoiDung))->toOthers();
-                }
-            }
-
-            broadcast(new \App\Events\AdminDataUpdated())->toOthers();
-            broadcast(new \App\Events\SystemDataUpdated())->toOthers();
-
-            return redirect($returnPage . '?vnpay_refund=success');
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return redirect($returnPage . '?vnpay_refund=error');
         }
     }
 
@@ -2374,7 +2109,7 @@ class DatSanController extends Controller
         $conThuTaiSanHD = null,
         $laAdminHoTro = false
     ) {
-        if (!$emailNhan || str_ends_with($emailNhan, '.offline')) {
+        if (!$emailNhan) {
             return;
         }
 
