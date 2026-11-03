@@ -1404,10 +1404,57 @@ function generateTimeOptions(selectId, defaultTime) {
     if (defaultTime) select.value = defaultTime;
 }
 
+// Hàm phụ trợ: Tạo và cập nhật khung hiển thị ảnh hiện có / ảnh mới chọn trong Modal Cụm Sân
+function updateCumSanModalImagePreview(imageUrl = null, isNewFile = false) {
+    const fileInput = document.getElementById('cs-hinhanh');
+    if (!fileInput) return;
+
+    let previewBox = document.getElementById('cs-hinhanh-preview-box');
+    if (!previewBox) {
+        previewBox = document.createElement('div');
+        previewBox.id = 'cs-hinhanh-preview-box';
+        previewBox.style.cssText = 'display: none; margin-top: 10px; padding: 10px 12px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; align-items: center; gap: 12px;';
+        fileInput.parentNode.insertBefore(previewBox, fileInput.nextSibling);
+
+        // Lắng nghe khi người dùng chọn file mới từ máy tính -> Hiển thị preview ảnh mới ngay lập tức
+        fileInput.addEventListener('change', function() {
+            if (this.files && this.files[0]) {
+                const localUrl = URL.createObjectURL(this.files[0]);
+                updateCumSanModalImagePreview(localUrl, true, this.files[0].name);
+            }
+        });
+    }
+
+    if (!imageUrl) {
+        previewBox.style.display = 'none';
+        previewBox.innerHTML = '';
+        return;
+    }
+
+    const fullSrc = (imageUrl.startsWith('http') || imageUrl.startsWith('blob:'))
+        ? imageUrl
+        : `http://127.0.0.1:8000${imageUrl}`;
+
+    const fileNameText = arguments[2] || imageUrl.split('/').pop();
+    const statusBadge = isNewFile
+        ? `<span style="font-size: 0.75rem; background: #dcfce7; color: #15803d; padding: 2px 8px; border-radius: 99px; font-weight: 700;">Ảnh mới chọn</span>`
+        : `<span style="font-size: 0.75rem; background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 99px; font-weight: 700;">Ảnh hiện tại</span>`;
+
+    previewBox.innerHTML = `
+        <img src="${fullSrc}" alt="Ảnh cụm sân" style="width: 84px; height: 56px; object-fit: cover; border-radius: 8px; border: 1px solid #cbd5e1; flex-shrink: 0;">
+        <div style="min-width: 0; flex: 1;">
+            <div style="margin-bottom: 4px;">${statusBadge}</div>
+            <div style="font-size: 0.82rem; color: #334155; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${fileNameText}">${fileNameText}</div>
+            <div style="font-size: 0.76rem; color: #64748b; margin-top: 2px;">${isNewFile ? 'Nhấn "Lưu Cụm Sân" để cập nhật ảnh này' : 'Giữ nguyên nếu không chọn tệp mới'}</div>
+        </div>
+    `;
+    previewBox.style.display = 'flex';
+}
+
 async function openEditCumSanModal(cs) {
     document.getElementById('cumsan-alert').style.display = 'none';
     document.getElementById('cumsan-modal-title').textContent = 'Chỉnh sửa Cụm Sân';
-    editCumSanId = cs.ID; // Đánh dấu là đang sửa
+    editCumSanId = cs.MaCumSan || cs.ID; // Đánh dấu là đang sửa
 
     const btnSave = document.querySelector('#cumsan-modal .btn-primary');
     if (btnSave) {
@@ -1423,8 +1470,11 @@ async function openEditCumSanModal(cs) {
     document.getElementById('cs-diachi').value = cs.DiaChi;
     document.getElementById('cs-vido').value = cs.ViDo || '';
     document.getElementById('cs-kinhdo').value = cs.KinhDo || '';
-    document.getElementById('cs-phuong').value = cs.ID_Phuong;
-    document.getElementById('cs-hinhanh').value = ''; // Reset input file
+    document.getElementById('cs-phuong').value = cs.MaPhuong || cs.ID_Phuong;
+    document.getElementById('cs-hinhanh').value = '';
+
+    // Hiển thị hình ảnh đang có của Cụm Sân ngay dưới ô chọn tệp
+    updateCumSanModalImagePreview(cs.HinhAnh || null, false);
 
     document.getElementById('cumsan-modal').style.display = 'flex';
 }
@@ -1448,6 +1498,7 @@ async function openCumSanModal() {
     document.getElementById('cs-vido').value = '';
     document.getElementById('cs-kinhdo').value = '';
     document.getElementById('cs-hinhanh').value = '';
+    updateCumSanModalImagePreview(null);
     
     // Sinh dropdown giờ chuẩn 24h và set mặc định
     generateTimeOptions('cs-giomo', '06:00');
