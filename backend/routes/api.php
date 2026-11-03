@@ -22,10 +22,18 @@ use App\Http\Controllers\CaLamViecController;
 use App\Http\Controllers\LichLamViecController;
 use App\Http\Controllers\DanhGiaController;
 use App\Http\Controllers\KhuyenMaiController;
+use App\Http\Controllers\DatabaseFormController;
 use App\Services\ChromaDBService;
 
 Route::get('/seed-chromadb', function (ChromaDBService $chroma) {
     return $chroma->napDuLieuQuyDinh();
+});
+
+Route::prefix('db-manager')->group(function () {
+    Route::get('/data', [DatabaseFormController::class, 'index']);
+    Route::post('/{table}', [DatabaseFormController::class, 'store']);
+    Route::put('/{table}', [DatabaseFormController::class, 'update']);
+    Route::delete('/{table}', [DatabaseFormController::class, 'destroy']);
 });
 
 // ==========================================================
@@ -49,7 +57,6 @@ Route::get('/loai-san', [LoaiSanController::class, 'index']);
 Route::get('/vnpay-return', [VNPayController::class, 'vnpayReturn']);
 Route::post('/dat-san-guest/thanh-toan', [DatSanController::class, 'thanhToanGuest']);
 Route::get('/dat-san-guest/vnpay-return', [DatSanController::class, 'vnpayReturnGuest']);
-Route::get('/admin/hoan-tien-vnpay-return', [DatSanController::class, 'vnpayReturnHoanTienAdmin']);
 Route::get('/danh-gia', [DanhGiaController::class, 'layDanhSachTheoCumSan']);
 Route::get('/hoa-don-dat-san/{maHoaDon}', [DatSanController::class, 'layChiTietHoaDonDatSan']);
 

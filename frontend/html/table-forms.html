@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ Thống Form Nhập Dữ Liệu 20 Bảng CSDL - DN FOOTBALL</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #0d8a5e;
+            --primary-hover: #096c49;
+            --primary-light: #e6f6f0;
+            --bg-body: #f4f7f6;
+            --bg-card: #ffffff;
+            --text-dark: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --danger: #e11d48;
+            --danger-bg: #ffe4e6;
+            --warning: #d97706;
+            --warning-bg: #fef3c7;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-dark);
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        /* HEADER */
+        .top-header {
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            padding: 14px 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .brand-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 10px;
+            background: var(--primary);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .brand-title {
+            font-size: 17px;
+            font-weight: 800;
+            color: #0f172a;
+            letter-spacing: -0.2px;
+        }
+
+        .brand-subtitle {
+            font-size: 12.5px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .header-status-pill {
+            background: var(--primary-light);
+            color: var(--primary);
+            border: 1px solid #b7e4d3;
+            padding: 7px 16px;
+            border-radius: 999px;
+            font-weight: 700;
+            font-size: 13px;
+        }
+
+        /* MAIN LAYOUT */
+        .main-wrapper {
+            max-width: 1560px;
+            margin: 22px auto;
+            padding: 0 24px;
+            display: grid;
+            grid-template-columns: 290px minmax(0, 1fr);
+            gap: 22px;
+            align-items: start;
+        }
+
+        /* SIDEBAR DANH SÁCH BẢNG */
+        .sidebar-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px 12px;
+            position: sticky;
+            top: 84px;
+            max-height: calc(100vh - 105px);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 10px 10px 10px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 10px;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .table-list {
+            overflow-y: auto;
+            padding-right: 4px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .table-list::-webkit-scrollbar {
+            width: 5px;
+        }
+        .table-list::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+
+        .table-nav-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 13px;
+            color: #334155;
+            transition: all 0.15s ease;
+            border: 1px solid transparent;
+        }
+
+        .table-nav-item:hover {
+            background: #f8fafc;
+            color: var(--primary);
+        }
+
+        .table-nav-item.active {
+            background: var(--primary);
+            color: #ffffff;
+        }
+
+        .count-badge {
+            min-width: 26px;
+            height: 22px;
+            padding: 0 7px;
+            border-radius: 999px;
+            font-size: 11.5px;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #f1f5f9;
+            color: #475569;
+        }
+
+        .count-badge.enough {
+            background: var(--primary-light);
+            color: var(--primary);
+        }
+
+        .table-nav-item.active .count-badge {
+            background: rgba(255, 255, 255, 0.22);
+            color: #ffffff;
+        }
+
+        /* RIGHT CONTENT */
+        .right-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            min-width: 0;
+        }
+
+        .card-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 22px 24px;
+        }
+
+        .form-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding-bottom: 16px;
+            margin-bottom: 18px;
+            border-bottom: 1px solid var(--border);
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .form-table-title {
+            font-size: 18px;
+            font-weight: 800;
+            color: #0f172a;
+        }
+
+        .form-table-desc {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 3px;
+        }
+
+        .record-status-badge {
+            padding: 6px 14px;
+            border-radius: 999px;
+            font-size: 12.5px;
+            font-weight: 700;
+            background: var(--primary-light);
+            color: var(--primary);
+        }
+
+        .record-status-badge.low {
+            background: var(--warning-bg);
+            color: var(--warning);
+        }
+
+        /* FORM GRID */
+        .fields-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 16px 18px;
+        }
+
+        @media (max-width: 1100px) {
+            .fields-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        .field-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .field-group.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .field-label {
+            font-size: 12.5px;
+            font-weight: 700;
+            color: #1e293b;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+
+        .field-type-hint {
+            font-weight: 400;
+            color: #94a3b8;
+            font-size: 11.5px;
+        }
+
+        .field-auto-tag {
+            color: var(--primary);
+            font-size: 11.5px;
+            font-weight: 600;
+        }
+
+        .req-star {
+            color: var(--danger);
+        }
+
+        .form-input {
+            height: 38px;
+            padding: 0 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 13.5px;
+            color: #0f172a;
+            background: #ffffff;
+            outline: none;
+            transition: border-color 0.15s;
+            font-family: inherit;
+        }
+
+        .form-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(13, 138, 94, 0.12);
+        }
+
+        .form-input:disabled, .form-input[readonly] {
+            background: #f1f5f9;
+            color: #64748b;
+            cursor: not-allowed;
+        }
+
+        textarea.form-input {
+            height: 70px;
+            padding: 8px 12px;
+            resize: vertical;
+        }
+
+        /* BUTTONS */
+        .form-actions {
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px dashed var(--border);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-submit {
+            background: var(--primary);
+            color: #ffffff;
+            border: none;
+            height: 38px;
+            padding: 0 18px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 13.5px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.15s;
+        }
+
+        .btn-submit:hover {
+            background: var(--primary-hover);
+        }
+
+        .btn-submit.editing-mode {
+            background: #2563eb;
+        }
+
+        .btn-reset {
+            background: #f1f5f9;
+            color: #334155;
+            border: 1px solid #cbd5e1;
+            height: 38px;
+            padding: 0 16px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .btn-reset:hover {
+            background: #e2e8f0;
+        }
+
+        /* ALERT MESSAGE */
+        .alert-bar {
+            display: none;
+            padding: 11px 16px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 13px;
+            margin-bottom: 16px;
+        }
+        .alert-bar.success {
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #86efac;
+        }
+        .alert-bar.error {
+            background: #ffe4e6;
+            color: #9f1239;
+            border: 1px solid #fda4af;
+        }
+
+        /* DATA TABLE */
+        .data-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .data-card-title {
+            font-size: 15px;
+            font-weight: 800;
+            color: #0f172a;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .table-scroll-container {
+            width: 100%;
+            max-height: 440px;
+            overflow-y: auto;
+            overflow-x: auto;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+        }
+
+        .data-table {
+            width: 100%;
+            min-width: max-content;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .data-table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: #f8fafc;
+            color: #334155;
+            font-weight: 700;
+            font-size: 11.5px;
+            letter-spacing: 0.3px;
+            padding: 11px 14px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+
+        .data-table tbody td {
+            padding: 10px 14px;
+            border-bottom: 1px solid #f1f5f9;
+            color: #1e293b;
+            max-width: 280px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .data-table tbody tr:hover {
+            background-color: #f8fafc;
+        }
+
+        .action-cell {
+            display: inline-flex;
+            gap: 6px;
+        }
+
+        .btn-row-edit {
+            background: var(--warning-bg);
+            color: #b45309;
+            border: 1px solid #fde68a;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .btn-row-delete {
+            background: var(--danger-bg);
+            color: var(--danger);
+            border: 1px solid #fecdd3;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- HEADER -->
+    <header class="top-header">
+        <div class="header-brand">
+            <div class="brand-icon"><i class="fa-solid fa-database"></i></div>
+            <div>
+                <div class="brand-title">HỆ THỐNG FORM NHẬP DỮ LIỆU 20 BẢNG CSDL</div>
+                <div class="brand-subtitle">Dự án: <strong>dn-football</strong> &bull; Database: <strong>quan_ly_san_bong</strong> (Quản lý trực tiếp MySQL)</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN WORKSPACE -->
+    <main class="main-wrapper">
+        <!-- CỘT TRÁI: DANH SÁCH 20 BẢNG -->
+        <aside class="sidebar-card">
+            <div class="sidebar-head">
+                <span>DANH SÁCH 20 BẢNG</span>
+                <span>Số bản ghi</span>
+            </div>
+            <div id="sidebar-table-list" class="table-list"></div>
+        </aside>
+
+        <!-- CỘT PHẢI: FORM NHẬP LIỆU + BẢNG DỮ LIỆU CÓ SCROLL -->
+        <section class="right-panel">
+            <!-- KHUNG FORM THÊM / SỬA -->
+            <div class="card-box">
+                <div class="form-card-header">
+                    <div>
+                        <div id="current-table-title" class="form-table-title">1. Phuong</div>
+                        <div id="current-table-subtitle" class="form-table-desc">Nhập thông tin vào các trường bên dưới để thêm bản ghi mới</div>
+                    </div>
+                    <div id="current-table-count-badge" class="record-status-badge">Hiện có: 0 bản ghi</div>
+                </div>
+
+                <div id="form-alert" class="alert-bar"></div>
+
+                <form id="dynamic-db-form" onsubmit="handleFormSubmit(event)">
+                    <div id="form-fields-container" class="fields-grid"></div>
+
+                    <div class="form-actions">
+                        <button type="submit" id="btn-submit-record" class="btn-submit">
+                            <i class="fa-solid fa-floppy-disk"></i>
+                            <span id="btn-submit-text">Thêm Bản Ghi Mới</span>
+                        </button>
+                        <button type="button" class="btn-reset" onclick="resetFormState()">
+                            Làm mới / Hủy sửa
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- KHUNG DANH SÁCH DỮ LIỆU THỰC TẾ TRONG BẢNG MYSQL -->
+            <div class="card-box">
+                <div class="data-card-header">
+                    <div class="data-card-title">
+                        <i class="fa-solid fa-table-list" style="color: var(--primary);"></i>
+                        <span>Dữ Liệu Thực Tế Trong Bảng MySQL</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <input type="text" id="quick-filter-input" class="form-input" style="height: 32px; width: 220px; font-size: 12.5px;" placeholder="Tìm nhanh trong bảng..." oninput="renderDataTableRows()">
+                        <span style="font-size: 12.5px; color: var(--text-muted);">Bấm <strong>"Sửa"</strong> để nạp dòng dữ liệu lên Form</span>
+                    </div>
+                </div>
+
+                <div class="table-scroll-container">
+                    <table class="data-table">
+                        <thead id="data-table-thead"></thead>
+                        <tbody id="data-table-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const API_DB_URL = 'http://127.0.0.1:8000/api/db-manager';
+
+        // ĐỊNH NGHĨA CẤU TRÚC 20 BẢNG HIỆN CÓ CỦA DN FOOTBALL
+        const DB_SCHEMAS = [
+            {
+                table: 'Phuong',
+                pk: ['MaPhuong'],
+                autoPrefix: 'P',
+                fields: [
+                    { name: 'MaPhuong', type: 'varchar(36)', auto: true, placeholder: 'Bỏ trống tự sinh (VD: P001)' },
+                    { name: 'TenPhuong', type: 'varchar(255)', required: true, placeholder: 'Nhập TenPhuong...' }
+                ]
+            },
+            {
+                table: 'LoaiSan',
+                pk: ['MaLoaiSan'],
+                autoPrefix: 'LS',
+                fields: [
+                    { name: 'MaLoaiSan', type: 'varchar(36)', auto: true, placeholder: 'Bỏ trống tự sinh (VD: LS001)' },
+                    { name: 'TenLoaiSan', type: 'varchar(255)', required: true, placeholder: 'VD: Sân 5 người, Sân 7 người...' }
+                ]
+            },
+            {
+                table: 'KhungGio',
+                pk: ['MaKhungGio'],
+                autoPrefix: 'KG',
+                fields: [
+                    { name: 'MaKhungGio', type: 'varchar(36)', auto: true, placeholder: 'Bỏ trống tự sinh (VD: KG001)' },
+                    { name: 'GioBatDau', type: 'time', input: 'time', required: true },
+                    { name: 'GioKetThuc', type: 'time', input: 'time', required: true }
+                ]
+            },
+            {
+                table: 'CumSan',
+                pk: ['MaCumSan'],
+                autoPrefix: 'CS',
+                fields: [
+                    { name: 'MaCumSan', type: 'varchar(36)', auto: true, placeholder: 'Bỏ trống tự sinh (VD: CS001)' },
+                    { name: 'MaPhuong', type: 'varchar(36) FK', required: true, placeholder: 'VD: P001' },
+                    { name: 'TenCumSan', type: 'varchar(255)', required: true, placeholder: 'Nhập tên cụm sân...' },
+                    { name: 'DiaChi', type: 'varchar(255)', required: true, placeholder: 'Nhập địa chỉ...' },
+                    { name: 'ViDo', type: 'decimal(10,7)', input: 'number', step: 'any', placeholder: 'VD: 16.054407' },
+                    { name: 'KinhDo', type: 'decimal(10,7)', input: 'number', step: 'any', placeholder: 'VD: 108.202167' },
+                    { name: 'GioMoCua', type: 'time', input: 'time', required: true, default: '06:00' },
+                    { name: 'GioDongCua', type: 'time', input: 'time', required: true, default: '22:00' },
+                    { name: 'HinhAnh', type: 'varchar(255)', placeholder: '/storage/cumsan/...' },
+                    { name: 'TrangThai', type: 'enum', options: ['HoatDong', 'BaoTri'], default: 'HoatDong' }
+                ]
+            },
+            {
+                table: 'NguoiDung',
+                pk: ['MaNguoiDung'],
+                autoPrefix: 'ND',
+                fields: [
+                    { name: 'MaNguoiDung', type: 'varchar(36)', auto: true, placeholder: 'Bỏ trống tự sinh (VD: ND001)' },
+                    { name: 'HoTen', type: 'varchar(255)', required: true, placeholder: 'Nhập họ tên...' },
+                    { name: 'SoDienThoai', type: 'varchar(20)', required: true, placeholder: 'Nhập SĐT...' },
+                    { name: 'Email', type: 'varchar(255)', required: true, placeholder: 'Nhập Email...' },
+                    { name: 'Vneid', type: 'varchar(50)', placeholder: '12 số CCCD/VNeID...' },
+                    { name: 'MatKhau', type: 'varchar(255)', placeholder: 'Nhập mật khẩu (tự động mã hóa Bcrypt)...' },
+                    { name: 'VaiTro', type: 'enum', options: ['KhachHang', 'NhanVien', 'QuanLySan', 'Admin'], default: 'KhachHang' },
+                    { name: 'MaCumSan', type: 'varchar(36) FK', placeholder: 'VD: CS001 (Nếu là QL/NV)' },
+                    { name: 'SoDuVi', type: 'decimal(15,2)', input: 'number', default: '0' },
+                    { name: 'TenNganHang', type: 'varchar(100)', placeholder: 'VD: Vietcombank, MB Bank...' },
+                    { name: 'STKNganHang', type: 'varchar(100)', placeholder: 'Nhập số tài khoản...' },
+                    { name: 'TenTaiKhoan', type: 'varchar(50)', placeholder: 'TÊN CHỦ TÀI KHOẢN...' },
+                    { name: 'TrangThaiKhoa', type: 'tinyint(1)', options: ['0', '1'], default: '0' }
+                ]
+            },
+            {
+                table: 'SanBong',
+                pk: ['MaSanBong'],
+                autoPrefix: 'SB',
+                fields: [
+                    { name: 'MaSanBong', type: 'varchar(36)', auto: true, placeholder: 'Bỏ trống tự sinh (VD: SB001)' },
+                    { name: 'MaCumSan', type: 'varchar(36) FK', required: true, placeholder: 'VD: CS001' },
+                    { name: 'MaLoaiSan', type: 'varchar(36) FK', required: true, placeholder: 'VD: LS001' },
+                    { name: 'TenSan', type: 'varchar(255)', required: true, placeholder: 'VD: Sân 1' },
+                    { name: 'DienTich', type: 'decimal(8,2)', input: 'number', step: 'any', placeholder: 'VD: 800' },
+                    { name: 'KichThuoc', type: 'varchar(50)', placeholder: 'VD: 20m x 40m' },
+                    { name: 'MoTa', type: 'text', placeholder: 'Mô tả mặt cỏ, đèn chiếu sáng...' },
+                    { name: 'TrangThai', type: 'enum', options: ['HoatDong', 'BaoTri'], default: 'HoatDong' }
+                ]
+            },
+            {
+                table: 'GiaTien',
+                pk: ['MaGiaTien'],
+                autoPrefix: 'GT',
+                fields: [
+                    { name: 'MaGiaTien', type: 'varchar(36)', auto: true, placeholder: 'Bỏ trống tự sinh (VD: GT001)' },
+                    { name: 'MaCumSan', type: 'varchar(36) FK', required: true, placeholder: 'VD: CS001' },
+                    { name: 'MaLoaiSan', type: 'varchar(36) FK', required: true, placeholder: 'VD: LS001' },
+                    { name: 'MaKhungGio', type: 'varchar(36) FK', required: true, placeholder: 'VD: KG001' },
+                    { name: 'SoTien', type: 'decimal(15,2)', input: 'number', required: true, placeholder: 'VD: 250000' }
+                ]
+            },
+            {
+                table: 'KhuyenMai',
+                pk: ['MaKhuyenMai'],
+                autoPrefix: 'KM',
+                fields: [
+                    { name: 'MaKhuyenMai', type: 'varchar(36)', auto: true, placeholder: 'VD: KM001 hoặc MÃ VOUCHER' },
+                    { name: 'MaNguoiDung', type: 'varchar(36) FK', placeholder: 'Bỏ trống = Toàn sàn, hoặc mã QL/KH' },
+                    { name: 'TenKhuyenMai', type: 'varchar(255)', required: true, placeholder: 'Nhập tên chương trình...' },
+                    { name: 'MoTa', type: 'text', placeholder: 'Mô tả khuyến mãi...' },
+                    { name: 'LoaiKhuyenMai', type: 'enum', options: ['PhanTram', 'CoDinh'], default: 'PhanTram' },
+                    { name: 'GiaTri', type: 'decimal(15,2)', input: 'number', required: true, placeholder: 'VD: 10 (%) hoặc 50000 (đ)' },
+                    { name: 'GiaTriToiDa', type: 'decimal(15,2)', input: 'number', default: '0', placeholder: 'Giảm tối đa...' },
+                    { name: 'GiaTriHoaDonToiThieu', type: 'decimal(15,2)', input: 'number', default: '0', placeholder: 'Đơn tối thiểu...' },
+                    { name: 'SoLuong', type: 'int', input: 'number', default: '10' },
+                    { name: 'SoLuongDaDung', type: 'int', input: 'number', default: '0' },
+                    { name: 'NgayBatDau', type: 'datetime', input: 'datetime-local', required: true },
+                    { name: 'NgayKetThuc', type: 'datetime', input: 'datetime-local', required: true },
+                    { name: 'TrangThai', type: 'enum', options: ['DangApDung', 'HetHan'], default: 'DangApDung' }
+                ]
+            },
+            {
+                table: 'GiaiDau',
+                pk: ['MaGiaiDau'],
+                autoPrefix: 'GDAU',
+                fields: [
+                    { name: 'MaGiaiDau', type: 'varchar(36)', auto: true, placeholder: 'Bỏ trống tự sinh (VD: GDAU001)' },
+                    { name: 'MaNguoiDung', type: 'varchar(36) FK', required: true, placeholder: 'VD: ND005' },
+                    { name: 'MaCumSan', type: 'varchar(36) FK', required: true, placeholder: 'VD: CS001' },
+                    { name: 'TenGiaiDau', type: 'varchar(255)', required: true, placeholder: 'Nhập tên giải đấu...' },
+                    { name: 'NgayBatDau', type: 'date', input: 'date', required: true },
+                    { name: 'NgayKetThuc', type: 'date', input: 'date', required: true },
+                    { name: 'NoiDung', type: 'text', placeholder: 'Ghi chú giải đấu...' },
+                    { name: 'TrangThai', type: 'enum', options: ['ChoDuyet', 'DaDuyet', 'TuChoi', 'HetHan', 'HoanThanh', 'DaHuy'], default: 'ChoDuyet' },
+                    { name: 'LyDoHuy', type: 'text', placeholder: 'Lý do từ chối/hủy (nếu có)...' }
+                ]
+            },
+            {
+                table: 'GiaoDich',
+                pk: ['MaGiaoDich'],
+                autoPrefix: 'GD',
+                fields: [
+                    { name: 'MaGiaoDich', type: 'varchar(36)', auto: true, placeholder: 'Bỏ trống tự sinh (VD: GD001)' },
+                    { name: 'MaNguoiDung', type: 'varchar(36) FK', required: true, placeholder: 'VD: ND005' },
+                    { name: 'MaNhanVienXuLy', type: 'varchar(36) FK', placeholder: 'Mã nhân viên/quản lý xử lý...' },
+                    { name: 'LoaiGiaoDich', type: 'enum', options: ['NapTien', 'DatSan', 'RutTien', 'HoanTienHuyGap', 'HoanTienHuySan'] },
+                    { name: 'DongTien', type: 'enum', options: ['Cong', 'Tru'] },
+                    { name: 'SoTien', type: 'decimal(15,2)', input: 'number', required: true, placeholder: 'Nhập số tiền...' },
+                    { name: 'SoDuTruoc', type: 'decimal(15,2)', input: 'number', required: true, default: '0' },
+                    { name: 'SoDuSau', type: 'decimal(15,2)', input: 'number', required: true, default: '0' },
+                    { name: 'NoiDung', type: 'text', placeholder: 'Nội dung giao dịch...' }
+                ]
+            },
+            {
+                table: 'HoaDonDatSan',
+                pk: ['MaHoaDonDatSan'],
+                autoPrefix: 'HDDS',
+                fields: [
+                    { name: 'MaHoaDonDatSan', type: 'varchar(36)', auto: true, placeholder: 'Bỏ trống tự sinh (VD: HDDS001)' },
+                    { name: 'MaNguoiDung', type: 'varchar(36) FK', placeholder: 'VD: ND005 (Bỏ trống nếu vãng lai)' },
+                    { name: 'MaGiaoDich', type: 'varchar(36) FK', placeholder: 'VD: GD001' },
+                    { name: 'MaKhuyenMai', type: 'varchar(36) FK', placeholder: 'VD: KM001 (nếu có)' },
+                    { name: 'TongTien', type: 'decimal(15,2)', input: 'number', required: true, placeholder: 'Tổng tiền HĐ (gồm VAT)...' },
+                    { name: 'ThueVAT', type: 'decimal(15,2)', input: 'number', required: true, default: '0', placeholder: 'Thuế VAT 8%...' },
+                    { name: 'PhuongThucThanhToan', type: 'enum', options: ['ViDienTu', 'ChuyenKhoan', 'TienMat'], default: 'ViDienTu' },
+                    { name: 'TrangThai', type: 'enum', options: ['DaCoc', 'HoanThanh', 'DaHuy', 'KhongDen'], default: 'DaCoc' }
+                ]
+            },
+            {
+                table: 'DatSan',
+                pk: ['MaDatSan'],
+                autoPrefix: 'DS',
+                fields: [
+                    { name: 'MaDatSan', type: 'varchar(36)', auto: true, placeholder: 'Bỏ trống tự sinh (VD: DS001)' },
+                    { name: 'MaNguoiDung', type: 'varchar(36) FK', placeholder: 'VD: ND005 (Để trống nếu vãng lai)' },
+                    { name: 'TenNguoiDat', type: 'varchar(100)', placeholder: 'Tên khách vãng lai...' },
+                    { name: 'SDTNguoiDat', type: 'varchar(20)', placeholder: 'SĐT khách vãng lai...' },
+                    { name: 'EmailNguoiDat', type: 'varchar(100)', placeholder: 'Email khách vãng lai...' },
+                    { name: 'MaSanBong', type: 'varchar(36) FK', required: true, placeholder: 'VD: SB001' },
+                    { name: 'MaKhungGio', type: 'varchar(36) FK', required: true, placeholder: 'VD: KG001' },
+                    { name: 'MaGiaiDau', type: 'varchar(36) FK', placeholder: 'VD: GDAU001 (Nếu thuộc giải đấu)' },
+                    { name: 'MaNhanVienXuLy', type: 'varchar(36) FK', placeholder: 'Mã nhân viên chốt sân...' },
+                    { name: 'NgayDa', type: 'date', input: 'date', required: true },
+                    { name: 'TongTien', type: 'decimal(15,2)', input: 'number', required: true, placeholder: 'Đơn giá khung giờ...' },
+                    { name: 'TienCoc', type: 'decimal(15,2)', input: 'number', required: true, placeholder: 'Tiền đã cọc...' },
+                    { name: 'TrangThai', type: 'enum', options: ['DaCoc', 'HoanThanh', 'DaHuy', 'KhongDen'], default: 'DaCoc' }
+                ]
+            },
+            {
+                table: 'ChiTietHoaDon',
+                pk: ['MaHoaDonDatSan', 'MaDatSan'],
+                autoPrefix: null,
+                fields: [
+                    { name: 'MaHoaDonDatSan', type: 'varchar(36) PK,FK', required: true, placeholder: 'VD: HDDS001' },
+                    { name: 'MaDatSan', type: 'varchar(36) PK,FK', required: true, placeholder: 'VD: DS001' },
+                    { name: 'DonGia', type: 'decimal(15,2)', input: 'number', required: true, placeholder: 'VD: 260000' }
+                ]
+            },
+            {
+                table: 'YeuCauHuyGap',
+                pk: ['MaYeuCauHuyGap'],
+                autoPrefix: 'YCHG',
+                fields: [
+                    { name: 'MaYeuCauHuyGap', type: 'varchar(36)', auto: true, placeholder: 'Bỏ trống tự sinh (VD: YCHG001)' },
+                    { name: 'MaNguoiDung', type: 'varchar(36) FK', required: true, placeholder: 'VD: ND005' },
+                    { name: 'MaDatSan', type: 'varchar(36) FK', required: true, placeholder: 'VD: DS001' },
+                    { name: 'NoiDung', type: 'text', required: true, placeholder: 'Lý do xin hủy sân gấp...' },
+                    { name: 'TrangThai', type: 'enum', options: ['ChoDuyet', 'DaDuyet', 'TuChoi'], default: 'ChoDuyet' },
+                    { name: 'LyDoHuy', type: 'text', placeholder: 'Phản hồi của quản lý...' }
+                ]
+            },
+            {
+                table: 'DanhGia',
+                pk: ['MaDanhGia'],
+                autoPrefix: 'DG',
+                fields: [
+                    { name: 'MaDanhGia', type: 'varchar(36)', auto: true, placeholder: 'Bỏ trống tự sinh (VD: DG001)' },
+                    { name: 'MaNguoiDung', type: 'varchar(36) FK', required: true, placeholder: 'VD: ND005' },
+                    { name: 'MaCumSan', type: 'varchar(36) FK', required: true, placeholder: 'VD: CS001' },
+                    { name: 'MaDatSan', type: 'varchar(36) FK', required: true, placeholder: 'VD: DS001' },
+                    { name: 'SoSao', type: 'smallint', options: ['5', '4', '3', '2', '1'], default: '5' },
+                    { name: 'NoiDung', type: 'text', placeholder: 'Nội dung đánh giá...' }
+                ]
+            },
+            {
+                table: 'ThongBao',
+                pk: ['MaThongBao'],
+                autoPrefix: 'TB',
+                fields: [
+                    { name: 'MaThongBao', type: 'varchar(36)', auto: true, placeholder: 'Bỏ trống tự sinh (VD: TB001)' },
+                    { name: 'MaNguoiDung', type: 'varchar(36) FK', required: true, placeholder: 'VD: ND005' },
+                    { name: 'TieuDe', type: 'varchar(255)', required: true, placeholder: 'Tiêu đề thông báo...' },
+                    { name: 'NoiDung', type: 'text', required: true, placeholder: 'Nội dung chi tiết...' },
+                    { name: 'LoaiThongBao', type: 'enum', options: ['HeThong', 'DatSan', 'ViTien', 'GiaiDau', 'ThoiTiet'], default: 'HeThong' },
+                    { name: 'DaDoc', type: 'tinyint(1)', options: ['0', '1'], default: '0' }
+                ]
+            },
+            {
+                table: 'PhienChat',
+                pk: ['MaPhienChat'],
+                autoPrefix: 'PC',
+                fields: [
+                    { name: 'MaPhienChat', type: 'varchar(36)', auto: true, placeholder: 'Bỏ trống tự sinh (VD: PC001)' },
+                    { name: 'MaNguoiDung', type: 'varchar(36) FK', required: true, placeholder: 'VD: ND005' },
+                    { name: 'TieuDe', type: 'varchar(255)', placeholder: 'Tiêu đề cuộc hội thoại...' }
+                ]
+            },
+            {
+                table: 'TinNhan',
+                pk: ['MaTinNhan'],
+                autoPrefix: 'TN',
+                fields: [
+                    { name: 'MaTinNhan', type: 'varchar(36)', auto: true, placeholder: 'Bỏ trống tự sinh (VD: TN001)' },
+                    { name: 'MaPhienChat', type: 'varchar(36) FK', required: true, placeholder: 'VD: PC001' },
+                    { name: 'NguoiGui', type: 'enum', options: ['User', 'Bot'], default: 'User' },
+                    { name: 'NoiDung', type: 'text', required: true, placeholder: 'Nội dung tin nhắn...' }
+                ]
+            },
+            {
+                table: 'CaLamViec',
+                pk: ['MaCaLamViec'],
+                autoPrefix: 'CLV',
+                fields: [
+                    { name: 'MaCaLamViec', type: 'varchar(36)', auto: true, placeholder: 'Bỏ trống tự sinh (VD: CLV001)' },
+                    { name: 'MaCumSan', type: 'varchar(36) FK', required: true, placeholder: 'VD: CS001' },
+                    { name: 'TenCa', type: 'varchar(50)', required: true, placeholder: 'VD: Ca Sáng, Ca Tối...' },
+                    { name: 'GioBatDau', type: 'time', input: 'time', required: true, default: '06:00' },
+                    { name: 'GioKetThuc', type: 'time', input: 'time', required: true, default: '14:00' },
+                    { name: 'SoLuongNhanVien', type: 'int', input: 'number', default: '2' },
+                    { name: 'LuongThuNgan', type: 'decimal(15,2)', input: 'number', default: '170000' },
+                    { name: 'LuongPhucVu', type: 'decimal(15,2)', input: 'number', default: '150000' }
+                ]
+            },
+            {
+                table: 'LichLamViec',
+                pk: ['MaLichLamViec'],
+                autoPrefix: 'LLV',
+                fields: [
+                    { name: 'MaLichLamViec', type: 'varchar(36)', auto: true, placeholder: 'Bỏ trống tự sinh (VD: LLV001)' },
+                    { name: 'MaCaLamViec', type: 'varchar(36) FK', required: true, placeholder: 'VD: CLV001' },
+                    { name: 'NgayLam', type: 'date', input: 'date', required: true },
+                    { name: 'MaNhanVien', type: 'varchar(36) FK', placeholder: 'VD: ND003' },
+                    { name: 'CongViec', type: 'varchar(50)', options: ['', 'ThuNgan', 'PhucVu'], default: 'PhucVu' },
+                    { name: 'TrangThaiXepLich', type: 'enum', options: ['DangKy', 'DaDuyet', 'TuChoi'], default: 'DangKy' },
+                    { name: 'TrangThaiDiemDanh', type: 'enum', options: ['ChuaLam', 'DaLam', 'VangMat'], default: 'ChuaLam' },
+                    { name: 'SoPhutDiMuon', type: 'int', input: 'number', default: '0' },
+                    { name: 'TienPhat', type: 'decimal(15,2)', input: 'number', default: '0' },
+                    { name: 'TienThuong', type: 'decimal(15,2)', input: 'number', default: '0' },
+                    { name: 'GhiChu', type: 'varchar(255)', placeholder: 'Ghi chú đăng ký...' },
+                    { name: 'LyDoDieuChinh', type: 'varchar(255)', placeholder: 'Lý do thưởng/phạt...' }
+                ]
+            }
+        ];
+
+        let currentTableIndex = 0;
+        let tableCounts = {};
+        let currentRows = [];
+        let editingPkObject = null; // null = Thêm mới, khác null = Đang sửa
+
+        document.addEventListener('DOMContentLoaded', () => {
+            selectTable(0);
+        });
+
+        async function selectTable(index) {
+            currentTableIndex = index;
+            editingPkObject = null;
+            const schema = DB_SCHEMAS[index];
+
+            renderSidebar();
+            renderFormInputs(schema);
+
+            await fetchTableData(schema.table);
+        }
+
+        async function fetchTableData(tableName) {
+            try {
+                const res = await fetch(`${API_DB_URL}/data?table=${encodeURIComponent(tableName)}`);
+                const json = await res.json();
+                if (json.success) {
+                    tableCounts = json.counts || {};
+                    currentRows = json.rows || [];
+                    renderSidebar();
+                    updateHeaderAndBadges();
+                    renderDataTableRows();
+                }
+            } catch (err) {
+                showAlert('Không thể kết nối tới Backend Laravel (http://127.0.0.1:8000)!', false);
+            }
+        }
+
+        function renderSidebar() {
+            const listEl = document.getElementById('sidebar-table-list');
+            listEl.innerHTML = DB_SCHEMAS.map((item, idx) => {
+                const count = tableCounts[item.table] ?? 0;
+                const isActive = idx === currentTableIndex ? 'active' : '';
+                const enoughClass = count >= 5 ? 'enough' : '';
+                return `
+                    <div class="table-nav-item ${isActive}" onclick="selectTable(${idx})">
+                        <span>${idx + 1}. ${item.table}</span>
+                        <span class="count-badge ${enoughClass}">${count}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateHeaderAndBadges() {
+            const schema = DB_SCHEMAS[currentTableIndex];
+            const count = tableCounts[schema.table] ?? 0;
+
+            document.getElementById('current-table-title').textContent = `${currentTableIndex + 1}. ${schema.table}`;
+
+            const badgeEl = document.getElementById('current-table-count-badge');
+            badgeEl.textContent = `Hiện có: ${count} bản ghi`;
+            badgeEl.className = 'record-status-badge ' + (count >= 5 ? '' : 'low');
+        }
+
+        function renderFormInputs(schema) {
+            const container = document.getElementById('form-fields-container');
+            document.getElementById('btn-submit-record').className = 'btn-submit';
+            document.getElementById('btn-submit-text').textContent = 'Thêm Bản Ghi Mới';
+            document.getElementById('current-table-subtitle').textContent = 'Nhập thông tin vào các trường bên dưới để thêm bản ghi mới';
+
+            container.innerHTML = schema.fields.map(f => {
+                const autoLabel = f.auto ? `<span class="field-auto-tag">[Tự sinh mã]</span>` : '';
+                const reqStar = f.required ? `<span class="req-star">*</span>` : '';
+                let inputHtml = '';
+
+                if (f.options) {
+                    inputHtml = `
+                        <select name="${f.name}" id="field-${f.name}" class="form-input">
+                            ${f.options.map(opt => `<option value="${opt}" ${opt === f.default ? 'selected' : ''}>${opt || '-- Trống --'}</option>`).join('')}
+                        </select>
+                    `;
+                } else if (f.type === 'text') {
+                    inputHtml = `<input type="text" name="${f.name}" id="field-${f.name}" class="form-input" placeholder="${f.placeholder || ''}" ${f.required ? 'required' : ''}>`;
+                } else {
+                    const inputType = f.input || 'text';
+                    const stepAttr = f.step ? `step="${f.step}"` : '';
+                    const defaultVal = f.default !== undefined ? f.default : '';
+                    inputHtml = `<input type="${inputType}" ${stepAttr} name="${f.name}" id="field-${f.name}" class="form-input" value="${defaultVal}" placeholder="${f.placeholder || `Nhập ${f.name}...`}" ${f.required ? 'required' : ''}>`;
+                }
+
+                return `
+                    <div class="field-group">
+                        <label class="field-label" for="field-${f.name}">
+                            <span>${f.name}</span>
+                            <span class="field-type-hint">(${f.type})</span>
+                            ${autoLabel}
+                            ${reqStar}
+                        </label>
+                        ${inputHtml}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderDataTableRows() {
+            const schema = DB_SCHEMAS[currentTableIndex];
+            const thead = document.getElementById('data-table-thead');
+            const tbody = document.getElementById('data-table-tbody');
+            const keyword = (document.getElementById('quick-filter-input')?.value || '').toLowerCase().trim();
+
+            const cols = schema.fields.map(f => f.name);
+            thead.innerHTML = `
+                <tr>
+                    ${cols.map(c => `<th>${c}</th>`).join('')}
+                    <th style="text-align: right; position: sticky; right: 0; background: #f8fafc;">THAO TÁC</th>
+                </tr>
+            `;
+
+            const filtered = keyword
+                ? currentRows.filter(r => Object.values(r).some(v => String(v ?? '').toLowerCase().includes(keyword)))
+                : currentRows;
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="${cols.length + 1}" style="text-align: center; padding: 32px; color: #94a3b8;">Chưa có dữ liệu trong bảng ${schema.table}.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map((row, rIdx) => {
+                const cellsHtml = cols.map(c => {
+                    const val = row[c] !== null && row[c] !== undefined ? row[c] : '<span style="color:#cbd5e1;font-style:italic;">NULL</span>';
+                    return `<td title="${String(row[c] ?? '').replace(/"/g, '&quot;')}">${val}</td>`;
+                }).join('');
+
+                const rowJson = encodeURIComponent(JSON.stringify(row));
+                return `
+                    <tr>
+                        ${cellsHtml}
+                        <td style="text-align: right; position: sticky; right: 0; background: #fff;">
+                            <div class="action-cell">
+                                <button type="button" class="btn-row-edit" onclick="loadRowToForm('${rowJson}')">Sửa</button>
+                                <button type="button" class="btn-row-delete" onclick="deleteRowRecord('${rowJson}')">Xóa</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        window.loadRowToForm = function(encodedRow) {
+            const row = JSON.parse(decodeURIComponent(encodedRow));
+            const schema = DB_SCHEMAS[currentTableIndex];
+
+            editingPkObject = {};
+            schema.pk.forEach(k => {
+                editingPkObject[k] = row[k];
+            });
+
+            schema.fields.forEach(f => {
+                const el = document.getElementById(`field-${f.name}`);
+                if (!el) return;
+
+                let val = row[f.name] ?? '';
+                if (f.input === 'datetime-local' && val) {
+                    val = String(val).replace(' ', 'T').substring(0, 16);
+                } else if (f.input === 'time' && val) {
+                    val = String(val).substring(0, 5);
+                }
+                el.value = val;
+
+                // Khóa ô khóa chính khi đang ở chế độ Sửa
+                if (schema.pk.includes(f.name)) {
+                    el.readOnly = true;
+                }
+            });
+
+            const btn = document.getElementById('btn-submit-record');
+            btn.className = 'btn-submit editing-mode';
+            document.getElementById('btn-submit-text').textContent = 'Cập Nhật Bản Ghi';
+            document.getElementById('current-table-subtitle').innerHTML =
+                `Đang chỉnh sửa bản ghi khóa chính: <strong style="color:#2563eb;">${Object.values(editingPkObject).join(' - ')}</strong>`;
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        };
+
+        window.resetFormState = function() {
+            editingPkObject = null;
+            renderFormInputs(DB_SCHEMAS[currentTableIndex]);
+        };
+
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            const schema = DB_SCHEMAS[currentTableIndex];
+            const formData = {};
+
+            schema.fields.forEach(f => {
+                const el = document.getElementById(`field-${f.name}`);
+                if (el) {
+                    let val = el.value;
+                    if (f.input === 'datetime-local' && val) {
+                        val = val.replace('T', ' ') + (val.length === 16 ? ':00' : '');
+                    }
+                    formData[f.name] = val;
+                }
+            });
+
+            try {
+                let res;
+                if (editingPkObject === null) {
+                    // THÊM MỚI (INSERT)
+                    res = await fetch(`${API_DB_URL}/${schema.table}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        body: JSON.stringify(formData)
+                    });
+                } else {
+                    // CẬP NHẬT (UPDATE)
+                    res = await fetch(`${API_DB_URL}/${schema.table}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        body: JSON.stringify({ _pk: editingPkObject, data: formData })
+                    });
+                }
+
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    showAlert(data.message, true);
+                    resetFormState();
+                    await fetchTableData(schema.table);
+                } else {
+                    showAlert(data.message || 'Có lỗi xảy ra!', false);
+                }
+            } catch (err) {
+                showAlert('Lỗi kết nối tới máy chủ!', false);
+            }
+        }
+
+        window.deleteRowRecord = async function(encodedRow) {
+            const row = JSON.parse(decodeURIComponent(encodedRow));
+            const schema = DB_SCHEMAS[currentTableIndex];
+
+            const pkPayload = {};
+            schema.pk.forEach(k => {
+                pkPayload[k] = row[k];
+            });
+
+            const pkLabel = Object.values(pkPayload).join(' - ');
+            if (!confirm(`Bạn có chắc chắn muốn xóa bản ghi [${pkLabel}] khỏi bảng ${schema.table}?`)) {
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_DB_URL}/${schema.table}`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ _pk: pkPayload })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    showAlert(data.message, true);
+                    if (editingPkObject && JSON.stringify(editingPkObject) === JSON.stringify(pkPayload)) {
+                        resetFormState();
+                    }
+                    await fetchTableData(schema.table);
+                } else {
+                    showAlert(data.message || 'Không thể xóa bản ghi!', false);
+                }
+            } catch (err) {
+                showAlert('Lỗi kết nối máy chủ!', false);
+            }
+        };
+
+        function showAlert(msg, isSuccess) {
+            const bar = document.getElementById('form-alert');
+            bar.textContent = msg;
+            bar.className = 'alert-bar ' + (isSuccess ? 'success' : 'error');
+            bar.style.display = 'block';
+            setTimeout(() => { bar.style.display = 'none'; }, 4000);
+        }
+    </script>
+</body>
+</html>
