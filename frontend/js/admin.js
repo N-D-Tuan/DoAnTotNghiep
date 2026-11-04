@@ -1088,11 +1088,23 @@ async function loadGiaTienTheoCum(cs) {
             const maLS = ls.MaLoaiSan || ls.ID;
             html += `
             <div class="section-loaisan">
-                <div class="section-loaisan-header">
-                    <div class="section-loaisan-title"><i class="fa-solid fa-futbol" style="color:var(--primary)"></i> ${ls.TenLoaiSan}</div>
-                    <button id="btn-save-price-${maLS}" class="btn-primary" onclick="saveGiaTien('${maCS}', '${maLS}', '${ls.TenLoaiSan}')" disabled style="opacity: 0.5; cursor: not-allowed;"><i class="fa-solid fa-save"></i> Lưu giá ${ls.TenLoaiSan}</button>
+                <div class="section-loaisan-header" style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+                    <div class="section-loaisan-title" onclick="toggleLoaiSanPriceGrid('${maLS}')" style="cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 8px;" title="Bấm để mở rộng hoặc thu gọn khung giờ">
+                        <i class="fa-solid fa-futbol" style="color:var(--primary)"></i>
+                        <span>${ls.TenLoaiSan}</span>
+                        <span style="font-size: 0.8rem; font-weight: 500; color: var(--text-muted);">(${validKhungGio.length} khung giờ)</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <button type="button" id="btn-toggle-price-${maLS}" class="btn-outline-sm" onclick="toggleLoaiSanPriceGrid('${maLS}')" style="display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; font-weight: 600; color: #475569; border-color: #cbd5e1; background: #f8fafc;">
+                            <i class="fa-solid fa-chevron-down" id="icon-toggle-price-${maLS}"></i>
+                            <span id="text-toggle-price-${maLS}">Mở rộng</span>
+                        </button>
+                        <button id="btn-save-price-${maLS}" class="btn-primary" onclick="saveGiaTien('${maCS}', '${maLS}', '${ls.TenLoaiSan}')" disabled style="opacity: 0.5; cursor: not-allowed;">
+                            <i class="fa-solid fa-save"></i> Lưu giá ${ls.TenLoaiSan}
+                        </button>
+                    </div>
                 </div>
-                <div class="price-grid">`;
+                <div id="price-grid-${maLS}" class="price-grid" style="display: none;">`;
 
             validKhungGio.forEach(kg => {
                 const maKG = kg.MaKhungGio || kg.ID;
@@ -1115,6 +1127,26 @@ async function loadGiaTienTheoCum(cs) {
         container.innerHTML = html;
     } catch (e) { console.error(e); }
 }
+
+// Hàm Thu gọn / Mở rộng danh sách khung giờ của từng Loại Sân
+window.toggleLoaiSanPriceGrid = function(maLS) {
+    const gridEl = document.getElementById(`price-grid-${maLS}`);
+    const iconEl = document.getElementById(`icon-toggle-price-${maLS}`);
+    const textEl = document.getElementById(`text-toggle-price-${maLS}`);
+    if (!gridEl) return;
+
+    const isHidden = gridEl.style.display === 'none';
+
+    if (isHidden) {
+        gridEl.style.display = 'grid';
+        if (iconEl) iconEl.className = 'fa-solid fa-chevron-up';
+        if (textEl) textEl.textContent = 'Thu gọn';
+    } else {
+        gridEl.style.display = 'none';
+        if (iconEl) iconEl.className = 'fa-solid fa-chevron-down';
+        if (textEl) textEl.textContent = 'Mở rộng';
+    }
+};
 
 let currentAdminClusterReviews = [];
 let adminReviewStarFilter = 'all';
