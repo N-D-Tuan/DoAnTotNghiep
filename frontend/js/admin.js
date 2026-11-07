@@ -937,6 +937,8 @@ async function renderCumSanDetail(cumSanId) {
     }
 }
 
+let currentSanBongListCache = [];
+
 async function loadSanBongTheoCum(cumSanId) {
     try {
         const response = await fetch(`${API_BASE_URL}/san-bong?cum_san_id=${cumSanId}`);
@@ -944,9 +946,12 @@ async function loadSanBongTheoCum(cumSanId) {
         
         const tbody = document.getElementById('sanbong-table-body');
         if (!res.success || res.data.length === 0) {
+            currentSanBongListCache = [];
             tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="text-align: center;">Chưa có sân con nào.</td></tr>`;
             return;
         }
+
+        currentSanBongListCache = res.data;
 
         tbody.innerHTML = res.data.map(sb => {
             const maSB = sb.MaSanBong || sb.ID;
@@ -965,7 +970,7 @@ async function loadSanBongTheoCum(cumSanId) {
                         <button class="action-btn" style="background:#f0fdf4; color:#16a34a; border-color:#bbf7d0;" onclick="renderAdminSchedule('${cumSanId}', '${sb.TenSan.replace(/'/g, "\\'")}', '${maSB}', '${maLS}')">
                             <i class="fa-regular fa-calendar"></i> Xem lịch
                         </button>
-                        <button class="action-btn" onclick='openSanBongModal(${JSON.stringify(sb).replace(/'/g, "\\'")})'>
+                        <button class="action-btn" onclick="openSanBongModalById('${maSB}')">
                             <i class="fa-solid fa-pen-to-square"></i> Sửa
                         </button>
                     </div>
@@ -975,23 +980,39 @@ async function loadSanBongTheoCum(cumSanId) {
     } catch (e) { console.error(e); }
 }
 
+function openSanBongModalById(maSB) {
+    const sb = currentSanBongListCache.find(item => String(item.MaSanBong || item.ID) === String(maSB));
+    if (sb) openSanBongModal(sb);
+}
+
 async function openSanBongModal(sb = null) {
-    const res = await fetch(`${API_BASE_URL}/loai-san`);
-    const loaiSans = (await res.json()).data;
-    document.getElementById('sb-loaisan').innerHTML = loaiSans.map(ls => {
-        const maLS = ls.MaLoaiSan || ls.ID;
-        return `<option value="${maLS}">${ls.TenLoaiSan}</option>`;
-    }).join('');
+    // Đảm bảo nút Lưu luôn được mở khóa khi bật Modal
+    const btnSave = document.querySelector('#sanbong-modal .btn-primary');
+    if (btnSave) {
+        btnSave.disabled = false;
+        btnSave.textContent = 'Lưu Sân Bóng';
+    }
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/loai-san`);
+        const loaiSans = (await res.json()).data || [];
+        document.getElementById('sb-loaisan').innerHTML = loaiSans.map(ls => {
+            const maLS = ls.MaLoaiSan || ls.ID;
+            return `<option value="${maLS}">${ls.TenLoaiSan}</option>`;
+        }).join('');
+    } catch (e) {
+        console.error('Lỗi tải loại sân:', e);
+    }
 
     if (sb) {
         document.getElementById('sanbong-modal-title').textContent = 'Chỉnh sửa Sân Con';
         document.getElementById('sb-id').value = sb.MaSanBong || sb.ID;
-        document.getElementById('sb-ten').value = sb.TenSan;
+        document.getElementById('sb-ten').value = sb.TenSan || '';
         document.getElementById('sb-loaisan').value = sb.MaLoaiSan || sb.ID_LoaiSan;
         if (document.getElementById('sb-dientich')) document.getElementById('sb-dientich').value = sb.DienTich || '';
         if (document.getElementById('sb-kichthuoc')) document.getElementById('sb-kichthuoc').value = sb.KichThuoc || '';
         if (document.getElementById('sb-mota')) document.getElementById('sb-mota').value = sb.MoTa || '';
-        document.getElementById('sb-trangthai').value = sb.TrangThai;
+        document.getElementById('sb-trangthai').value = sb.TrangThai || 'HoatDong';
         document.getElementById('group-trangthai').style.display = 'block';
     } else {
         document.getElementById('sanbong-modal-title').textContent = 'Thêm Sân Con';
@@ -1408,6 +1429,8 @@ function showCumSanAlert(message, isSuccess) {
     setTimeout(() => { alertBox.style.display = 'none'; }, 3000);
 }
 
+let editCumSanId = null;
+
 // Hàm tải danh sách Phường vào Select
 async function loadPhuongDropdown() {
     try {
@@ -1415,7 +1438,10 @@ async function loadPhuongDropdown() {
         const res = await response.json();
         if (res.success) {
             const select = document.getElementById('cs-phuong');
-            select.innerHTML = res.data.map(p => `<option value="${p.ID}">${p.TenPhuong}</option>`).join('');
+            select.innerHTML = res.data.map(p => {
+                const maP = p.MaPhuong || p.ID;
+                return `<option value="${maP}">${p.TenPhuong}</option>`;
+            }).join('');
         }
     } catch (error) {
         console.error('Lỗi tải dropdown Phường:', error);
@@ -1498,10 +1524,10 @@ async function openEditCumSanModal(cs) {
     generateTimeOptions('cs-giomo', cs.GioMoCua.substring(0, 5));
     generateTimeOptions('cs-giodong', cs.GioDongCua.substring(0, 5));
 
-    document.getElementById('cs-ten').value = cs.TenCumSan;
-    document.getElementById('cs-diachi').value = cs.DiaChi;
-    document.getElementById('cs-vido').value = cs.ViDo || '';
-    document.getElementById('cs-kinhdo').value = cs.KinhDo || '';
+    document.getElementById('cs-ten').value = cs.TenCumSan || '';
+    document.getElementById('cs-diachi').value = cs.DiaChi || '';
+    document.getElementById('cs-vido').value = cs.ViDo ?? '';
+    document.getElementById('cs-kinhdo').value = cs.KinhDo ?? '';
     document.getElementById('cs-phuong').value = cs.MaPhuong || cs.ID_Phuong;
     document.getElementById('cs-hinhanh').value = '';
 
@@ -1511,7 +1537,7 @@ async function openEditCumSanModal(cs) {
     document.getElementById('cumsan-modal').style.display = 'flex';
 }
 
-// Bật Modal
+// Bật Modal Thêm Cụm Sân Mới
 async function openCumSanModal() {
     document.getElementById('cumsan-alert').style.display = 'none';
     document.getElementById('cumsan-modal-title').textContent = 'Thêm Cụm Sân Mới';
@@ -1546,11 +1572,10 @@ function closeCumSanModal() {
     document.getElementById('cumsan-modal').style.display = 'none';
 }
 
-// Lưu dữ liệu (Thêm mới)
+// Lưu dữ liệu (Thêm mới & Cập nhật)
 async function saveCumSan() {
     const btn = document.querySelector('#cumsan-modal .btn-primary');
     
-    // Lấy dữ liệu dạng text
     const tenCumSan = document.getElementById('cs-ten').value.trim();
     const idPhuong = document.getElementById('cs-phuong').value;
     const diaChi = document.getElementById('cs-diachi').value.trim();
@@ -1558,21 +1583,24 @@ async function saveCumSan() {
     const kinhDo = document.getElementById('cs-kinhdo').value.trim();
     const gioMo = document.getElementById('cs-giomo').value;
     const gioDong = document.getElementById('cs-giodong').value;
-    
-    // Lấy file ảnh
     const hinhAnhFile = document.getElementById('cs-hinhanh').files[0];
 
-    // Validate sơ bộ
-    if(!tenCumSan || !diaChi || !gioMo || !gioDong) {
-        return showCumSanAlert('Vui lòng điền đầy đủ thông tin bắt buộc!', false);
+    // Validate đầy đủ trước khi gửi
+    if (!tenCumSan || !diaChi || !viDo || !kinhDo || !gioMo || !gioDong) {
+        return showCumSanAlert('Vui lòng điền đầy đủ thông tin bắt buộc (bao gồm cả Vĩ độ và Kinh độ)!', false);
+    }
+
+    if (gioMo >= gioDong) {
+        return showCumSanAlert('Giờ đóng cửa phải sau giờ mở cửa!', false);
     }
 
     btn.disabled = true;
     btn.textContent = 'Đang lưu...';
 
-    // Dùng FormData để gửi cả Text và File
+    const targetEditId = editCumSanId;
     const formData = new FormData();
     formData.append('TenCumSan', tenCumSan);
+    formData.append('MaPhuong', idPhuong);
     formData.append('ID_Phuong', idPhuong);
     formData.append('DiaChi', diaChi);
     formData.append('ViDo', viDo);
@@ -1580,14 +1608,13 @@ async function saveCumSan() {
     formData.append('GioMoCua', gioMo);
     formData.append('GioDongCua', gioDong);
     
-    // Nếu có chọn ảnh thì mới append vào
     if (hinhAnhFile) {
         formData.append('HinhAnh', hinhAnhFile);
     }
 
-    if (editCumSanId) formData.append('_method', 'PUT');
+    if (targetEditId) formData.append('_method', 'PUT');
 
-    const url = editCumSanId ? `${API_BASE_URL}/cum-san/${editCumSanId}` : `${API_BASE_URL}/cum-san`;
+    const url = targetEditId ? `${API_BASE_URL}/cum-san/${targetEditId}` : `${API_BASE_URL}/cum-san`;
 
     try {
         const response = await fetch(url, {
@@ -1601,22 +1628,28 @@ async function saveCumSan() {
         const data = await response.json();
 
         if (response.ok && data.success) {
-            showCumSanAlert(editCumSanId ? 'Cập nhật thành công!' : 'Thêm mới thành công!', true);
+            showCumSanAlert(targetEditId ? 'Cập nhật thành công!' : 'Thêm mới thành công!', true);
             
-            // Xử lý Render lại giao diện
             setTimeout(() => {
                 closeCumSanModal();
                 btn.disabled = false;
                 btn.textContent = 'Lưu Cụm Sân';
                 
-                if (editCumSanId) {
-                    renderCumSanDetail(editCumSanId); // Đang ở trang chi tiết -> Render lại chi tiết
+                if (targetEditId) {
+                    renderCumSanDetail(targetEditId);
                 } else {
-                    loadCumSanCards(); // Đang tạo mới -> Render lại danh sách thẻ
+                    loadCumSanCards();
                 }
-            }, 1500);
+            }, 1200);
         } else {
-            showCumSanAlert(data.message || 'Có lỗi xảy ra!', false);
+            let errMsg = data.message || 'Có lỗi xảy ra!';
+            if (data.errors) {
+                errMsg = Object.values(data.errors)[0][0];
+            }
+            showCumSanAlert(errMsg, false);
+            // Khôi phục lại nút bấm khi Server báo lỗi Validate
+            btn.disabled = false;
+            btn.textContent = 'Lưu Cụm Sân';
         }
     } catch (error) {
         showCumSanAlert('Không thể kết nối máy chủ!', false);
