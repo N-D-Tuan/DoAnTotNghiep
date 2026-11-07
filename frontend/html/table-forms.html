@@ -912,14 +912,24 @@
             badgeEl.className = 'record-status-badge ' + (count >= 5 ? '' : 'low');
         }
 
+        let pkValidationTimer = null;
+        let isPrimaryKeyDuplicate = false;
+
         function renderFormInputs(schema) {
             const container = document.getElementById('form-fields-container');
-            document.getElementById('btn-submit-record').className = 'btn-submit';
+            const btnSubmit = document.getElementById('btn-submit-record');
+            btnSubmit.className = 'btn-submit';
+            btnSubmit.disabled = false;
+            btnSubmit.style.opacity = '1';
+            btnSubmit.style.cursor = 'pointer';
+            isPrimaryKeyDuplicate = false;
+
             document.getElementById('btn-submit-text').textContent = 'Thêm Bản Ghi Mới';
             document.getElementById('current-table-subtitle').textContent = 'Nhập thông tin vào các trường bên dưới để thêm bản ghi mới';
 
             container.innerHTML = schema.fields.map(f => {
-                const autoLabel = f.auto ? `<span class="field-auto-tag">[Tự sinh mã]</span>` : '';
+                const isSinglePk = (schema.pk.length === 1 && schema.pk[0] === f.name);
+                const autoLabel = f.auto ? `<span class="field-auto-tag">[Tùy chọn A-Z0-9 hoặc Bỏ trống tự sinh]</span>` : '';
                 const reqStar = f.required ? `<span class="req-star">*</span>` : '';
                 let inputHtml = '';
 
@@ -937,6 +947,15 @@
                             <span id="preview-path-${f.name}" style="font-size: 12px; color: #475569; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></span>
                         </div>
                     `;
+                } else if (isSinglePk) {
+                    inputHtml = `
+                        <input type="text" name="${f.name}" id="field-${f.name}" class="form-input" maxlength="36"
+                               style="font-family: monospace; font-weight: 700; text-transform: uppercase;"
+                               placeholder="${f.placeholder || `Nhập ${f.name}...`}"
+                               oninput="handlePkRealtimeInput(this, '${f.name}')"
+                               onblur="validatePkFieldNow(this, '${f.name}')">
+                        <div id="pk-feedback-${f.name}" style="display: none; font-size: 12px; font-weight: 600; margin-top: 4px; line-height: 1.4;"></div>
+                    `;
                 } else if (f.type === 'text') {
                     inputHtml = `<input type="text" name="${f.name}" id="field-${f.name}" class="form-input" placeholder="${f.placeholder || ''}" ${f.required ? 'required' : ''}>`;
                 } else {
@@ -951,7 +970,6 @@
                         <label class="field-label" for="field-${f.name}">
                             <span>${f.name}</span>
                             <span class="field-type-hint">(${f.type})</span>
-                            ${autoLabel}
                             ${reqStar}
                         </label>
                         ${inputHtml}
@@ -959,6 +977,90 @@
                 `;
             }).join('');
         }
+
+        // Hàm xử lý vừa nhập vừa kiểm tra + Debounce khi ngừng nhập cho ô Khóa chính
+        window.handlePkRealtimeInput = function(inputEl, fieldName) {
+            // Chỉ giữ lại chữ cái không dấu A-Z và số 0-9, viết liền in hoa
+            const cleaned = inputEl.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            if (inputEl.value !== cleaned) {
+                inputEl.value = cleaned;
+            }
+
+            // Kiểm tra ngay lập tức và kiểm tra lại sau khi ngừng gõ 200ms
+            validatePkFieldNow(inputEl, fieldName);
+            if (pkValidationTimer) clearTimeout(pkValidationTimer);
+            pkValidationTimer = setTimeout(() => {
+                validatePkFieldNow(inputEl, fieldName);
+            }, 200);
+        };
+
+        window.validatePkFieldNow = function(inputEl, fieldName) {
+            const feedbackEl = document.getElementById(`pk-feedback-${fieldName}`);
+            const btnSubmit = document.getElementById('btn-submit-record');
+            if (!feedbackEl || !btnSubmit) return;
+
+            const val = inputEl.value.trim().toUpperCase();
+            const originalPkVal = editingPkObject ? String(editingPkObject[fieldName] ?? '').toUpperCase() : null;
+
+            // 1. Nếu để trống
+            if (val === '') {
+                isPrimaryKeyDuplicate = false;
+                inputEl.style.borderColor = '#cbd5e1';
+                btnSubmit.disabled = false;
+                btnSubmit.style.opacity = '1';
+                btnSubmit.style.cursor = 'pointer';
+
+                if (editingPkObject) {
+                    feedbackEl.style.display = 'block';
+                    feedbackEl.style.color = '#64748b';
+                    feedbackEl.innerHTML = `<i class="fa-solid fa-circle-info"></i> Đang để trống — Hệ thống sẽ giữ nguyên mã cũ <strong>[${originalPkVal}]</strong>.`;
+                } else {
+                    feedbackEl.style.display = 'none';
+                    feedbackEl.innerHTML = '';
+                }
+                return;
+            }
+
+            // 2. Nếu đang ở chế độ Sửa và mã giống hệt mã ban đầu của chính bản ghi đó
+            if (editingPkObject && val === originalPkVal) {
+                isPrimaryKeyDuplicate = false;
+                inputEl.style.borderColor = '#cbd5e1';
+                feedbackEl.style.display = 'block';
+                feedbackEl.style.color = '#64748b';
+                feedbackEl.innerHTML = `<i class="fa-solid fa-check"></i> Đang giữ nguyên mã hiện tại <strong>[${val}]</strong> (Có thể nhập mã mới để đổi).`;
+                btnSubmit.disabled = false;
+                btnSubmit.style.opacity = '1';
+                btnSubmit.style.cursor = 'pointer';
+                return;
+            }
+
+            // 3. Kiểm tra xem mã đã tồn tại trong danh sách bản ghi hiện tại (currentRows) chưa
+            const isExisted = currentRows.some(r => String(r[fieldName] ?? '').toUpperCase() === val);
+
+            if (isExisted) {
+                isPrimaryKeyDuplicate = true;
+                inputEl.style.borderColor = '#e11d48';
+                feedbackEl.style.display = 'block';
+                feedbackEl.style.color = '#e11d48';
+                feedbackEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Mã <strong>[${val}]</strong> đã tồn tại! Vui lòng chọn mã khác.`;
+                btnSubmit.disabled = true;
+                btnSubmit.style.opacity = '0.5';
+                btnSubmit.style.cursor = 'not-allowed';
+            } else {
+                isPrimaryKeyDuplicate = false;
+                inputEl.style.borderColor = '#0d8a5e';
+                feedbackEl.style.display = 'block';
+                feedbackEl.style.color = '#0d8a5e';
+                if (editingPkObject) {
+                    feedbackEl.innerHTML = `<i class="fa-solid fa-circle-check"></i> Mã mới <strong>[${val}]</strong> hợp lệ (Sẽ đổi từ [${originalPkVal}] &rarr; [${val}] và tự động cập nhật các khóa ngoại liên quan).`;
+                } else {
+                    feedbackEl.innerHTML = `<i class="fa-solid fa-circle-check"></i> Mã <strong>[${val}]</strong> hợp lệ, có thể sử dụng.`;
+                }
+                btnSubmit.disabled = false;
+                btnSubmit.style.opacity = '1';
+                btnSubmit.style.cursor = 'pointer';
+            }
+        };
 
         function renderDataTableRows() {
             const schema = DB_SCHEMAS[currentTableIndex];
@@ -1057,9 +1159,17 @@
                 }
                 el.value = val;
 
-                // Khóa ô khóa chính khi đang ở chế độ Sửa
+                // Xử lý ô Khóa chính khi bấm Sửa:
+                // - Cho phép sửa mã khóa chính đối với các bảng có 1 khóa chính (trừ tài khoản Admin tối cao ND001)
+                // - Chỉ khóa readOnly đối với bảng ChiTietHoaDon (khóa chính kép) hoặc dòng ND001
                 if (schema.pk.includes(f.name)) {
-                    el.readOnly = true;
+                    const isProtectedAdmin = (schema.table === 'NguoiDung' && String(val).toUpperCase() === 'ND001');
+                    if (schema.pk.length > 1 || isProtectedAdmin) {
+                        el.readOnly = true;
+                    } else {
+                        el.readOnly = false;
+                        validatePkFieldNow(el, f.name);
+                    }
                 }
             });
 
@@ -1067,7 +1177,7 @@
             btn.className = 'btn-submit editing-mode';
             document.getElementById('btn-submit-text').textContent = 'Cập Nhật Bản Ghi';
             document.getElementById('current-table-subtitle').innerHTML =
-                `Đang chỉnh sửa bản ghi khóa chính: <strong style="color:#2563eb;">${Object.values(editingPkObject).join(' - ')}</strong>`;
+                `Đang chỉnh sửa bản ghi khóa chính: <strong style="color:#2563eb;">${Object.values(editingPkObject).join(' - ')}</strong> (Có thể sửa cả mã khóa chính)`;
 
             window.scrollTo({ top: 0, behavior: 'smooth' });
         };
@@ -1079,6 +1189,12 @@
 
         async function handleFormSubmit(e) {
             e.preventDefault();
+
+            if (isPrimaryKeyDuplicate) {
+                showAlert('Mã khóa chính đã tồn tại! Vui lòng đổi mã khác.', false);
+                return;
+            }
+
             const schema = DB_SCHEMAS[currentTableIndex];
             const plainData = {};
             const formDataObj = new FormData();

@@ -88,6 +88,49 @@ class DatabaseFormController extends Controller
     }
 
     /**
+     * Tự động cập nhật dây chuyền (Cascade) khóa chính sang toàn bộ các bảng con có khóa ngoại tham chiếu
+     * và bảng personal_access_tokens (nếu đổi MaNguoiDung)
+     */
+    private static function cascadeUpdatePrimaryKey(string $table, string $pkCol, string $oldVal, string $newVal): int
+    {
+        $dbName = DB::connection()->getDatabaseName();
+
+        // Tìm tất cả các bảng và cột khóa ngoại trong CSDL đang tham chiếu tới ($table, $pkCol)
+        $references = DB::select("
+            SELECT TABLE_NAME as table_name, COLUMN_NAME as column_name
+            FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+            WHERE TABLE_SCHEMA = ?
+              AND REFERENCED_TABLE_NAME = ?
+              AND REFERENCED_COLUMN_NAME = ?
+        ", [$dbName, $table, $pkCol]);
+
+        $affectedChildren = 0;
+
+        // Tắt kiểm tra khóa ngoại tạm thời trong phiên kết nối để đổi cả bảng cha lẫn bảng con mượt mà
+        DB::statement('SET FOREIGN_KEY_CHECKS=0');
+        try {
+            foreach ($references as $ref) {
+                $childTable = $ref->table_name;
+                $childCol   = $ref->column_name;
+                $affectedChildren += DB::table($childTable)
+                    ->where($childCol, $oldVal)
+                    ->update([$childCol => $newVal]);
+            }
+
+            // Nếu đổi MaNguoiDung thì cập nhật luôn tokenable_id trong bảng personal_access_tokens
+            if ($table === 'NguoiDung' && $pkCol === 'MaNguoiDung' && Schema::hasTable('personal_access_tokens')) {
+                DB::table('personal_access_tokens')
+                    ->where('tokenable_id', $oldVal)
+                    ->update(['tokenable_id' => $newVal]);
+            }
+        } finally {
+            DB::statement('SET FOREIGN_KEY_CHECKS=1');
+        }
+
+        return $affectedChildren;
+    }
+
+    /**
      * 2. Thêm mới bản ghi (INSERT)
      */
     public function store(Request $request, string $table)
@@ -112,11 +155,20 @@ class DatabaseFormController extends Controller
             }
         }
 
-        // Nếu bảng có khóa chính đơn và người dùng bỏ trống -> Tự sinh mã tiếp theo
-        if (count($cfg['pk']) === 1 && $cfg['prefix']) {
+        // Xử lý khóa chính đơn: Nếu để trống thì tự sinh, nếu có nhập thì chuẩn hóa IN HOA viết liền (A-Z0-9) và kiểm tra trùng
+        if (count($cfg['pk']) === 1) {
             $pkCol = $cfg['pk'][0];
-            if (empty($payload[$pkCol])) {
+            if (empty($payload[$pkCol]) && $cfg['prefix']) {
                 $payload[$pkCol] = self::generateNextId($table, $pkCol, $cfg['prefix']);
+            } elseif (!empty($payload[$pkCol])) {
+                $cleanId = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) $payload[$pkCol]));
+                if ($cleanId === '') {
+                    return response()->json(['success' => false, 'message' => "Mã khóa chính {$pkCol} chỉ được chứa chữ cái không dấu và số viết liền (A-Z, 0-9)!"], 422);
+                }
+                if (DB::table($table)->where($pkCol, $cleanId)->exists()) {
+                    return response()->json(['success' => false, 'message' => "Mã khóa chính [{$cleanId}] đã tồn tại trong bảng {$table}! Vui lòng chọn mã khác."], 422);
+                }
+                $payload[$pkCol] = $cleanId;
             }
         }
 
@@ -147,7 +199,7 @@ class DatabaseFormController extends Controller
     }
 
     /**
-     * 3. Cập nhật bản ghi (UPDATE)
+     * 3. Cập nhật bản ghi (UPDATE) — Hỗ trợ đổi luôn cả Mã Khóa Chính và tự động cập nhật Khóa Ngoại ở các bảng con
      */
     public function update(Request $request, string $table)
     {
@@ -197,18 +249,72 @@ class DatabaseFormController extends Controller
             }
         }
 
+        DB::beginTransaction();
         try {
+            $cascadeMsg = '';
+
+            // Kiểm tra nếu người dùng thay đổi Mã Khóa Chính (trên bảng có khóa chính đơn)
+            if (count($cfg['pk']) === 1) {
+                $pkCol  = $cfg['pk'][0];
+                $oldPk  = (string) ($pkValues[$pkCol] ?? '');
+                $newRaw = isset($payload[$pkCol]) ? trim((string) $payload[$pkCol]) : $oldPk;
+
+                if ($newRaw === '') {
+                    $payload[$pkCol] = $oldPk;
+                } else {
+                    $newPk = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $newRaw));
+                    if ($newPk === '') {
+                        DB::rollBack();
+                        return response()->json(['success' => false, 'message' => "Mã khóa chính {$pkCol} chỉ được chứa chữ cái không dấu và số viết liền (A-Z, 0-9)!"], 422);
+                    }
+
+                    if ($newPk !== $oldPk) {
+                        // Bảo vệ mã ND001 của Admin tối cao
+                        if ($table === 'NguoiDung' && strtoupper($oldPk) === 'ND001') {
+                            DB::rollBack();
+                            return response()->json(['success' => false, 'message' => 'Mã ND001 là tài khoản Admin tối cao mặc định của hệ thống, không được phép đổi mã!'], 422);
+                        }
+
+                        // Kiểm tra trùng mã mới trong bảng hiện tại
+                        if (DB::table($table)->where($pkCol, $newPk)->exists()) {
+                            DB::rollBack();
+                            return response()->json(['success' => false, 'message' => "Mã khóa chính mới [{$newPk}] đã tồn tại trong bảng {$table}! Vui lòng chọn mã khác."], 422);
+                        }
+
+                        $payload[$pkCol] = $newPk;
+
+                        // Tắt kiểm tra khóa ngoại tạm thời, cập nhật cả bảng gốc và các bảng con
+                        DB::statement('SET FOREIGN_KEY_CHECKS=0');
+                        DB::table($table)->where($pkCol, $oldPk)->update($payload);
+                        DB::statement('SET FOREIGN_KEY_CHECKS=1');
+
+                        $updatedChildCount = self::cascadeUpdatePrimaryKey($table, $pkCol, $oldPk, $newPk);
+                        $cascadeMsg = " (Đã đổi mã [{$oldPk}] -> [{$newPk}] và tự động đồng bộ {$updatedChildCount} bản ghi khóa ngoại liên quan)";
+
+                        DB::commit();
+                        return response()->json([
+                            'success' => true,
+                            'message' => "Đã cập nhật bản ghi trong bảng {$table} thành công!{$cascadeMsg}"
+                        ]);
+                    }
+                }
+            }
+
+            // Trường hợp giữ nguyên khóa chính, chỉ cập nhật các cột thông thường
             $query = DB::table($table);
             foreach ($cfg['pk'] as $pkCol) {
                 $query->where($pkCol, $pkValues[$pkCol] ?? null);
             }
             $query->update($payload);
 
+            DB::commit();
             return response()->json([
                 'success' => true,
                 'message' => "Đã cập nhật bản ghi trong bảng {$table} thành công!"
             ]);
         } catch (\Exception $e) {
+            DB::rollBack();
+            DB::statement('SET FOREIGN_KEY_CHECKS=1');
             return response()->json([
                 'success' => false,
                 'message' => 'Lỗi MySQL: ' . $e->getMessage()
