@@ -211,6 +211,24 @@ class KhuyenMaiController extends Controller
     {
         $userDangNhap = auth()->user();
 
+        $maKhuyenMaiInput = $request->input('MaKhuyenMai');
+        $cleanMaKM = null;
+        if ($maKhuyenMaiInput !== null && trim((string) $maKhuyenMaiInput) !== '') {
+            $cleanMaKM = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) $maKhuyenMaiInput));
+            if ($cleanMaKM === '') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Mã khuyến mãi chỉ được chứa chữ cái không dấu và số viết liền (A-Z, 0-9)!'
+                ], 422);
+            }
+            if (KhuyenMai::where('MaKhuyenMai', $cleanMaKM)->exists()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Mã khuyến mãi [{$cleanMaKM}] đã tồn tại trên hệ thống! Vui lòng chọn mã khác."
+                ], 422);
+            }
+        }
+
         $request->validate([
             'TenKhuyenMai'         => 'required|string|max:255',
             'MoTa'                 => 'nullable|string',
@@ -241,7 +259,7 @@ class KhuyenMaiController extends Controller
             ? $request->GiaTri
             : ($request->GiaTriToiDa ?? 0);
 
-        $km = KhuyenMai::create([
+        $createData = [
             'MaNguoiDung'          => $maNguoiDungLuu,
             'TenKhuyenMai'         => $request->TenKhuyenMai,
             'MoTa'                 => $request->MoTa,
@@ -254,7 +272,13 @@ class KhuyenMaiController extends Controller
             'NgayBatDau'           => Carbon::parse($request->NgayBatDau)->format('Y-m-d H:i:s'),
             'NgayKetThuc'          => Carbon::parse($request->NgayKetThuc)->format('Y-m-d H:i:s'),
             'TrangThai'            => 'DangApDung',
-        ]);
+        ];
+
+        if ($cleanMaKM) {
+            $createData['MaKhuyenMai'] = $cleanMaKM;
+        }
+
+        $km = KhuyenMai::create($createData);
 
         // PHÁT THÔNG BÁO NẾU MÃ ĐƯỢC TẶNG RIÊNG CHO KHÁCH HÀNG CÁ NHÂN
         if ($maNguoiDungLuu) {
@@ -290,7 +314,7 @@ class KhuyenMaiController extends Controller
     }
 
     /**
-     * 4. DÀNH CHO ADMIN / QUẢN LÝ: Cập nhật thông tin mã khuyến mãi
+     * 4. DÀNH CHO ADMIN / QUẢN LÝ: Cập nhật thông tin mã khuyến mãi (Hỗ trợ đổi luôn cả MaKhuyenMai)
      */
     public function update(Request $request, $maKhuyenMai)
     {
@@ -305,6 +329,23 @@ class KhuyenMaiController extends Controller
             $nd = $km->nguoiDung;
             if (!$km->MaNguoiDung || ($nd && $nd->VaiTro !== 'QuanLySan') || ($nd && $nd->MaCumSan !== $userDangNhap->MaCumSan)) {
                 return response()->json(['success' => false, 'message' => 'Bạn chỉ có quyền chỉnh sửa mã khuyến mãi thuộc Cụm sân của mình!'], 403);
+            }
+        }
+
+        $oldMaKM = $km->MaKhuyenMai;
+        $newMaKMInput = $request->input('MaKhuyenMai');
+        $newMaKM = $oldMaKM;
+
+        if ($newMaKMInput !== null && trim((string) $newMaKMInput) !== '') {
+            $cleanNewKM = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) $newMaKMInput));
+            if ($cleanNewKM === '') {
+                return response()->json(['success' => false, 'message' => 'Mã khuyến mãi chỉ được chứa chữ cái không dấu và số viết liền (A-Z, 0-9)!'], 422);
+            }
+            if ($cleanNewKM !== $oldMaKM) {
+                if (KhuyenMai::where('MaKhuyenMai', $cleanNewKM)->exists()) {
+                    return response()->json(['success' => false, 'message' => "Mã khuyến mãi mới [{$cleanNewKM}] đã tồn tại! Vui lòng chọn mã khác."], 422);
+                }
+                $newMaKM = $cleanNewKM;
             }
         }
 
@@ -332,7 +373,7 @@ class KhuyenMaiController extends Controller
             ? $request->GiaTri
             : ($request->GiaTriToiDa ?? 0);
 
-        $km->update([
+        $updatePayload = [
             'MaNguoiDung'          => $maNguoiDungLuu,
             'TenKhuyenMai'         => $request->TenKhuyenMai,
             'MoTa'                 => $request->MoTa,
@@ -344,16 +385,35 @@ class KhuyenMaiController extends Controller
             'NgayBatDau'           => Carbon::parse($request->NgayBatDau)->format('Y-m-d H:i:s'),
             'NgayKetThuc'          => Carbon::parse($request->NgayKetThuc)->format('Y-m-d H:i:s'),
             'TrangThai'            => $request->TrangThai,
-        ]);
+        ];
 
-        broadcast(new \App\Events\AdminDataUpdated())->toOthers();
-        broadcast(new \App\Events\SystemDataUpdated())->toOthers();
+        \Illuminate\Support\Facades\DB::beginTransaction();
+        try {
+            if ($newMaKM !== $oldMaKM) {
+                $updatePayload['MaKhuyenMai'] = $newMaKM;
+                \Illuminate\Support\Facades\DB::statement('SET FOREIGN_KEY_CHECKS=0');
+                \Illuminate\Support\Facades\DB::table('KhuyenMai')->where('MaKhuyenMai', $oldMaKM)->update($updatePayload);
+                \Illuminate\Support\Facades\DB::table('HoaDonDatSan')->where('MaKhuyenMai', $oldMaKM)->update(['MaKhuyenMai' => $newMaKM]);
+                \Illuminate\Support\Facades\DB::statement('SET FOREIGN_KEY_CHECKS=1');
+                $km = KhuyenMai::find($newMaKM);
+            } else {
+                $km->update($updatePayload);
+            }
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Cập nhật khuyến mãi thành công!',
-            'data'    => $km
-        ]);
+            \Illuminate\Support\Facades\DB::commit();
+            broadcast(new \App\Events\AdminDataUpdated())->toOthers();
+            broadcast(new \App\Events\SystemDataUpdated())->toOthers();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Cập nhật khuyến mãi thành công!',
+                'data'    => $km
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\DB::rollBack();
+            \Illuminate\Support\Facades\DB::statement('SET FOREIGN_KEY_CHECKS=1');
+            return response()->json(['success' => false, 'message' => 'Lỗi cập nhật: ' . $e->getMessage()], 422);
+        }
     }
 
     /**

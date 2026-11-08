@@ -986,27 +986,45 @@ function openSanBongModalById(maSB) {
 }
 
 async function openSanBongModal(sb = null) {
-    // Đảm bảo nút Lưu luôn được mở khóa khi bật Modal
     const btnSave = document.querySelector('#sanbong-modal .btn-primary');
     if (btnSave) {
         btnSave.disabled = false;
+        btnSave.style.opacity = '1';
+        btnSave.style.cursor = 'pointer';
         btnSave.textContent = 'Lưu Sân Bóng';
     }
+
+    adminModalPkDuplicateMap['SanBong'] = false;
+    await preloadAdminModalExistingCodes('SanBong');
 
     try {
         const res = await fetch(`${API_BASE_URL}/loai-san`);
         const loaiSans = (await res.json()).data || [];
         document.getElementById('sb-loaisan').innerHTML = loaiSans.map(ls => {
             const maLS = ls.MaLoaiSan || ls.ID;
-            return `<option value="${maLS}">${ls.TenLoaiSan}</option>`;
+            return `<option value="${maLS}">${ls.TenLoaiSan} (${maLS})</option>`;
         }).join('');
     } catch (e) {
         console.error('Lỗi tải loại sân:', e);
     }
 
+    const maInput = document.getElementById('sb-ma');
+    const maFeedback = document.getElementById('sb-ma-feedback');
+    if (maFeedback) {
+        maFeedback.style.display = 'none';
+        maFeedback.innerHTML = '';
+    }
+
     if (sb) {
+        const maSB = sb.MaSanBong || sb.ID;
         document.getElementById('sanbong-modal-title').textContent = 'Chỉnh sửa Sân Con';
-        document.getElementById('sb-id').value = sb.MaSanBong || sb.ID;
+        document.getElementById('sb-id').value = maSB;
+        if (maInput) {
+            maInput.value = maSB;
+            maInput.readOnly = false;
+            maInput.style.background = '#ffffff';
+            maInput.style.borderColor = '#cbd5e1';
+        }
         document.getElementById('sb-ten').value = sb.TenSan || '';
         document.getElementById('sb-loaisan').value = sb.MaLoaiSan || sb.ID_LoaiSan;
         if (document.getElementById('sb-dientich')) document.getElementById('sb-dientich').value = sb.DienTich || '';
@@ -1017,6 +1035,12 @@ async function openSanBongModal(sb = null) {
     } else {
         document.getElementById('sanbong-modal-title').textContent = 'Thêm Sân Con';
         document.getElementById('sb-id').value = '';
+        if (maInput) {
+            maInput.value = '';
+            maInput.readOnly = false;
+            maInput.style.background = '#ffffff';
+            maInput.style.borderColor = '#cbd5e1';
+        }
         document.getElementById('sb-ten').value = '';
         if (document.getElementById('sb-dientich')) document.getElementById('sb-dientich').value = '';
         if (document.getElementById('sb-kichthuoc')) document.getElementById('sb-kichthuoc').value = '';
@@ -1031,8 +1055,14 @@ function closeSanBongModal() {
 }
 
 async function saveSanBong() {
+    if (adminModalPkDuplicateMap['SanBong']) {
+        alert('Mã sân con đã tồn tại! Vui lòng chọn mã khác hoặc để trống.');
+        return;
+    }
+
     const btn = document.querySelector('#sanbong-modal .btn-primary');
     const sbId = document.getElementById('sb-id').value;
+    const customMaSB = document.getElementById('sb-ma')?.value.trim().toUpperCase() || '';
     const tenSan = document.getElementById('sb-ten').value.trim();
     const idLoaiSan = document.getElementById('sb-loaisan').value;
     const dienTich = document.getElementById('sb-dientich')?.value || null;
@@ -1058,6 +1088,10 @@ async function saveSanBong() {
         TrangThai: trangThai
     };
 
+    if (customMaSB !== '') {
+        payload.MaSanBong = customMaSB;
+    }
+
     const url = sbId ? `${API_BASE_URL}/san-bong/${sbId}` : `${API_BASE_URL}/san-bong`;
     const method = sbId ? 'PUT' : 'POST';
 
@@ -1070,6 +1104,7 @@ async function saveSanBong() {
         const data = await response.json();
 
         if (response.ok && data.success) {
+            adminModalPkCache['SanBong'] = null; // Xóa cache để lần mở sau nạp danh sách mã mới nhất
             closeSanBongModal();
             loadSanBongTheoCum(currentCumSanId);
         } else {
@@ -1512,12 +1547,29 @@ function updateCumSanModalImagePreview(imageUrl = null, isNewFile = false) {
 async function openEditCumSanModal(cs) {
     document.getElementById('cumsan-alert').style.display = 'none';
     document.getElementById('cumsan-modal-title').textContent = 'Chỉnh sửa Cụm Sân';
-    editCumSanId = cs.MaCumSan || cs.ID; // Đánh dấu là đang sửa
+    editCumSanId = cs.MaCumSan || cs.ID;
+    adminModalPkDuplicateMap['CumSan'] = false;
+    await preloadAdminModalExistingCodes('CumSan');
 
     const btnSave = document.querySelector('#cumsan-modal .btn-primary');
     if (btnSave) {
         btnSave.textContent = 'Lưu Cụm Sân';
         btnSave.disabled = false;
+        btnSave.style.opacity = '1';
+        btnSave.style.cursor = 'pointer';
+    }
+
+    const maInput = document.getElementById('cs-ma');
+    const maFeedback = document.getElementById('cs-ma-feedback');
+    if (maInput) {
+        maInput.value = editCumSanId;
+        maInput.readOnly = false;
+        maInput.style.background = '#ffffff';
+        maInput.style.borderColor = '#cbd5e1';
+    }
+    if (maFeedback) {
+        maFeedback.style.display = 'none';
+        maFeedback.innerHTML = '';
     }
 
     await loadPhuongDropdown();
@@ -1531,7 +1583,6 @@ async function openEditCumSanModal(cs) {
     document.getElementById('cs-phuong').value = cs.MaPhuong || cs.ID_Phuong;
     document.getElementById('cs-hinhanh').value = '';
 
-    // Hiển thị hình ảnh đang có của Cụm Sân ngay dưới ô chọn tệp
     updateCumSanModalImagePreview(cs.HinhAnh || null, false);
 
     document.getElementById('cumsan-modal').style.display = 'flex';
@@ -1543,14 +1594,30 @@ async function openCumSanModal() {
     document.getElementById('cumsan-modal-title').textContent = 'Thêm Cụm Sân Mới';
 
     editCumSanId = null;
+    adminModalPkDuplicateMap['CumSan'] = false;
+    await preloadAdminModalExistingCodes('CumSan');
 
     const btnSave = document.querySelector('#cumsan-modal .btn-primary');
     if (btnSave) {
         btnSave.textContent = 'Lưu Cụm Sân';
         btnSave.disabled = false;
+        btnSave.style.opacity = '1';
+        btnSave.style.cursor = 'pointer';
+    }
+
+    const maInput = document.getElementById('cs-ma');
+    const maFeedback = document.getElementById('cs-ma-feedback');
+    if (maInput) {
+        maInput.value = '';
+        maInput.readOnly = false;
+        maInput.style.background = '#ffffff';
+        maInput.style.borderColor = '#cbd5e1';
+    }
+    if (maFeedback) {
+        maFeedback.style.display = 'none';
+        maFeedback.innerHTML = '';
     }
     
-    // Clear dữ liệu cũ
     document.getElementById('cs-ten').value = '';
     document.getElementById('cs-diachi').value = '';
     document.getElementById('cs-vido').value = '';
@@ -1558,7 +1625,6 @@ async function openCumSanModal() {
     document.getElementById('cs-hinhanh').value = '';
     updateCumSanModalImagePreview(null);
     
-    // Sinh dropdown giờ chuẩn 24h và set mặc định
     generateTimeOptions('cs-giomo', '06:00');
     generateTimeOptions('cs-giodong', '22:00');
     
@@ -1567,15 +1633,14 @@ async function openCumSanModal() {
     document.getElementById('cumsan-modal').style.display = 'flex';
 }
 
-// Tắt Modal
-function closeCumSanModal() {
-    document.getElementById('cumsan-modal').style.display = 'none';
-}
-
 // Lưu dữ liệu (Thêm mới & Cập nhật)
 async function saveCumSan() {
+    if (adminModalPkDuplicateMap['CumSan']) {
+        return showCumSanAlert('Mã cụm sân đã tồn tại! Vui lòng chọn mã khác hoặc để trống.', false);
+    }
+
     const btn = document.querySelector('#cumsan-modal .btn-primary');
-    
+    const customMaCS = document.getElementById('cs-ma')?.value.trim().toUpperCase() || '';
     const tenCumSan = document.getElementById('cs-ten').value.trim();
     const idPhuong = document.getElementById('cs-phuong').value;
     const diaChi = document.getElementById('cs-diachi').value.trim();
@@ -1585,7 +1650,6 @@ async function saveCumSan() {
     const gioDong = document.getElementById('cs-giodong').value;
     const hinhAnhFile = document.getElementById('cs-hinhanh').files[0];
 
-    // Validate đầy đủ trước khi gửi
     if (!tenCumSan || !diaChi || !viDo || !kinhDo || !gioMo || !gioDong) {
         return showCumSanAlert('Vui lòng điền đầy đủ thông tin bắt buộc (bao gồm cả Vĩ độ và Kinh độ)!', false);
     }
@@ -1599,6 +1663,9 @@ async function saveCumSan() {
 
     const targetEditId = editCumSanId;
     const formData = new FormData();
+    if (customMaCS !== '') {
+        formData.append('MaCumSan', customMaCS);
+    }
     formData.append('TenCumSan', tenCumSan);
     formData.append('MaPhuong', idPhuong);
     formData.append('ID_Phuong', idPhuong);
@@ -1628,6 +1695,17 @@ async function saveCumSan() {
         const data = await response.json();
 
         if (response.ok && data.success) {
+            adminModalPkCache['CumSan'] = null;
+            const finalCumSanId = data.new_id || targetEditId;
+
+            // Đồng bộ lại sessionStorage nếu Quản lý sân vừa đổi Mã Cụm Sân của chính mình
+            const curUser = JSON.parse(sessionStorage.getItem('dn_football_user') || 'null');
+            if (curUser && targetEditId && String(curUser.MaCumSan || curUser.ID_CumSan) === String(targetEditId) && finalCumSanId) {
+                curUser.MaCumSan = finalCumSanId;
+                curUser.ID_CumSan = finalCumSanId;
+                sessionStorage.setItem('dn_football_user', JSON.stringify(curUser));
+            }
+
             showCumSanAlert(targetEditId ? 'Cập nhật thành công!' : 'Thêm mới thành công!', true);
             
             setTimeout(() => {
@@ -1636,7 +1714,7 @@ async function saveCumSan() {
                 btn.textContent = 'Lưu Cụm Sân';
                 
                 if (targetEditId) {
-                    renderCumSanDetail(targetEditId);
+                    renderCumSanDetail(finalCumSanId);
                 } else {
                     loadCumSanCards();
                 }
@@ -1647,7 +1725,6 @@ async function saveCumSan() {
                 errMsg = Object.values(data.errors)[0][0];
             }
             showCumSanAlert(errMsg, false);
-            // Khôi phục lại nút bấm khi Server báo lỗi Validate
             btn.disabled = false;
             btn.textContent = 'Lưu Cụm Sân';
         }
@@ -1656,6 +1733,11 @@ async function saveCumSan() {
         btn.disabled = false;
         btn.textContent = 'Lưu Cụm Sân';
     }
+}
+
+// Tắt Modal
+function closeCumSanModal() {
+    document.getElementById('cumsan-modal').style.display = 'none';
 }
 
 // ======================================================
@@ -4665,6 +4747,12 @@ async function renderTongQuan() {
     if (menuLink) menuLink.classList.add('active');
 
     const contentArea = document.querySelector('.admin-content');
+    contentArea.innerHTML = `
+        <div style="text-align: center; padding: 80px 20px; color: var(--text-muted);">
+            <i class="fa-solid fa-spinner fa-spin" style="font-size: 2.2rem; color: var(--primary); margin-bottom: 12px;"></i>
+            <div style="font-size: 0.95rem; font-weight: 500;">Đang tải dữ liệu tổng quan từ hệ thống...</div>
+        </div>
+    `;
     
     let selectCumSanHtml = '';
     let selectStaffCumSanHtml = '';
@@ -8339,6 +8427,7 @@ window.togglePromoTargetScope = function() {
 
 window.openPromoModal = function(km = null) {
     editingPromoId = km ? km.MaKhuyenMai : null;
+    isPromoCodeModalDuplicate = false;
 
     const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user')) || {};
     const isAdmin = currentUser.VaiTro === 'Admin';
@@ -8363,7 +8452,6 @@ window.openPromoModal = function(km = null) {
         currentScope = km.pham_vi || (!km.MaNguoiDung ? 'HE_THONG' : (km.nguoi_dung?.VaiTro === 'QuanLySan' ? 'CUM_SAN' : 'KHACH_HANG'));
     }
 
-    // Chỉ Admin mới được chọn 3 phạm vi (bao gồm tặng riêng cá nhân); Quản lý sân mặc định cố định là Cụm sân của mình
     let scopeSectionHtml = '';
     if (isAdmin) {
         const clusterOpts = adminClusterManagersCache.map(ql => {
@@ -8407,7 +8495,6 @@ window.openPromoModal = function(km = null) {
             </div>
         `;
     } else {
-        // Quản lý sân: Mặc định khóa cứng phạm vi là Cụm sân của mình
         scopeSectionHtml = `
             <div class="form-group">
                 <label>Phạm vi áp dụng khuyến mãi</label>
@@ -8425,6 +8512,16 @@ window.openPromoModal = function(km = null) {
                 <i class="fa-solid fa-xmark" style="cursor: pointer;" onclick="document.getElementById('admin-promo-modal').style.display='none'"></i>
             </div>
             <div class="modal-body">
+                <div class="form-group">
+                    <label>Mã khuyến mãi (Voucher Code) <span style="color: var(--primary); font-size: 0.8rem; font-weight: 600;">[Tùy chọn A-Z0-9 hoặc Bỏ trống tự sinh]</span></label>
+                    <input type="text" id="km-ma" class="form-control" maxlength="36"
+                           placeholder="Bỏ trống tự sinh (VD: KM001) hoặc nhập KMHE2026, GIAM50K..."
+                           value="${km ? km.MaKhuyenMai : ''}"
+                           style="font-family:monospace; font-weight:700; text-transform:uppercase;"
+                           oninput="validatePromoCodeModalRealtime(this)">
+                    <div id="km-ma-feedback" style="display: none; font-size: 0.8rem; font-weight: 600; margin-top: 4px; line-height: 1.4;"></div>
+                </div>
+
                 <div class="form-group">
                     <label>Tên chương trình khuyến mãi <span style="color:red;">*</span></label>
                     <input type="text" id="km-ten" class="form-control" placeholder="VD: Giảm 10% đặt sân cuối tuần" value="${km ? km.TenKhuyenMai : ''}">
@@ -8498,7 +8595,72 @@ window.openPromoModal = function(km = null) {
     modal.style.display = 'flex';
 };
 
+let isPromoCodeModalDuplicate = false;
+
+window.validatePromoCodeModalRealtime = function(inputEl) {
+    const cleaned = inputEl.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (inputEl.value !== cleaned) {
+        inputEl.value = cleaned;
+    }
+
+    const val = inputEl.value.trim().toUpperCase();
+    const originalId = editingPromoId ? String(editingPromoId).toUpperCase() : null;
+    const feedbackEl = document.getElementById('km-ma-feedback');
+    const btnSave = document.getElementById('btn-save-promo');
+
+    if (val === '' || (originalId && val === originalId)) {
+        isPromoCodeModalDuplicate = false;
+        inputEl.style.borderColor = '#cbd5e1';
+        if (feedbackEl) {
+            feedbackEl.style.display = 'none';
+            feedbackEl.innerHTML = '';
+        }
+        if (btnSave) {
+            btnSave.disabled = false;
+            btnSave.style.opacity = '1';
+            btnSave.style.cursor = 'pointer';
+        }
+        return;
+    }
+
+    const existedInLocal = (allAdminPromos || []).some(p => String(p.MaKhuyenMai || '').toUpperCase() === val);
+    const existedInCache = (adminModalPkCache['KhuyenMai'] || []).includes(val);
+
+    if (existedInLocal || existedInCache) {
+        isPromoCodeModalDuplicate = true;
+        inputEl.style.borderColor = '#e11d48';
+        if (feedbackEl) {
+            feedbackEl.style.display = 'block';
+            feedbackEl.style.color = '#e11d48';
+            feedbackEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Mã khuyến mãi <strong>[${val}]</strong> đã tồn tại! Vui lòng chọn mã khác.`;
+        }
+        if (btnSave) {
+            btnSave.disabled = true;
+            btnSave.style.opacity = '0.5';
+            btnSave.style.cursor = 'not-allowed';
+        }
+    } else {
+        isPromoCodeModalDuplicate = false;
+        inputEl.style.borderColor = '#0d8a5e';
+        if (feedbackEl) {
+            feedbackEl.style.display = 'block';
+            feedbackEl.style.color = '#0d8a5e';
+            feedbackEl.innerHTML = `<i class="fa-solid fa-circle-check"></i> Mã khuyến mãi <strong>[${val}]</strong> hợp lệ, có thể sử dụng.`;
+        }
+        if (btnSave) {
+            btnSave.disabled = false;
+            btnSave.style.opacity = '1';
+            btnSave.style.cursor = 'pointer';
+        }
+    }
+};
+
 window.savePromoAdmin = async function() {
+    if (isPromoCodeModalDuplicate) {
+        return showSystemModal('Trùng mã khuyến mãi', 'Mã khuyến mãi bạn nhập đã tồn tại! Vui lòng chọn mã khác.', 'error');
+    }
+
+    const customMaKM = document.getElementById('km-ma')?.value.trim().toUpperCase() || '';
     const ten = document.getElementById('km-ten')?.value.trim();
     const phamVi = document.getElementById('km-phamvi')?.value || 'CUM_SAN';
     const loai = document.getElementById('km-loai')?.value || 'PhanTram';
@@ -8538,26 +8700,33 @@ window.savePromoAdmin = async function() {
     const method = editingPromoId ? 'PUT' : 'POST';
 
     try {
+        const payload = {
+            loai_doi_tuong: phamVi,
+            TenKhuyenMai: ten,
+            MaNguoiDung: maND,
+            LoaiKhuyenMai: loai,
+            GiaTri: giaTri,
+            GiaTriToiDa: toiDa,
+            GiaTriHoaDonToiThieu: toiThieu,
+            SoLuong: soLuong,
+            NgayBatDau: batDau + ' 00:00:00',
+            NgayKetThuc: ketThuc + ' 23:59:59',
+            TrangThai: trangThai,
+            MoTa: moTa
+        };
+
+        if (customMaKM !== '') {
+            payload.MaKhuyenMai = customMaKM;
+        }
+
         const res = await fetch(url, {
             method,
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                loai_doi_tuong: phamVi,
-                TenKhuyenMai: ten,
-                MaNguoiDung: maND,
-                LoaiKhuyenMai: loai,
-                GiaTri: giaTri,
-                GiaTriToiDa: toiDa,
-                GiaTriHoaDonToiThieu: toiThieu,
-                SoLuong: soLuong,
-                NgayBatDau: batDau + ' 00:00:00',
-                NgayKetThuc: ketThuc + ' 23:59:59',
-                TrangThai: trangThai,
-                MoTa: moTa
-            })
+            body: JSON.stringify(payload)
         });
         const data = await res.json();
         if (res.ok && data.success) {
+            adminModalPkCache['KhuyenMai'] = null;
             document.getElementById('admin-promo-modal').style.display = 'none';
             showSystemModal('Thành công', data.message, 'success');
             loadAdminPromosData();
@@ -9212,4 +9381,108 @@ window.executeAdminReschedule = async function() {
             btn.innerHTML = 'Đồng ý dời lịch';
         }
     }
+};
+
+// ======================================================
+// BỘ KIỂM TRA TRÙNG MÃ KHÓA CHÍNH REALTIME TRÊN MODAL ADMIN
+// (Giống hệt cơ chế của table-forms.html: Tự động viết hoa A-Z0-9, báo đỏ nếu đã tồn tại, báo xanh nếu hợp lệ)
+// ======================================================
+let adminModalPkCache = {
+    CumSan: null,
+    SanBong: null,
+    KhuyenMai: null
+};
+let adminModalPkTimer = null;
+let adminModalPkDuplicateMap = {};
+
+async function preloadAdminModalExistingCodes(table) {
+    try {
+        const res = await fetch(`${API_BASE_URL}/db-manager/data?table=${encodeURIComponent(table)}`);
+        const json = await res.json();
+        if (json.success && Array.isArray(json.rows)) {
+            const pkColMap = { CumSan: 'MaCumSan', SanBong: 'MaSanBong', KhuyenMai: 'MaKhuyenMai' };
+            const col = pkColMap[table];
+            adminModalPkCache[table] = json.rows.map(r => String(r[col] ?? '').toUpperCase());
+        }
+    } catch (e) {
+        console.error('Lỗi tải danh sách mã kiểm tra trùng:', e);
+    }
+}
+
+// Cập nhật hàm validateAdminModalCodeRealtime để bỏ qua chính mã hiện tại khi đang ở chế độ Sửa
+window.validateAdminModalCodeRealtime = function(inputEl, table, feedbackId, saveBtnId) {
+    if (!inputEl || inputEl.readOnly || inputEl.disabled) return;
+
+    const cleaned = inputEl.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (inputEl.value !== cleaned) {
+        inputEl.value = cleaned;
+    }
+
+    const runCheck = async () => {
+        if (!adminModalPkCache[table]) {
+            await preloadAdminModalExistingCodes(table);
+        }
+        const existingList = adminModalPkCache[table] || [];
+        const feedbackEl = document.getElementById(feedbackId);
+        const btnSave = document.getElementById(saveBtnId) || inputEl.closest('.modal-content')?.querySelector('.btn-primary');
+        const val = inputEl.value.trim().toUpperCase();
+
+        // Lấy mã gốc hiện tại nếu đang ở chế độ Sửa
+        let currentEditingId = null;
+        if (table === 'CumSan' && editCumSanId) {
+            currentEditingId = String(editCumSanId).toUpperCase();
+        } else if (table === 'SanBong') {
+            const sbHiddenId = document.getElementById('sb-id')?.value;
+            if (sbHiddenId) currentEditingId = String(sbHiddenId).toUpperCase();
+        }
+
+        // Nếu để trống hoặc giữ nguyên mã cũ của chính nó -> Hợp lệ
+        if (val === '' || (currentEditingId && val === currentEditingId)) {
+            adminModalPkDuplicateMap[table] = false;
+            inputEl.style.borderColor = '#cbd5e1';
+            if (feedbackEl) {
+                feedbackEl.style.display = 'none';
+                feedbackEl.innerHTML = '';
+            }
+            if (btnSave) {
+                btnSave.disabled = false;
+                btnSave.style.opacity = '1';
+                btnSave.style.cursor = 'pointer';
+            }
+            return;
+        }
+
+        const isDuplicate = existingList.includes(val);
+        if (isDuplicate) {
+            adminModalPkDuplicateMap[table] = true;
+            inputEl.style.borderColor = '#e11d48';
+            if (feedbackEl) {
+                feedbackEl.style.display = 'block';
+                feedbackEl.style.color = '#e11d48';
+                feedbackEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Mã <strong>[${val}]</strong> đã tồn tại! Vui lòng chọn mã khác.`;
+            }
+            if (btnSave) {
+                btnSave.disabled = true;
+                btnSave.style.opacity = '0.5';
+                btnSave.style.cursor = 'not-allowed';
+            }
+        } else {
+            adminModalPkDuplicateMap[table] = false;
+            inputEl.style.borderColor = '#0d8a5e';
+            if (feedbackEl) {
+                feedbackEl.style.display = 'block';
+                feedbackEl.style.color = '#0d8a5e';
+                feedbackEl.innerHTML = `<i class="fa-solid fa-circle-check"></i> Mã <strong>[${val}]</strong> hợp lệ, có thể sử dụng.`;
+            }
+            if (btnSave) {
+                btnSave.disabled = false;
+                btnSave.style.opacity = '1';
+                btnSave.style.cursor = 'pointer';
+            }
+        }
+    };
+
+    runCheck();
+    if (adminModalPkTimer) clearTimeout(adminModalPkTimer);
+    adminModalPkTimer = setTimeout(runCheck, 200);
 };

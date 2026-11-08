@@ -76,71 +76,9 @@
             </header>
 
             <div class="admin-content">
-                <div class="page-title" style="margin-bottom: 20px;">Tổng quan hệ thống</div>
-                
-                <div class="stat-grid">
-                    <div class="stat-card">
-                        <div class="stat-title">Doanh thu hôm nay</div>
-                        <div class="stat-value">2.500.000đ</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-title">Tổng Booking (Ngày)</div>
-                        <div class="stat-value">24</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-title">Khách hàng mới</div>
-                        <div class="stat-value">5</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-title">Yêu cầu chờ xử lý</div>
-                        <div class="stat-value" style="color: #eab308;">3</div>
-                    </div>
-                </div>
-
-                <div class="chart-layout">
-                    <div class="panel">
-                        <div class="panel-header">Biểu đồ doanh thu 7 ngày</div>
-                        <canvas id="revenueChart" height="100"></canvas>
-                    </div>
-                </div>
-
-                <div class="panel" style="margin-top: 24px;">
-                    <div class="panel-header">
-                        Booking mới nhất
-                        <button class="btn-outline-sm">Xem tất cả</button>
-                    </div>
-                    <div class="table-responsive">
-                        <table class="admin-table">
-                            <thead>
-                                <tr>
-                                    <th>Mã Đặt</th>
-                                    <th>Khách hàng</th>
-                                    <th>Sân</th>
-                                    <th>Ngày & Giờ</th>
-                                    <th>Trạng thái</th>
-                                    <th>Hành động</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td>#BK001</td>
-                                    <td>Nguyễn Văn A</td>
-                                    <td>Sân Đa Phước - Sân 1</td>
-                                    <td>31/08/2026<br><span class="text-sm text-muted">19:00 - 20:00</span></td>
-                                    <td><span class="badge badge-success">Đã xác nhận</span></td>
-                                    <td><button class="action-btn">Chi tiết</button></td>
-                                </tr>
-                                <tr>
-                                    <td>#BK002</td>
-                                    <td>Trần Thị B</td>
-                                    <td>Sân An Phúc - Sân A</td>
-                                    <td>31/08/2026<br><span class="text-sm text-muted">18:00 - 19:00</span></td>
-                                    <td><span class="badge badge-warning">Chờ xác nhận</span></td>
-                                    <td><button class="action-btn">Chi tiết</button></td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                <div style="text-align: center; padding: 80px 20px; color: var(--text-muted);">
+                    <i class="fa-solid fa-spinner fa-spin" style="font-size: 2.2rem; color: var(--primary); margin-bottom: 12px;"></i>
+                    <div style="font-size: 0.95rem; font-weight: 500;">Đang tải dữ liệu hệ thống...</div>
                 </div>
             </div>
         </main>
@@ -261,6 +199,11 @@
             <div id="cumsan-alert" class="modal-alert"></div>
             
             <div class="modal-body">
+                <div class="form-group" id="group-cs-ma">
+                    <label>Mã cụm sân <span style="color: var(--primary); font-size: 0.8rem; font-weight: 600;">[Tùy chọn A-Z0-9 hoặc Bỏ trống tự sinh]</span></label>
+                    <input type="text" id="cs-ma" class="form-control" maxlength="36" placeholder="Bỏ trống tự sinh (VD: CS001) hoặc nhập CSDAPHUOC..." style="font-family: monospace; font-weight: 700; text-transform: uppercase;" oninput="validateAdminModalCodeRealtime(this, 'CumSan', 'cs-ma-feedback', 'btn-save-cumsan')">
+                    <div id="cs-ma-feedback" style="display: none; font-size: 0.8rem; font-weight: 600; margin-top: 4px; line-height: 1.4;"></div>
+                </div>
                 <div class="form-group">
                     <label>Tên cụm sân <span style="color: red;">*</span></label>
                     <input type="text" id="cs-ten" class="form-control" placeholder="VD: Cụm sân Đa Phước">
@@ -303,7 +246,7 @@
             
             <div class="modal-footer">
                 <button type="button" class="btn-outline-sm" onclick="closeCumSanModal()">Hủy</button>
-                <button type="button" class="btn-primary" onclick="saveCumSan()">Lưu Cụm Sân</button>
+                <button type="button" id="btn-save-cumsan" class="btn-primary" onclick="saveCumSan()">Lưu Cụm Sân</button>
             </div>
         </div>
     </div>
@@ -317,6 +260,11 @@
             </div>
             <div class="modal-body">
                 <input type="hidden" id="sb-id">
+                <div class="form-group" id="group-sb-ma">
+                    <label>Mã sân con <span style="color: var(--primary); font-size: 0.8rem; font-weight: 600;">[Tùy chọn A-Z0-9 hoặc Bỏ trống tự sinh]</span></label>
+                    <input type="text" id="sb-ma" class="form-control" maxlength="36" placeholder="Bỏ trống tự sinh (VD: SB001) hoặc nhập SBDP1..." style="font-family: monospace; font-weight: 700; text-transform: uppercase;" oninput="validateAdminModalCodeRealtime(this, 'SanBong', 'sb-ma-feedback', 'btn-save-sanbong')">
+                    <div id="sb-ma-feedback" style="display: none; font-size: 0.8rem; font-weight: 600; margin-top: 4px; line-height: 1.4;"></div>
+                </div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
                     <div class="form-group">
                         <label>Tên sân (VD: Sân 1, Sân A) <span style="color: red;">*</span></label>
@@ -353,7 +301,7 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn-outline-sm" onclick="closeSanBongModal()">Hủy</button>
-                <button type="button" class="btn-primary" onclick="saveSanBong()">Lưu Sân Bóng</button>
+                <button type="button" id="btn-save-sanbong" class="btn-primary" onclick="saveSanBong()">Lưu Sân Bóng</button>
             </div>
         </div>
     </div>
