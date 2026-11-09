@@ -295,6 +295,83 @@ class DashboardController extends Controller
             }
         }
 
+        // 8. DỮ LIỆU TIMELINE GIẢI ĐẤU CỦA CỤM SÂN (DÀNH CHO QUẢN LÝ SÂN & NHÂN VIÊN)
+        $tournamentsTimeline = [];
+        if ($idCumSan !== 'all') {
+            $giaiDaus = GiaiDau::with([
+                    'nguoiDung:MaNguoiDung,HoTen,SoDienThoai',
+                    'cumSan:MaCumSan,TenCumSan',
+                    'datSans' => function ($q) {
+                        $q->where('TrangThai', '!=', 'DaHuy')
+                          ->with(['sanBong:MaSanBong,TenSan', 'khungGio:MaKhungGio,GioBatDau,GioKetThuc'])
+                          ->orderBy('NgayDa', 'asc')
+                          ->orderBy('MaKhungGio', 'asc');
+                    }
+                ])
+                ->where('MaCumSan', $idCumSan)
+                ->whereIn('TrangThai', ['ChoDuyet', 'DaDuyet', 'HetHan', 'HoanThanh'])
+                ->orderBy('NgayBatDau', 'asc')
+                ->get();
+
+            foreach ($giaiDaus as $gd) {
+                $activeBookings = $gd->datSans ?? collect([]);
+
+                // Nếu giải đã chuyển sang HetHan nhưng thực tế khách không đặt bất kỳ trận nào -> Bỏ qua
+                if ($gd->TrangThai === 'HetHan' && $activeBookings->isEmpty()) {
+                    continue;
+                }
+
+                $chiTietNgayDa = [];
+                $danhSachSanThamGia = [];
+
+                foreach ($activeBookings->groupBy('NgayDa') as $ngayDa => $cacTranTrongNgay) {
+                    $dsTran = [];
+                    foreach ($cacTranTrongNgay as $tran) {
+                        $tenSan = $tran->sanBong ? $tran->sanBong->TenSan : 'Sân bóng';
+                        $maSan  = $tran->MaSanBong;
+                        if ($maSan && !isset($danhSachSanThamGia[$maSan])) {
+                            $danhSachSanThamGia[$maSan] = $tenSan;
+                        }
+                        $khungGioStr = $tran->khungGio
+                            ? substr($tran->khungGio->GioBatDau, 0, 5) . ' - ' . substr($tran->khungGio->GioKetThuc, 0, 5)
+                            : '';
+
+                        $dsTran[] = [
+                            'ma_dat_san'  => $tran->MaDatSan,
+                            'ma_san_bong' => $maSan,
+                            'ten_san'     => $tenSan,
+                            'khung_gio'   => $khungGioStr,
+                            'trang_thai'  => $tran->TrangThai,
+                            'tong_tien'   => (float) $tran->TongTien,
+                            'tien_coc'    => (float) $tran->TienCoc,
+                        ];
+                    }
+
+                    $chiTietNgayDa[$ngayDa] = [
+                        'ngay_da' => $ngayDa,
+                        'so_tran' => count($dsTran),
+                        'cac_san' => array_values(array_unique(array_column($dsTran, 'ten_san'))),
+                        'ds_tran' => $dsTran,
+                    ];
+                }
+
+                $tournamentsTimeline[] = [
+                    'ma_giai_dau'        => $gd->MaGiaiDau,
+                    'ten_giai_dau'       => $gd->TenGiaiDau,
+                    'ngay_bat_dau'       => $gd->NgayBatDau,
+                    'ngay_ket_thuc'      => $gd->NgayKetThuc,
+                    'trang_thai_giai'    => $gd->TrangThai,
+                    'da_dat_san'         => $activeBookings->isNotEmpty(),
+                    'tong_so_tran'       => $activeBookings->count(),
+                    'so_tran_hoan_thanh' => $activeBookings->where('TrangThai', 'HoanThanh')->count(),
+                    'khach_hang'         => $gd->nguoiDung ? $gd->nguoiDung->HoTen : 'Khách hàng',
+                    'so_dien_thoai'      => $gd->nguoiDung ? $gd->nguoiDung->SoDienThoai : '',
+                    'cac_san_su_dung'    => $danhSachSanThamGia,
+                    'ngay_co_tran'       => $chiTietNgayDa,
+                ];
+            }
+        }
+
         return response()->json([
             'success' => true,
             'data' => [
@@ -305,6 +382,7 @@ class DashboardController extends Controller
                 'cho_duyet'                  => $tongChoDuyet,
                 'so_san_quen_chot'           => $soSanQuenChot,
                 'chart'                      => $doanhThuChart,
+                'tournaments_timeline'       => $tournamentsTimeline,
                 'staff_performance'          => [
                     'thang_nam'     => sprintf('%02d-%04d', $filterMonth, $filterYear),
                     'days_in_month' => $daysInMonth,

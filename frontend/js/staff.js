@@ -855,6 +855,9 @@ async function renderManHinhThuNgan() {
                     </div>
                 </div>
             </div>
+
+            <!-- TIMELINE LỊCH TRÌNH GIẢI ĐẤU TẠI CƠ SỞ (DÀNH CHO NHÂN VIÊN) -->
+            <div id="staff-tournament-timeline-wrapper" style="margin-bottom: 24px;"></div>
             
             <!-- KHU VỰC CHỌN SÂN -->
             <div class="panel" style="padding: 24px; border-top: 4px solid var(--primary);">
@@ -992,6 +995,10 @@ async function updateStaffDashboardStats() {
                 }
             }
         });
+
+        if (typeof initAndRenderTournamentTimeline === 'function') {
+            initAndRenderTournamentTimeline('staff-tournament-timeline-wrapper', data.tournaments_timeline || []);
+        }
 
     } catch (e) { 
         console.error('Lỗi load biểu đồ nhân viên', e); 
@@ -4471,4 +4478,596 @@ window.executeAdminReschedule = async function() {
             btn.innerHTML = 'Đồng ý dời lịch';
         }
     }
+};
+
+// ======================================================
+// MODULE: LỊCH TRÌNH TIMELINE GIẢI ĐẤU (GANTT TIMELINE CHO QUẢN LÝ SÂN & NHÂN VIÊN)
+// ======================================================
+let clusterTournamentTimelineState = {
+    containerId: '',
+    rawList: [],
+    startDateYmd: '',
+    rangeDays: 14,          // 14 ngày hoặc 30 ngày
+    statusFilter: 'ACTIVE', // 'ALL' | 'ACTIVE' (Đang & Sắp diễn ra) | 'ONGOING' | 'UPCOMING' | 'BOOKED' | 'WAITING'
+    pitchFilter: 'ALL',     // 'ALL' hoặc MaSanBong
+    dayModeFilter: 'ALL',   // 'ALL' (Tất cả các ngày) | 'WEEKEND' (Chỉ hiện giải có lịch cuối tuần T7-CN)
+    searchKeyword: ''
+};
+
+const TOURNAMENT_PALETTES = [
+    { bg: '#10b981', light: '#ecfdf5', border: '#6ee7b7', text: '#065f46', badgeBg: '#d1fae5' }, // Emerald
+    { bg: '#3b82f6', light: '#eff6ff', border: '#93c5fd', text: '#1e40af', badgeBg: '#dbeafe' }, // Royal Blue
+    { bg: '#f59e0b', light: '#fffbeb', border: '#fcd34d', text: '#92400e', badgeBg: '#fef3c7' }, // Amber
+    { bg: '#8b5cf6', light: '#f5f3ff', border: '#c4b5fd', text: '#5b21b6', badgeBg: '#ede9fe' }, // Violet
+    { bg: '#ec4899', light: '#fdf2f8', border: '#f9a8d4', text: '#9d174d', badgeBg: '#fce7f3' }, // Rose
+    { bg: '#06b6d4', light: '#ecfeff', border: '#67e8f9', text: '#155e75', badgeBg: '#cffafe' }  // Cyan
+];
+
+function getLocalTodayYmdTimeline() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+window.initAndRenderTournamentTimeline = function(containerId, tournamentsData) {
+    const wrap = document.getElementById(containerId);
+    if (!wrap) return;
+
+    clusterTournamentTimelineState.containerId = containerId;
+    clusterTournamentTimelineState.rawList = Array.isArray(tournamentsData) ? tournamentsData : [];
+
+    if (!clusterTournamentTimelineState.startDateYmd) {
+        // Mặc định lùi 1 ngày so với hôm nay để dễ nhìn bối cảnh giải đang diễn ra
+        const d = new Date();
+        d.setDate(d.getDate() - 1);
+        const pad = n => n < 10 ? '0' + n : n;
+        clusterTournamentTimelineState.startDateYmd = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    }
+
+    renderTournamentTimelinePanel();
+};
+
+window.shiftTournamentTimelineDays = function(offset) {
+    if (offset === 0) {
+        const d = new Date();
+        d.setDate(d.getDate() - 1);
+        const pad = n => n < 10 ? '0' + n : n;
+        clusterTournamentTimelineState.startDateYmd = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    } else {
+        const base = new Date(clusterTournamentTimelineState.startDateYmd + 'T00:00:00');
+        base.setDate(base.getDate() + offset);
+        const pad = n => n < 10 ? '0' + n : n;
+        clusterTournamentTimelineState.startDateYmd = `${base.getFullYear()}-${pad(base.getMonth() + 1)}-${pad(base.getDate())}`;
+    }
+    renderTournamentTimelineGridOnly();
+};
+
+window.handleTournamentTimelineFilterChange = function(field, value) {
+    clusterTournamentTimelineState[field] = value;
+    renderTournamentTimelineGridOnly();
+};
+
+function renderTournamentTimelinePanel() {
+    const wrap = document.getElementById(clusterTournamentTimelineState.containerId);
+    if (!wrap) return;
+
+    // Tổng hợp danh sách tất cả các Sân con có xuất hiện trong các giải đấu để đưa vào Bộ lọc Sân
+    const pitchMap = {};
+    clusterTournamentTimelineState.rawList.forEach(gd => {
+        if (gd.cac_san_su_dung) {
+            Object.entries(gd.cac_san_su_dung).forEach(([maSan, tenSan]) => {
+                pitchMap[maSan] = tenSan;
+            });
+        }
+    });
+
+    const pitchOptionsHtml = Object.entries(pitchMap).map(([ma, ten]) =>
+        `<option value="${ma}" ${clusterTournamentTimelineState.pitchFilter === ma ? 'selected' : ''}>${ten}</option>`
+    ).join('');
+
+    // Style chuẩn cho các thẻ <select> và <input> trên thanh bộ lọc để không bị cắt chân chữ (g, y, p) và không bị che chữ bên phải
+    const filterSelectStyle = `height: 38px; padding: 0 32px 0 12px; line-height: 1.4; font-size: 0.85rem; font-weight: 600; color: #1e293b; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; cursor: pointer; width: auto;`;
+
+    wrap.innerHTML = `
+        <div class="panel" style="border-top: 4px solid #0d8a5e; overflow: hidden;">
+            <!-- Header & Thanh điều hướng thời gian -->
+            <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; padding: 18px 22px; background: #ffffff; border-bottom: 1px solid #e2e8f0;">
+                <div>
+                    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                        <span style="width: 34px; height: 34px; border-radius: 9px; background: #ecfdf5; color: #059669; display: inline-flex; align-items: center; justify-content: center; font-size: 1rem;">
+                            <i class="fa-solid fa-trophy"></i>
+                        </span>
+                        <div>
+                            <h3 style="margin: 0; font-size: 1.08rem; font-weight: 700; color: #0f172a;">Lịch trình Giải đấu tại Cơ sở (Gantt Timeline)</h3>
+                            <p style="margin: 2px 0 0 0; font-size: 0.82rem; color: #64748b; font-weight: 400;">
+                                Theo dõi trực quan các giải đấu diễn ra liên tục, cách ngày hoặc đá cuối tuần. Nhấp vào từng thanh giải đấu để xem chi tiết ca đá.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Điều hướng thời gian -->
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: #f8fafc; padding: 6px 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                    <button type="button" class="btn-outline-sm" style="height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 5px; background: #fff; font-size: 0.84rem;" onclick="shiftTournamentTimelineDays(-7)" title="Lùi 7 ngày">
+                        <i class="fa-solid fa-chevron-left"></i> 7 ngày
+                    </button>
+                    <button type="button" class="btn-outline-sm" style="height: 36px; padding: 0 14px; display: inline-flex; align-items: center; background: #fff; color: var(--primary); border-color: #86efac; font-weight: 700; font-size: 0.84rem;" onclick="shiftTournamentTimelineDays(0)">
+                        Hôm nay
+                    </button>
+                    <input type="date" id="tl-start-date-picker" class="form-control" style="width: 150px; height: 36px; padding: 0 10px; line-height: 1.4; font-size: 0.84rem; font-weight: 600; background: #fff; box-sizing: border-box;" value="${clusterTournamentTimelineState.startDateYmd}" onchange="handleTournamentTimelineFilterChange('startDateYmd', this.value)">
+                    <button type="button" class="btn-outline-sm" style="height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 5px; background: #fff; font-size: 0.84rem;" onclick="shiftTournamentTimelineDays(7)" title="Tiến 7 ngày">
+                        7 ngày <i class="fa-solid fa-chevron-right"></i>
+                    </button>
+                    <select class="form-control" style="${filterSelectStyle} height: 36px; min-width: 148px;" onchange="handleTournamentTimelineFilterChange('rangeDays', Number(this.value))">
+                        <option value="14" ${clusterTournamentTimelineState.rangeDays === 14 ? 'selected' : ''}>Khung 14 ngày</option>
+                        <option value="21" ${clusterTournamentTimelineState.rangeDays === 21 ? 'selected' : ''}>Khung 21 ngày</option>
+                        <option value="30" ${clusterTournamentTimelineState.rangeDays === 30 ? 'selected' : ''}>Khung 30 ngày</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Thanh Bộ lọc đa năng (Đã bỏ icon ở các lựa chọn và bỏ mục Sắp khai mạc) -->
+            <div style="padding: 14px 22px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: 1;">
+                    <!-- 1. Tìm kiếm tên giải / khách / SĐT -->
+                    <div style="position: relative; min-width: 240px; flex: 1; max-width: 290px;">
+                        <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 0.85rem;"></i>
+                        <input type="text" class="form-control" style="width: 100%; height: 38px; padding: 0 12px 0 34px; line-height: 1.4; font-size: 0.85rem; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box;" placeholder="Tìm tên giải, mã #GD, tên khách, SĐT..." value="${clusterTournamentTimelineState.searchKeyword}" oninput="handleTournamentTimelineFilterChange('searchKeyword', this.value)">
+                    </div>
+
+                    <!-- 2. Lọc theo Trạng thái tiến độ -->
+                    <select class="form-control" style="${filterSelectStyle} min-width: 215px;" onchange="handleTournamentTimelineFilterChange('statusFilter', this.value)">
+                        <option value="ACTIVE" ${clusterTournamentTimelineState.statusFilter === 'ACTIVE' ? 'selected' : ''}>Đang & Sắp diễn ra</option>
+                        <option value="ALL" ${clusterTournamentTimelineState.statusFilter === 'ALL' ? 'selected' : ''}>Tất cả giải đấu</option>
+                        <option value="ONGOING" ${clusterTournamentTimelineState.statusFilter === 'ONGOING' ? 'selected' : ''}>Đang diễn ra</option>
+                        <option value="BOOKED" ${clusterTournamentTimelineState.statusFilter === 'BOOKED' ? 'selected' : ''}>Đã đặt lịch sân (Đã cọc)</option>
+                        <option value="WAITING" ${clusterTournamentTimelineState.statusFilter === 'WAITING' ? 'selected' : ''}>Chờ duyệt / Chờ đặt lịch</option>
+                    </select>
+
+                    <!-- 3. Lọc theo Sân con tham gia -->
+                    <select class="form-control" style="${filterSelectStyle} min-width: 165px;" onchange="handleTournamentTimelineFilterChange('pitchFilter', this.value)">
+                        <option value="ALL">Tất cả sân con</option>
+                        ${pitchOptionsHtml}
+                    </select>
+
+                    <!-- 4. Lọc theo kiểu lịch đá -->
+                    <select class="form-control" style="${filterSelectStyle} min-width: 235px;" onchange="handleTournamentTimelineFilterChange('dayModeFilter', this.value)">
+                        <option value="ALL" ${clusterTournamentTimelineState.dayModeFilter === 'ALL' ? 'selected' : ''}>Mọi kiểu lịch thi đấu</option>
+                        <option value="WEEKEND" ${clusterTournamentTimelineState.dayModeFilter === 'WEEKEND' ? 'selected' : ''}>Giải có đá Cuối tuần (T7/CN)</option>
+                        <option value="INTERMITTENT" ${clusterTournamentTimelineState.dayModeFilter === 'INTERMITTENT' ? 'selected' : ''}>Giải đá cách ngày / ngắt quãng</option>
+                    </select>
+                </div>
+
+                <!-- Chú thích ký hiệu (Legend) -->
+                <div style="display: flex; align-items: center; gap: 14px; font-size: 0.78rem; color: #475569; flex-wrap: wrap;">
+                    <span style="display: inline-flex; align-items: center; gap: 6px;">
+                        <span style="width: 18px; height: 10px; border-radius: 99px; background: #10b981; display: inline-block;"></span>
+                        <strong>Ngày có trận thi đấu</strong>
+                    </span>
+                    <span style="display: inline-flex; align-items: center; gap: 6px;">
+                        <span style="width: 22px; height: 6px; border-radius: 99px; background: #e2e8f0; border: 1px dashed #64748b; display: inline-block;"></span>
+                        <span>Ngày nghỉ giữa giải (Cách ngày)</span>
+                    </span>
+                    <span style="display: inline-flex; align-items: center; gap: 6px;">
+                        <span style="width: 18px; height: 10px; border-radius: 99px; background: repeating-linear-gradient(45deg, #fef3c7, #fef3c7 4px, #fde68a 4px, #fde68a 8px); border: 1px solid #f59e0b; display: inline-block;"></span>
+                        <span>Chờ khách đặt khung giờ</span>
+                    </span>
+                </div>
+            </div>
+
+            <!-- Lưới Gantt Chart Timeline -->
+            <div id="tournament-gantt-grid-container"></div>
+        </div>
+    `;
+
+    renderTournamentTimelineGridOnly();
+}
+
+function renderTournamentTimelineGridOnly() {
+    const gridContainer = document.getElementById('tournament-gantt-grid-container');
+    if (!gridContainer) return;
+
+    const picker = document.getElementById('tl-start-date-picker');
+    if (picker && picker.value !== clusterTournamentTimelineState.startDateYmd) {
+        picker.value = clusterTournamentTimelineState.startDateYmd;
+    }
+
+    const todayYmd = getLocalTodayYmdTimeline();
+    const rangeDays = clusterTournamentTimelineState.rangeDays || 14;
+    const baseDate = new Date(clusterTournamentTimelineState.startDateYmd + 'T00:00:00');
+    const pad = n => n < 10 ? '0' + n : n;
+
+    // 1. Tạo mảng cột ngày trên trục ngang
+    const dateCols = [];
+    for (let i = 0; i < rangeDays; i++) {
+        const d = new Date(baseDate);
+        d.setDate(baseDate.getDate() + i);
+        const ymd = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        const dayOfWeek = d.getDay(); // 0: CN, 6: T7
+        const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
+        const isToday = (ymd === todayYmd);
+
+        dateCols.push({
+            index: i,
+            ymd: ymd,
+            ddmm: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`,
+            dayLabel: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][dayOfWeek],
+            isWeekend: isWeekend,
+            isToday: isToday
+        });
+    }
+
+    const windowStartYmd = dateCols[0].ymd;
+    const windowEndYmd = dateCols[dateCols.length - 1].ymd;
+
+    // 2. Lọc danh sách giải đấu theo 4 Bộ lọc + Giao thoa với khung thời gian đang xem
+    const kw = clusterTournamentTimelineState.searchKeyword.toLowerCase().trim();
+    const stFilter = clusterTournamentTimelineState.statusFilter;
+    const pFilter = clusterTournamentTimelineState.pitchFilter;
+    const modeFilter = clusterTournamentTimelineState.dayModeFilter;
+
+    const filteredTournaments = clusterTournamentTimelineState.rawList.filter(gd => {
+        // Giao thoa với cửa sổ ngày đang xem
+        const isOverlappingWindow = (gd.ngay_ket_thuc >= windowStartYmd && gd.ngay_bat_dau <= windowEndYmd);
+        if (!isOverlappingWindow) return false;
+
+        // Lọc từ khóa
+        if (kw !== '') {
+            const matchText =
+                String(gd.ten_giai_dau || '').toLowerCase().includes(kw) ||
+                String(gd.ma_giai_dau || '').toLowerCase().includes(kw) ||
+                (`gd-${gd.ma_giai_dau}`).toLowerCase().includes(kw) ||
+                String(gd.khach_hang || '').toLowerCase().includes(kw) ||
+                String(gd.so_dien_thoai || '').toLowerCase().includes(kw);
+            if (!matchText) return false;
+        }
+
+        // Phân loại trạng thái thực tế
+        const isOngoing = (gd.ngay_bat_dau <= todayYmd && gd.ngay_ket_thuc >= todayYmd && gd.trang_thai_giai !== 'HoanThanh');
+        const isFinished = (gd.ngay_ket_thuc < todayYmd || gd.trang_thai_giai === 'HoanThanh');
+
+        if (stFilter === 'ACTIVE' && isFinished) return false;
+        if (stFilter === 'ONGOING' && !isOngoing) return false;
+        if (stFilter === 'BOOKED' && !gd.da_dat_san) return false;
+        if (stFilter === 'WAITING' && gd.da_dat_san) return false;
+
+        // Lọc theo sân con
+        if (pFilter !== 'ALL') {
+            if (!gd.cac_san_su_dung || !gd.cac_san_su_dung[pFilter]) return false;
+        }
+
+        // Lọc theo kiểu lịch đá (Cuối tuần / Ngắt quãng)
+        const matchDates = Object.keys(gd.ngay_co_tran || {}).sort();
+        if (modeFilter === 'WEEKEND') {
+            const hasWeekendMatch = matchDates.some(dStr => {
+                const dayNum = new Date(dStr + 'T00:00:00').getDay();
+                return dayNum === 0 || dayNum === 6;
+            });
+            const spanHasWeekend = !gd.da_dat_san && dateCols.some(c => c.isWeekend && c.ymd >= gd.ngay_bat_dau && c.ymd <= gd.ngay_ket_thuc);
+            if (!hasWeekendMatch && !spanHasWeekend) return false;
+        } else if (modeFilter === 'INTERMITTENT') {
+            if (matchDates.length < 2) return false;
+            const dStart = new Date(gd.ngay_bat_dau + 'T00:00:00');
+            const dEnd = new Date(gd.ngay_ket_thuc + 'T00:00:00');
+            const totalSpanDays = Math.round((dEnd - dStart) / 86400000) + 1;
+            if (matchDates.length >= totalSpanDays) return false;
+        }
+
+        return true;
+    });
+
+    if (filteredTournaments.length === 0) {
+        gridContainer.innerHTML = `
+            <div style="padding: 45px 20px; text-align: center; color: #64748b; background: #ffffff;">
+                <i class="fa-regular fa-calendar-xmark" style="font-size: 2.4rem; color: #cbd5e1; margin-bottom: 10px; display: block;"></i>
+                <div style="font-weight: 700; color: #334155; font-size: 0.96rem; margin-bottom: 4px;">Không có giải đấu nào trong khoảng thời gian / bộ lọc này</div>
+                <div style="font-size: 0.84rem;">Bạn có thể bấm nút <strong>7 ngày</strong> tiếp theo hoặc đổi bộ lọc sang <strong>Tất cả giải đấu</strong> để kiểm tra.</div>
+            </div>
+        `;
+        return;
+    }
+
+    const colMinWidth = rangeDays <= 14 ? 64 : 50;
+
+    // 3. Vẽ Header các cột ngày + Cột cố định Thông tin giải đấu bên trái
+    let html = `
+        <div style="width: 100%; overflow-x: auto; overflow-y: auto; max-height: 460px; position: relative; background: #ffffff;">
+            <div style="min-width: ${300 + rangeDays * colMinWidth}px; position: relative;">
+                
+                <!-- HÀNG TIÊU ĐỀ NGÀY (STICKY TOP) -->
+                <div style="display: grid; grid-template-columns: 300px repeat(${rangeDays}, minmax(${colMinWidth}px, 1fr)); position: sticky; top: 0; z-index: 15; background: #f8fafc; border-bottom: 2px solid #cbd5e1;">
+                    <div style="position: sticky; left: 0; z-index: 20; background: #f1f5f9; padding: 12px 16px; font-size: 0.78rem; font-weight: 800; color: #334155; text-transform: uppercase; letter-spacing: 0.04em; border-right: 2px solid #cbd5e1; display: flex; align-items: center; justify-content: space-between;">
+                        <span>THÔNG TIN GIẢI ĐẤU (${filteredTournaments.length})</span>
+                        <span style="font-size: 0.72rem; color: #64748b; font-weight: 600;">Mã / Khách</span>
+                    </div>
+                    ${dateCols.map(col => {
+                        let thBg = col.isWeekend ? '#fffbeb' : '#f8fafc';
+                        let dayColor = col.isWeekend ? '#d97706' : '#64748b';
+                        let dateColor = '#0f172a';
+                        let topBadge = '';
+
+                        if (col.isToday) {
+                            thBg = '#ecfdf5';
+                            dayColor = '#059669';
+                            dateColor = '#059669';
+                            topBadge = `<span style="display: block; font-size: 0.62rem; background: #10b981; color: #fff; border-radius: 4px; padding: 1px 4px; margin-bottom: 2px; font-weight: 800;">HÔM NAY</span>`;
+                        }
+
+                        return `
+                            <div style="background: ${thBg}; border-right: 1px solid #e2e8f0; padding: 8px 4px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; ${col.isToday ? 'border-bottom: 3px solid #10b981;' : ''}">
+                                ${topBadge}
+                                <span style="font-size: 0.73rem; font-weight: 700; color: ${dayColor};">${col.dayLabel}</span>
+                                <span style="font-size: 0.84rem; font-weight: 800; color: ${dateColor}; margin-top: 1px;">${col.ddmm}</span>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+    `;
+
+    // 4. Vẽ từng Hàng Giải đấu
+    filteredTournaments.forEach((gd, rowIdx) => {
+        const palette = TOURNAMENT_PALETTES[rowIdx % TOURNAMENT_PALETTES.length];
+        const startFmt = gd.ngay_bat_dau.split('-').reverse().slice(0, 2).join('/');
+        const endFmt = gd.ngay_ket_thuc.split('-').reverse().slice(0, 2).join('/');
+        const sanNames = Object.values(gd.cac_san_su_dung || {});
+        const sanText = sanNames.length > 0 ? sanNames.join(', ') : 'Chưa chọn sân con';
+
+        // Badge trạng thái của giải
+        let statusTag = '';
+        if (gd.trang_thai_giai === 'ChoDuyet') {
+            statusTag = `<span style="background:#fef3c7; color:#b45309; border:1px solid #fde68a; padding:2px 7px; border-radius:99px; font-size:0.7rem; font-weight:700; white-space:nowrap;">Chờ duyệt</span>`;
+        } else if (!gd.da_dat_san) {
+            statusTag = `<span style="background:#fff7ed; color:#ea580c; border:1px solid #fed7aa; padding:2px 7px; border-radius:99px; font-size:0.7rem; font-weight:700; white-space:nowrap;">Chờ đặt lịch</span>`;
+        } else if (gd.ngay_bat_dau <= todayYmd && gd.ngay_ket_thuc >= todayYmd) {
+            statusTag = `<span style="background:#dcfce7; color:#15803d; border:1px solid #86efac; padding:2px 7px; border-radius:99px; font-size:0.7rem; font-weight:700; white-space:nowrap;">Đang diễn ra</span>`;
+        } else if (gd.ngay_bat_dau > todayYmd) {
+            statusTag = `<span style="background:#dbeafe; color:#1d4ed8; border:1px solid #93c5fd; padding:2px 7px; border-radius:99px; font-size:0.7rem; font-weight:700; white-space:nowrap;">Sắp diễn ra</span>`;
+        } else {
+            statusTag = `<span style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; padding:2px 7px; border-radius:99px; font-size:0.7rem; font-weight:700; white-space:nowrap;">Đã kết thúc</span>`;
+        }
+
+        const spanStartIdx = dateCols.findIndex(c => c.ymd >= gd.ngay_bat_dau);
+        let spanEndIdx = -1;
+        for (let i = dateCols.length - 1; i >= 0; i--) {
+            if (dateCols[i].ymd <= gd.ngay_ket_thuc) {
+                spanEndIdx = i;
+                break;
+            }
+        }
+
+        // Gom các ngày có trận đấu thực tế liền kề nhau thành các Thanh phân đoạn (Contiguous Segments)
+        const segments = [];
+        if (gd.da_dat_san) {
+            let currentSeg = null;
+            dateCols.forEach((col, idx) => {
+                let dayInfo = gd.ngay_co_tran ? gd.ngay_co_tran[col.ymd] : null;
+                if (dayInfo && pFilter !== 'ALL') {
+                    const filteredMatches = (dayInfo.ds_tran || []).filter(t => String(t.ma_san_bong) === String(pFilter));
+                    dayInfo = filteredMatches.length > 0
+                        ? { ...dayInfo, so_tran: filteredMatches.length, ds_tran: filteredMatches }
+                        : null;
+                }
+
+                if (dayInfo) {
+                    if (!currentSeg) {
+                        currentSeg = { startIdx: idx, endIdx: idx, totalMatches: dayInfo.so_tran, daysCount: 1 };
+                    } else {
+                        currentSeg.endIdx = idx;
+                        currentSeg.totalMatches += dayInfo.so_tran;
+                        currentSeg.daysCount++;
+                    }
+                } else {
+                    if (currentSeg) {
+                        segments.push(currentSeg);
+                        currentSeg = null;
+                    }
+                }
+            });
+            if (currentSeg) segments.push(currentSeg);
+        }
+
+        let spanTrackHtml = '';
+        if (spanStartIdx !== -1 && spanEndIdx !== -1 && spanEndIdx >= spanStartIdx) {
+            const leftPct = (spanStartIdx / rangeDays) * 100;
+            const widthPct = ((spanEndIdx - spanStartIdx + 1) / rangeDays) * 100;
+
+            if (gd.da_dat_san) {
+                spanTrackHtml = `
+                    <div onclick="openTournamentTimelineDetailModal('${gd.ma_giai_dau}')"
+                         title="${gd.ten_giai_dau} (${startFmt} - ${endFmt}): Đường nối các ngày diễn ra giải"
+                         style="position: absolute; left: calc(${leftPct}% + 4px); width: calc(${widthPct}% - 8px); top: 50%; transform: translateY(-50%); height: 12px; background: ${palette.light}; border: 1.5px dashed ${palette.border}; border-radius: 999px; z-index: 2; cursor: pointer;">
+                    </div>
+                `;
+            } else {
+                spanTrackHtml = `
+                    <div onclick="openTournamentTimelineDetailModal('${gd.ma_giai_dau}')"
+                         title="${gd.ten_giai_dau} (${startFmt} - ${endFmt}) - Chưa chọn khung giờ đặt sân"
+                         style="position: absolute; left: calc(${leftPct}% + 4px); width: calc(${widthPct}% - 8px); top: 50%; transform: translateY(-50%); height: 30px; background: repeating-linear-gradient(45deg, #fffbeb, #fffbeb 6px, #fef3c7 6px, #fef3c7 12px); border: 1.5px dashed #f59e0b; border-radius: 999px; z-index: 3; display: flex; align-items: center; justify-content: center; padding: 0 12px; color: #b45309; font-size: 0.76rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; box-shadow: 0 2px 4px rgba(245, 158, 11, 0.1);">
+                        <i class="fa-solid fa-clock" style="margin-right: 5px;"></i> ${gd.ten_giai_dau} (${startFmt} - ${endFmt} &bull; Chờ đặt lịch sân)
+                    </div>
+                `;
+            }
+        }
+
+        const segmentsHtml = segments.map(seg => {
+            const leftPct = (seg.startIdx / rangeDays) * 100;
+            const widthPct = ((seg.endIdx - seg.startIdx + 1) / rangeDays) * 100;
+            const segLabel = seg.daysCount > 1
+                ? `${gd.ten_giai_dau} (${seg.totalMatches} trận)`
+                : `${seg.totalMatches} trận`;
+
+            return `
+                <div onclick="openTournamentTimelineDetailModal('${gd.ma_giai_dau}')"
+                     title="Bấm để xem chi tiết: ${gd.ten_giai_dau} — ${seg.totalMatches} trận (${sanText})"
+                     style="position: absolute; left: calc(${leftPct}% + 4px); width: calc(${widthPct}% - 8px); top: 50%; transform: translateY(-50%); height: 32px; background: ${palette.bg}; color: #ffffff; border-radius: 999px; z-index: 4; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 0 10px; font-size: 0.78rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; box-shadow: 0 3px 8px rgba(15, 23, 42, 0.14); transition: transform 0.15s ease, filter 0.15s ease;"
+                     onmouseover="this.style.filter='brightness(1.08)'; this.style.transform='translateY(-50%) scale(1.01)';"
+                     onmouseout="this.style.filter='brightness(1)'; this.style.transform='translateY(-50%) scale(1)';">
+                    <i class="fa-solid fa-futbol" style="font-size: 0.72rem; opacity: 0.9;"></i>
+                    <span style="overflow: hidden; text-overflow: ellipsis;">${segLabel}</span>
+                </div>
+            `;
+        }).join('');
+
+        html += `
+            <div style="display: grid; grid-template-columns: 300px 1fr; border-bottom: 1px solid #f1f5f9; min-height: 68px; background: #ffffff; transition: background 0.15s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='#ffffff'">
+                <!-- Cột Trái Cố Định -->
+                <div onclick="openTournamentTimelineDetailModal('${gd.ma_giai_dau}')" style="position: sticky; left: 0; z-index: 10; background: inherit; padding: 10px 16px; border-right: 2px solid #cbd5e1; border-left: 4px solid ${palette.bg}; cursor: pointer; display: flex; flex-direction: column; justify-content: center; gap: 4px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                        <div style="font-weight: 700; color: #0f172a; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${gd.ten_giai_dau}">
+                            ${gd.ten_giai_dau}
+                        </div>
+                        ${statusTag}
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.76rem; color: #64748b; gap: 6px;">
+                        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="Trưởng giải: ${gd.khach_hang} (${gd.so_dien_thoai})">
+                            <i class="fa-regular fa-user" style="color: ${palette.bg};"></i> ${gd.khach_hang} (${gd.so_dien_thoai})
+                        </span>
+                        <span style="font-family: monospace; font-weight: 700; color: #475569; background: #f1f5f9; padding: 1px 6px; border-radius: 4px; flex-shrink: 0;">#GD-${gd.ma_giai_dau}</span>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.74rem; color: #475569;">
+                        <span><i class="fa-regular fa-calendar" style="color: ${palette.bg};"></i> ${startFmt} &rarr; ${endFmt}</span>
+                        <span style="font-weight: 700; color: ${palette.text};">${gd.tong_so_tran} trận (${sanNames.length > 0 ? sanNames.join(', ') : 'Chưa đặt'})</span>
+                    </div>
+                </div>
+
+                <!-- Cột Phải: Vùng Lưới Ngày & Thanh Gantt Bar -->
+                <div style="position: relative; display: grid; grid-template-columns: repeat(${rangeDays}, minmax(${colMinWidth}px, 1fr));">
+                    ${dateCols.map(col => {
+                        let cellBg = col.isWeekend ? 'rgba(254, 243, 199, 0.28)' : 'transparent';
+                        if (col.isToday) cellBg = 'rgba(16, 185, 129, 0.08)';
+                        return `<div style="border-right: 1px solid #f1f5f9; background: ${cellBg}; height: 100%; position: relative;">
+                            ${col.isToday ? `<div style="position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: rgba(16, 185, 129, 0.35); transform: translateX(-50%); pointer-events: none;"></div>` : ''}
+                        </div>`;
+                    }).join('')}
+                    ${spanTrackHtml}
+                    ${segmentsHtml}
+                </div>
+            </div>
+        `;
+    });
+
+    html += `
+            </div>
+        </div>
+    `;
+
+    gridContainer.innerHTML = html;
+}
+
+// Modal hiển thị chi tiết toàn bộ thông tin & các ca đá của Giải đấu khi click vào thanh Timeline
+window.openTournamentTimelineDetailModal = function(maGiaiDau) {
+    const gd = clusterTournamentTimelineState.rawList.find(item => String(item.ma_giai_dau) === String(maGiaiDau));
+    if (!gd) return;
+
+    let modal = document.getElementById('tournament-timeline-detail-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'tournament-timeline-detail-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 10020; align-items: center; justify-content: center;';
+        modal.onclick = function(e) {
+            if (e.target === modal) modal.style.display = 'none';
+        };
+        document.body.appendChild(modal);
+    }
+
+    const startFmt = gd.ngay_bat_dau.split('-').reverse().join('/');
+    const endFmt = gd.ngay_ket_thuc.split('-').reverse().join('/');
+    const sanNames = Object.values(gd.cac_san_su_dung || {});
+    const matchDays = Object.values(gd.ngay_co_tran || {});
+
+    let scheduleRowsHtml = '';
+    if (matchDays.length === 0) {
+        scheduleRowsHtml = `
+            <div style="padding: 30px 20px; text-align: center; background: #fffbeb; border: 1px dashed #fcd34d; border-radius: 10px; color: #b45309; font-size: 0.88rem;">
+                <i class="fa-solid fa-clock-rotate-left" style="font-size: 1.6rem; margin-bottom: 8px; display: block;"></i>
+                Giải đấu này hiện chưa có khung giờ đặt sân cụ thể (Đang chờ duyệt hoặc chờ khách chọn khung giờ).
+            </div>
+        `;
+    } else {
+        scheduleRowsHtml = matchDays.map(dayObj => {
+            const dParts = dayObj.ngay_da.split('-');
+            const dObj = new Date(dayObj.ngay_da + 'T00:00:00');
+            const thuStr = ['Chủ Nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][dObj.getDay()];
+            const ngayFmt = `${dParts[2]}/${dParts[1]}/${dParts[0]}`;
+
+            const slotsBadges = (dayObj.ds_tran || []).map(t => {
+                const stColor = t.trang_thai === 'HoanThanh' ? '#047857' : '#1d4ed8';
+                const stBg = t.trang_thai === 'HoanThanh' ? '#d1fae5' : '#eff6ff';
+                const stBorder = t.trang_thai === 'HoanThanh' ? '#6ee7b7' : '#bfdbfe';
+                const stText = t.trang_thai === 'HoanThanh' ? 'Hoàn thành' : 'Đã cọc';
+
+                return `
+                    <div style="display: inline-flex; align-items: center; gap: 8px; background: ${stBg}; border: 1px solid ${stBorder}; color: ${stColor}; padding: 6px 12px; border-radius: 8px; font-size: 0.82rem; font-weight: 600;">
+                        <span><i class="fa-solid fa-futbol"></i> <strong>${t.ten_san}</strong></span>
+                        <span>&bull; ${t.khung_gio}</span>
+                        <span style="font-size: 0.72rem; background: #fff; padding: 1px 6px; border-radius: 4px;">${stText}</span>
+                    </div>
+                `;
+            }).join('');
+
+            return `
+                <div style="padding: 12px 14px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; margin-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <strong style="color: #0f172a; font-size: 0.9rem;">
+                            <i class="fa-regular fa-calendar-check" style="color: var(--primary); margin-right: 6px;"></i>${thuStr} — Ngày ${ngayFmt}
+                        </strong>
+                        <span style="font-size: 0.78rem; font-weight: 700; color: #059669; background: #ecfdf5; padding: 2px 9px; border-radius: 99px; border: 1px solid #a7f3d0;">
+                            ${dayObj.so_tran} trận
+                        </span>
+                    </div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                        ${slotsBadges}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 640px; width: 94%; padding: 0; border-radius: 16px; overflow: hidden; background: #ffffff; max-height: 88vh; display: flex; flex-direction: column; box-shadow: 0 20px 45px rgba(15, 23, 42, 0.22);">
+            <div style="padding: 18px 24px; background: #0f172a; color: #ffffff; display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <i class="fa-solid fa-trophy" style="color: #fbbf24; font-size: 1.25rem;"></i>
+                    <div>
+                        <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700;">${gd.ten_giai_dau}</h3>
+                        <div style="font-size: 0.78rem; color: #94a3b8; margin-top: 2px;">Mã giải: #GD-${gd.ma_giai_dau} &bull; Thời gian: ${startFmt} - ${endFmt}</div>
+                    </div>
+                </div>
+                <button type="button" onclick="document.getElementById('tournament-timeline-detail-modal').style.display='none'" style="background: none; border: none; color: #94a3b8; font-size: 1.2rem; cursor: pointer;">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div style="padding: 20px 24px; overflow-y: auto; flex: 1;">
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px;">
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 14px;">
+                        <div style="font-size: 0.75rem; color: #64748b;">Trưởng ban tổ chức</div>
+                        <div style="font-weight: 700; color: #0f172a; font-size: 0.92rem; margin-top: 2px;">${gd.khach_hang}</div>
+                        <div style="font-size: 0.8rem; color: #2563eb; font-weight: 600;">${gd.so_dien_thoai}</div>
+                    </div>
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 14px;">
+                        <div style="font-size: 0.75rem; color: #64748b;">Sân bóng sử dụng</div>
+                        <div style="font-weight: 700; color: #0f172a; font-size: 0.92rem; margin-top: 2px;">${sanNames.length > 0 ? sanNames.join(', ') : 'Chưa đặt sân'}</div>
+                        <div style="font-size: 0.78rem; color: #64748b;">${matchDays.length} ngày thi đấu thực tế</div>
+                    </div>
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 14px;">
+                        <div style="font-size: 0.75rem; color: #64748b;">Tiến độ trận đấu</div>
+                        <div style="font-weight: 800; color: #059669; font-size: 1.05rem; margin-top: 2px;">${gd.so_tran_hoan_thanh} / ${gd.tong_so_tran} trận</div>
+                        <div style="font-size: 0.76rem; color: #64748b;">Đã hoàn thành</div>
+                    </div>
+                </div>
+
+                <div style="font-weight: 700; color: #0f172a; font-size: 0.92rem; margin-bottom: 10px;">
+                    <i class="fa-solid fa-calendar-week" style="color: var(--primary); margin-right: 6px;"></i>Chi tiết các ngày và khung giờ thi đấu:
+                </div>
+                ${scheduleRowsHtml}
+            </div>
+
+            <div style="padding: 14px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end;">
+                <button type="button" class="btn-primary" style="padding: 8px 22px;" onclick="document.getElementById('tournament-timeline-detail-modal').style.display='none'">Đóng</button>
+            </div>
+        </div>
+    `;
+
+    modal.style.display = 'flex';
 };

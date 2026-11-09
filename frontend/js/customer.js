@@ -2472,7 +2472,7 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                         </h4>
                         <ul style="color: #334155; font-size: 0.88rem; margin-left: 18px; line-height: 1.7; list-style: disc;">
                             <li><strong>Đặt sân phong trào:</strong> Đặt trước trong vòng <strong>7 ngày tới</strong>, thanh toán tiền cọc trước <strong>30%</strong>.</li>
-                            <li style="margin-top: 6px;"><strong>Đặt sân đá giải:</strong> Cần được Admin duyệt giải đấu tại đúng cụm sân. Chọn mục đích "Giải đấu" trong Giỏ hàng để mở lịch theo ngày giải. Hoàn tất đặt lịch trong <strong>3 ngày</strong> từ lúc duyệt, cọc trước <strong>50%</strong>.</li>
+                            <li style="margin-top: 6px;"><strong>Đặt sân đá giải:</strong> Cần được Quản lý duyệt giải đấu tại đúng cụm sân. Chọn mục đích "Giải đấu" trong Giỏ hàng để mở lịch theo ngày giải. Hoàn tất đặt lịch trong <strong>3 ngày</strong> từ lúc duyệt, cọc trước <strong>50%</strong>.</li>
                             <li style="margin-top: 6px;"><strong>Quy định hủy lịch:</strong> Tự hủy miễn phí trước trận <strong>10 tiếng</strong> (đá phong trào) hoặc trước <strong>7 ngày</strong> (đá giải). Nếu sát giờ, vui lòng gửi "Yêu cầu hủy gấp" tại mục Các yêu cầu.</li>
                         </ul>
                     </div>
