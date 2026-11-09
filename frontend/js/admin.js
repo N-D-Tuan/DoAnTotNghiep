@@ -461,9 +461,14 @@ function renderAdminProfile() {
 
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
-        <div class="page-header" style="margin-bottom: 24px;">
-            <h1 class="page-title">Trang cá nhân</h1>
-            <p class="text-muted">Quản lý thông tin tài khoản của bạn (Mã: <strong>${user.MaNguoiDung || user.ID}</strong>)</p>
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">Trang cá nhân</h1>
+                <p class="text-muted">Quản lý thông tin hồ sơ và tài khoản ngân hàng của bạn</p>
+            </div>
+            <span style="background: #f8fafc; border: 1px solid #cbd5e1; color: #334155; padding: 6px 14px; border-radius: 8px; font-size: 0.86rem; font-weight: 700; font-family: monospace;">
+                Mã TK: #${user.MaNguoiDung || user.ID}
+            </span>
         </div>
 
         ${bankWarningBanner}
@@ -715,18 +720,31 @@ async function executeChangePassword() {
 
 // 1. Render giao diện danh sách thẻ Cụm Sân
 function renderQuanLySan() {
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user') || '{}');
+    if (currentUser.VaiTro !== 'Admin') {
+        showSystemModal('Không có quyền truy cập', 'Chức năng Quản lý Cụm Sân & Loại Sân chỉ dành riêng cho Admin hệ thống!', 'error');
+        return;
+    }
+
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
     const menuLink = document.getElementById('menu-cumsan');
     if (menuLink) menuLink.classList.add('active');
 
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
-        <div class="page-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
             <div>
                 <h1 class="page-title">Quản lý Cụm Sân</h1>
-                <p class="text-muted">Chọn một cụm sân để xem danh sách sân con và cấu hình giá</p>
+                <p class="text-muted">Chọn một cụm sân để xem danh sách sân con, cấu hình giá và quản lý danh mục loại sân</p>
             </div>
-            <button class="btn-primary" onclick="openCumSanModal()">+ Thêm Cụm Sân</button>
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <button type="button" class="btn-outline-sm" style="padding: 10px 16px; font-size: 0.92rem; font-weight: 700; color: var(--primary); border-color: var(--primary); background: #f0fdf4; border-radius: 8px; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#dcfce7'" onmouseout="this.style.background='#f0fdf4'" onclick="openLoaiSanManagerModal()">
+                    <i class="fa-solid fa-futbol"></i> Quản lý Loại Sân
+                </button>
+                <button type="button" class="btn-primary" style="display: inline-flex; align-items: center; gap: 6px;" onclick="openCumSanModal()">
+                    <i class="fa-solid fa-plus"></i> Thêm Cụm Sân
+                </button>
+            </div>
         </div>
         
         <!-- Khung chứa các thẻ -->
@@ -840,13 +858,15 @@ async function renderCumSanDetail(cumSanId) {
         window.currentClusterNameAdmin = cs.TenCumSan;
         const isBaoTri = cs.TrangThai === 'BaoTri';
 
-        const btnEdit = `<button class="btn-outline-sm" onclick='openEditCumSanModal(${JSON.stringify(cs).replace(/'/g, "\\'")})'><i class="fa-solid fa-pen"></i> Sửa Cụm Sân</button>`;
+        const btnEdit = `<button class="btn-outline-sm" style="background: #ffffff; color: #334155; border: 1px solid #cbd5e1; padding: 8px 14px; font-weight: 600;" onclick='openEditCumSanModal(${JSON.stringify(cs).replace(/'/g, "\\'")})'><i class="fa-solid fa-pen" style="color: var(--primary); margin-right: 5px;"></i> Sửa Cụm Sân</button>`;
         
         const btnDeleteOrRestore = isBaoTri 
-            ? `<button class="btn-outline-sm" style="color: #16A34A; border-color: #bbf7d0;" onclick="restoreCumSan('${maCS}')"><i class="fa-solid fa-rotate-left"></i> Mở hoạt động lại</button>`
-            : `<button class="btn-outline-sm" style="color: #ef4444; border-color: #fecaca;" onclick="deleteCumSan('${maCS}')"><i class="fa-solid fa-screwdriver-wrench"></i> Bảo trì cụm sân</button>`;
+            ? `<button class="btn-outline-sm" style="background: #f0fdf4; color: #16A34A; border: 1px solid #bbf7d0; padding: 8px 14px; font-weight: 600;" onclick="restoreCumSan('${maCS}')"><i class="fa-solid fa-rotate-left"></i> Mở hoạt động lại</button>`
+            : `<button class="btn-outline-sm" style="background: #fef2f2; color: #ef4444; border: 1px solid #fecaca; padding: 8px 14px; font-weight: 600;" onclick="deleteCumSan('${maCS}')"><i class="fa-solid fa-screwdriver-wrench"></i> Bảo trì cụm sân</button>`;
 
-        const statusBadge = isBaoTri ? `<span class="badge badge-warning" style="margin-left: 10px; font-size: 0.9rem;">Đang bảo trì</span>` : '';
+        const statusBadge = isBaoTri
+            ? `<span class="badge badge-warning" style="font-size: 0.8rem; padding: 4px 10px;">Đang bảo trì</span>`
+            : `<span class="badge badge-success" style="font-size: 0.8rem; padding: 4px 10px;">Đang hoạt động</span>`;
 
         const backBtnHtml = currentUser.VaiTro === 'QuanLySan' 
             ? ''
@@ -855,23 +875,20 @@ async function renderCumSanDetail(cumSanId) {
         contentArea.innerHTML = `
             ${backBtnHtml}
             
-            <div class="page-header" style="margin-bottom: 24px; padding: 20px 24px; display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; border-radius: 14px; background: linear-gradient(135deg, #0b5d3b 0%, #087f4f 100%); box-shadow: 0 6px 18px rgba(0, 93, 59, 0.18); border-left: 5px solid #f5c542;"> 
+            <div class="page-header"> 
                 <div> 
-                    <h1 class="page-title" style="margin: 0 0 10px 0; color: #fff; font-size: 28px; font-weight: 700; letter-spacing: -0.3px;"> 
-                        ${cs.TenCumSan} ${statusBadge} 
-                    </h1> 
-                    
-                    <p class="text-muted" style="margin: 7px 0; display: flex; align-items: center; gap: 8px; color: rgba(255,255,255,0.9); font-size: 14px;"> 
-                        <i class="fa-solid fa-location-dot" style="width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; background: rgba(255,255,255,0.12); color: #f5c542;"> </i> 
-                        ${cs.DiaChi} (${cs.phuong?.TenPhuong || ''}) 
-                    </p> 
-
-                    <p class="text-muted" style="margin: 7px 0 0 0; display: flex; align-items: center; gap: 8px; color: rgba(255,255,255,0.9); font-size: 14px;"> 
-                        <i class="fa-solid fa-clock" style="width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; background: rgba(255,255,255,0.12); color: #f5c542;"> </i> 
-                        ${cs.GioMoCua.substring(0,5)} - ${cs.GioDongCua.substring(0,5)} 
-                    </p> 
+                    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px;">
+                        <h1 class="page-title" style="margin: 0 !important;">${cs.TenCumSan}</h1>
+                        <span style="font-family: monospace; font-size: 0.8rem; font-weight: 700; color: #475569; background: #f1f5f9; padding: 3px 8px; border-radius: 6px; border: 1px solid #cbd5e1;">#${maCS}</span>
+                        ${statusBadge}
+                    </div>
+                    <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 16px; color: #475569; font-size: 0.88rem;"> 
+                        <span><i class="fa-solid fa-location-dot" style="color: var(--primary); margin-right: 5px;"></i> ${cs.DiaChi} (${cs.phuong?.TenPhuong || ''})</span> 
+                        <span style="color: #cbd5e1;">|</span>
+                        <span><i class="fa-regular fa-clock" style="color: var(--primary); margin-right: 5px;"></i> Giờ hoạt động: <strong style="color: #0f172a;">${cs.GioMoCua.substring(0,5)} - ${cs.GioDongCua.substring(0,5)}</strong></span> 
+                    </div> 
                 </div> 
-                <div style="display: flex; gap: 10px; align-items: center; flex-shrink: 0; padding: 5px; border-radius: 10px; background: rgba(0,0,0,0.12);"> 
+                <div style="display: flex; gap: 10px; align-items: center; flex-shrink: 0;"> 
                     ${btnEdit} ${btnDeleteOrRestore} 
                 </div> 
             </div>
@@ -1071,7 +1088,7 @@ async function saveSanBong() {
     const trangThai = sbId ? document.getElementById('sb-trangthai').value : 'HoatDong';
 
     if (!tenSan || !idLoaiSan) {
-        alert('Vui lòng nhập đầy đủ tên sân và loại sân!');
+        showSystemModal('Thiếu thông tin', 'Vui lòng nhập đầy đủ tên sân và loại sân!', 'error');
         return;
     }
 
@@ -1108,10 +1125,10 @@ async function saveSanBong() {
             closeSanBongModal();
             loadSanBongTheoCum(currentCumSanId);
         } else {
-            alert(data.message || 'Có lỗi xảy ra');
+            showSystemModal('Lỗi', data.message || 'Có lỗi xảy ra!', 'error');
         }
     } catch (error) {
-        alert('Lỗi kết nối máy chủ!');
+        showSystemModal('Lỗi kết nối', 'Lỗi kết nối máy chủ!', 'error');
     } finally {
         btn.disabled = false;
         btn.textContent = 'Lưu Sân Bóng';
@@ -1872,10 +1889,14 @@ function renderQuanLyGiaiDau() {
     // 2. Render khung giao diện chính tích hợp Bộ lọc, Tìm kiếm và Modal Confirm
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
-        <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <div class="page-header">
             <div>
                 <h1 class="page-title">Quản lý Yêu cầu Giải đấu</h1>
-                <p class="text-muted">Có <strong id="gd-pending-count" style="color: #ea580c; font-size: 1.1rem;">0</strong> đơn đang chờ bạn phê duyệt</p>
+                <p class="text-muted">Kiểm tra ma trận lịch sân và xét duyệt các đơn đăng ký tổ chức giải đấu</p>
+            </div>
+            <div style="background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; padding: 8px 16px; border-radius: 8px; font-size: 0.88rem; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-hourglass-half" style="color: #ea580c;"></i>
+                <span>Đơn chờ duyệt: <strong id="gd-pending-count" style="color: #ea580c; font-size: 1.05rem;">0</strong></span>
             </div>
         </div>
         
@@ -2061,10 +2082,19 @@ function renderGDTable(data) {
         let actionHtml = '';
         if (item.TrangThai === 'ChoDuyet') {
             actionHtml = `
-                <button class="btn-outline-sm" style="color: #2563eb; border-color: #bfdbfe; background: #eff6ff; margin-right: 5px; margin-bottom: 5px; text-align: center; width: 95%;" onclick="openMaTranLichModal('${item.ID}')"><i class="fa-regular fa-calendar-days"></i> Kiểm tra Lịch</button>
-                <br>
-                <button class="btn-outline-sm" style="color: #047857; border-color: #047857;" onclick="openGDConfirmModal('${item.ID}', 'DaDuyet')"><i class="fa-solid fa-check"></i> Duyệt</button>
-                <button class="btn-outline-sm" style="color: #b91c1c; border-color: #b91c1c; margin-left: 5px;" onclick="openGDConfirmModal('${item.ID}', 'TuChoi')"><i class="fa-solid fa-xmark"></i> Từ chối</button>
+                <div style="display: inline-flex; flex-direction: column; gap: 6px; min-width: 176px;">
+                    <button type="button" class="btn-outline-sm" style="width: 100%; padding: 6px 12px; border-radius: 8px; border: 1px solid #bfdbfe; background: #eff6ff; color: #2563eb; font-weight: 600; font-size: 0.82rem; display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; transition: all 0.18s ease;" onmouseover="this.style.background='#dbeafe'; this.style.borderColor='#93c5fd';" onmouseout="this.style.background='#eff6ff'; this.style.borderColor='#bfdbfe';" onclick="openMaTranLichModal('${item.ID}')">
+                        <i class="fa-regular fa-calendar-days"></i> Kiểm tra Lịch
+                    </button>
+                    <div style="display: flex; gap: 6px; width: 100%;">
+                        <button type="button" class="btn-outline-sm" style="flex: 1; padding: 6px 10px; border-radius: 8px; border: 1px solid #86efac; background: #f0fdf4; color: #15803d; font-weight: 700; font-size: 0.82rem; display: inline-flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; cursor: pointer; transition: all 0.18s ease;" onmouseover="this.style.background='#16a34a'; this.style.color='#ffffff'; this.style.borderColor='#16a34a';" onmouseout="this.style.background='#f0fdf4'; this.style.color='#15803d'; this.style.borderColor='#86efac';" onclick="openGDConfirmModal('${item.ID}', 'DaDuyet')">
+                            <i class="fa-solid fa-check"></i> Duyệt
+                        </button>
+                        <button type="button" class="btn-outline-sm" style="flex: 1; padding: 6px 10px; border-radius: 8px; border: 1px solid #fecaca; background: #fef2f2; color: #dc2626; font-weight: 700; font-size: 0.82rem; display: inline-flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; cursor: pointer; transition: all 0.18s ease;" onmouseover="this.style.background='#ef4444'; this.style.color='#ffffff'; this.style.borderColor='#ef4444';" onmouseout="this.style.background='#fef2f2'; this.style.color='#dc2626'; this.style.borderColor='#fecaca';" onclick="openGDConfirmModal('${item.ID}', 'TuChoi')">
+                            <i class="fa-solid fa-xmark"></i> Từ chối
+                        </button>
+                    </div>
+                </div>
             `;
         } else {
             actionHtml = `<span style="color: var(--text-muted); font-size: 0.85rem;">Không có hành động</span>`;
@@ -2206,41 +2236,49 @@ async function executeCapNhatTrangThai() {
 let maTranDataCache = null; // Lưu cache để chuyển tab không bị gọi lại API
 
 async function openMaTranLichModal(giaiDauId) {
-    // 1. Khởi tạo Modal nếu chưa có
+    // 1. Khởi tạo Modal nếu chưa có (hoặc cập nhật lại cấu trúc chuẩn)
     let modal = document.getElementById('ma-tran-modal');
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'ma-tran-modal';
         modal.className = 'modal-overlay';
-        modal.style.cssText = 'display: none; z-index: 9999;';
-        modal.innerHTML = `
-            <div class="modal-content" style="max-width: 900px; width: 90%; padding: 0; overflow: hidden; border-radius: 12px;">
-                <div class="modal-header" style="padding: 20px 24px; background: #F8FAFC; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-                    <h3 style="margin: 0; font-size: 1.25rem; color: var(--primary);"><i class="fa-solid fa-table-cells"></i> Ma trận Lịch Cụm Sân</h3>
-                    <i class="fa-solid fa-xmark" style="cursor: pointer; font-size: 1.2rem; color: var(--text-muted);" onclick="document.getElementById('ma-tran-modal').style.display='none'"></i>
-                </div>
-                
-                <div id="ma-tran-loading" style="padding: 50px; text-align: center; color: var(--primary);">
-                    <i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem;"></i><br><br>Đang tải dữ liệu lịch...
-                </div>
-
-                <div id="ma-tran-content" style="display: none; padding: 20px 24px;">
-                    <!-- Thanh Tab Ngày -->
-                    <div id="ma-tran-tabs" style="display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px; border-bottom: 2px solid #e2e8f0; margin-bottom: 20px; scrollbar-width: thin;">
-                    </div>
-
-                    <!-- Bảng Ma trận -->
-                    <div class="table-responsive" style="max-height: 50vh; overflow-y: auto; overflow-x: auto; border: 1px solid var(--border); border-radius: 8px;">
-                        <table class="admin-table" style="min-width: max-content; margin: 0; border: none;">
-                            <thead id="ma-tran-thead"></thead>
-                            <tbody id="ma-tran-tbody"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        `;
+        modal.style.cssText = 'display: none; z-index: 9999; align-items: center; justify-content: center;';
+        modal.onclick = function(e) {
+            if (e.target === modal) modal.style.display = 'none';
+        };
         document.body.appendChild(modal);
     }
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 1140px; width: 95%; padding: 0; overflow: hidden; border-radius: 14px; background: #ffffff; box-shadow: 0 20px 45px rgba(15, 23, 42, 0.22); display: flex; flex-direction: column; max-height: 90vh;">
+            <div class="modal-header" style="padding: 18px 24px; background: #f8fafc; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
+                <h3 style="margin: 0; font-size: 1.2rem; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-table-cells"></i> Ma trận Lịch Cụm Sân
+                </h3>
+                <button type="button" onclick="document.getElementById('ma-tran-modal').style.display='none'" style="background: none; border: none; cursor: pointer; font-size: 1.25rem; color: var(--text-muted); width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <div id="ma-tran-loading" style="padding: 60px 20px; text-align: center; color: var(--primary);">
+                <i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem;"></i><br><br>Đang tải dữ liệu lịch...
+            </div>
+
+            <div id="ma-tran-content" style="display: none; padding: 18px 24px 22px 24px; overflow: hidden; flex: 1;">
+                <!-- Thanh Tab Ngày (Cố định phía trên bảng) -->
+                <div id="ma-tran-tabs" style="display: flex; gap: 10px; overflow-x: auto; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; margin-bottom: 16px; scrollbar-width: thin; flex-shrink: 0;">
+                </div>
+
+                <!-- Bảng Ma trận có Sticky Header (Hàng trên) & Sticky Column (Cột trái) -->
+                <div class="table-responsive" style="max-height: 62vh; overflow-y: auto; overflow-x: auto; border: 1px solid #cbd5e1; border-radius: 10px; position: relative; background: #ffffff;">
+                    <table class="admin-table" style="width: 100%; min-width: max-content; margin: 0; border-collapse: separate; border-spacing: 0;">
+                        <thead id="ma-tran-thead"></thead>
+                        <tbody id="ma-tran-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
 
     modal.style.display = 'flex';
     document.getElementById('ma-tran-loading').style.display = 'block';
@@ -2263,7 +2301,6 @@ async function openMaTranLichModal(giaiDauId) {
         const dEnd = new Date(res.giai_dau.NgayKetThuc);
         const dateArray = [];
 
-        // Vòng lặp +1 ngày cho đến khi bằng dEnd
         for (let d = new Date(dStart); d <= dEnd; d.setDate(d.getDate() + 1)) {
             const pad = n => n < 10 ? '0' + n : n;
             const yyyy = d.getFullYear();
@@ -2272,7 +2309,7 @@ async function openMaTranLichModal(giaiDauId) {
             
             dateArray.push({
                 dbFormat: `${yyyy}-${mm}-${dd}`,
-                displayFormat: `${dd}/${mm}` // Chỉ hiện Ngày/Tháng trên Tab cho gọn
+                displayFormat: `${dd}/${mm}`
             });
         }
 
@@ -2280,21 +2317,19 @@ async function openMaTranLichModal(giaiDauId) {
         const totalSlotsPerDay = res.san_bongs.length * res.khung_gios.length;
         let tabsHtml = '';
 
-        dateArray.forEach((date, index) => {
-            // Đếm xem ngày này có bao nhiêu slot đã bị đặt
+        dateArray.forEach((date) => {
             const bookedCount = res.dat_sans.filter(ds => ds.NgayDa === date.dbFormat).length;
             const bookingRate = totalSlotsPerDay > 0 ? (bookedCount / totalSlotsPerDay) * 100 : 0;
             
-            // Nếu sân đã bị đặt >= 50%, tô viền đỏ và icon cảnh báo
-            let btnStyle = `padding: 8px 20px; border-radius: 20px; font-weight: 600; cursor: pointer; white-space: nowrap; border: 1px solid #cbd5e1; background: white; color: #64748b;`;
+            let btnStyle = `padding: 8px 20px; border-radius: 999px; font-weight: 700; font-size: 0.88rem; cursor: pointer; white-space: nowrap; border: 1px solid #cbd5e1; background: #ffffff; color: #334155; transition: all 0.18s ease;`;
             let iconHtml = '';
             
             if (bookingRate >= 50) {
-                btnStyle = `padding: 8px 20px; border-radius: 20px; font-weight: 600; cursor: pointer; white-space: nowrap; border: 1px solid #fca5a5; background: #fef2f2; color: #ef4444;`;
+                btnStyle = `padding: 8px 20px; border-radius: 999px; font-weight: 700; font-size: 0.88rem; cursor: pointer; white-space: nowrap; border: 1px solid #fca5a5; background: #fef2f2; color: #ef4444; transition: all 0.18s ease;`;
                 iconHtml = `<i class="fa-solid fa-triangle-exclamation" style="margin-right: 5px;"></i>`;
             }
 
-            tabsHtml += `<button class="ma-tran-tab-btn" data-date="${date.dbFormat}" style="${btnStyle}" onclick="renderMaTranTab('${date.dbFormat}', this)">${iconHtml}${date.displayFormat}</button>`;
+            tabsHtml += `<button type="button" class="ma-tran-tab-btn" data-date="${date.dbFormat}" style="${btnStyle}" onclick="renderMaTranTab('${date.dbFormat}', this)">${iconHtml}${date.displayFormat}</button>`;
         });
 
         document.getElementById('ma-tran-tabs').innerHTML = tabsHtml;
@@ -2314,41 +2349,40 @@ async function openMaTranLichModal(giaiDauId) {
 
 // Render dữ liệu ma trận khi click vào 1 Tab Ngày cụ thể
 function renderMaTranTab(dateDbFormat, btnElement) {
-    // 1. Xử lý Active/Inactive cho các nút Tab
+    // 1. Xử lý Active/Inactive cho các nút Tab Ngày
     document.querySelectorAll('.ma-tran-tab-btn').forEach(btn => {
-        // Reset về giao diện mờ (opacity) nếu không được chọn
-        btn.style.opacity = '0.5'; 
+        btn.style.opacity = '0.55';
         btn.style.boxShadow = 'none';
+        btn.style.transform = 'none';
     });
     btnElement.style.opacity = '1';
-    btnElement.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+    btnElement.style.boxShadow = '0 2px 6px rgba(15, 23, 42, 0.12)';
 
     const data = maTranDataCache;
 
-    // 2. Vẽ Tiêu đề cột (Tên các Sân bóng)
+    // 2. Vẽ Tiêu đề cột (Cố định khi cuộn dọc top: 0, riêng ô góc trái KHUNG GIỜ cố định cả top: 0 và left: 0)
     let theadHtml = `<tr>
-        <th style="background: #e2e8f0; position: sticky; left: 0; z-index: 2; width: 120px; text-align: center;">KHUNG GIỜ</th>`;
+        <th style="background: #e2e8f0; position: sticky; top: 0; left: 0; z-index: 30; width: 145px; min-width: 145px; text-align: center; white-space: nowrap; border-right: 2px solid #cbd5e1; border-bottom: 2px solid #cbd5e1; color: #0f172a; font-weight: 800;">KHUNG GIỜ</th>`;
     data.san_bongs.forEach(sb => {
-        theadHtml += `<th style="background: #f8fafc; text-align: center; border-left: 1px solid #e2e8f0;">${sb.TenSan}</th>`;
+        theadHtml += `<th style="background: #f8fafc; position: sticky; top: 0; z-index: 20; min-width: 130px; text-align: center; white-space: nowrap; border-left: 1px solid #e2e8f0; border-bottom: 2px solid #cbd5e1; color: #0f172a; font-weight: 700;">${sb.TenSan}</th>`;
     });
     theadHtml += `</tr>`;
     document.getElementById('ma-tran-thead').innerHTML = theadHtml;
 
-    // 3. Vẽ Dữ liệu hàng (Khung giờ) và Cột (Trạng thái đặt)
+    // 3. Vẽ Dữ liệu hàng (Cột Khung giờ nằm trên 1 hàng duy nhất và cố định left: 0 khi cuộn ngang)
     let tbodyHtml = '';
     data.khung_gios.forEach(kg => {
         const timeStr = `${kg.GioBatDau.substring(0,5)} - ${kg.GioKetThuc.substring(0,5)}`;
         tbodyHtml += `<tr>
-            <td style="background: #f8fafc; position: sticky; left: 0; font-weight: bold; text-align: center; color: var(--primary); border-right: 2px solid #e2e8f0;">${timeStr}</td>`;
+            <td style="background: #f8fafc; position: sticky; left: 0; z-index: 15; width: 145px; min-width: 145px; font-weight: 700; text-align: center; white-space: nowrap; color: var(--primary); border-right: 2px solid #cbd5e1; border-bottom: 1px solid #e2e8f0; padding: 12px 14px;">${timeStr}</td>`;
         
-        // Quét từng sân xem ở khung giờ này, ngày này đã bị đặt chưa
         data.san_bongs.forEach(sb => {
             const isBooked = data.dat_sans.some(ds => ds.NgayDa === dateDbFormat && ds.ID_KhungGio === kg.ID && ds.ID_SanBong === sb.ID);
             
             if (isBooked) {
-                tbodyHtml += `<td style="background: #fee2e2; color: #b91c1c; text-align: center; font-size: 0.85rem; border-left: 1px solid #e2e8f0;"><i class="fa-solid fa-lock"></i> Đã kẹt</td>`;
+                tbodyHtml += `<td style="background: #fee2e2; color: #b91c1c; text-align: center; font-size: 0.85rem; font-weight: 600; white-space: nowrap; border-left: 1px solid #e2e8f0; border-bottom: 1px solid #f1f5f9; padding: 12px 14px;"><i class="fa-solid fa-lock"></i> Đã đặt</td>`;
             } else {
-                tbodyHtml += `<td style="background: #fff; color: #10b981; text-align: center; font-size: 0.85rem; border-left: 1px solid #e2e8f0;"><i class="fa-solid fa-check"></i> Trống</td>`;
+                tbodyHtml += `<td style="background: #ffffff; color: #10b981; text-align: center; font-size: 0.85rem; font-weight: 600; white-space: nowrap; border-left: 1px solid #e2e8f0; border-bottom: 1px solid #f1f5f9; padding: 12px 14px;"><i class="fa-solid fa-check"></i> Trống</td>`;
             }
         });
         tbodyHtml += `</tr>`;
@@ -3529,10 +3563,14 @@ function renderQuanLyHuySan() {
 
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
-        <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <div class="page-header">
             <div>
                 <h1 class="page-title">Quản lý Yêu cầu Hủy Sân Gấp</h1>
-                <p class="text-muted">Có <strong id="uc-pending-count" style="color: #ea580c; font-size: 1.1rem;">0</strong> đơn đang chờ phê duyệt</p>
+                <p class="text-muted">Xét duyệt các yêu cầu hủy lịch sát giờ và hoàn tiền cọc cho khách hàng</p>
+            </div>
+            <div style="background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; padding: 8px 16px; border-radius: 8px; font-size: 0.88rem; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-clock-rotate-left" style="color: #ea580c;"></i>
+                <span>Đơn chờ duyệt: <strong id="uc-pending-count" style="color: #ea580c; font-size: 1.05rem;">0</strong></span>
             </div>
         </div>
         
@@ -3638,17 +3676,17 @@ function renderUCTable(data) {
 
         if (item.TrangThai === 'ChoDuyet') {
             actionHtml = `
-                <div style="display: flex; gap: 8px; justify-content: flex-start;">
-                    <button class="btn-outline-sm" style="color: #047857; border-color: #047857; padding: 6px 12px; white-space: nowrap;" onclick="openUCConfirmModal('${item.ID}', 'DaDuyet')">
+                <div style="display: inline-flex; gap: 8px; align-items: center;">
+                    <button type="button" class="btn-outline-sm" style="padding: 6px 13px; border-radius: 8px; border: 1px solid #86efac; background: #f0fdf4; color: #15803d; font-weight: 700; font-size: 0.82rem; display: inline-flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; cursor: pointer; transition: all 0.18s ease;" onmouseover="this.style.background='#16a34a'; this.style.color='#ffffff'; this.style.borderColor='#16a34a';" onmouseout="this.style.background='#f0fdf4'; this.style.color='#15803d'; this.style.borderColor='#86efac';" onclick="openUCConfirmModal('${item.ID}', 'DaDuyet')">
                         <i class="fa-solid fa-check"></i> Duyệt
                     </button>
-                    <button class="btn-outline-sm" style="color: #b91c1c; border-color: #b91c1c; padding: 6px 12px; white-space: nowrap;" onclick="openUCConfirmModal('${item.ID}', 'TuChoi')">
+                    <button type="button" class="btn-outline-sm" style="padding: 6px 13px; border-radius: 8px; border: 1px solid #fecaca; background: #fef2f2; color: #dc2626; font-weight: 700; font-size: 0.82rem; display: inline-flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; cursor: pointer; transition: all 0.18s ease;" onmouseover="this.style.background='#ef4444'; this.style.color='#ffffff'; this.style.borderColor='#ef4444';" onmouseout="this.style.background='#fef2f2'; this.style.color='#dc2626'; this.style.borderColor='#fecaca';" onclick="openUCConfirmModal('${item.ID}', 'TuChoi')">
                         <i class="fa-solid fa-xmark"></i> Từ chối
                     </button>
                 </div>
             `;
         } else {
-            actionHtml = `<span style="color: var(--text-muted); font-size: 0.85rem;">(Ngày xử lý: ${item.NgayDuyet ? item.NgayDuyet.substring(0,10) : 'N/A'})</span>`;
+            actionHtml = `<span style="color: var(--text-muted); font-size: 0.85rem; white-space: nowrap;">(Ngày xử lý: ${item.NgayDuyet ? item.NgayDuyet.substring(0,10) : 'N/A'})</span>`;
         }
 
         const sanBong = item.dat_san && item.dat_san.san_bong ? item.dat_san.san_bong.TenSan : 'N/A';
@@ -4859,9 +4897,9 @@ async function renderTongQuan() {
                 </div>
             </div>
 
-            <div class="table-responsive" style="max-height: 440px; overflow-x: auto; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; margin-top: 12px;">
+            <div class="table-responsive" style="width: 100%; max-width: 100%; max-height: 440px; overflow-x: auto; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; margin-top: 12px;">
                 <table class="admin-table" style="min-width: max-content; margin: 0; border-collapse: separate; border-spacing: 0;">
-                    <thead id="staff-perf-thead" style="background: #F8FAFC; position: sticky; top: 0; z-index: 20;">
+                    <thead id="staff-perf-thead" style="background: #F8FAFC; position: sticky; top: 0; z-index: 5;">
                     </thead>
                     <tbody id="staff-perf-tbody">
                         <tr><td colspan="10" class="text-center" style="padding: 30px; text-align: center;">Đang tải dữ liệu...</td></tr>
@@ -4999,8 +5037,8 @@ async function updateDashboardStats(scope = 'all') {
 
                 // 1. Vẽ Header: Cột Nhân viên (Sticky) + Cột Tổng tháng (Sticky) + Các ngày 01 -> 30/31
                 let headHtml = `<tr>
-                    <th style="position: sticky; left: 0; z-index: 25; background: #f1f5f9; min-width: 210px; border-right: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1;">Nhân viên${isAdmin ? ' / Cơ sở' : ''}</th>
-                    <th style="position: sticky; left: 210px; z-index: 25; background: #eff6ff; color: #1d4ed8; min-width: 120px; text-align: center; border-right: 2px solid #cbd5e1; border-bottom: 1px solid #cbd5e1;">Tổng chốt tháng</th>
+                    <th style="position: sticky; left: 0; z-index: 6; background: #f1f5f9; min-width: 210px; border-right: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1;">Nhân viên${isAdmin ? ' / Cơ sở' : ''}</th>
+                    <th style="position: sticky; left: 210px; z-index: 6; background: #eff6ff; color: #1d4ed8; min-width: 120px; text-align: center; border-right: 2px solid #cbd5e1; border-bottom: 1px solid #cbd5e1;">Tổng chốt tháng</th>
                 `;
                 for (let d = 1; d <= daysCount; d++) {
                     const dayLabel = String(d).padStart(2, '0');
@@ -9485,4 +9523,453 @@ window.validateAdminModalCodeRealtime = function(inputEl, table, feedbackId, sav
     runCheck();
     if (adminModalPkTimer) clearTimeout(adminModalPkTimer);
     adminModalPkTimer = setTimeout(runCheck, 200);
+};
+
+// ======================================================
+// MODULE: QUẢN LÝ DANH MỤC LOẠI SÂN (CHỈ DÀNH RIÊNG CHO ADMIN)
+// - Hỗ trợ Thêm mới / Chỉnh sửa Mã (A-Z0-9 hoặc tự sinh) & Tên loại sân
+// - Kiểm tra trùng Mã & Tên Realtime
+// - Chặn xóa nếu đang có Sân con sử dụng + Xác nhận xóa bằng Modal
+// ======================================================
+let adminLoaiSanListCache = [];
+let editingLoaiSanId = null;
+let isLoaiSanCodeDuplicate = false;
+let pendingDeleteLoaiSanId = null;
+
+window.openLoaiSanManagerModal = async function() {
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user') || '{}');
+    if (currentUser.VaiTro !== 'Admin') {
+        return showSystemModal('Từ chối truy cập', 'Chức năng Quản lý Loại Sân chỉ dành riêng cho Admin hệ thống!', 'error');
+    }
+
+    editingLoaiSanId = null;
+    isLoaiSanCodeDuplicate = false;
+
+    let modal = document.getElementById('admin-loaisan-manager-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'admin-loaisan-manager-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 10010; align-items: center; justify-content: center;';
+        modal.onclick = function(e) {
+            if (e.target === modal) closeLoaiSanManagerModal();
+        };
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 860px; width: 95%; padding: 0; border-radius: 16px; overflow: hidden; background: #ffffff; box-shadow: 0 20px 45px rgba(15, 23, 42, 0.22); max-height: 90vh; display: flex; flex-direction: column;">
+            <!-- Header -->
+            <div style="padding: 18px 26px; background: linear-gradient(135deg, #0b5d3b 0%, #087f4f 100%); color: #ffffff; display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="width: 42px; height: 42px; border-radius: 10px; background: rgba(255,255,255,0.16); display: flex; align-items: center; justify-content: center; font-size: 1.25rem; color: #f5c542;">
+                        <i class="fa-solid fa-futbol"></i>
+                    </div>
+                    <div>
+                        <h3 style="margin: 0; font-size: 1.2rem; font-weight: 800; letter-spacing: -0.2px;">Quản lý Danh mục Loại Sân</h3>
+                        <div style="font-size: 0.84rem; opacity: 0.92; margin-top: 2px;">Danh mục dùng chung cho toàn bộ Cụm sân trên hệ thống (Đặc quyền Admin)</div>
+                    </div>
+                </div>
+                <button type="button" onclick="closeLoaiSanManagerModal()" style="background: rgba(255,255,255,0.14); border: none; color: #fff; width: 34px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 1.15rem; display: flex; align-items: center; justify-content: center;">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Body -->
+            <div style="padding: 22px 26px; overflow-y: auto; flex: 1;">
+                <!-- Khung Form Thêm / Sửa Loại Sân -->
+                <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 12px; padding: 18px 20px; margin-bottom: 22px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; min-height: 30px; margin-bottom: 14px;">
+                        <div id="ls-form-title" style="font-weight: 800; color: #0f172a; font-size: 1rem; display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-circle-plus" style="color: var(--primary);"></i>
+                            <span>Thêm Loại Sân Mới</span>
+                        </div>
+                        <button type="button" id="btn-cancel-edit-ls" onclick="resetLoaiSanForm()" style="display: none; padding: 5px 12px; font-size: 0.8rem; border-radius: 6px; border: 1px solid #fecaca; background: #fef2f2; color: #dc2626; font-weight: 700; cursor: pointer;">
+                            <i class="fa-solid fa-rotate-left"></i> Hủy chế độ sửa
+                        </button>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 280px 1fr 155px; gap: 14px; align-items: start;">
+                        <div>
+                            <label style="font-size: 0.84rem; font-weight: 700; color: #334155; display: block; height: 22px; line-height: 22px; margin-bottom: 6px; white-space: nowrap;">
+                                Mã loại sân <span style="color: var(--primary); font-weight: 600;">(Tùy chọn A-Z0-9)</span>
+                            </label>
+                            <input type="text" id="ls-ma-input" class="form-control" maxlength="36" placeholder="Bỏ trống tự sinh hoặc VD: LS5..." style="height: 42px; box-sizing: border-box; font-family: monospace; font-weight: 700; text-transform: uppercase; background: #ffffff;" oninput="validateLoaiSanCodeRealtime(this)">
+                            <div id="ls-ma-feedback" style="display: none; font-size: 0.78rem; font-weight: 600; margin-top: 5px; line-height: 1.35;"></div>
+                        </div>
+                        <div>
+                            <label style="font-size: 0.84rem; font-weight: 700; color: #334155; display: block; height: 22px; line-height: 22px; margin-bottom: 6px; white-space: nowrap;">
+                                Tên loại sân <span style="color: #ef4444;">*</span>
+                            </label>
+                            <input type="text" id="ls-ten-input" class="form-control" maxlength="100" placeholder="VD: Sân 5 người, Sân 7 người, Sân 11 người..." style="height: 42px; box-sizing: border-box; background: #ffffff;">
+                        </div>
+                        <div>
+                            <div style="height: 22px; margin-bottom: 6px;"></div>
+                            <button type="button" id="btn-submit-loaisan" class="btn-primary" style="width: 100%; height: 42px; padding: 0 16px; box-sizing: border-box; white-space: nowrap; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 7px;" onclick="saveLoaiSanAdmin()">
+                                <i class="fa-solid fa-floppy-disk"></i> <span id="btn-submit-loaisan-text">Thêm mới</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Danh sách Loại Sân hiện có -->
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
+                    <div style="font-weight: 700; color: #0f172a; font-size: 0.96rem; white-space: nowrap;">
+                        <i class="fa-solid fa-list-check" style="color: var(--primary); margin-right: 6px;"></i>
+                        Danh sách Loại sân hiện có (<span id="ls-total-count">0</span>)
+                    </div>
+                    <span style="font-size: 0.8rem; color: #64748b;">* Khi đổi Mã loại sân, các sân con và bảng giá sẽ tự động đồng bộ theo</span>
+                </div>
+
+                <div class="table-responsive" style="max-height: 340px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 10px;">
+                    <table class="admin-table" style="margin: 0; width: 100%;">
+                        <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 5;">
+                            <tr>
+                                <th style="width: 150px; white-space: nowrap;">Mã Loại Sân</th>
+                                <th>Tên Loại Sân</th>
+                                <th style="text-align: center; width: 170px; white-space: nowrap;">Đang sử dụng</th>
+                                <th style="text-align: center; width: 170px; white-space: nowrap;">Hành động</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-loaisan-tbody">
+                            <tr><td colspan="4" style="text-align: center; padding: 30px; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải danh sách loại sân...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div style="padding: 14px 26px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end;">
+                <button type="button" class="btn-outline-sm" style="padding: 9px 24px; font-weight: 600;" onclick="closeLoaiSanManagerModal()">Đóng cửa sổ</button>
+            </div>
+        </div>
+    `;
+
+    modal.style.display = 'flex';
+    await loadAdminLoaiSanList();
+};
+
+window.closeLoaiSanManagerModal = function() {
+    const modal = document.getElementById('admin-loaisan-manager-modal');
+    if (modal) modal.style.display = 'none';
+};
+
+async function loadAdminLoaiSanList() {
+    const tbody = document.getElementById('admin-loaisan-tbody');
+    if (!tbody) return;
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/loai-san`);
+        const json = await res.json();
+        adminLoaiSanListCache = json.data || [];
+
+        const countEl = document.getElementById('ls-total-count');
+        if (countEl) countEl.textContent = adminLoaiSanListCache.length;
+
+        if (adminLoaiSanListCache.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 35px; color: var(--text-muted);">Chưa có loại sân nào. Hãy thêm loại sân đầu tiên ở khung phía trên!</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = adminLoaiSanListCache.map(ls => {
+            const maLS = ls.MaLoaiSan || ls.ID;
+            const soSanCon = Number(ls.so_san_con || 0);
+            const soBangGia = Number(ls.so_bang_gia || 0);
+            const isInUse = (soSanCon > 0 || soBangGia > 0);
+            const safeTen = (ls.TenLoaiSan || '').replace(/'/g, "\\'");
+
+            const usageBadge = isInUse
+                ? `<span style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; padding: 3px 9px; border-radius: 99px; font-size: 0.78rem; font-weight: 700; white-space: nowrap;">
+                        <i class="fa-solid fa-check-circle"></i> ${soSanCon} sân con
+                   </span>`
+                : `<span style="background: #f1f5f9; color: #64748b; padding: 3px 9px; border-radius: 99px; font-size: 0.78rem; font-weight: 600; white-space: nowrap;">
+                        Chưa dùng
+                   </span>`;
+
+            const deleteBtnHtml = isInUse
+                ? `<button type="button" class="action-btn" style="color: #94a3b8; border-color: #e2e8f0; background: #f8fafc; cursor: pointer;" title="Loại sân đang có sân con hoặc bảng giá sử dụng" onclick="showSystemModal('Không thể xóa', 'Loại sân <strong>${safeTen} (#${maLS})</strong> đang có <strong>${soSanCon} sân con</strong> và <strong>${soBangGia} cấu hình giá</strong> sử dụng nên được bảo vệ không thể xóa!', 'error')">
+                        <i class="fa-solid fa-shield-halved"></i>
+                   </button>`
+                : `<button type="button" class="action-btn" style="color: #ef4444; border-color: #fecaca; background: #fef2f2;" onclick="openDeleteLoaiSanConfirmModal('${maLS}', '${safeTen}')">
+                        <i class="fa-solid fa-trash-can"></i> Xóa
+                   </button>`;
+
+            return `
+                <tr>
+                    <td>
+                        <span style="font-family: monospace; font-weight: 800; font-size: 0.88rem; color: #0f172a; background: #f1f5f9; border: 1px solid #cbd5e1; padding: 4px 10px; border-radius: 6px; display: inline-block;">#${maLS}</span>
+                    </td>
+                    <td>
+                        <strong style="color: #0f172a; font-size: 0.94rem;">${ls.TenLoaiSan}</strong>
+                    </td>
+                    <td style="text-align: center;">${usageBadge}</td>
+                    <td style="text-align: center;">
+                        <div style="display: inline-flex; gap: 6px; align-items: center;">
+                            <button type="button" class="action-btn" onclick="startEditLoaiSan('${maLS}', '${safeTen}')">
+                                <i class="fa-solid fa-pen-to-square"></i> Sửa
+                            </button>
+                            ${deleteBtnHtml}
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 30px; color: #ef4444;">Lỗi tải danh sách loại sân!</td></tr>`;
+    }
+}
+
+window.validateLoaiSanCodeRealtime = function(inputEl) {
+    if (!inputEl) return;
+    const cleaned = inputEl.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (inputEl.value !== cleaned) {
+        inputEl.value = cleaned;
+    }
+
+    const val = inputEl.value.trim().toUpperCase();
+    const originalId = editingLoaiSanId ? String(editingLoaiSanId).toUpperCase() : null;
+    const feedbackEl = document.getElementById('ls-ma-feedback');
+    const btnSave = document.getElementById('btn-submit-loaisan');
+
+    if (val === '' || (originalId && val === originalId)) {
+        isLoaiSanCodeDuplicate = false;
+        inputEl.style.borderColor = '#cbd5e1';
+        if (feedbackEl) {
+            feedbackEl.style.display = 'none';
+            feedbackEl.innerHTML = '';
+        }
+        if (btnSave) {
+            btnSave.disabled = false;
+            btnSave.style.opacity = '1';
+            btnSave.style.cursor = 'pointer';
+        }
+        return;
+    }
+
+    const isDup = adminLoaiSanListCache.some(ls => String(ls.MaLoaiSan || ls.ID || '').toUpperCase() === val);
+    if (isDup) {
+        isLoaiSanCodeDuplicate = true;
+        inputEl.style.borderColor = '#e11d48';
+        if (feedbackEl) {
+            feedbackEl.style.display = 'block';
+            feedbackEl.style.color = '#e11d48';
+            feedbackEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Mã <strong>[${val}]</strong> đã tồn tại!`;
+        }
+        if (btnSave) {
+            btnSave.disabled = true;
+            btnSave.style.opacity = '0.5';
+            btnSave.style.cursor = 'not-allowed';
+        }
+    } else {
+        isLoaiSanCodeDuplicate = false;
+        inputEl.style.borderColor = '#0d8a5e';
+        if (feedbackEl) {
+            feedbackEl.style.display = 'block';
+            feedbackEl.style.color = '#0d8a5e';
+            feedbackEl.innerHTML = `<i class="fa-solid fa-circle-check"></i> Mã <strong>[${val}]</strong> hợp lệ.`;
+        }
+        if (btnSave) {
+            btnSave.disabled = false;
+            btnSave.style.opacity = '1';
+            btnSave.style.cursor = 'pointer';
+        }
+    }
+};
+
+window.startEditLoaiSan = function(maLS, tenLS) {
+    editingLoaiSanId = maLS;
+    isLoaiSanCodeDuplicate = false;
+
+    const titleEl = document.getElementById('ls-form-title');
+    const cancelBtn = document.getElementById('btn-cancel-edit-ls');
+    const maInput = document.getElementById('ls-ma-input');
+    const tenInput = document.getElementById('ls-ten-input');
+    const feedbackEl = document.getElementById('ls-ma-feedback');
+    const btnText = document.getElementById('btn-submit-loaisan-text');
+    const btnSave = document.getElementById('btn-submit-loaisan');
+
+    if (titleEl) {
+        titleEl.innerHTML = `<i class="fa-solid fa-pen-to-square" style="color: #2563eb;"></i> <span style="color: #1e40af;">Chỉnh sửa Loại Sân #${maLS}</span>`;
+    }
+    if (cancelBtn) cancelBtn.style.display = 'inline-block';
+    if (maInput) {
+        maInput.value = maLS;
+        maInput.style.borderColor = '#cbd5e1';
+    }
+    if (tenInput) {
+        tenInput.value = tenLS;
+        tenInput.focus();
+    }
+    if (feedbackEl) {
+        feedbackEl.style.display = 'none';
+        feedbackEl.innerHTML = '';
+    }
+    if (btnText) btnText.textContent = 'Lưu cập nhật';
+    if (btnSave) {
+        btnSave.disabled = false;
+        btnSave.style.opacity = '1';
+        btnSave.style.cursor = 'pointer';
+    }
+};
+
+window.resetLoaiSanForm = function() {
+    editingLoaiSanId = null;
+    isLoaiSanCodeDuplicate = false;
+
+    const titleEl = document.getElementById('ls-form-title');
+    const cancelBtn = document.getElementById('btn-cancel-edit-ls');
+    const maInput = document.getElementById('ls-ma-input');
+    const tenInput = document.getElementById('ls-ten-input');
+    const feedbackEl = document.getElementById('ls-ma-feedback');
+    const btnText = document.getElementById('btn-submit-loaisan-text');
+    const btnSave = document.getElementById('btn-submit-loaisan');
+
+    if (titleEl) {
+        titleEl.innerHTML = `<i class="fa-solid fa-circle-plus" style="color: var(--primary);"></i> <span>Thêm Loại Sân Mới</span>`;
+    }
+    if (cancelBtn) cancelBtn.style.display = 'none';
+    if (maInput) {
+        maInput.value = '';
+        maInput.style.borderColor = '#cbd5e1';
+    }
+    if (tenInput) tenInput.value = '';
+    if (feedbackEl) {
+        feedbackEl.style.display = 'none';
+        feedbackEl.innerHTML = '';
+    }
+    if (btnText) btnText.textContent = 'Thêm mới';
+    if (btnSave) {
+        btnSave.disabled = false;
+        btnSave.style.opacity = '1';
+        btnSave.style.cursor = 'pointer';
+    }
+};
+
+window.saveLoaiSanAdmin = async function() {
+    if (isLoaiSanCodeDuplicate) {
+        return showSystemModal('Trùng mã loại sân', 'Mã loại sân bạn nhập đã tồn tại trên hệ thống! Vui lòng chọn mã khác.', 'error');
+    }
+
+    const maVal = document.getElementById('ls-ma-input')?.value.trim().toUpperCase() || '';
+    const tenVal = document.getElementById('ls-ten-input')?.value.trim() || '';
+
+    if (!tenVal) {
+        return showSystemModal('Thiếu thông tin', 'Vui lòng nhập Tên loại sân (VD: Sân 5 người, Sân 7 người, Sân 11 người)!', 'error');
+    }
+
+    if (editingLoaiSanId && !maVal) {
+        return showSystemModal('Thiếu mã loại sân', 'Khi chỉnh sửa không được để trống Mã loại sân!', 'error');
+    }
+
+    const btn = document.getElementById('btn-submit-loaisan');
+    if (btn) btn.disabled = true;
+
+    const url = editingLoaiSanId
+        ? `${API_BASE_URL}/loai-san/${editingLoaiSanId}`
+        : `${API_BASE_URL}/loai-san`;
+    const method = editingLoaiSanId ? 'PUT' : 'POST';
+
+    const payload = { TenLoaiSan: tenVal };
+    if (maVal !== '') {
+        payload.MaLoaiSan = maVal;
+    }
+
+    try {
+        const res = await fetch(url, {
+            method: method,
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+            showSystemModal('Thành công', data.message, 'success');
+            resetLoaiSanForm();
+            await loadAdminLoaiSanList();
+
+            // Nếu Admin đang đứng ở màn hình chi tiết 1 Cụm sân -> Tự động làm mới lại Bảng giá & Danh sách sân con
+            if (currentCumSanId && document.getElementById('sanbong-table-body')) {
+                renderCumSanDetail(currentCumSanId);
+            }
+        } else {
+            showSystemModal('Không thể lưu', data.message || 'Có lỗi xảy ra khi lưu loại sân!', 'error');
+        }
+    } catch (e) {
+        showSystemModal('Lỗi kết nối', 'Không thể kết nối đến máy chủ!', 'error');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+};
+
+window.openDeleteLoaiSanConfirmModal = function(maLS, tenLS) {
+    pendingDeleteLoaiSanId = maLS;
+
+    let modal = document.getElementById('admin-delete-loaisan-confirm-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'admin-delete-loaisan-confirm-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 10060; align-items: center; justify-content: center;';
+        modal.onclick = function(e) {
+            if (e.target === modal) modal.style.display = 'none';
+        };
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 420px; width: 92%; text-align: center; padding: 28px 24px; border-radius: 16px;">
+            <div style="width: 64px; height: 64px; border-radius: 50%; background: #fef2f2; color: #ef4444; border: 2px solid #fecaca; display: inline-flex; align-items: center; justify-content: center; font-size: 1.8rem; margin-bottom: 14px;">
+                <i class="fa-solid fa-trash-can"></i>
+            </div>
+            <h3 style="margin: 0 0 10px 0; font-size: 1.25rem; font-weight: 800; color: #0f172a;">Xác nhận xóa Loại Sân?</h3>
+            <p style="color: #475569; font-size: 0.92rem; line-height: 1.6; margin: 0 0 22px 0;">
+                Bạn có chắc chắn muốn xóa loại sân <strong style="color: #0f172a;">${tenLS} (#${maLS})</strong> khỏi hệ thống không?
+            </p>
+            <div style="display: flex; justify-content: center; gap: 12px;">
+                <button type="button" class="btn-outline" style="flex: 1; padding: 10px 18px; border-radius: 10px;" onclick="document.getElementById('admin-delete-loaisan-confirm-modal').style.display='none'">Hủy bỏ</button>
+                <button type="button" id="btn-confirm-delete-loaisan" class="btn-primary" style="flex: 1; padding: 10px 18px; border-radius: 10px; background: #ef4444; border-color: #ef4444;" onclick="executeDeleteLoaiSanAdmin()">
+                    <i class="fa-solid fa-check" style="margin-right: 5px;"></i> Đồng ý xóa
+                </button>
+            </div>
+        </div>
+    `;
+
+    modal.style.display = 'flex';
+};
+
+window.executeDeleteLoaiSanAdmin = async function() {
+    if (!pendingDeleteLoaiSanId) return;
+
+    const btn = document.getElementById('btn-confirm-delete-loaisan');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xóa...';
+    }
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/loai-san/${pendingDeleteLoaiSanId}`, {
+            method: 'DELETE',
+            headers: { 'Accept': 'application/json' }
+        });
+        const data = await res.json();
+
+        const confModal = document.getElementById('admin-delete-loaisan-confirm-modal');
+        if (confModal) confModal.style.display = 'none';
+
+        if (res.ok && data.success) {
+            if (editingLoaiSanId === pendingDeleteLoaiSanId) {
+                resetLoaiSanForm();
+            }
+            showSystemModal('Đã xóa thành công', data.message, 'success');
+            await loadAdminLoaiSanList();
+        } else {
+            showSystemModal('Không thể xóa', data.message || 'Loại sân này đang được sử dụng!', 'error');
+        }
+    } catch (e) {
+        const confModal = document.getElementById('admin-delete-loaisan-confirm-modal');
+        if (confModal) confModal.style.display = 'none';
+        showSystemModal('Lỗi kết nối', 'Mất kết nối đến máy chủ!', 'error');
+    } finally {
+        pendingDeleteLoaiSanId = null;
+    }
 };
