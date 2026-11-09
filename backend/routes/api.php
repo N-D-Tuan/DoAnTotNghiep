@@ -140,10 +140,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/cum-san/{id}', [CumSanController::class, 'update']);
     Route::delete('/cum-san/{id}', [CumSanController::class, 'destroy']);
     Route::put('/cum-san/{id}/restore', [CumSanController::class, 'restore']);
+
+    Route::post('/loai-san', [LoaiSanController::class, 'store']);
+    Route::put('/loai-san/{id}', [LoaiSanController::class, 'update']);
+    Route::delete('/loai-san/{id}', [LoaiSanController::class, 'destroy']);
     
     Route::post('/san-bong', [SanBongController::class, 'store']);
     Route::put('/san-bong/{id}', [SanBongController::class, 'update']);
-    
     Route::post('/gia-tien/save', [GiaTienController::class, 'saveBulk']);
 
     // 9. Ca làm việc và Lịch làm việc

@@ -7,6 +7,140 @@
     <link rel="stylesheet" href="../css/admin.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style id="admin-clean-theme">
+        /* 1. Khắc phục triệt để lỗi tràn/cắt màn hình bên phải ở Tổng quan & Lịch làm việc */
+        .admin-layout {
+            width: 100%;
+            overflow-x: hidden;
+        }
+        .admin-main {
+            flex: 1;
+            min-width: 0 !important; /* Bắt buộc để bảng 31 ngày không đẩy vỡ khung phải */
+            max-width: 100%;
+        }
+        .admin-content {
+            width: 100% !important;
+            max-width: none !important; /* Xóa bỏ khoảng trắng 2 bên */
+            margin: 0 !important;
+            box-sizing: border-box;
+        }
+        .chart-layout, .panel, .stat-grid {
+            min-width: 0;
+            max-width: 100%;
+        }
+
+        /* 2. Bảo toàn z-index cho Topbar & Dropdown Thông báo luôn nằm trên mọi bảng Sticky */
+        .admin-topbar {
+            position: relative;
+            z-index: 1500 !important;
+            background: #ffffff;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        #notif-dropdown {
+            z-index: 2000 !important;
+        }
+
+        /* 3. Thiết kế đồng bộ Page Header gọn gàng, lịch sự cho tất cả các mục */
+        .page-header {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-left: 4px solid var(--primary, #16a34a);
+            border-radius: 10px;
+            padding: 16px 22px !important;
+            margin-bottom: 20px !important;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 14px;
+        }
+        .page-header .page-title {
+            font-size: 1.35rem !important;
+            font-weight: 700 !important;
+            color: #0f172a !important;
+            margin: 0 0 4px 0 !important;
+            line-height: 1.3 !important;
+        }
+        .page-header p.text-muted {
+            font-size: 0.88rem !important;
+            color: #64748b !important;
+            margin: 0 !important;
+            line-height: 1.4 !important;
+        }
+
+        /* 4. Thiết kế nút Quay lại (.btn-back) gọn gàng, thanh lịch ở mọi trang chi tiết */
+        .btn-back {
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 8px !important;
+            padding: 7px 14px !important;
+            margin-bottom: 14px !important;
+            font-size: 0.86rem !important;
+            font-weight: 600 !important;
+            color: #334155 !important;
+            background: #ffffff !important;
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 8px !important;
+            cursor: pointer !important;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03) !important;
+            transition: all 0.18s ease !important;
+        }
+        .btn-back i {
+            font-size: 0.82rem !important;
+            color: var(--primary, #16a34a) !important;
+            transition: transform 0.18s ease !important;
+        }
+        .btn-back:hover {
+            background: #f0fdf4 !important;
+            color: var(--primary, #16a34a) !important;
+            border-color: #86efac !important;
+        }
+        .btn-back:hover i {
+            transform: translateX(-3px) !important;
+        }
+
+        /* 5. Tinh chỉnh Thẻ thống kê (.stat-card), Khung (.panel) và Bảng (.admin-table) */
+        .stat-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 18px 20px;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+        }
+        .stat-title {
+            font-size: 0.84rem;
+            font-weight: 600;
+            color: #64748b;
+            margin-bottom: 6px;
+        }
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+        .panel {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+        }
+        .panel-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid #e2e8f0;
+            font-weight: 700;
+            color: #0f172a;
+        }
+        .admin-table th {
+            background: #f8fafc;
+            color: #334155;
+            font-weight: 700;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .admin-table td {
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: middle;
+        }
+    </style>
 </head>
 <body>
     <div class="admin-layout">
