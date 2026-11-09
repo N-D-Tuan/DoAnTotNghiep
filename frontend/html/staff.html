@@ -7,6 +7,14 @@
     <link rel="stylesheet" href="../css/admin.css"> <!-- Tận dụng lại CSS của Admin -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .admin-layout { width: 100%; overflow-x: hidden; }
+        .admin-main { flex: 1; min-width: 0 !important; max-width: 100%; }
+        .admin-content { width: 100% !important; max-width: none !important; margin: 0 !important; box-sizing: border-box; }
+        .chart-layout, .panel, .stat-grid { min-width: 0; max-width: 100%; }
+        .admin-topbar { position: relative; z-index: 1500 !important; }
+        #notif-dropdown { z-index: 2000 !important; }
+    </style>
 </head>
 <body>
     <div class="admin-layout">
