@@ -2403,7 +2403,10 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                 
                 for (let d = new Date(dStart); d <= dEnd; d.setDate(d.getDate() + 1)) {
                     const pad = n => n < 10 ? '0' + n : n;
+                    const dow = d.getDay();
                     dateArray.push({
+                        dayLabel: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][dow],
+                        isWeekend: (dow === 0 || dow === 6),
                         short: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`,
                         full: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`
                     });
@@ -2417,7 +2420,10 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                 let d = new Date(today); 
                 d.setDate(today.getDate() + i);
                 const pad = n => n < 10 ? '0' + n : n;
+                const dow = d.getDay();
                 dateArray.push({
+                    dayLabel: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][dow],
+                    isWeekend: (dow === 0 || dow === 6),
                     short: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`,
                     full: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`
                 });
@@ -2504,8 +2510,9 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                                     Giá sân
                                 </th>
                                 ${dateArray.map(d => `
-                                    <th style="min-width: 115px; padding: 14px 10px; text-align: center; border-bottom: 1px solid #cbd5e1; background: #F8FAFC; position: sticky; top: 0; z-index: 50;">
-                                        ${d.short}
+                                    <th style="min-width: 115px; padding: 10px 8px; text-align: center; border-bottom: 1px solid #cbd5e1; border-right: 1px solid #e2e8f0; background: ${d.isWeekend ? '#fffbeb' : '#F8FAFC'}; position: sticky; top: 0; z-index: 50;">
+                                        <div style="font-size: 0.75rem; font-weight: 700; color: ${d.isWeekend ? '#d97706' : '#64748b'}; line-height: 1.2;">${d.dayLabel}</div>
+                                        <div style="font-size: 0.92rem; font-weight: 800; color: #0f172a; margin-top: 2px;">${d.short}</div>
                                     </th>
                                 `).join('')}
                             </tr>

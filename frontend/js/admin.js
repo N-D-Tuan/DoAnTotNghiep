@@ -2306,14 +2306,17 @@ async function openMaTranLichModal(giaiDauId) {
             const yyyy = d.getFullYear();
             const mm = pad(d.getMonth() + 1);
             const dd = pad(d.getDate());
+            const dow = d.getDay();
             
             dateArray.push({
+                dayLabel: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][dow],
+                isWeekend: (dow === 0 || dow === 6),
                 dbFormat: `${yyyy}-${mm}-${dd}`,
                 displayFormat: `${dd}/${mm}`
             });
         }
 
-        // 4. Sinh các Tabs và tính toán tỷ lệ Đỏ/Trắng
+        // 4. Sinh các Tabs (Hiển thị Thứ ở dòng trên + Ngày ở dòng dưới) và tính toán tỷ lệ Đỏ/Trắng
         const totalSlotsPerDay = res.san_bongs.length * res.khung_gios.length;
         let tabsHtml = '';
 
@@ -2321,15 +2324,24 @@ async function openMaTranLichModal(giaiDauId) {
             const bookedCount = res.dat_sans.filter(ds => ds.NgayDa === date.dbFormat).length;
             const bookingRate = totalSlotsPerDay > 0 ? (bookedCount / totalSlotsPerDay) * 100 : 0;
             
-            let btnStyle = `padding: 8px 20px; border-radius: 999px; font-weight: 700; font-size: 0.88rem; cursor: pointer; white-space: nowrap; border: 1px solid #cbd5e1; background: #ffffff; color: #334155; transition: all 0.18s ease;`;
+            const baseBg = date.isWeekend ? '#fffbeb' : '#ffffff';
+            const baseBorder = date.isWeekend ? '#fde68a' : '#cbd5e1';
+            const dayColor = bookingRate >= 50 ? '#dc2626' : (date.isWeekend ? '#d97706' : '#64748b');
+
+            let btnStyle = `padding: 6px 16px; min-width: 72px; border-radius: 10px; cursor: pointer; white-space: nowrap; border: 1px solid ${baseBorder}; background: ${baseBg}; color: #0f172a; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; transition: all 0.18s ease;`;
             let iconHtml = '';
             
             if (bookingRate >= 50) {
-                btnStyle = `padding: 8px 20px; border-radius: 999px; font-weight: 700; font-size: 0.88rem; cursor: pointer; white-space: nowrap; border: 1px solid #fca5a5; background: #fef2f2; color: #ef4444; transition: all 0.18s ease;`;
-                iconHtml = `<i class="fa-solid fa-triangle-exclamation" style="margin-right: 5px;"></i>`;
+                btnStyle = `padding: 6px 16px; min-width: 72px; border-radius: 10px; cursor: pointer; white-space: nowrap; border: 1px solid #fca5a5; background: #fef2f2; color: #ef4444; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; transition: all 0.18s ease;`;
+                iconHtml = `<i class="fa-solid fa-triangle-exclamation" style="margin-right: 4px; font-size: 0.72rem;"></i>`;
             }
 
-            tabsHtml += `<button type="button" class="ma-tran-tab-btn" data-date="${date.dbFormat}" style="${btnStyle}" onclick="renderMaTranTab('${date.dbFormat}', this)">${iconHtml}${date.displayFormat}</button>`;
+            tabsHtml += `
+                <button type="button" class="ma-tran-tab-btn" data-date="${date.dbFormat}" style="${btnStyle}" onclick="renderMaTranTab('${date.dbFormat}', this)">
+                    <span style="font-size: 0.72rem; font-weight: 700; color: ${dayColor}; line-height: 1.1;">${date.dayLabel}</span>
+                    <span style="font-size: 0.88rem; font-weight: 800; line-height: 1.2;">${iconHtml}${date.displayFormat}</span>
+                </button>
+            `;
         });
 
         document.getElementById('ma-tran-tabs').innerHTML = tabsHtml;
@@ -5782,7 +5794,10 @@ async function renderAdminSchedule(clusterId, pitchName, pitchId, loaiSanId, cus
         for(let i = 0; i < 7; i++) {
             let d = new Date(baseDate); 
             d.setDate(baseDate.getDate() + i);
+            const dow = d.getDay();
             dateArray.push({
+                dayLabel: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][dow],
+                isWeekend: (dow === 0 || dow === 6),
                 short: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`,
                 dbFormat: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
                 displayFormat: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`
@@ -5811,7 +5826,12 @@ async function renderAdminSchedule(clusterId, pitchName, pitchId, loaiSanId, cus
                             <tr>
                                 <th style="width: 140px; min-width: 140px; position: sticky; top: 0; left: 0; z-index: 60;">Khung giờ</th>
                                 <th style="width: 110px; min-width: 110px; position: sticky; top: 0; left: 140px; z-index: 59;">Giá tiền</th>
-                                ${dateArray.map(d => `<th style="min-width: 110px; position: sticky; top: 0; z-index: 50;">${d.short}</th>`).join('')}
+                                ${dateArray.map(d => `
+                                    <th style="min-width: 110px; padding: 10px 8px; text-align: center; background: ${d.isWeekend ? '#fffbeb' : '#f8fafc'}; position: sticky; top: 0; z-index: 50;">
+                                        <div style="font-size: 0.75rem; font-weight: 700; color: ${d.isWeekend ? '#d97706' : '#64748b'}; line-height: 1.2;">${d.dayLabel}</div>
+                                        <div style="font-size: 0.9rem; font-weight: 800; color: #0f172a; margin-top: 2px;">${d.short}</div>
+                                    </th>
+                                `).join('')}
                             </tr>
                         </thead>
                         <tbody>
@@ -10137,6 +10157,7 @@ function renderTournamentTimelinePanel() {
                         <option value="ALL" ${clusterTournamentTimelineState.dayModeFilter === 'ALL' ? 'selected' : ''}>Mọi kiểu lịch thi đấu</option>
                         <option value="WEEKEND" ${clusterTournamentTimelineState.dayModeFilter === 'WEEKEND' ? 'selected' : ''}>Giải có đá Cuối tuần (T7/CN)</option>
                         <option value="INTERMITTENT" ${clusterTournamentTimelineState.dayModeFilter === 'INTERMITTENT' ? 'selected' : ''}>Giải đá cách ngày / ngắt quãng</option>
+                        <option value="CONTINUOUS" ${clusterTournamentTimelineState.dayModeFilter === 'CONTINUOUS' ? 'selected' : ''}>Giải đá liên tục (Không nghỉ)</option>
                     </select>
                 </div>
 
@@ -10238,8 +10259,21 @@ function renderTournamentTimelineGridOnly() {
             if (!gd.cac_san_su_dung || !gd.cac_san_su_dung[pFilter]) return false;
         }
 
-        // Lọc theo kiểu lịch đá (Cuối tuần / Ngắt quãng)
+        // Lọc theo kiểu lịch đá (Cuối tuần / Ngắt quãng / Liên tục)
         const matchDates = Object.keys(gd.ngay_co_tran || {}).sort();
+
+        // Kiểm tra xem giữa các ngày thực tế có trận có tồn tại khoảng trống (cách ngày > 1 ngày) hay không
+        let hasGapBetweenMatchDays = false;
+        for (let i = 1; i < matchDates.length; i++) {
+            const prevDate = new Date(matchDates[i - 1] + 'T00:00:00');
+            const currDate = new Date(matchDates[i] + 'T00:00:00');
+            const diffDays = Math.round((currDate - prevDate) / 86400000);
+            if (diffDays > 1) {
+                hasGapBetweenMatchDays = true;
+                break;
+            }
+        }
+
         if (modeFilter === 'WEEKEND') {
             const hasWeekendMatch = matchDates.some(dStr => {
                 const dayNum = new Date(dStr + 'T00:00:00').getDay();
@@ -10248,11 +10282,11 @@ function renderTournamentTimelineGridOnly() {
             const spanHasWeekend = !gd.da_dat_san && dateCols.some(c => c.isWeekend && c.ymd >= gd.ngay_bat_dau && c.ymd <= gd.ngay_ket_thuc);
             if (!hasWeekendMatch && !spanHasWeekend) return false;
         } else if (modeFilter === 'INTERMITTENT') {
-            if (matchDates.length < 2) return false;
-            const dStart = new Date(gd.ngay_bat_dau + 'T00:00:00');
-            const dEnd = new Date(gd.ngay_ket_thuc + 'T00:00:00');
-            const totalSpanDays = Math.round((dEnd - dStart) / 86400000) + 1;
-            if (matchDates.length >= totalSpanDays) return false;
+            // Chỉ lấy giải đã đặt lịch và có ít nhất 2 ngày thi đấu bị ngắt quãng (cách nhau >= 2 ngày)
+            if (!gd.da_dat_san || matchDates.length < 2 || !hasGapBetweenMatchDays) return false;
+        } else if (modeFilter === 'CONTINUOUS') {
+            // Chỉ lấy giải đã đặt lịch mà các ngày thi đấu liền mạch hoàn toàn (không có ngày nghỉ ở giữa)
+            if (!gd.da_dat_san || matchDates.length === 0 || hasGapBetweenMatchDays) return false;
         }
 
         return true;

@@ -545,7 +545,10 @@ async function loadSchedule(clusterId, pitchId) {
             let d = new Date(today);
             d.setDate(today.getDate() + i);
             const pad = n => n < 10 ? '0' + n : n;
+            const dow = d.getDay();
             dateArray.push({
+                dayLabel: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][dow],
+                isWeekend: (dow === 0 || dow === 6),
                 short: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`,
                 dbDate: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
                 rawDate: d
@@ -603,9 +606,10 @@ async function loadSchedule(clusterId, pitchId) {
                             <th style="width: 100px; min-width: 100px; padding: 14px 10px; border-bottom: 1px solid var(--border-color); background: var(--bg-tertiary); position: sticky; top: 80px; left: 120px; z-index: 49; box-shadow: 4px 0 6px -2px rgba(0,0,0,0.2), 0 3px 8px rgba(0,0,0,0.2); text-align: center; color: var(--text-main);">
                                 Giá tiền
                             </th>
-                            ${dateArray.map((d, i) => `
-                                <th style="min-width: 105px; padding: 14px 10px; text-align: center; white-space: nowrap; border-bottom: 1px solid var(--border-color); background: var(--bg-tertiary); position: sticky; top: 80px; z-index: 40; box-shadow: 0 3px 8px rgba(0,0,0,0.2); color: var(--text-main);">
-                                    ${i === 0 ? 'Hôm nay' : d.short}
+                            ${dateArray.map((d) => `
+                                <th style="min-width: 105px; padding: 10px 8px; text-align: center; white-space: nowrap; border-bottom: 1px solid var(--border-color); background: var(--bg-tertiary); position: sticky; top: 80px; z-index: 40; box-shadow: 0 3px 8px rgba(0,0,0,0.2); color: var(--text-main);">
+                                    <div style="font-size: 0.75rem; font-weight: 700; color: ${d.isWeekend ? '#fbbf24' : '#94a3b8'}; line-height: 1.2; margin-bottom: 2px;">${d.dayLabel}</div>
+                                    <div style="font-size: 0.92rem; font-weight: 800; color: var(--text-main);">${d.short}</div>
                                 </th>
                             `).join('')}
                         </tr>
