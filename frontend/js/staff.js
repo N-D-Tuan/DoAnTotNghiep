@@ -1519,22 +1519,37 @@ function renderStaffQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = null) {
         <div id="staff-datsan-alert" class="modal-alert" style="display: none; margin-bottom: 16px;"></div>
 
         <div class="panel">
-            <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
-                <div style="position: relative; flex: 1; min-width: 250px;">
-                    <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
-                    <input type="text" id="staff-ds-search-input" class="form-control" style="padding-left: 35px;" placeholder="Tìm Mã HĐ, Mã vé (PT-..., GD-...), SĐT, Tên khách..." oninput="handleStaffDSSearch(this.value)">
+            <!-- Thanh công cụ Tìm kiếm & Bộ lọc (Đã bỏ nút Quét mã bị trùng và thiết kế lại cân đối) -->
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; background: #f8fafc; padding: 14px 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                <!-- Ô tìm kiếm từ khóa -->
+                <div style="position: relative; flex: 1; min-width: 260px;">
+                    <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #64748b; font-size: 0.9rem;"></i>
+                    <input type="text" id="staff-ds-search-input" class="form-control" style="padding-left: 38px; height: 40px; background: #ffffff; border-color: #cbd5e1; border-radius: 9px; font-size: 0.9rem;" placeholder="Tìm Mã HĐ, Mã vé (#PT-..., #GD-...), SĐT, Tên khách..." oninput="handleStaffDSSearch(this.value)">
                 </div>
-                <button type="button" class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 0 18px; background: #0f172a; border-color: #0f172a; white-space: nowrap;" onclick="openStaffQrScannerModal()">
-                    <i class="fa-solid fa-qrcode"></i> Quét mã vé
-                </button>
-                <input type="date" class="form-control" style="width: 150px;" id="staff-ds-date-input" onchange="handleStaffDSDate(this.value)">
-                <select class="form-control" id="staff-ds-status-select" style="width: 210px;" onchange="handleStaffDSFilter(this.value)" title="Lọc theo trạng thái Hóa đơn đặt sân">
-                    <option value="All" ${defaultStatus === 'All' ? 'selected' : ''}>Tất cả trạng thái HĐ</option>
-                    <option value="DaCoc" ${defaultStatus === 'DaCoc' ? 'selected' : ''}>Đã cọc</option>
-                    <option value="HoanThanh" ${defaultStatus === 'HoanThanh' ? 'selected' : ''}>Hoàn thành</option>
-                    <option value="DaHuy" ${defaultStatus === 'DaHuy' ? 'selected' : ''}>Đã hủy</option>
-                    <option value="KhongDen" ${defaultStatus === 'KhongDen' ? 'selected' : ''}>Không đến</option>
-                </select>                
+
+                <!-- Cụm lọc Ngày đá & Trạng thái HĐ -->
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <div style="display: inline-flex; align-items: center; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 6px 0 12px; height: 40px; gap: 6px;">
+                        <i class="fa-regular fa-calendar" style="color: var(--primary); font-size: 0.88rem;"></i>
+                        <span style="font-size: 0.82rem; font-weight: 600; color: #64748b; white-space: nowrap;">Ngày đá:</span>
+                        <input type="date" id="staff-ds-date-input" style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%;" onchange="handleStaffDSDate(this.value)">
+                        <button type="button" onclick="document.getElementById('staff-ds-date-input').value=''; handleStaffDSDate('');" title="Xem tất cả các ngày" style="background: #f1f5f9; border: none; color: #475569; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: 0.15s;" onmouseover="this.style.background='#e2e8f0'; this.style.color='#0f172a'" onmouseout="this.style.background='#f1f5f9'; this.style.color='#475569'">
+                            Tất cả
+                        </button>
+                    </div>
+
+                    <div style="display: inline-flex; align-items: center; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 10px 0 12px; height: 40px; gap: 6px;">
+                        <i class="fa-solid fa-filter" style="color: var(--primary); font-size: 0.85rem;"></i>
+                        <span style="font-size: 0.82rem; font-weight: 600; color: #64748b; white-space: nowrap;">Trạng thái HĐ:</span>
+                        <select id="staff-ds-status-select" style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%; padding-right: 4px;" onchange="handleStaffDSFilter(this.value)" title="Lọc theo trạng thái Hóa đơn đặt sân">
+                            <option value="All" ${defaultStatus === 'All' ? 'selected' : ''}>Tất cả trạng thái</option>
+                            <option value="DaCoc" ${defaultStatus === 'DaCoc' ? 'selected' : ''}>Đã cọc</option>
+                            <option value="HoanThanh" ${defaultStatus === 'HoanThanh' ? 'selected' : ''}>Hoàn thành</option>
+                            <option value="DaHuy" ${defaultStatus === 'DaHuy' ? 'selected' : ''}>Đã hủy</option>
+                            <option value="KhongDen" ${defaultStatus === 'KhongDen' ? 'selected' : ''}>Không đến</option>
+                        </select>
+                    </div>
+                </div>
             </div>
 
             <div class="table-responsive" style="min-height: 350px;">

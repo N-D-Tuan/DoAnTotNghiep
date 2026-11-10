@@ -698,8 +698,8 @@
                 pk: ['MaGiaoDich'],
                 autoPrefix: 'GD',
                 fields: [
-                    { name: 'MaGiaoDich', type: 'varchar(36)', auto: true, placeholder: 'Bỏ trống tự sinh (VD: GD001)' },
-                    { name: 'MaNguoiDung', type: 'varchar(36) FK', required: true, placeholder: 'VD: ND005' },
+                    { name: 'MaGiaoDich', type: 'varchar(36)', auto: true, placeholder: 'Bỏ trống tự sinh (VD: GD002192610)' },
+                    { name: 'MaNguoiDung', type: 'varchar(36) FK', required: true, placeholder: 'VD: ND002 (Sẽ tự sinh mã GD002...)' },
                     { name: 'MaNhanVienXuLy', type: 'varchar(36) FK', placeholder: 'Mã nhân viên/quản lý xử lý...' },
                     { name: 'LoaiGiaoDich', type: 'enum', options: ['NapTien', 'DatSan', 'RutTien', 'HoanTienHuyGap', 'HoanTienHuySan'] },
                     { name: 'DongTien', type: 'enum', options: ['Cong', 'Tru'] },
@@ -976,6 +976,26 @@
                     </div>
                 `;
             }).join('');
+
+            // Nếu đang ở bảng GiaoDich: Tự động cập nhật gợi ý mã GD + [Mã KH] + [GiờPhútNgày] khi nhập MaNguoiDung
+            if (schema.table === 'GiaoDich') {
+                const userField = document.getElementById('field-MaNguoiDung');
+                const pkField = document.getElementById('field-MaGiaoDich');
+                if (userField && pkField) {
+                    const updateGdPreview = () => {
+                        if (editingPkObject) return;
+                        const rawNd = userField.value.trim().toUpperCase();
+                        const digits = rawNd.replace(/\D/g, '');
+                        const userCode = digits ? digits.slice(-3).padStart(3, '0') : '002';
+                        const now = new Date();
+                        const pad = n => String(n).padStart(2, '0');
+                        const previewCode = `GD${userCode}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getDate())}`;
+                        pkField.placeholder = `Bỏ trống tự sinh (Sẽ tạo: ${previewCode})`;
+                    };
+                    userField.addEventListener('input', updateGdPreview);
+                    updateGdPreview();
+                }
+            }
         }
 
         // Hàm xử lý vừa nhập vừa kiểm tra + Debounce khi ngừng nhập cho ô Khóa chính

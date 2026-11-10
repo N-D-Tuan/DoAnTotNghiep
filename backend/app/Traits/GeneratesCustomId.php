@@ -12,6 +12,12 @@ trait GeneratesCustomId
             $primaryKey = $model->getKeyName();
 
             if (empty($model->{$primaryKey})) {
+                // Nếu Model có hàm sinh mã riêng (như bảng GiaoDich) thì ưu tiên gọi hàm đó
+                if (method_exists($model, 'generateCustomPrimaryKey')) {
+                    $model->{$primaryKey} = $model->generateCustomPrimaryKey();
+                    return;
+                }
+
                 $prefix = property_exists($model, 'idPrefix') ? $model->idPrefix : 'ID';
                 $padLength = property_exists($model, 'idPadLength') ? $model->idPadLength : 3;
 

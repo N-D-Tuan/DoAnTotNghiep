@@ -159,7 +159,16 @@ class DatabaseFormController extends Controller
         if (count($cfg['pk']) === 1) {
             $pkCol = $cfg['pk'][0];
             if (empty($payload[$pkCol]) && $cfg['prefix']) {
-                $payload[$pkCol] = self::generateNextId($table, $pkCol, $cfg['prefix']);
+                if ($table === 'GiaoDich') {
+                    // Riêng bảng GiaoDich: Tự sinh theo cấu trúc GD + [Mã KH 3 số] + [GiờPhútNgày] (VD: GD002192610)
+                    $payload[$pkCol] = \App\Models\GiaoDich::taoMaGiaoDich(
+                        $payload['MaNguoiDung'] ?? null,
+                        $payload['LoaiGiaoDich'] ?? null,
+                        $payload['NgayTao'] ?? null
+                    );
+                } else {
+                    $payload[$pkCol] = self::generateNextId($table, $pkCol, $cfg['prefix']);
+                }
             } elseif (!empty($payload[$pkCol])) {
                 $cleanId = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) $payload[$pkCol]));
                 if ($cleanId === '') {

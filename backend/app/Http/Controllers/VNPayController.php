@@ -116,28 +116,27 @@ class VNPayController extends Controller
                         $soDuTruoc = $nguoiDung->SoDuVi;
                         $soDuSau = $soDuTruoc + $soTienNap;
 
-                        $isProcessed = GiaoDich::where('NoiDung', 'LIKE', "%{$request->vnp_TxnRef}%")->exists();
+                        $cacheKeyVnp = 'vnpay_processed_' . $request->vnp_TxnRef;
+                        $isProcessed = \Illuminate\Support\Facades\Cache::has($cacheKeyVnp);
 
                         if (!$isProcessed) {
+                            \Illuminate\Support\Facades\Cache::put($cacheKeyVnp, true, now()->addHours(24));
+
                             $nguoiDung->update(['SoDuVi' => $soDuSau]);
 
-                            $giaoDichMoi = GiaoDich::create([
+                            // Sinh mã giao dịch có ý nghĩa (VD: GD002192610)
+                            $maGDMoi = GiaoDich::taoMaGiaoDich($nguoiDung->MaNguoiDung, 'NapTien');
+
+                            GiaoDich::create([
+                                'MaGiaoDich'   => $maGDMoi,
                                 'MaNguoiDung'  => $nguoiDung->MaNguoiDung,
                                 'LoaiGiaoDich' => 'NapTien',
                                 'DongTien'     => 'Cong',
                                 'SoTien'       => $soTienNap,
                                 'SoDuTruoc'    => $soDuTruoc,
                                 'SoDuSau'      => $soDuSau,
-                                'NoiDung'      => 'Nạp tiền vào ví qua cổng VNPay'
+                                'NoiDung'      => "Nạp tiền VNPay (Mã GD: #{$maGDMoi})"
                             ]);
-
-                            // Cập nhật chính xác khóa chính MaGiaoDich (VD: GD328) vào NoiDung
-                            $maGDChinhThuc = $giaoDichMoi->MaGiaoDich ?? $giaoDichMoi->ID;
-                            if ($maGDChinhThuc) {
-                                $giaoDichMoi->update([
-                                    'NoiDung' => "Nạp tiền VNPay (Mã GD: #{$maGDChinhThuc})"
-                                ]);
-                            }
 
                             ThongBao::create([
                                 'MaNguoiDung'  => $nguoiDung->MaNguoiDung,
