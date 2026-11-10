@@ -469,18 +469,26 @@ function renderStaffProfile() {
 
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
-        <div class="page-header" style="margin-bottom: 24px;">
-            <h1 class="page-title">Trang cá nhân</h1>
-            <p class="text-muted">Quản lý thông tin tài khoản nhân viên của bạn (Mã: <strong>${user.MaNguoiDung || user.ID}</strong>)</p>
+        <div class="page-header staff-hero-header">
+            <div>
+                <div class="staff-hero-badge"><i class="fa-solid fa-id-badge"></i> Hồ sơ nhân sự</div>
+                <h1 class="page-title">Trang cá nhân</h1>
+                <p class="text-muted">Quản lý thông tin liên hệ và tài khoản ngân hàng nhận lương của bạn</p>
+            </div>
+            <div style="background: #ffffff; border: 1px solid #cbd5e1; color: #0f172a; padding: 8px 16px; border-radius: 10px; font-size: 0.88rem; font-weight: 700; font-family: monospace; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                <i class="fa-solid fa-fingerprint" style="color: var(--primary); margin-right: 6px;"></i>Mã NV: #${user.MaNguoiDung || user.ID}
+            </div>
         </div>
 
         ${bankWarningBanner}
         
-        <div class="profile-card">
-            <div class="profile-avatar-large"><i class="fa-solid fa-user"></i></div>
+        <div class="profile-card" style="border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);">
+            <div class="profile-avatar-large" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%); color: #fff; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.25);"><i class="fa-solid fa-user-tie"></i></div>
             <div>
-                <h3 style="margin-bottom: 5px;">${user.HoTen || 'Chưa cập nhật'}</h3>
-                <p style="font-weight: 500; font-size: 0.95rem; color: #0369a1;"><i class="fa-solid fa-user"></i> Nhân viên cơ sở</p>
+                <h3 style="margin-bottom: 6px; font-size: 1.25rem; color: #0f172a;">${user.HoTen || 'Chưa cập nhật'}</h3>
+                <span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 0.82rem; color: #0369a1; background: #e0f2fe; border: 1px solid #bae6fd; padding: 4px 12px; border-radius: 999px;">
+                    <i class="fa-solid fa-user-gear"></i> Nhân viên cơ sở
+                </span>
             </div>
         </div>
 
@@ -795,35 +803,55 @@ async function renderManHinhThuNgan() {
         const rawAvgStaff = (ratingData && ratingData.success) ? Number(ratingData.trung_binh || 0) : Number(cs.danh_gias_avg_so_sao || 0);
         const avgStarStaff = countStarStaff > 0 ? rawAvgStaff.toFixed(1) : '0.0';
 
+        const gioMo = cs.GioMoCua ? cs.GioMoCua.substring(0, 5) : '06:00';
+        const gioDong = cs.GioDongCua ? cs.GioDongCua.substring(0, 5) : '22:00';
+
         contentArea.innerHTML = `
-            <div class="page-header" style="margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div class="page-header staff-hero-header">
                 <div>
-                    <h1 class="page-title">Màn hình Thu Ngân - ${cs.TenCumSan}</h1>
-                    <p class="text-muted">Tổng quan ca làm việc và thao tác xử lý lịch đặt sân.</p>
+                    <div class="staff-hero-badge"><i class="fa-solid fa-cash-register"></i> Quầy Thu Ngân Trực Tuyến</div>
+                    <h1 class="page-title">${cs.TenCumSan}</h1>
+                    <p class="text-muted" style="display: flex; align-items: center; flex-wrap: wrap; gap: 14px; margin-top: 4px !important;">
+                        <span><i class="fa-solid fa-location-dot" style="color: var(--primary); margin-right: 5px;"></i>${cs.DiaChi || 'Đà Nẵng'}</span>
+                        <span style="color: #cbd5e1;">|</span>
+                        <span><i class="fa-regular fa-clock" style="color: var(--primary); margin-right: 5px;"></i>Giờ mở cửa: <strong style="color: #0f172a;">${gioMo} - ${gioDong}</strong></span>
+                    </p>
                 </div>
-                <button type="button" onclick="openStaffClusterReviewsModal('${cumSanId}', '${cs.TenCumSan.replace(/'/g, "\\'")}')" style="background: #fffbeb; border: 1.5px solid #fcd34d; color: #b45309; padding: 10px 18px; border-radius: 12px; font-weight: 700; font-size: 0.92rem; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 2px 6px rgba(245, 158, 11, 0.15);">
-                    <i class="fa-solid fa-star" style="color: #f59e0b; font-size: 1.1rem;"></i>
+                <button type="button" onclick="openStaffClusterReviewsModal('${cumSanId}', '${cs.TenCumSan.replace(/'/g, "\\'")}')" style="background: #fffbeb; border: 1.5px solid #fcd34d; color: #b45309; padding: 10px 18px; border-radius: 12px; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.14); transition: 0.2s;" onmouseover="this.style.background='#fef3c7'" onmouseout="this.style.background='#fffbeb'">
+                    <i class="fa-solid fa-star" style="color: #f59e0b; font-size: 1.05rem;"></i>
                     <span>Đánh giá cơ sở: <strong>${avgStarStaff}</strong> (${countStarStaff} đánh giá)</span>
                 </button>
             </div>
 
             <!-- KHU VỰC THỐNG KÊ NHANH TRONG NGÀY -->
             <div class="stat-grid" style="margin-bottom: 24px;">
-                <div class="stat-card" style="border-left: 4px solid #3b82f6;">
-                    <div class="stat-title">Lịch đá hôm nay</div>
-                    <div id="staff-stat-sotran" class="stat-value" style="color: #1e293b;">...</div>
+                <div class="staff-stat-card" style="border-left: 4px solid #3b82f6;">
+                    <div>
+                        <div class="stat-title" style="color: #64748b; font-weight: 600; font-size: 0.84rem; margin-bottom: 6px;">Lịch đá hôm nay</div>
+                        <div id="staff-stat-sotran" class="stat-value" style="color: #0f172a; font-size: 1.65rem; font-weight: 800;">...</div>
+                    </div>
+                    <div class="staff-stat-icon" style="background: #eff6ff; color: #2563eb;"><i class="fa-solid fa-calendar-day"></i></div>
                 </div>
-                <div class="stat-card" style="border-left: 4px solid #f59e0b;">
-                    <div class="stat-title">Chờ nhận sân (Check-in)</div>
-                    <div id="staff-stat-chonhan" class="stat-value" style="color: #d97706;">...</div>
+                <div class="staff-stat-card" style="border-left: 4px solid #f59e0b;">
+                    <div>
+                        <div class="stat-title" style="color: #64748b; font-weight: 600; font-size: 0.84rem; margin-bottom: 6px;">Chờ nhận sân (Check-in)</div>
+                        <div id="staff-stat-chonhan" class="stat-value" style="color: #d97706; font-size: 1.65rem; font-weight: 800;">...</div>
+                    </div>
+                    <div class="staff-stat-icon" style="background: #fffbeb; color: #d97706;"><i class="fa-solid fa-hourglass-half"></i></div>
                 </div>
-                <div class="stat-card" style="border-left: 4px solid #10b981;">
-                    <div class="stat-title">Đã hoàn thành (Ra về)</div>
-                    <div id="staff-stat-hoanthanh" class="stat-value" style="color: #047857;">...</div>
+                <div class="staff-stat-card" style="border-left: 4px solid #10b981;">
+                    <div>
+                        <div class="stat-title" style="color: #64748b; font-weight: 600; font-size: 0.84rem; margin-bottom: 6px;">Đã hoàn thành (Ra về)</div>
+                        <div id="staff-stat-hoanthanh" class="stat-value" style="color: #047857; font-size: 1.65rem; font-weight: 800;">...</div>
+                    </div>
+                    <div class="staff-stat-icon" style="background: #ecfdf5; color: #059669;"><i class="fa-solid fa-circle-check"></i></div>
                 </div>
-                <div class="stat-card" style="border-left: 4px solid #8b5cf6;">
-                    <div class="stat-title">Doanh thu sân</div>
-                    <div id="staff-stat-doanhthu" class="stat-value" style="color: #6d28d9;">...</div>
+                <div class="staff-stat-card" style="border-left: 4px solid #8b5cf6;">
+                    <div>
+                        <div class="stat-title" style="color: #64748b; font-weight: 600; font-size: 0.84rem; margin-bottom: 6px;">Doanh thu hôm nay</div>
+                        <div id="staff-stat-doanhthu" class="stat-value" style="color: #6d28d9; font-size: 1.55rem; font-weight: 800;">...</div>
+                    </div>
+                    <div class="staff-stat-icon" style="background: #f5f3ff; color: #7c3aed;"><i class="fa-solid fa-sack-dollar"></i></div>
                 </div>
             </div>
 
@@ -1477,9 +1505,15 @@ function renderStaffQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = null) {
 
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
-        <div class="page-header" style="margin-bottom: 24px;">
-            <h1 class="page-title">Quản lý Lịch Đặt Sân</h1>
-            <p class="text-muted">Danh sách các hóa đơn và đặt sân tại cơ sở của bạn. Vui lòng chốt trạng thái khách đến sân.</p>
+        <div class="page-header staff-hero-header">
+            <div>
+                <div class="staff-hero-badge"><i class="fa-solid fa-clipboard-check"></i> Nghiệp vụ Sân Bóng</div>
+                <h1 class="page-title">Quản lý Lịch Đặt Sân</h1>
+                <p class="text-muted">Tra cứu hóa đơn, quét mã QR check-in và chốt trạng thái khách đến nhận sân tại cơ sở.</p>
+            </div>
+            <button type="button" class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 10px; background: #0f172a; border-color: #0f172a; font-weight: 700; box-shadow: 0 4px 10px rgba(15, 23, 42, 0.15);" onclick="openStaffQrScannerModal()">
+                <i class="fa-solid fa-qrcode" style="color: #4ade80;"></i> Quét QR Check-in nhanh
+            </button>
         </div>
 
         <div id="staff-datsan-alert" class="modal-alert" style="display: none; margin-bottom: 16px;"></div>
@@ -2524,10 +2558,14 @@ function renderLichLamViecStaff() {
 
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
-        <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <div class="page-header staff-hero-header">
             <div>
+                <div class="staff-hero-badge"><i class="fa-solid fa-calendar-week"></i> Điều phối Ca Trực</div>
                 <h1 class="page-title">Lịch làm việc của bạn</h1>
-                <p class="text-muted">Đăng ký ca tuần tới, theo dõi lịch tuần này và xem lịch sử các ca đã nhận</p>
+                <p class="text-muted">Đăng ký ca làm tuần tới (Thứ 2 - Thứ 7), theo dõi lịch trực tuần này và tra cứu bảng công hàng tháng</p>
+            </div>
+            <div style="background: #ffffff; border: 1px solid #bbf7d0; color: #15803d; padding: 8px 14px; border-radius: 10px; font-size: 0.84rem; font-weight: 700; display: inline-flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-building-user"></i> Cơ sở: ${window.currentClusterNameStaff || 'Đang trực'}
             </div>
         </div>
 
@@ -3103,11 +3141,18 @@ function renderDiemDanhNhanCa() {
     const menuLink = document.getElementById('menu-nhangiaoca');
     if (menuLink) menuLink.classList.add('active');
 
+    const todayFmt = new Date().toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
-        <div class="page-header" style="margin-bottom: 24px;">
-            <h1 class="page-title">Điểm danh Ca làm việc</h1>
-            <p class="text-muted">Nhấn điểm danh khi bắt đầu ca làm việc hôm nay. Chú ý: Bạn có thể điểm danh trước giờ bắt đầu ca tối đa 30 phút.</p>
+        <div class="page-header staff-hero-header">
+            <div>
+                <div class="staff-hero-badge"><i class="fa-solid fa-fingerprint"></i> Chấm Công Điện Tử</div>
+                <h1 class="page-title">Điểm danh Ca làm việc</h1>
+                <p class="text-muted">Nhấn điểm danh khi bắt đầu ca trực hôm nay (Mở điểm danh trước giờ vào ca tối đa 30 phút).</p>
+            </div>
+            <div style="background: #ffffff; border: 1px solid #cbd5e1; color: #334155; padding: 8px 16px; border-radius: 10px; font-size: 0.86rem; font-weight: 700; display: inline-flex; align-items: center; gap: 8px;">
+                <i class="fa-regular fa-calendar-check" style="color: var(--primary);"></i> ${todayFmt}
+            </div>
         </div>
 
         <div id="diemdanh-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;">
