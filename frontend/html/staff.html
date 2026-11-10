@@ -14,6 +14,74 @@
         .chart-layout, .panel, .stat-grid { min-width: 0; max-width: 100%; }
         .admin-topbar { position: relative; z-index: 1500 !important; }
         #notif-dropdown { z-index: 2000 !important; }
+
+        /* Thiết kế mới cho Page Header Nhân viên (Giữ nguyên bố cục Flexbox gốc) */
+        .staff-hero-header {
+            background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);
+            border: 1px solid #bbf7d0;
+            border-left: 5px solid var(--primary);
+            border-radius: 16px;
+            padding: 20px 26px;
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+            box-shadow: 0 4px 15px rgba(15, 23, 42, 0.04);
+        }
+        .staff-hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--primary);
+            background: #dcfce7;
+            border: 1px solid #86efac;
+            padding: 3px 10px;
+            border-radius: 999px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+        .staff-hero-header .page-title {
+            margin: 0 0 4px 0 !important;
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: #0f172a;
+            letter-spacing: -0.3px;
+        }
+        .staff-hero-header .text-muted {
+            margin: 0 !important;
+            font-size: 0.9rem;
+            color: #475569;
+        }
+        .staff-stat-card {
+            background: #ffffff;
+            border-radius: 14px;
+            padding: 18px 20px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .staff-stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+        }
+        .staff-stat-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+            flex-shrink: 0;
+        }
     </style>
 </head>
 <body>

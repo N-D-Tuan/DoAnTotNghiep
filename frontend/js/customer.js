@@ -569,27 +569,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         // ==========================================
         const urlParams = new URLSearchParams(window.location.search);
         const vnpayStatus = urlParams.get('vnpay_status');
+        const vnpayAmount = urlParams.get('so_tien');
         
         if (vnpayStatus) {
-            let msg = '';
-            let isSuccess = false;
-            
             if (vnpayStatus === 'success') { 
-
                 await syncUserWallet();
-
-                msg = 'Thanh toán VNPay thành công! Số dư đã được cập nhật.'; 
-                isSuccess = true; 
-            } else if (vnpayStatus === 'failed') { 
-                msg = 'Giao dịch đã bị hủy bởi người dùng.'; 
-            } else { 
-                msg = 'Giao dịch không hợp lệ hoặc lỗi chữ ký bảo mật.'; 
             }
 
-            // 3. Load lại Header và Ép hệ thống KHÔNG VẼ danh sách sân
+            // Load lại Header, mở trang Ví và bật Modal thông báo kết quả VNPay
             loadCustomerInfo(); 
             loadNotifications();
-            renderWallet(msg, isSuccess); 
+            await renderWallet(); 
+            showCustomerVnpayResultModal(vnpayStatus, vnpayAmount);
             
             // Xóa query param để F5 không bị lặp thông báo
             window.history.replaceState({}, document.title, window.location.pathname);
@@ -4336,6 +4327,11 @@ async function loadTransactionHistory(filterDate = '') {
 
             const soDuTruoc = Number(tx.SoDuTruoc || 0).toLocaleString('vi-VN');
             const soDuSau = Number(tx.SoDuSau || 0).toLocaleString('vi-VN');
+            const maGD = tx.MaGiaoDich || tx.ID || '';
+
+            // Tự động thay thế chuỗi mã tham chiếu cũ (VD: ND002_1794311155) bằng đúng khóa chính MaGiaoDich (VD: #GD328)
+            let noiDungHienThi = tx.NoiDung || tx.LoaiGiaoDich;
+            noiDungHienThi = noiDungHienThi.replace(/\(Mã GD:\s*[^)]+\)/gi, '').trim();
 
             html += `
                 <div class="tx-item-card">
@@ -4344,7 +4340,10 @@ async function loadTransactionHistory(filterDate = '') {
                             <i class="fa-solid ${icon}"></i>
                         </div>
                         <div>
-                            <div style="font-weight: 700; color: #0f172a; margin-bottom: 4px; font-size: 0.94rem; line-height: 1.35;">${tx.NoiDung || tx.LoaiGiaoDich}</div>
+                            <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 4px;">
+                                <span style="font-weight: 700; color: #0f172a; font-size: 0.94rem; line-height: 1.35;">${noiDungHienThi}</span>
+                                ${maGD ? `<span style="font-family: monospace; font-size: 0.76rem; font-weight: 700; color: #047857; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 2px 8px; border-radius: 6px;">#${maGD}</span>` : ''}
+                            </div>
                             <div style="font-size: 0.8rem; color: #64748b; display: flex; align-items: center; flex-wrap: wrap; gap: 10px;">
                                 <span><i class="fa-regular fa-clock" style="margin-right: 4px;"></i>${tx.displayDate}</span>
                                 <span style="background: #f1f5f9; padding: 2px 8px; border-radius: 6px; font-size: 0.76rem;">
@@ -4393,6 +4392,100 @@ function openDepositModal() {
 function closeDepositModal() {
     document.getElementById('deposit-modal').style.display = 'none';
 }
+
+// Modal hiển thị kết quả Nạp tiền Ví qua cổng VNPay (Thành công / Thất bại / Lỗi chữ ký)
+window.showCustomerVnpayResultModal = function(status, amount = null) {
+    let modal = document.getElementById('customer-vnpay-result-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'customer-vnpay-result-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 100000; align-items: center; justify-content: center;';
+        modal.onclick = function(e) {
+            if (e.target === modal) closeCustomerVnpayResultModal();
+        };
+        document.body.appendChild(modal);
+    }
+
+    const user = JSON.parse(sessionStorage.getItem('dn_football_user') || '{}');
+    const currentBalanceStr = Number(user.SoDuVi || 0).toLocaleString('vi-VN') + 'đ';
+    const isSuccess = (status === 'success');
+
+    let title = '';
+    let message = '';
+    let iconHtml = '';
+    let modalBg = '';
+    let modalBorder = '';
+    let titleColor = '';
+    let msgBg = '';
+    let msgBorder = '';
+    let msgColor = '';
+    let actionButtonsHtml = '';
+
+    if (isSuccess) {
+        const amountStr = amount ? `<strong style="color: #059669; font-size: 1.08rem;">+${Number(amount).toLocaleString('vi-VN')}đ</strong>` : 'thành công';
+        title = 'Nạp tiền ví thành công!';
+        message = `Giao dịch thanh toán qua cổng <strong>VNPay</strong> đã hoàn tất.<br>Hệ thống đã cộng ${amountStr} vào ví điện tử của bạn.<br><div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed #6ee7b7; color: #0f172a;">Số dư ví hiện tại: <strong style="color: #047857; font-size: 1.05rem;">${currentBalanceStr}</strong></div>`;
+        iconHtml = '<div style="width: 72px; height: 72px; border-radius: 50%; background: #d1fae5; color: #059669; border: 3px solid #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 2.3rem; margin-bottom: 14px; box-shadow: 0 6px 16px rgba(16, 185, 129, 0.22);"><i class="fa-solid fa-check"></i></div>';
+        modalBg = 'linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%)';
+        modalBorder = '1.5px solid #bbf7d0';
+        titleColor = '#065f46';
+        msgBg = '#ecfdf5';
+        msgBorder = '1px solid #a7f3d0';
+        msgColor = '#047857';
+        actionButtonsHtml = `
+            <button type="button" class="btn-outline" style="flex: 1; padding: 11px 16px; border-radius: 10px; font-weight: 600; background: #fff; border-color: #cbd5e1; color: #475569;" onclick="closeCustomerVnpayResultModal()">Đóng</button>
+            <button type="button" class="btn-primary" style="flex: 1.2; padding: 11px 16px; border-radius: 10px; font-weight: 700; background: #10b981; border-color: #10b981;" onclick="closeCustomerVnpayResultModal(); renderClusters();">
+                <i class="fa-solid fa-futbol" style="margin-right: 6px;"></i> Đặt sân ngay
+            </button>
+        `;
+    } else {
+        if (status === 'failed') {
+            title = 'Nạp tiền không thành công';
+            message = 'Giao dịch thanh toán VNPay đã bị hủy hoặc không hoàn tất. Số dư ví của bạn không bị thay đổi.';
+        } else if (status === 'invalid_signature') {
+            title = 'Lỗi xác thực chữ ký';
+            message = 'Chữ ký bảo mật từ cổng thanh toán VNPay không hợp lệ. Vui lòng thực hiện lại giao dịch!';
+        } else {
+            title = 'Có lỗi xảy ra';
+            message = 'Không thể xử lý giao dịch nạp tiền vào lúc này. Vui lòng thử lại hoặc liên hệ Hotline hỗ trợ!';
+        }
+
+        iconHtml = '<div style="width: 72px; height: 72px; border-radius: 50%; background: #fecdd3; color: #e11d48; border: 3px solid #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 2.3rem; margin-bottom: 14px; box-shadow: 0 6px 16px rgba(225, 29, 72, 0.2);"><i class="fa-solid fa-xmark"></i></div>';
+        modalBg = 'linear-gradient(180deg, #fff1f2 0%, #ffe4e6 100%)';
+        modalBorder = '1.5px solid #fda4af';
+        titleColor = '#9f1239';
+        msgBg = 'rgba(255, 255, 255, 0.8)';
+        msgBorder = '1px dashed #fda4af';
+        msgColor = '#881337';
+        actionButtonsHtml = `
+            <button type="button" class="btn-outline" style="flex: 1; padding: 11px 16px; border-radius: 10px; font-weight: 600; background: #ffffff; border: 1px solid #fda4af; color: #be123c;" onclick="closeCustomerVnpayResultModal()">Đóng</button>
+            <button type="button" class="btn-primary" style="flex: 1.2; padding: 11px 16px; border-radius: 10px; font-weight: 700; background: #2563eb; border-color: #2563eb;" onclick="closeCustomerVnpayResultModal(); openDepositModal();">
+                <i class="fa-solid fa-rotate-right" style="margin-right: 6px;"></i> Thử nạp lại
+            </button>
+        `;
+    }
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 440px; width: 92%; text-align: center; padding: 28px 24px; border-radius: 18px; background: ${modalBg}; border: ${modalBorder}; box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);">
+            ${iconHtml}
+            <h3 style="margin: 0 0 12px 0; font-size: 1.35rem; font-weight: 800; color: ${titleColor};">${title}</h3>
+            <div style="background: ${msgBg}; border: ${msgBorder}; color: ${msgColor}; padding: 14px 16px; border-radius: 12px; margin: 0 0 22px 0; line-height: 1.6; font-size: 0.92rem; font-weight: 500;">
+                ${message}
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                ${actionButtonsHtml}
+            </div>
+        </div>
+    `;
+
+    modal.style.display = 'flex';
+};
+
+window.closeCustomerVnpayResultModal = function() {
+    const modal = document.getElementById('customer-vnpay-result-modal');
+    if (modal) modal.style.display = 'none';
+};
 
 // 4. API Gửi yêu cầu lấy URL VNPay
 async function processDeposit() {

@@ -110,9 +110,9 @@ class VNPayController extends Controller
                     $parts = explode('_', $request->vnp_TxnRef);
                     $userId = $parts[0];
 
+                    $soTienNap = $request->vnp_Amount / 100;
                     $nguoiDung = NguoiDung::find($userId);
                     if ($nguoiDung) {
-                        $soTienNap = $request->vnp_Amount / 100;
                         $soDuTruoc = $nguoiDung->SoDuVi;
                         $soDuSau = $soDuTruoc + $soTienNap;
 
@@ -121,15 +121,23 @@ class VNPayController extends Controller
                         if (!$isProcessed) {
                             $nguoiDung->update(['SoDuVi' => $soDuSau]);
 
-                            GiaoDich::create([
+                            $giaoDichMoi = GiaoDich::create([
                                 'MaNguoiDung'  => $nguoiDung->MaNguoiDung,
                                 'LoaiGiaoDich' => 'NapTien',
                                 'DongTien'     => 'Cong',
                                 'SoTien'       => $soTienNap,
                                 'SoDuTruoc'    => $soDuTruoc,
                                 'SoDuSau'      => $soDuSau,
-                                'NoiDung'      => 'Nạp tiền VNPay (Mã GD: ' . $request->vnp_TxnRef . ')'
+                                'NoiDung'      => 'Nạp tiền vào ví qua cổng VNPay'
                             ]);
+
+                            // Cập nhật chính xác khóa chính MaGiaoDich (VD: GD328) vào NoiDung
+                            $maGDChinhThuc = $giaoDichMoi->MaGiaoDich ?? $giaoDichMoi->ID;
+                            if ($maGDChinhThuc) {
+                                $giaoDichMoi->update([
+                                    'NoiDung' => "Nạp tiền VNPay (Mã GD: #{$maGDChinhThuc})"
+                                ]);
+                            }
 
                             ThongBao::create([
                                 'MaNguoiDung'  => $nguoiDung->MaNguoiDung,
@@ -142,7 +150,7 @@ class VNPayController extends Controller
                         }
                     }
                     DB::commit();
-                    return redirect($frontendUrl . '?vnpay_status=success');
+                    return redirect($frontendUrl . '?vnpay_status=success&so_tien=' . $soTienNap);
                 } catch (\Exception $e) {
                     DB::rollBack();
                     return redirect($frontendUrl . '?vnpay_status=error');
