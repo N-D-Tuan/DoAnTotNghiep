@@ -356,5 +356,10 @@ class AuthController extends Controller
                 broadcast(new \App\Events\UserDataUpdated($userId));
             }
         }
+
+        // Tự động chạy ngầm kiểm tra & phát thông báo nhắc lịch đặt sân trong ngày hôm nay
+        dispatch(function () {
+            \App\Http\Controllers\DatSanController::kiemTraVaPhatThongBaoNhacLichHomNay();
+        })->afterResponse();
     }
 }
