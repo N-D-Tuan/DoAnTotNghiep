@@ -11,6 +11,11 @@ class CumSanController extends Controller
     // 1. Lấy danh sách Cụm Sân (kèm tên Phường)
     public function index()
     {
+        // Tự động chạy ngầm kiểm tra & gửi thông báo nhắc lịch hôm nay sau khi trả kết quả về trình duyệt
+        dispatch(function () {
+            \App\Http\Controllers\DatSanController::kiemTraVaPhatThongBaoNhacLichHomNay();
+        })->afterResponse();
+
         $cumSans = CumSan::with('phuong')
             ->withCount('danhGias')
             ->withAvg('danhGias', 'SoSao')

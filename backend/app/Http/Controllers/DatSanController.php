@@ -2713,4 +2713,298 @@ class DatSanController extends Controller
             return response()->json(['success' => false, 'message' => 'Lỗi hệ thống: ' . $e->getMessage()]);
         }
     }
+
+    // =========================================================================
+    // TỰ ĐỘNG KIỂM TRA & PHÁT THÔNG BÁO NHẮC LỊCH ĐẶT SÂN TRONG NGÀY (PHƯƠNG ÁN A)
+    // - Hoạt động tự động khi gọi API Xem Cụm Sân hoặc Đăng Nhập
+    // - Áp dụng cho cả Khách thành viên (Web + Mail) và Khách vãng lai (Mail)
+    // =========================================================================
+    public static function kiemTraVaPhatThongBaoNhacLichHomNay($forceScan = false)
+    {
+        $now = \Carbon\Carbon::now('Asia/Ho_Chi_Minh');
+        $todayYmd = $now->toDateString(); // YYYY-MM-DD
+        $todayDisplay = $now->format('d/m/Y');
+
+        // Phương án A: Bắt đầu phát thông báo nhắc lịch trong ngày từ 06:00 sáng trở đi
+        if (!$forceScan && $now->hour < 6) {
+            return;
+        }
+
+        // Khóa Cache 5 phút để tránh nhiều request cùng lúc quét trùng lặp
+        $scanLockKey = "auto_reminder_scan_lock_{$todayYmd}";
+        if (!$forceScan && \Illuminate\Support\Facades\Cache::has($scanLockKey)) {
+            return;
+        }
+        \Illuminate\Support\Facades\Cache::put($scanLockKey, true, now()->addMinutes(5));
+
+        // 1. Lấy tất cả các lịch đặt có NgayDa = Hôm nay và đang ở trạng thái Đã cọc (DaCoc)
+        $danhSachHomNay = DatSan::with(['sanBong.cumSan', 'khungGio', 'nguoiDung', 'giaiDau', 'chiTietHoaDon.hoaDonDatSan'])
+            ->whereDate('NgayDa', $todayYmd)
+            ->where('TrangThai', 'DaCoc')
+            ->get();
+
+        if ($danhSachHomNay->isEmpty()) {
+            return;
+        }
+
+        // 2. Lọc ra các trận chưa được nhắc trong hôm nay và chưa kết thúc ca đá
+        $cacTranCanNhac = $danhSachHomNay->filter(function ($ds) use ($todayYmd, $todayDisplay, $now) {
+            $cacheKey = "reminded_match_{$todayYmd}_{$ds->MaDatSan}";
+            if (\Illuminate\Support\Facades\Cache::has($cacheKey)) {
+                return false;
+            }
+
+            // Kiểm tra thêm trong bảng ThongBao (đối với khách có tài khoản) để phòng trường hợp xóa Cache vẫn không gửi trùng
+            if ($ds->MaNguoiDung) {
+                $maVeCheck = $ds->MaGiaiDau ? "#GD-{$ds->MaGiaiDau}" : "#PT-{$ds->MaDatSan}";
+                $daCoThongBaoDB = ThongBao::where('MaNguoiDung', $ds->MaNguoiDung)
+                    ->where('LoaiThongBao', 'DatSan')
+                    ->where('TieuDe', 'like', "%Nhắc lịch đá bóng hôm nay ({$todayDisplay})%")
+                    ->where('NoiDung', 'like', "%{$maVeCheck}%")
+                    ->exists();
+
+                if ($daCoThongBaoDB) {
+                    \Illuminate\Support\Facades\Cache::put($cacheKey, true, $now->copy()->endOfDay());
+                    return false;
+                }
+            }
+
+            // Bỏ qua nếu ca đá hôm nay đã kết thúc
+            if ($ds->khungGio && $ds->khungGio->GioKetThuc) {
+                $endTime = \Carbon\Carbon::parse($todayYmd . ' ' . $ds->khungGio->GioKetThuc, 'Asia/Ho_Chi_Minh');
+                if ($now->greaterThanOrEqualTo($endTime)) {
+                    return false;
+                }
+            }
+
+            // Nếu khách vừa mới đặt sân ngay trong hôm nay cách đây < 15 phút (vừa nhận mail đặt sân xong) -> Tạm hoãn lại lần quét sau
+            if ($ds->NgayTao) {
+                $createdTime = \Carbon\Carbon::parse($ds->NgayTao, 'Asia/Ho_Chi_Minh');
+                if ($createdTime->isSameDay($now) && $createdTime->diffInMinutes($now) < 15) {
+                    return false;
+                }
+            }
+
+            return true;
+        });
+
+        if ($cacTranCanNhac->isEmpty()) {
+            return;
+        }
+
+        // 3. Gom nhóm các trận trong ngày hôm nay theo từng Hóa đơn / Khách hàng
+        // (Ví dụ: Hóa đơn có 3 trận ngày 12 và 2 trận ngày 13 -> Ngày 12 gom 3 trận thành 1 thông báo, Ngày 13 gom 2 trận thành 1 thông báo)
+        $groups = $cacTranCanNhac->groupBy(function ($ds) {
+            $maHD = $ds->chiTietHoaDon ? $ds->chiTietHoaDon->MaHoaDonDatSan : null;
+            if ($ds->MaNguoiDung) {
+                return 'MEMBER_' . $ds->MaNguoiDung . '_' . ($maHD ?? 'NOHD');
+            }
+            $email = strtolower(trim($ds->EmailNguoiDat ?? 'noemail'));
+            return 'GUEST_' . $email . '_' . ($maHD ?? $ds->MaDatSan);
+        });
+
+        foreach ($groups as $groupKey => $matches) {
+            $sortedMatches = $matches->sortBy(function ($m) {
+                return $m->khungGio ? $m->khungGio->GioBatDau : '00:00:00';
+            })->values();
+
+            $first = $sortedMatches->first();
+            $soTranHomNay = $sortedMatches->count();
+            $maHoaDon = $first->chiTietHoaDon ? $first->chiTietHoaDon->MaHoaDonDatSan : null;
+            $isMember = ($first->MaNguoiDung !== null);
+            $isGiaiDau = ($first->MaGiaiDau !== null);
+
+            $tenKhach = $isMember
+                ? ($first->nguoiDung ? $first->nguoiDung->HoTen : 'Quý khách')
+                : ($first->TenNguoiDat ?: 'Quý khách');
+
+            $emailNhan = $isMember
+                ? ($first->nguoiDung ? $first->nguoiDung->Email : null)
+                : $first->EmailNguoiDat;
+
+            // Đánh dấu ngay vào Cache (hiệu lực đến hết ngày) để chỉ gửi đúng 1 lần duy nhất trong ngày
+            foreach ($sortedMatches as $m) {
+                \Illuminate\Support\Facades\Cache::put("reminded_match_{$todayYmd}_{$m->MaDatSan}", true, $now->copy()->endOfDay());
+            }
+
+            $danhSachTranMailHtml = '';
+            $tomTatWebArr = [];
+            $tongTienSanHomNay = 0;
+            $tongDaCocHomNay = 0;
+
+            foreach ($sortedMatches as $idx => $dsItem) {
+                $tenSan = $dsItem->sanBong ? $dsItem->sanBong->TenSan : 'Sân bóng';
+                $tenCumSan = ($dsItem->sanBong && $dsItem->sanBong->cumSan) ? $dsItem->sanBong->cumSan->TenCumSan : 'Cơ sở DN Football';
+                $diaChiCum = ($dsItem->sanBong && $dsItem->sanBong->cumSan) ? $dsItem->sanBong->cumSan->DiaChi : 'Đà Nẵng';
+                $gioStr = $dsItem->khungGio
+                    ? substr($dsItem->khungGio->GioBatDau, 0, 5) . ' - ' . substr($dsItem->khungGio->GioKetThuc, 0, 5)
+                    : '';
+                $maVe = $dsItem->MaGiaiDau ? "GD-{$dsItem->MaGiaiDau}" : "PT-{$dsItem->MaDatSan}";
+
+                $donGia = (float) $dsItem->TongTien;
+                $tienCoc = (float) $dsItem->TienCoc;
+                $tongTienSanHomNay += $donGia;
+                $tongDaCocHomNay += $tienCoc;
+
+                $tomTatWebArr[] = "{$tenSan} ({$gioStr} - #{$maVe})";
+
+                $danhSachTranMailHtml .= "
+                    <tr>
+                        <td style='padding: 10px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold;'>" . ($idx + 1) . "</td>
+                        <td style='padding: 10px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; font-weight: bold; color: #0b5d3b;'>#{$maVe}</td>
+                        <td style='padding: 10px; border: 1px solid #cbd5e1;'>
+                            <strong>{$tenSan}</strong><br>
+                            <span style='font-size: 12px; color: #475569;'>{$tenCumSan} — {$diaChiCum}</span>
+                        </td>
+                        <td style='padding: 10px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold; color: #15803d;'>{$gioStr}<br><span style='font-size: 12px; color: #64748b; font-weight: normal;'>{$todayDisplay}</span></td>
+                        <td style='padding: 10px; border: 1px solid #cbd5e1; text-align: right;'>" . number_format($donGia, 0, ',', '.') . "đ</td>
+                        <td style='padding: 10px; border: 1px solid #cbd5e1; text-align: right; color: #047857; font-weight: bold;'>" . number_format($tienCoc, 0, ',', '.') . "đ</td>
+                    </tr>
+                ";
+            }
+
+            $maCumSanChinh = $first->sanBong ? $first->sanBong->MaCumSan : null;
+            $tenCumSanChinh = ($first->sanBong && $first->sanBong->cumSan) ? $first->sanBong->cumSan->TenCumSan : 'DN Football';
+            $diaChiChinh = ($first->sanBong && $first->sanBong->cumSan) ? $first->sanBong->cumSan->DiaChi : 'Đà Nẵng';
+            $chuoiTomTatCa = implode(', ', $tomTatWebArr);
+
+            // Lấy đúng Số điện thoại của Quản lý cụm sân (VaiTro = 'QuanLySan') mà khách đã đặt
+            // (Nếu cụm sân chưa gán quản lý thì fallback về số điện thoại của Admin hệ thống)
+            $quanLyCum = $maCumSanChinh
+                ? NguoiDung::where('VaiTro', 'QuanLySan')
+                    ->where('MaCumSan', $maCumSanChinh)
+                    ->where('TrangThaiKhoa', 0)
+                    ->first()
+                : null;
+
+            if (!$quanLyCum && $maCumSanChinh) {
+                $quanLyCum = NguoiDung::where('VaiTro', 'QuanLySan')
+                    ->where('MaCumSan', $maCumSanChinh)
+                    ->first();
+            }
+
+            $adminInfo = NguoiDung::where('VaiTro', 'Admin')->first();
+            $sdtQuanLySan = ($quanLyCum && $quanLyCum->SoDienThoai)
+                ? $quanLyCum->SoDienThoai
+                : ($adminInfo && $adminInfo->SoDienThoai ? $adminInfo->SoDienThoai : '0899244124');
+            $tenQuanLyHienThi = ($quanLyCum && $quanLyCum->HoTen)
+                ? "Quản lý {$quanLyCum->HoTen} ({$tenCumSanChinh})"
+                : "Quản lý {$tenCumSanChinh}";
+
+            // =================================================================
+            // A. NẾU LÀ KHÁCH CÓ TÀI KHOẢN -> TẠO THÔNG BÁO WEB + PHÁT REALTIME
+            // =================================================================
+            if ($isMember) {
+                try {
+                    $tieuDeWeb = "Nhắc lịch đá bóng hôm nay ({$todayDisplay})";
+                    $noiDungWeb = "Hôm nay bạn có {$soTranHomNay} lịch đặt sân tại {$tenCumSanChinh}: {$chuoiTomTatCa}"
+                        . ($maHoaDon ? " (Hóa đơn #{$maHoaDon})" : "")
+                        . ". Vui lòng đến sân trước 10-15 phút để check-in (Hotline cơ sở: {$sdtQuanLySan}). Nếu có việc đột xuất quá thời hạn tự hủy, bạn có thể gửi 'Yêu cầu hủy sân gấp' tại mục Các yêu cầu.";
+
+                    ThongBao::create([
+                        'MaNguoiDung'  => $first->MaNguoiDung,
+                        'TieuDe'       => $tieuDeWeb,
+                        'NoiDung'      => $noiDungWeb,
+                        'LoaiThongBao' => 'DatSan'
+                    ]);
+
+                    broadcast(new \App\Events\UserDataUpdated($first->MaNguoiDung))->toOthers();
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::error('Lỗi tạo thông báo web nhắc lịch: ' . $e->getMessage());
+                }
+            }
+
+            // =================================================================
+            // B. GỬI EMAIL NHẮC LỊCH CHI TIẾT (CHO CẢ KHÁCH THÀNH VIÊN & VÃNG LAI)
+            // =================================================================
+            if ($emailNhan) {
+                try {
+                    $hdLabel = $maHoaDon ? " (Thuộc Hóa đơn <strong>#{$maHoaDon}</strong>)" : "";
+                    $loaiHinhText = ($isGiaiDau && $first->giaiDau)
+                        ? "Giải đấu: <strong>{$first->giaiDau->TenGiaiDau} (#GD-{$first->MaGiaiDau})</strong>"
+                        : "Đá phong trào";
+
+                    // Tính số tiền còn thu tại sân của Hóa đơn (nếu có Hóa đơn)
+                    $hdObj = $first->chiTietHoaDon ? $first->chiTietHoaDon->hoaDonDatSan : null;
+                    $dongConThuHtml = '';
+                    if ($hdObj) {
+                        $conThuHD = max(0, (float) $hdObj->TongTien - (float) $hdObj->TienDaCoc);
+                        $dongConThuHtml = "<div>&bull; Tổng số tiền còn cần thanh toán tại sân (Hóa đơn #{$maHoaDon}, đã gồm VAT/Khuyến mãi): <strong style='color: #e11d48;'>" . number_format($conThuHD, 0, ',', '.') . "đ</strong></div>";
+                    }
+
+                    if ($isMember) {
+                        $huongDanHuyHtml = "
+                            <div style='background: #fffbeb; border: 1px solid #fde68a; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 14px 18px; margin-top: 18px;'>
+                                <h4 style='margin: 0 0 8px 0; color: #92400e; font-size: 15px;'>📌 Hướng dẫn Dời lịch, Hủy sân & Yêu cầu hủy sân gấp:</h4>
+                                <ul style='margin: 0; padding-left: 20px; color: #334155; font-size: 13.5px; line-height: 1.65;'>
+                                    <li><strong>Tự hủy hoặc Dời lịch trực tiếp trên Web:</strong> Bạn có thể đăng nhập vào hệ thống &rarr; mục <strong>Lịch sử đặt sân</strong> để tự dời lịch hoặc hủy miễn phí (hoàn 100% tiền cọc vào Ví điện tử) nếu còn trước giờ bóng lăn tối thiểu <strong>10 tiếng</strong> (đối với đá phong trào) hoặc trước <strong>7 ngày</strong> (đối với giải đấu).</li>
+                                    <li style='margin-top: 6px;'><strong>Trường hợp đã quá thời hạn tự hủy (Sát giờ thi đấu):</strong> Nếu có việc đột xuất hoặc lý do bất khả kháng không thể ra sân khi thời gian còn dưới 10 tiếng, bạn hãy vào mục <strong>Các yêu cầu &rarr; Yêu cầu hủy sân gấp &rarr; Tạo yêu cầu hủy gấp</strong>, chọn lịch đặt và ghi rõ lý do để Ban quản lý cụm sân xem xét hỗ trợ duyệt hủy và hoàn trả 100% tiền cọc về Ví.</li>
+                                    <li style='margin-top: 6px;'><strong>Hotline Quản lý sân hỗ trợ trực tiếp:</strong> <strong>{$sdtQuanLySan}</strong> — {$tenQuanLyHienThi}.</li>
+                                </ul>
+                            </div>
+                        ";
+                    } else {
+                        $huongDanHuyHtml = "
+                            <div style='background: #fffbeb; border: 1px solid #fde68a; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 14px 18px; margin-top: 18px;'>
+                                <h4 style='margin: 0 0 8px 0; color: #92400e; font-size: 15px;'>📌 Hướng dẫn Hỗ trợ Dời lịch, Hủy sân & Hoàn tiền cọc:</h4>
+                                <ul style='margin: 0; padding-left: 20px; color: #334155; font-size: 13.5px; line-height: 1.65;'>
+                                    <li><strong>Cách thức yêu cầu hủy hoặc dời lịch:</strong> Đối với khách đặt sân không qua tài khoản thành viên, khi có việc đột xuất cần dời khung giờ hoặc hủy lịch đặt sân, quý khách vui lòng liên hệ trực tiếp với Nhân viên / Quản lý sân qua số <strong>Hotline: {$sdtQuanLySan}</strong> ({$tenQuanLyHienThi}).</li>
+                                    <li style='margin-top: 6px;'><strong>Xác thực OTP bảo mật & Hoàn cọc:</strong> Nhân viên tại cơ sở sẽ gửi <strong>1 mã xác thực OTP (6 chữ số)</strong> về chính địa chỉ Email này của bạn. Quý khách chỉ cần đọc mã OTP để hoàn tất hủy lịch và nhận lại 100% tiền đặt cọc.</li>
+                                </ul>
+                            </div>
+                        ";
+                    }
+
+                    $noiDungEmail = "
+                        <div style='font-family: Arial, sans-serif; max-width: 680px; margin: 0 auto; color: #0f172a; line-height: 1.6; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;'>
+                            <div style='background: linear-gradient(135deg, #0b5d3b 0%, #16a34a 100%); color: #ffffff; padding: 20px 24px;'>
+                                <h2 style='margin: 0; font-size: 20px;'>⚽ THÔNG BÁO NHẮC LỊCH ĐẶT SÂN HÔM NAY ({$todayDisplay})</h2>
+                                <p style='margin: 4px 0 0 0; font-size: 13.5px; opacity: 0.92;'>Hệ thống sân bóng đá trực tuyến DN Football — Đà Nẵng</p>
+                            </div>
+
+                            <div style='padding: 22px 24px; background: #ffffff;'>
+                                <p style='margin-top: 0;'>Xin chào <strong>{$tenKhach}</strong>,</p>
+                                <p>Hệ thống <strong>DN Football</strong> xin nhắc bạn có <strong>{$soTranHomNay} ca đặt sân</strong> sẽ diễn ra trong ngày hôm nay (<strong>{$todayDisplay}</strong>){$hdLabel} tại cơ sở <strong>{$tenCumSanChinh}</strong> ({$diaChiChinh}):</p>
+                                <p style='margin-bottom: 10px; font-size: 13.5px;'>&bull; Hình thức: {$loaiHinhText}</p>
+
+                                <table style='width: 100%; border-collapse: collapse; font-size: 13.5px; margin-bottom: 16px;'>
+                                    <thead>
+                                        <tr style='background: #f1f5f9; color: #0f172a;'>
+                                            <th style='padding: 10px; border: 1px solid #cbd5e1;'>STT</th>
+                                            <th style='padding: 10px; border: 1px solid #cbd5e1;'>Mã Vé</th>
+                                            <th style='padding: 10px; border: 1px solid #cbd5e1; text-align: left;'>Sân Bóng & Địa Chỉ</th>
+                                            <th style='padding: 10px; border: 1px solid #cbd5e1;'>Khung Giờ Đá</th>
+                                            <th style='padding: 10px; border: 1px solid #cbd5e1; text-align: right;'>Đơn Giá</th>
+                                            <th style='padding: 10px; border: 1px solid #cbd5e1; text-align: right;'>Đã Cọc</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {$danhSachTranMailHtml}
+                                    </tbody>
+                                </table>
+
+                                <div style='background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 16px; font-size: 14px;'>
+                                    <div>&bull; Tổng đơn giá các ca đá hôm nay ({$soTranHomNay} trận): <strong>" . number_format($tongTienSanHomNay, 0, ',', '.') . "đ</strong></div>
+                                    <div>&bull; Tiền cọc đã thanh toán cho các ca hôm nay: <strong style='color: #047857;'>" . number_format($tongDaCocHomNay, 0, ',', '.') . "đ</strong></div>
+                                    {$dongConThuHtml}
+                                    <div style='margin-top: 6px; font-size: 13px; color: #15803d;'><em>* Lưu ý: Quý khách vui lòng có mặt tại sân trước giờ bóng lăn 10 - 15 phút và xuất trình Mã vé / Mã QR cho nhân viên trực sân để Check-in nhận sân.</em></div>
+                                </div>
+
+                                {$huongDanHuyHtml}
+
+                                <p style='margin-top: 22px; margin-bottom: 0; font-size: 13.5px; color: #475569;'>Chúc bạn và đội bóng có những trận cầu thật sôi nổi tại <strong>DN Football</strong>!</p>
+                            </div>
+                        </div>
+                    ";
+
+                    Mail::html($noiDungEmail, function ($message) use ($emailNhan, $todayDisplay, $soTranHomNay, $tenCumSanChinh) {
+                        $message->to($emailNhan)
+                                ->subject("Nhắc lịch đá bóng hôm nay ({$todayDisplay}) - {$soTranHomNay} trận tại {$tenCumSanChinh}");
+                    });
+                } catch (\Exception $mailEx) {
+                    \Illuminate\Support\Facades\Log::error('Lỗi gửi email nhắc lịch hôm nay: ' . $mailEx->getMessage());
+                }
+            }
+        }
+    }
 }
