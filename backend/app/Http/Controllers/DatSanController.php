@@ -1896,15 +1896,22 @@ class DatSanController extends Controller
 
     public function guiOtpHuyHoaDonGuest(Request $request, $maHoaDon)
     {
-        $cacTran = DatSan::with(['sanBong.cumSan', 'khungGio'])
+        $selectedIds = $request->input('ma_dat_sans', []);
+
+        $query = DatSan::with(['sanBong.cumSan', 'khungGio'])
             ->whereHas('chiTietHoaDon', function ($q) use ($maHoaDon) {
                 $q->where('MaHoaDonDatSan', $maHoaDon);
             })
-            ->where('TrangThai', 'DaCoc')
-            ->get();
+            ->where('TrangThai', 'DaCoc');
+
+        if (is_array($selectedIds) && count($selectedIds) > 0) {
+            $query->whereIn('MaDatSan', $selectedIds);
+        }
+
+        $cacTran = $query->get();
 
         if ($cacTran->isEmpty()) {
-            return response()->json(['success' => false, 'message' => 'Không còn trận Đã cọc nào trong hóa đơn này để hủy!']);
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy trận Đã cọc nào hợp lệ để gửi OTP hủy!']);
         }
 
         $first = $cacTran->first();
@@ -1912,28 +1919,65 @@ class DatSanController extends Controller
             return response()->json(['success' => false, 'message' => 'Không tìm thấy email khách vãng lai của hóa đơn này!']);
         }
 
+        // Đếm tổng số trận đang Đã cọc của cả hóa đơn để phân biệt Hủy 1 phần hay Hủy toàn bộ
+        $tongTranDaCocTrongHD = DatSan::whereHas('chiTietHoaDon', function ($q) use ($maHoaDon) {
+                $q->where('MaHoaDonDatSan', $maHoaDon);
+            })
+            ->where('TrangThai', 'DaCoc')
+            ->count();
+
+        $sortedIds = $cacTran->pluck('MaDatSan')->map(fn($id) => (string) $id)->sort()->values()->toArray();
         $otp = (string) rand(100000, 999999);
-        \Illuminate\Support\Facades\Cache::put('guest_cancel_invoice_otp_' . $maHoaDon, $otp, now()->addMinutes(5));
+
+        // Lưu kèm danh sách ID các trận được chọn vào Cache để đảm bảo lúc bấm Xác nhận không bị lệch trận
+        \Illuminate\Support\Facades\Cache::put('guest_cancel_invoice_otp_' . $maHoaDon, [
+            'otp'         => $otp,
+            'ma_dat_sans' => $sortedIds
+        ], now()->addMinutes(5));
 
         $tongCoc = number_format($cacTran->sum('TienCoc'), 0, ',', '.') . 'đ';
         $soTran = $cacTran->count();
+        $laHuyToanBo = ($soTran === $tongTranDaCocTrongHD);
+
+        $danhSachTranHtml = '';
+        foreach ($cacTran as $dsItem) {
+            $tenSanItem = $dsItem->sanBong ? $dsItem->sanBong->TenSan : 'Sân bóng';
+            $cumSanItem = ($dsItem->sanBong && $dsItem->sanBong->cumSan) ? $dsItem->sanBong->cumSan->TenCumSan : '';
+            $ngayDaItem = date('d/m/Y', strtotime($dsItem->NgayDa));
+            $gioDaItem  = $dsItem->khungGio ? substr($dsItem->khungGio->GioBatDau, 0, 5) . ' - ' . substr($dsItem->khungGio->GioKetThuc, 0, 5) : '';
+            $cocItem    = number_format($dsItem->TienCoc, 0, ',', '.') . 'đ';
+
+            $danhSachTranHtml .= "
+                <li style='margin-bottom: 4px;'>
+                    <strong>Vé #PT-{$dsItem->MaDatSan}:</strong> {$tenSanItem} ({$cumSanItem}) — {$gioDaItem} ngày {$ngayDaItem} (Cọc: <strong>{$cocItem}</strong>)
+                </li>
+            ";
+        }
+
+        $moTaYeuCau = $laHuyToanBo
+            ? "hủy toàn bộ <strong>{$soTran} trận</strong> trong hóa đơn <strong>#{$maHoaDon}</strong>"
+            : "hủy <strong>{$soTran}/{$tongTranDaCocTrongHD} trận</strong> được chọn trong hóa đơn <strong>#{$maHoaDon}</strong>";
 
         try {
             $noiDungMail = "
-                <h2>Mã xác thực (OTP) hủy toàn bộ Hóa đơn đặt sân #{$maHoaDon}</h2>
+                <h2>Mã xác thực (OTP) hủy lịch đặt sân - Hóa đơn #{$maHoaDon}</h2>
                 <p>Chào <strong>{$first->TenNguoiDat}</strong>,</p>
-                <p>Hệ thống DN Football vừa nhận được yêu cầu hủy toàn bộ <strong>{$soTran} trận</strong> trong hóa đơn <strong>#{$maHoaDon}</strong>.</p>
-                <p><strong>Tổng số tiền cọc hoàn trả:</strong> <span style='color:#10b981; font-weight:bold;'>{$tongCoc}</span></p>
-                <p>Mã OTP xác nhận của bạn là: <strong style='font-size: 20px; color: #e11d48; letter-spacing: 2px;'>{$otp}</strong> (Hiệu lực 5 phút)</p>
+                <p>Hệ thống DN Football vừa nhận được yêu cầu {$moTaYeuCau}:</p>
+                <ul>
+                    {$danhSachTranHtml}
+                </ul>
+                <p><strong>Tổng số tiền cọc hoàn trả (1 lần):</strong> <span style='color:#10b981; font-weight:bold; font-size:16px;'>{$tongCoc}</span></p>
+                <p>Mã OTP xác nhận của bạn là: <strong style='font-size: 22px; color: #e11d48; letter-spacing: 2px;'>{$otp}</strong> (Hiệu lực 5 phút)</p>
+                <p><em>Vui lòng đọc mã OTP này cho nhân viên/quản lý sân để hoàn tất thủ tục hủy lịch và nhận lại tiền cọc.</em></p>
             ";
-            Mail::html($noiDungMail, function ($message) use ($first, $maHoaDon) {
+            Mail::html($noiDungMail, function ($message) use ($first, $maHoaDon, $soTran) {
                 $message->to($first->EmailNguoiDat)
-                        ->subject("Mã OTP Hủy Hóa Đơn #{$maHoaDon} - DN Football");
+                        ->subject("Mã OTP Xác Nhận Hủy {$soTran} Trận (HĐ #{$maHoaDon}) - DN Football");
             });
 
             return response()->json([
                 'success' => true,
-                'message' => 'Đã gửi mã OTP hủy hóa đơn tới email: ' . $first->EmailNguoiDat
+                'message' => "Đã gửi mã OTP xác nhận hủy {$soTran} trận tới email: {$first->EmailNguoiDat}"
             ]);
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => 'Lỗi gửi email OTP: ' . $e->getMessage()]);
@@ -1943,21 +1987,39 @@ class DatSanController extends Controller
     public function huyHoaDonAdmin(Request $request, $maHoaDon)
     {
         $userDangNhap = auth()->user();
+        $selectedIds = $request->input('ma_dat_sans', []);
 
-        $cacTranDaCoc = DatSan::with(['sanBong.cumSan', 'khungGio'])
+        $tatCaTranDaCoc = DatSan::with(['sanBong.cumSan', 'khungGio'])
             ->whereHas('chiTietHoaDon', function ($q) use ($maHoaDon) {
                 $q->where('MaHoaDonDatSan', $maHoaDon);
             })
             ->where('TrangThai', 'DaCoc')
             ->get();
 
-        if ($cacTranDaCoc->isEmpty()) {
+        if ($tatCaTranDaCoc->isEmpty()) {
             return response()->json(['success' => false, 'message' => 'Hóa đơn này không còn trận nào ở trạng thái Đã cọc để hủy!']);
         }
 
-        $first = $cacTranDaCoc->first();
-        $tongTienHoan = $cacTranDaCoc->sum('TienCoc');
-        $soTranHuy = $cacTranDaCoc->count();
+        // Lọc ra các trận được chọn hủy (nếu không truyền ma_dat_sans thì mặc định hủy toàn bộ trận Đã cọc)
+        if (is_array($selectedIds) && count($selectedIds) > 0) {
+            $selectedStrIds = array_map('strval', $selectedIds);
+            $cacTranCanHuy = $tatCaTranDaCoc->filter(function ($ds) use ($selectedStrIds) {
+                return in_array((string) $ds->MaDatSan, $selectedStrIds, true);
+            })->values();
+        } else {
+            $cacTranCanHuy = $tatCaTranDaCoc;
+        }
+
+        if ($cacTranCanHuy->isEmpty()) {
+            return response()->json(['success' => false, 'message' => 'Vui lòng chọn ít nhất 1 trận ở trạng thái Đã cọc để hủy!']);
+        }
+
+        $first = $cacTranCanHuy->first();
+        $tongSoTranDaCocBanDau = $tatCaTranDaCoc->count();
+        $soTranHuy = $cacTranCanHuy->count();
+        $laHuyToanBo = ($soTranHuy === $tongSoTranDaCocBanDau);
+        $tongTienHoan = (float) $cacTranCanHuy->sum('TienCoc');
+        $idsCanHuy = $cacTranCanHuy->pluck('MaDatSan')->map(fn($id) => (string) $id)->sort()->values()->toArray();
 
         DB::beginTransaction();
         try {
@@ -1969,6 +2031,10 @@ class DatSanController extends Controller
                     $soDuSau = $soDuTruoc + $tongTienHoan;
                     $khach->update(['SoDuVi' => $soDuSau]);
 
+                    $noiDungGD = $laHuyToanBo
+                        ? "Hỗ trợ hủy toàn bộ hóa đơn đặt sân #{$maHoaDon} ({$soTranHuy} trận) - Hoàn vào ví"
+                        : "Hỗ trợ hủy {$soTranHuy} trận trong hóa đơn #{$maHoaDon} - Hoàn vào ví";
+
                     if ($tongTienHoan > 0) {
                         GiaoDich::create([
                             'MaNguoiDung'    => $khach->MaNguoiDung,
@@ -1978,41 +2044,62 @@ class DatSanController extends Controller
                             'SoTien'         => $tongTienHoan,
                             'SoDuTruoc'      => $soDuTruoc,
                             'SoDuSau'        => $soDuSau,
-                            'NoiDung'        => "Hỗ trợ hủy toàn bộ hóa đơn đặt sân #{$maHoaDon} ({$soTranHuy} trận) - Hoàn vào ví"
+                            'NoiDung'        => $noiDungGD
                         ]);
                     }
 
+                    $tieuDeTB = $laHuyToanBo
+                        ? "Hóa đơn đặt sân #{$maHoaDon} đã được hủy"
+                        : "Đã hủy {$soTranHuy} trận trong hóa đơn #{$maHoaDon}";
+
+                    $noiDungTB = $laHuyToanBo
+                        ? "Ban quản lý đã hỗ trợ hủy toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon}. Số tiền cọc " . number_format($tongTienHoan, 0, ',', '.') . "đ đã được hoàn lại vào ví của bạn."
+                        : "Ban quản lý đã hỗ trợ hủy {$soTranHuy} trận được chọn trong hóa đơn #{$maHoaDon}. Số tiền cọc " . number_format($tongTienHoan, 0, ',', '.') . "đ đã được hoàn lại vào ví của bạn.";
+
                     ThongBao::create([
                         'MaNguoiDung'  => $khach->MaNguoiDung,
-                        'TieuDe'       => "Hóa đơn đặt sân #{$maHoaDon} đã được hủy",
-                        'NoiDung'      => "Ban quản lý đã hỗ trợ hủy toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon}. Số tiền cọc " . number_format($tongTienHoan, 0, ',', '.') . "đ đã được hoàn lại vào ví của bạn.",
+                        'TieuDe'       => $tieuDeTB,
+                        'NoiDung'      => $noiDungTB,
                         'LoaiThongBao' => 'DatSan'
                     ]);
                 }
             } else {
                 // LUỒNG 2: KHÁCH VÃNG LAI & ĐẶT SÂN HỘ -> Xác thực OTP qua Email
                 $otpInput = trim($request->input('otp', ''));
-                $cachedOtp = \Illuminate\Support\Facades\Cache::get('guest_cancel_invoice_otp_' . $maHoaDon);
+                $cachedData = \Illuminate\Support\Facades\Cache::get('guest_cancel_invoice_otp_' . $maHoaDon);
+
+                $cachedOtp = is_array($cachedData) ? ($cachedData['otp'] ?? null) : $cachedData;
+                $cachedIds = is_array($cachedData) ? ($cachedData['ma_dat_sans'] ?? null) : null;
 
                 if (!$otpInput || !$cachedOtp || $otpInput !== (string) $cachedOtp) {
                     DB::rollBack();
                     return response()->json([
                         'success' => false,
-                        'message' => 'Mã OTP hủy hóa đơn không chính xác hoặc đã hết hạn!'
+                        'message' => 'Mã OTP không chính xác hoặc đã hết hạn! Vui lòng kiểm tra lại.'
                     ]);
                 }
+
+                // Kiểm tra danh sách trận lúc bấm Xác nhận phải khớp với danh sách trận lúc gửi OTP
+                if (is_array($cachedIds) && $cachedIds !== $idsCanHuy) {
+                    DB::rollBack();
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Danh sách trận chọn hủy đã thay đổi sau khi gửi OTP! Vui lòng bấm "Gửi lại OTP" để cập nhật đúng số tiền hoàn trả.'
+                    ]);
+                }
+
                 \Illuminate\Support\Facades\Cache::forget('guest_cancel_invoice_otp_' . $maHoaDon);
             }
 
-            DatSan::whereHas('chiTietHoaDon', function ($q) use ($maHoaDon) {
-                    $q->where('MaHoaDonDatSan', $maHoaDon);
-                })
+            // Chỉ cập nhật trạng thái DaHuy cho đúng các trận được chọn
+            DatSan::whereIn('MaDatSan', $idsCanHuy)
                 ->where('TrangThai', 'DaCoc')
                 ->update([
                     'TrangThai'      => 'DaHuy',
                     'MaNhanVienXuLy' => $userDangNhap->MaNguoiDung
                 ]);
 
+            // Đồng bộ lại TongTien, ThueVAT, KhuyenMai và TrangThai của HoaDonDatSan
             self::dongBoHoaDonDatSan($maHoaDon);
 
             if ($first->MaGiaiDau !== null) {
@@ -2026,13 +2113,13 @@ class DatSanController extends Controller
                 }
             }
 
-            // GỬI EMAIL XÁC NHẬN HỦY HÓA ĐƠN & HOÀN CỌC CHO KHÁCH VÃNG LAI / ĐẶT SÂN HỘ
+            // GỬI 1 EMAIL XÁC NHẬN HỦY & HOÀN CỌC DUY NHẤT CHO KHÁCH VÃNG LAI / ĐẶT SÂN HỘ
             if ($first->MaNguoiDung === null && $first->EmailNguoiDat) {
                 try {
                     $tongCocStr = number_format($tongTienHoan, 0, ',', '.') . 'đ';
                     $danhSachTranHtml = '';
 
-                    foreach ($cacTranDaCoc as $dsItem) {
+                    foreach ($cacTranCanHuy as $dsItem) {
                         $tenSanItem = $dsItem->sanBong ? $dsItem->sanBong->TenSan : 'Sân bóng';
                         $cumSanItem = ($dsItem->sanBong && $dsItem->sanBong->cumSan) ? $dsItem->sanBong->cumSan->TenCumSan : '';
                         $ngayDaItem = date('d/m/Y', strtotime($dsItem->NgayDa));
@@ -2040,26 +2127,36 @@ class DatSanController extends Controller
                         $cocItem    = number_format($dsItem->TienCoc, 0, ',', '.') . 'đ';
 
                         $danhSachTranHtml .= "
-                            <li>
-                                <strong>Vé #PT-{$dsItem->MaDatSan}:</strong> {$tenSanItem} ({$cumSanItem}) — {$gioDaItem} ngày {$ngayDaItem} (Cọc: {$cocItem})
+                            <li style='margin-bottom: 4px;'>
+                                <strong>Vé #PT-{$dsItem->MaDatSan}:</strong> {$tenSanItem} ({$cumSanItem}) — {$gioDaItem} ngày {$ngayDaItem} (Cọc: <strong>{$cocItem}</strong>)
                             </li>
                         ";
                     }
 
+                    $tieuDeMail = $laHuyToanBo
+                        ? "Xác nhận hủy toàn bộ Hóa đơn đặt sân #{$maHoaDon} thành công"
+                        : "Xác nhận hủy {$soTranHuy} trận trong Hóa đơn đặt sân #{$maHoaDon} thành công";
+
+                    $moTaMail = $laHuyToanBo
+                        ? "Toàn bộ <strong>{$soTranHuy} trận</strong> trong hóa đơn đặt sân <strong>#{$maHoaDon}</strong> của bạn đã được hủy thành công theo yêu cầu:"
+                        : "<strong>{$soTranHuy} trận</strong> dưới đây trong hóa đơn đặt sân <strong>#{$maHoaDon}</strong> của bạn đã được hủy thành công theo yêu cầu (các trận còn lại trong hóa đơn vẫn giữ nguyên hiệu lực):";
+
                     $mailHuyHD = "
-                        <h2>Xác nhận hủy Hóa đơn đặt sân #{$maHoaDon} thành công</h2>
+                        <h2>{$tieuDeMail}</h2>
                         <p>Chào <strong>{$first->TenNguoiDat}</strong>,</p>
-                        <p>Toàn bộ <strong>{$soTranHuy} trận</strong> trong hóa đơn đặt sân <strong>#{$maHoaDon}</strong> của bạn đã được hủy thành công theo yêu cầu:</p>
+                        <p>{$moTaMail}</p>
                         <ul>
                             {$danhSachTranHtml}
                         </ul>
-                        <p><strong>Tổng số tiền cọc hoàn lại:</strong> <span style='color:#10b981; font-weight:bold;'>{$tongCocStr}</span></p>
+                        <p><strong>Tổng số tiền cọc hoàn lại:</strong> <span style='color:#10b981; font-weight:bold; font-size:16px;'>{$tongCocStr}</span></p>
                         <p>Cảm ơn bạn đã sử dụng dịch vụ của DN Football!</p>
                     ";
 
-                    Mail::html($mailHuyHD, function ($message) use ($first, $maHoaDon) {
-                        $message->to($first->EmailNguoiDat)
-                                ->subject("Xác nhận hủy Hóa đơn đặt sân #{$maHoaDon} - DN Football");
+                    Mail::html($mailHuyHD, function ($message) use ($first, $maHoaDon, $soTranHuy, $laHuyToanBo) {
+                        $subj = $laHuyToanBo
+                            ? "Xác nhận hủy Hóa đơn đặt sân #{$maHoaDon} - DN Football"
+                            : "Xác nhận hủy {$soTranHuy} trận (HĐ #{$maHoaDon}) - DN Football";
+                        $message->to($first->EmailNguoiDat)->subject($subj);
                     });
                 } catch (\Exception $mailEx) {
                     \Illuminate\Support\Facades\Log::error('Lỗi gửi mail hủy hóa đơn khách vãng lai: ' . $mailEx->getMessage());
@@ -2074,9 +2171,13 @@ class DatSanController extends Controller
             broadcast(new \App\Events\AdminDataUpdated())->toOthers();
             broadcast(new \App\Events\SystemDataUpdated())->toOthers();
 
+            $phamViText = $laHuyToanBo
+                ? "toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon}"
+                : "{$soTranHuy}/{$tongSoTranDaCocBanDau} trận trong hóa đơn #{$maHoaDon}";
+
             $msgSuccess = ($first->MaNguoiDung === null)
-                ? "Đã hủy toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon} và gửi Email xác nhận hoàn cọc!"
-                : "Đã hủy toàn bộ {$soTranHuy} trận trong hóa đơn #{$maHoaDon} và hoàn cọc vào ví khách hàng!";
+                ? "Đã hủy thành công {$phamViText} (Tổng hoàn cọc: " . number_format($tongTienHoan, 0, ',', '.') . "đ) và gửi Email xác nhận!"
+                : "Đã hủy thành công {$phamViText} và hoàn " . number_format($tongTienHoan, 0, ',', '.') . "đ vào ví khách hàng!";
 
             return response()->json([
                 'success' => true,
