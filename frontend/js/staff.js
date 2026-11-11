@@ -1816,7 +1816,7 @@ function renderStaffDSTable(invoiceGroups) {
                                 </button>
                                 ${activeDaCocCount > 0 ? `
                                 <button type="button" class="btn-outline-sm" style="background: #fef2f2; color: #dc2626; border-color: #fca5a5; padding: 5px 11px; font-size: 0.8rem; font-weight: 700;" onclick="openAdminCancelInvoiceModal('${group.maHoaDon}', ${activeDaCocCount}, ${isMember}, '${tenKhach.replace(/'/g, "\\'")}', '${emailKhach}', ${cocHD})">
-                                    <i class="fa-solid fa-ban"></i> Hủy cả hóa đơn (${activeDaCocCount} trận)
+                                    <i class="fa-solid fa-ban"></i> Hủy lịch / Hóa đơn (${activeDaCocCount} trận)
                                 </button>` : ''}
                             </div>
                         </div>
@@ -2213,7 +2213,7 @@ function openStaffCancelConfirmModal() {
                 <div class="form-group" style="margin-bottom: 20px;">
                     <label style="font-size: 0.86rem; font-weight: 600; color: #1e293b; margin-bottom: 6px; display: block;">Mã xác thực OTP (gửi về Email khách) <span style="color: #ef4444;">*</span></label>
                     <div style="display: flex; gap: 10px; align-items: stretch;">
-                        <input type="text" id="staff-guest-cancel-otp" class="form-control" placeholder="Nhập 6 số OTP..." maxlength="6" style="flex: 1; font-weight: 700; letter-spacing: 2px; text-align: center; border-radius: 10px;">
+                        <input type="text" id="staff-guest-cancel-otp" class="form-control" placeholder="Nhập 6 số OTP..." maxlength="6" oninput="this.value=this.value.replace(/\\D/g,''); if(this.value.length===6){ const ab=document.getElementById('staff-guest-cancel-alert'); if(ab && ab.classList.contains('error')) ab.style.display='none'; }" style="flex: 1; font-weight: 700; letter-spacing: 2px; text-align: center; border-radius: 10px;">
                         <button type="button" id="btn-staff-send-guest-otp" onclick="sendGuestCancelOtpStaff('${item.ID}')" style="width: auto; padding: 0 16px; border-radius: 10px; border: 1px solid #bfdbfe; background: #eff6ff; color: #2563eb; font-weight: 700; font-size: 0.86rem; white-space: nowrap; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
                             <i class="fa-solid fa-paper-plane"></i> Gửi OTP
                         </button>
@@ -3868,79 +3868,408 @@ window.printAdminBookingInvoice = async function(maHoaDon) {
     }
 };
 
+// ======================================================
+// HỦY LỊCH THEO LÔ / HỦY HÓA ĐƠN (HỖ TRỢ CHỌN TỪNG TRẬN + 1 OTP + MODAL XÁC NHẬN CHẮC CHẮN)
+// ======================================================
+let currentCancelInvoiceContext = {
+    maHoaDon: null,
+    isMember: false,
+    tenKhach: '',
+    emailGuest: '',
+    activeMatches: [],
+    otpSentForKey: null // Lưu chuỗi ID các trận đã gửi OTP để kiểm tra nếu nhân viên tích lại
+};
+
+function getCancelInvoiceSourceList() {
+    if (typeof allDatSanData !== 'undefined' && Array.isArray(allDatSanData) && allDatSanData.length > 0) {
+        return allDatSanData;
+    }
+    if (typeof staffDatSanData !== 'undefined' && Array.isArray(staffDatSanData)) {
+        return staffDatSanData;
+    }
+    return [];
+}
+
 window.openAdminCancelInvoiceModal = function(maHoaDon, soTran, isMember, tenKhach, emailGuest, tongCoc) {
+    const sourceList = getCancelInvoiceSourceList();
+    const activeMatches = sourceList
+        .filter(item => String(item.MaHoaDonDatSan) === String(maHoaDon) && item.TrangThai === 'DaCoc')
+        .sort((a, b) => {
+            const dateCmp = String(a.NgayDa || '').localeCompare(String(b.NgayDa || ''));
+            if (dateCmp !== 0) return dateCmp;
+            const timeA = a.khung_gio?.GioBatDau || '';
+            const timeB = b.khung_gio?.GioBatDau || '';
+            return timeA.localeCompare(timeB);
+        });
+
+    if (activeMatches.length === 0) {
+        return showSystemModal('Thông báo', 'Hóa đơn này không còn trận nào ở trạng thái Đã cọc để hủy!', 'error');
+    }
+
+    currentCancelInvoiceContext = {
+        maHoaDon: maHoaDon,
+        isMember: Boolean(isMember),
+        tenKhach: tenKhach,
+        emailGuest: emailGuest,
+        activeMatches: activeMatches,
+        otpSentForKey: null
+    };
+
     let modal = document.getElementById('admin-cancel-invoice-modal');
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'admin-cancel-invoice-modal';
         modal.className = 'modal-overlay';
         modal.style.cssText = 'display: none; z-index: 10000; align-items: center; justify-content: center;';
+        modal.onclick = function(e) {
+            if (e.target === modal) modal.style.display = 'none';
+        };
         document.body.appendChild(modal);
     }
 
-    const tongCocStr = Number(tongCoc || 0).toLocaleString('vi-VN') + 'đ';
+    const matchListHtml = activeMatches.map(m => {
+        const maDS = m.MaDatSan || m.ID;
+        const maVe = m.ID_GiaiDau ? `GD-${m.ID_GiaiDau}` : `PT-${maDS}`;
+        const tenSan = m.san_bong ? m.san_bong.TenSan : 'Sân bóng';
+        const ngayStr = m.NgayDa ? m.NgayDa.split('-').reverse().join('/') : '';
+        const gioStr = m.khung_gio ? `${m.khung_gio.GioBatDau.substring(0, 5)} - ${m.khung_gio.GioKetThuc.substring(0, 5)}` : '';
+        const cocVal = Number(m.TienCoc || 0);
 
-    if (isMember) {
-        modal.innerHTML = `
-            <div class="modal-content" style="max-width: 460px; width: 92%; text-align: center; padding: 26px 24px; border-radius: 16px;">
-                <div style="font-size: 3.2rem; color: #ef4444; margin-bottom: 10px;"><i class="fa-solid fa-file-circle-xmark"></i></div>
-                <h3 style="margin-bottom: 10px; font-size: 1.3rem;">Hủy cả Hóa đơn #${maHoaDon}?</h3>
-                <div id="admin-inv-member-alert" class="modal-alert" style="display:none; margin-bottom:12px; text-align:left;"></div>
-                <p style="color: #64748b; font-size: 0.92rem; line-height: 1.6; margin-bottom: 22px;">
-                    Khách hàng: <strong style="color:#0f172a;">${tenKhach}</strong>.<br>
-                    Hệ thống sẽ hủy toàn bộ <strong>${soTran} trận đang đặt cọc</strong> trong hóa đơn này và hoàn trả 100% tiền cọc (${tongCocStr}) vào ví khách hàng.
-                </p>
-                <div style="display: flex; gap: 12px; justify-content: center;">
-                    <button type="button" class="btn-outline" style="flex: 1; padding: 10px;" onclick="document.getElementById('admin-cancel-invoice-modal').style.display='none'">Đóng</button>
-                    <button type="button" id="btn-exec-cancel-inv" class="btn-primary" style="flex: 1.3; padding: 10px; background: #ef4444; border-color: #ef4444;" onclick="executeAdminCancelInvoice('${maHoaDon}', false)">Xác nhận Hủy & Hoàn tiền</button>
-                </div>
-            </div>
-        `;
-    } else {
-        modal.innerHTML = `
-            <div class="modal-content" style="max-width: 440px; width: 92%; padding: 24px; text-align: left; border-radius: 16px;">
-                <h3 style="margin: 0 0 12px 0; font-size: 1.15rem; color: #0f172a;"><i class="fa-solid fa-user-check" style="color:#ef4444;"></i> Hủy Hóa đơn (#${maHoaDon})</h3>
-                <div id="admin-inv-otp-alert" class="modal-alert" style="display:none; margin-bottom:12px;"></div>
-                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-bottom:14px; font-size:0.88rem; line-height:1.6;">
-                    <div>Khách hàng: <strong>${tenKhach}</strong> (${soTran} trận)</div>
-                    <div>Email nhận OTP: <strong style="color:#2563eb;">${emailGuest || 'Chưa có'}</strong></div>
-                    <div>Tổng tiền cọc hoàn lại: <strong style="color:#ea580c;">${tongCocStr}</strong></div>
-                </div>
-                <div class="form-group" style="margin-bottom:18px;">
-                    <label style="font-size:0.85rem; font-weight:600;">Mã xác thực OTP <span style="color:red;">*</span></label>
-                    <div style="display:flex; gap:8px;">
-                        <input type="text" id="admin-inv-otp-input" class="form-control" placeholder="Nhập 6 số OTP..." maxlength="6" style="flex:1; text-align:center; font-weight:700;">
-                        <button type="button" id="btn-send-inv-otp" class="btn-outline-sm" style="white-space:nowrap; color:#2563eb; border-color:#93c5fd; background:#eff6ff;" onclick="sendAdminInvoiceGuestOtp('${maHoaDon}')">Gửi OTP</button>
+        return `
+            <label style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; background: #ffffff; cursor: pointer; margin-bottom: 8px; transition: 0.15s;" onmouseover="this.style.borderColor='#ef4444'" onmouseout="this.style.borderColor='#cbd5e1'">
+                <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
+                    <input type="checkbox" class="inv-cancel-match-cb" value="${maDS}" data-coc="${cocVal}" data-label="#${maVe} (${tenSan} - ${gioStr} ngày ${ngayStr})" checked onchange="handleInvoiceMatchSelectionChange()" style="width: 17px; height: 17px; accent-color: #ef4444; cursor: pointer; flex-shrink: 0;">
+                    <div style="min-width: 0;">
+                        <div style="font-size: 0.88rem; font-weight: 700; color: #0f172a;">
+                            <span style="font-family: monospace; color: #dc2626;">#${maVe}</span> &bull; ${tenSan}
+                        </div>
+                        <div style="font-size: 0.8rem; color: #64748b;">
+                            <i class="fa-regular fa-clock"></i> ${gioStr} | Ngày: <strong>${ngayStr}</strong>
+                        </div>
                     </div>
                 </div>
-                <div style="display:flex; justify-content:flex-end; gap:10px;">
-                    <button type="button" class="btn-outline" style="width:auto; padding:9px 18px;" onclick="document.getElementById('admin-cancel-invoice-modal').style.display='none'">Đóng</button>
-                    <button type="button" id="btn-exec-cancel-inv" class="btn-primary" style="width:auto; padding:9px 18px; background:#ef4444; border-color:#ef4444;" onclick="executeAdminCancelInvoice('${maHoaDon}', true)">Xác nhận Hủy HĐ</button>
+                <div style="text-align: right; flex-shrink: 0;">
+                    <div style="font-size: 0.74rem; color: #64748b;">Tiền cọc</div>
+                    <div style="font-size: 0.9rem; font-weight: 800; color: #047857;">${cocVal.toLocaleString('vi-VN')}đ</div>
+                </div>
+            </label>
+        `;
+    }).join('');
+
+    const otpSectionHtml = !isMember ? `
+        <div class="form-group" style="margin-top: 14px; margin-bottom: 16px; background: #fffbeb; border: 1px solid #fde68a; padding: 12px 14px; border-radius: 10px;">
+            <label style="font-size: 0.84rem; font-weight: 700; color: #92400e; display: block; margin-bottom: 6px;">
+                <i class="fa-solid fa-shield-halved"></i> Mã xác thực OTP (1 lần cho các trận đã chọn) <span style="color: red;">*</span>
+            </label>
+            <div style="display: flex; gap: 8px;">
+                <input type="text" id="admin-inv-otp-input" class="form-control" placeholder="Nhập 6 số OTP..." maxlength="6" oninput="handleInvoiceOtpInputChange(this)" style="flex: 1; text-align: center; font-weight: 800; letter-spacing: 2px; background: #ffffff;">
+                <button type="button" id="btn-send-inv-otp" class="btn-outline-sm" style="white-space: nowrap; color: #2563eb; border-color: #93c5fd; background: #eff6ff; padding: 0 14px; font-weight: 700;" onclick="sendAdminInvoiceGuestOtp('${maHoaDon}')">
+                    <i class="fa-solid fa-paper-plane"></i> Gửi OTP
+                </button>
+            </div>
+            <div style="font-size: 0.76rem; color: #b45309; margin-top: 6px;">
+                * Chọn xong các trận cần hủy rồi bấm <strong>Gửi OTP</strong>. Khách chỉ cần đọc 1 mã OTP và nhận hoàn tiền 1 lần.
+            </div>
+        </div>
+    ` : '';
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 540px; width: 94%; padding: 22px 24px; text-align: left; border-radius: 16px; max-height: 90vh; display: flex; flex-direction: column;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0;">
+                <div>
+                    <h3 style="margin: 0; font-size: 1.18rem; color: #0f172a; font-weight: 800;">
+                        <i class="fa-solid fa-file-circle-xmark" style="color: #ef4444; margin-right: 6px;"></i>Hủy lịch đặt sân — Hóa đơn #${maHoaDon}
+                    </h3>
+                    <div style="font-size: 0.82rem; color: #64748b; margin-top: 2px;">
+                        Khách hàng: <strong style="color: #0f172a;">${tenKhach}</strong> ${!isMember ? `&bull; Email: <strong style="color:#2563eb;">${emailGuest || 'Chưa có'}</strong>` : '<span style="color:#16a34a; font-weight:700;">(Thành viên - Hoàn về Ví)</span>'}
+                    </div>
+                </div>
+                <i class="fa-solid fa-xmark" style="cursor: pointer; color: #64748b; font-size: 1.2rem;" onclick="document.getElementById('admin-cancel-invoice-modal').style.display='none'"></i>
+            </div>
+
+            <div id="admin-inv-cancel-alert" class="modal-alert" style="display: none; margin-bottom: 12px;"></div>
+
+            <!-- Thanh chọn nhanh Tất cả / Bỏ chọn -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-size: 0.85rem; font-weight: 700; color: #334155;">
+                    Chọn các trận muốn hủy (<span id="inv-cancel-selected-count">${activeMatches.length}</span>/${activeMatches.length} trận):
+                </span>
+                <div style="display: flex; gap: 6px;">
+                    <button type="button" onclick="toggleAllInvoiceCancelMatches(true)" style="font-size: 0.76rem; padding: 3px 9px; border-radius: 6px; border: 1px solid #cbd5e1; background: #f8fafc; color: #0f172a; font-weight: 600; cursor: pointer;">Chọn tất cả</button>
+                    <button type="button" onclick="toggleAllInvoiceCancelMatches(false)" style="font-size: 0.76rem; padding: 3px 9px; border-radius: 6px; border: 1px solid #cbd5e1; background: #f8fafc; color: #64748b; font-weight: 600; cursor: pointer;">Bỏ chọn hết</button>
                 </div>
             </div>
-        `;
-    }
+
+            <!-- Danh sách Checkbox các trận Đã cọc trong Hóa đơn -->
+            <div style="max-height: 240px; overflow-y: auto; padding-right: 4px; margin-bottom: 12px;">
+                ${matchListHtml}
+            </div>
+
+            <!-- Hộp tổng kết số tiền hoàn cọc -->
+            <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 12px 14px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div id="inv-cancel-mode-badge" style="font-size: 0.78rem; font-weight: 700; color: #dc2626; text-transform: uppercase;">Hủy toàn bộ hóa đơn (${activeMatches.length} trận)</div>
+                    <div style="font-size: 0.82rem; color: #64748b;">Tổng tiền cọc cần hoàn trả 1 lần:</div>
+                </div>
+                <strong id="inv-cancel-total-refund" style="font-size: 1.2rem; font-weight: 800; color: #dc2626;">0đ</strong>
+            </div>
+
+            ${otpSectionHtml}
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid #e2e8f0;">
+                <button type="button" class="btn-outline" style="width: auto; padding: 10px 20px; border-radius: 10px;" onclick="document.getElementById('admin-cancel-invoice-modal').style.display='none'">Đóng</button>
+                <button type="button" id="btn-open-final-inv-confirm" class="btn-primary" style="width: auto; padding: 10px 22px; border-radius: 10px; background: #ef4444; border-color: #ef4444; font-weight: 700;" onclick="openFinalConfirmInvoiceCancelModal()">
+                    <i class="fa-solid fa-check"></i> Tiếp tục Hủy & Hoàn cọc
+                </button>
+            </div>
+        </div>
+    `;
+
     modal.style.display = 'flex';
+    handleInvoiceMatchSelectionChange();
+};
+
+window.toggleAllInvoiceCancelMatches = function(checked) {
+    document.querySelectorAll('.inv-cancel-match-cb').forEach(cb => {
+        cb.checked = checked;
+    });
+    handleInvoiceMatchSelectionChange();
+};
+
+window.handleInvoiceMatchSelectionChange = function() {
+  const checkboxes = Array.from(document.querySelectorAll('.inv-cancel-match-cb'));
+  const checkedBoxes = checkboxes.filter(cb => cb.checked);
+  const totalCount = checkboxes.length;
+  const selectedCount = checkedBoxes.length;
+
+  const totalRefund = checkedBoxes.reduce((sum, cb) => sum + Number(cb.getAttribute('data-coc') || 0), 0);
+
+  const countEl = document.getElementById('inv-cancel-selected-count');
+  const refundEl = document.getElementById('inv-cancel-total-refund');
+  const modeEl = document.getElementById('inv-cancel-mode-badge');
+  const btnContinue = document.getElementById('btn-open-final-inv-confirm');
+  const alertBox = document.getElementById('admin-inv-cancel-alert');
+
+  if (countEl) countEl.textContent = selectedCount;
+  if (refundEl) refundEl.textContent = totalRefund.toLocaleString('vi-VN') + 'đ';
+
+  if (modeEl) {
+      if (selectedCount === 0) {
+          modeEl.textContent = 'Chưa chọn trận nào';
+      } else if (selectedCount === totalCount) {
+          modeEl.textContent = `Hủy toàn bộ hóa đơn (${selectedCount} trận)`;
+      } else {
+          modeEl.textContent = `Hủy ${selectedCount}/${totalCount} trận đã chọn (Giữ lại ${totalCount - selectedCount} trận)`;
+      }
+  }
+
+  if (btnContinue) {
+      btnContinue.disabled = (selectedCount === 0);
+      btnContinue.style.opacity = (selectedCount === 0) ? '0.5' : '1';
+      btnContinue.style.cursor = (selectedCount === 0) ? 'not-allowed' : 'pointer';
+  }
+
+  // Xử lý tự động hiện / ẩn thông báo lỗi theo điều kiện thực tế
+  if (alertBox) {
+      const currentKey = checkedBoxes.map(cb => String(cb.value)).sort().join(',');
+
+      if (selectedCount > 0) {
+          // 1. Nếu đã chọn lại ít nhất 1 trận -> Tự động ẩn lỗi "Vui lòng chọn ít nhất 1 trận..."
+          if (alertBox.textContent.includes('ít nhất 1 trận')) {
+              alertBox.style.display = 'none';
+              alertBox.textContent = '';
+          }
+
+          // 2. Nếu đã gửi OTP trước đó: Kiểm tra khớp danh sách trận
+          if (!currentCancelInvoiceContext.isMember && currentCancelInvoiceContext.otpSentForKey) {
+              if (currentKey !== currentCancelInvoiceContext.otpSentForKey) {
+                  alertBox.textContent = 'Bạn vừa thay đổi danh sách trận cần hủy. Vui lòng bấm "Gửi lại OTP" để cập nhật đúng số tiền hoàn cọc mới!';
+                  alertBox.className = 'modal-alert error';
+                  alertBox.style.display = 'block';
+              } else {
+                  // Khi tích chọn khớp lại đúng các trận như lúc gửi OTP -> Tự động ẩn cảnh báo lỗi ngay!
+                  if (alertBox.classList.contains('error') && (alertBox.textContent.includes('thay đổi') || alertBox.textContent.includes('Gửi lại OTP'))) {
+                      alertBox.style.display = 'none';
+                      alertBox.textContent = '';
+                  }
+              }
+          }
+      }
+  }
+};
+
+window.handleInvoiceOtpInputChange = function(inputEl) {
+  if (!inputEl) return;
+  // Chỉ giữ lại ký tự số
+  const cleaned = inputEl.value.replace(/\D/g, '');
+  if (inputEl.value !== cleaned) inputEl.value = cleaned;
+
+  const alertBox = document.getElementById('admin-inv-cancel-alert');
+  // Khi người dùng nhập đủ 6 số OTP (hoặc đang sửa lại OTP) -> Tự động ẩn thông báo lỗi OTP cũ
+  if (alertBox && alertBox.classList.contains('error') && alertBox.textContent.includes('OTP') && !alertBox.textContent.includes('thay đổi')) {
+      if (inputEl.value.trim().length === 6) {
+          alertBox.style.display = 'none';
+          alertBox.textContent = '';
+      }
+  }
+};
+
+window.sendAdminInvoiceGuestOtp = async function(maHoaDon) {
+    const checkedBoxes = Array.from(document.querySelectorAll('.inv-cancel-match-cb:checked'));
+    const alertBox = document.getElementById('admin-inv-cancel-alert');
+
+    if (checkedBoxes.length === 0) {
+        if (alertBox) {
+            alertBox.textContent = 'Vui lòng tích chọn ít nhất 1 trận muốn hủy trước khi gửi OTP!';
+            alertBox.className = 'modal-alert error';
+            alertBox.style.display = 'block';
+        }
+        return;
+    }
+
+    const selectedIds = checkedBoxes.map(cb => String(cb.value));
+    const btn = document.getElementById('btn-send-inv-otp');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang gửi...';
+    if (alertBox) alertBox.style.display = 'none';
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/admin/hoa-don-dat-san/${maHoaDon}/gui-otp-huy-guest`, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ma_dat_sans: selectedIds })
+        });
+        const data = await res.json();
+        if (data.success) {
+            currentCancelInvoiceContext.otpSentForKey = [...selectedIds].sort().join(',');
+        }
+        if (alertBox) {
+            alertBox.textContent = data.message;
+            alertBox.className = 'modal-alert ' + (data.success ? 'success' : 'error');
+            alertBox.style.display = 'block';
+        }
+    } catch (e) {
+        if (alertBox) {
+            alertBox.textContent = 'Lỗi kết nối máy chủ!';
+            alertBox.className = 'modal-alert error';
+            alertBox.style.display = 'block';
+        }
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-rotate-right"></i> Gửi lại OTP';
+    }
+};
+
+// BƯỚC XÁC NHẬN CHẮC CHẮN TRƯỚC KHI HỦY ("Bạn có chắc chắn muốn hủy không?")
+window.openFinalConfirmInvoiceCancelModal = function() {
+    const checkboxes = Array.from(document.querySelectorAll('.inv-cancel-match-cb'));
+    const checkedBoxes = checkboxes.filter(cb => cb.checked);
+    const alertBox = document.getElementById('admin-inv-cancel-alert');
+
+    if (checkedBoxes.length === 0) {
+        if (alertBox) {
+            alertBox.textContent = 'Vui lòng chọn ít nhất 1 trận để hủy!';
+            alertBox.className = 'modal-alert error';
+            alertBox.style.display = 'block';
+        }
+        return;
+    }
+
+    const { maHoaDon, isMember, tenKhach } = currentCancelInvoiceContext;
+    const selectedIds = checkedBoxes.map(cb => String(cb.value));
+    const currentKey = [...selectedIds].sort().join(',');
+
+    if (!isMember) {
+        const otp = document.getElementById('admin-inv-otp-input')?.value.trim() || '';
+        if (!otp || otp.length !== 6) {
+            if (alertBox) {
+                alertBox.textContent = 'Vui lòng nhập đủ 6 chữ số OTP xác nhận từ khách hàng!';
+                alertBox.className = 'modal-alert error';
+                alertBox.style.display = 'block';
+            }
+            return;
+        }
+        if (currentCancelInvoiceContext.otpSentForKey && currentCancelInvoiceContext.otpSentForKey !== currentKey) {
+            if (alertBox) {
+                alertBox.textContent = 'Danh sách các trận chọn hủy đã được thay đổi sau khi gửi OTP! Vui lòng bấm "Gửi lại OTP".';
+                alertBox.className = 'modal-alert error';
+                alertBox.style.display = 'block';
+            }
+            return;
+        }
+    }
+
+    const totalCount = checkboxes.length;
+    const selectedCount = checkedBoxes.length;
+    const isAll = (selectedCount === totalCount);
+    const totalRefund = checkedBoxes.reduce((sum, cb) => sum + Number(cb.getAttribute('data-coc') || 0), 0);
+    const selectedLabelsHtml = checkedBoxes.map(cb => `<li style="margin-bottom: 4px;">${cb.getAttribute('data-label')}</li>`).join('');
+
+    let confirmModal = document.getElementById('admin-final-confirm-inv-cancel-modal');
+    if (!confirmModal) {
+        confirmModal = document.createElement('div');
+        confirmModal.id = 'admin-final-confirm-inv-cancel-modal';
+        confirmModal.className = 'modal-overlay';
+        confirmModal.style.cssText = 'display: none; z-index: 10050; align-items: center; justify-content: center;';
+        document.body.appendChild(confirmModal);
+    }
+
+    confirmModal.innerHTML = `
+        <div class="modal-content" style="max-width: 460px; width: 92%; text-align: center; padding: 26px 24px; border-radius: 16px; box-shadow: 0 20px 45px rgba(15, 23, 42, 0.25);">
+            <div style="width: 64px; height: 64px; border-radius: 50%; background: #fef2f2; color: #ef4444; border: 2px solid #fecaca; display: inline-flex; align-items: center; justify-content: center; font-size: 1.9rem; margin-bottom: 12px;">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <h3 style="margin: 0 0 8px 0; font-size: 1.25rem; font-weight: 800; color: #0f172a;">
+                Xác nhận chắc chắn hủy?
+            </h3>
+            <p style="color: #475569; font-size: 0.9rem; line-height: 1.5; margin-bottom: 14px;">
+                Bạn có chắc chắn muốn hủy <strong>${isAll ? `toàn bộ ${selectedCount} trận` : `${selectedCount}/${totalCount} trận đã chọn`}</strong> trong Hóa đơn <strong>#${maHoaDon}</strong> của khách <strong>${tenKhach}</strong> không?
+            </p>
+
+            <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px 14px; text-align: left; font-size: 0.83rem; color: #334155; max-height: 140px; overflow-y: auto; margin-bottom: 14px;">
+                <div style="font-weight: 700; color: #0f172a; margin-bottom: 4px;">Danh sách vé sẽ bị hủy:</div>
+                <ul style="margin: 0; padding-left: 18px;">
+                    ${selectedLabelsHtml}
+                </ul>
+            </div>
+
+            <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 10px; padding: 10px 14px; margin-bottom: 20px; font-size: 0.88rem; color: #065f46;">
+                Tổng tiền cọc hoàn lại (${isMember ? 'Tự động cộng vào Ví' : 'Hoàn 1 lần cho khách'}):
+                <strong style="font-size: 1.08rem; color: #047857; display: block; margin-top: 2px;">${totalRefund.toLocaleString('vi-VN')}đ</strong>
+            </div>
+
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button type="button" class="btn-outline" style="flex: 1; padding: 10px;" onclick="document.getElementById('admin-final-confirm-inv-cancel-modal').style.display='none'">
+                    Quay lại
+                </button>
+                <button type="button" id="btn-exec-cancel-inv" class="btn-primary" style="flex: 1.3; padding: 10px; background: #ef4444; border-color: #ef4444; font-weight: 700;" onclick="executeAdminCancelInvoice('${maHoaDon}', ${!isMember})">
+                    <i class="fa-solid fa-check"></i> Chắc chắn hủy
+                </button>
+            </div>
+        </div>
+    `;
+
+    confirmModal.style.display = 'flex';
 };
 
 window.executeAdminCancelInvoice = async function(maHoaDon, needOtp = false) {
-    let payload = {};
+    const checkedBoxes = Array.from(document.querySelectorAll('.inv-cancel-match-cb:checked'));
+    const selectedIds = checkedBoxes.map(cb => String(cb.value));
+
+    let payload = {
+        ma_dat_sans: selectedIds
+    };
 
     if (needOtp) {
         const otp = document.getElementById('admin-inv-otp-input')?.value.trim();
-        if (!otp || otp.length !== 6) {
-            const alertBox = document.getElementById('admin-inv-otp-alert');
-            alertBox.textContent = 'Vui lòng nhập đủ 6 số OTP!';
-            alertBox.className = 'modal-alert error';
-            alertBox.style.display = 'block';
-            return;
-        }
         payload.otp = otp;
     }
 
     const btn = document.getElementById('btn-exec-cancel-inv');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+    }
 
     try {
         const res = await fetch(`${API_BASE_URL}/admin/hoa-don-dat-san/${maHoaDon}/huy`, {
@@ -3949,6 +4278,10 @@ window.executeAdminCancelInvoice = async function(maHoaDon, needOtp = false) {
             body: JSON.stringify(payload)
         });
         const data = await res.json();
+
+        const finalModal = document.getElementById('admin-final-confirm-inv-cancel-modal');
+        if (finalModal) finalModal.style.display = 'none';
+
         if (res.ok && data.success) {
             document.getElementById('admin-cancel-invoice-modal').style.display = 'none';
             showSystemModal('Thành công', data.message, 'success');
@@ -3959,35 +4292,24 @@ window.executeAdminCancelInvoice = async function(maHoaDon, needOtp = false) {
                 loadStaffDanhSachDatSan();
             }
         } else {
-            showSystemModal('Lỗi', data.message || 'Không thể hủy hóa đơn!', 'error');
-            btn.disabled = false;
-            btn.innerHTML = needOtp ? 'Xác nhận Hủy HĐ' : 'Xác nhận Hủy & Hoàn tiền';
+            const alertBox = document.getElementById('admin-inv-cancel-alert');
+            if (alertBox) {
+                alertBox.textContent = data.message || 'Không thể hủy lịch đặt sân!';
+                alertBox.className = 'modal-alert error';
+                alertBox.style.display = 'block';
+            } else {
+                showSystemModal('Lỗi', data.message || 'Không thể hủy lịch đặt sân!', 'error');
+            }
         }
     } catch (e) {
+        const finalModal = document.getElementById('admin-final-confirm-inv-cancel-modal');
+        if (finalModal) finalModal.style.display = 'none';
         showSystemModal('Lỗi', 'Mất kết nối máy chủ!', 'error');
-        btn.disabled = false;
-        btn.innerHTML = needOtp ? 'Xác nhận Hủy HĐ' : 'Xác nhận Hủy & Hoàn tiền';
-    }
-};
-
-window.sendAdminInvoiceGuestOtp = async function(maHoaDon) {
-    const btn = document.getElementById('btn-send-inv-otp');
-    const alertBox = document.getElementById('admin-inv-otp-alert');
-    btn.disabled = true;
-    btn.innerText = 'Đang gửi...';
-    try {
-        const res = await fetch(`${API_BASE_URL}/admin/hoa-don-dat-san/${maHoaDon}/gui-otp-huy-guest`, { method: 'POST' });
-        const data = await res.json();
-        alertBox.textContent = data.message;
-        alertBox.className = 'modal-alert ' + (data.success ? 'success' : 'error');
-        alertBox.style.display = 'block';
-    } catch (e) {
-        alertBox.textContent = 'Lỗi kết nối!';
-        alertBox.className = 'modal-alert error';
-        alertBox.style.display = 'block';
     } finally {
-        btn.disabled = false;
-        btn.innerText = 'Gửi lại OTP';
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-check"></i> Chắc chắn hủy';
+        }
     }
 };
 
