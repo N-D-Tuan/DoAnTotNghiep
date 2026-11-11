@@ -106,101 +106,258 @@ function initCounterAnimation() {
 }
 
 /* ==========================================================================
-   THREE.JS SCENE (TECH FOOTBALL)
+   THREE.JS SCENE (CLASSIC WHITE/BLACK FOOTBALL ON PITCH TURF - OPTIMIZED)
    ========================================================================== */
+
+// Hàm nội suy mượt (Smoothstep) giúp khử răng cưa hoàn toàn ở mép ngũ giác và đường chỉ khâu
+function smoothStepEdge(edge0, edge1, x) {
+    const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+    return t * t * (3 - 2 * t);
+}
+
+// Hàm tạo Texture mặt bóng đá truyền thống mềm mại, tự nhiên (Khử răng cưa + Độ nổi nhẹ)
+function createClassicSoccerBallTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+
+    // 12 đỉnh của khối Icosahedron (Tâm của 12 miếng ngũ giác trên mặt cầu)
+    const phi = (1 + Math.sqrt(5)) / 2;
+    const rawVertices = [
+        [-1,  phi, 0], [ 1,  phi, 0], [-1, -phi, 0], [ 1, -phi, 0],
+        [ 0, -1,  phi], [ 0,  1,  phi], [ 0, -1, -phi], [ 0,  1, -phi],
+        [ phi, 0, -1], [ phi, 0,  1], [-phi, 0, -1], [-phi, 0,  1]
+    ];
+    const vertices = rawVertices.map(v => {
+        const len = Math.hypot(v[0], v[1], v[2]);
+        return [v[0] / len, v[1] / len, v[2] / len];
+    });
+
+    const imgData = ctx.createImageData(canvas.width, canvas.height);
+    const data = imgData.data;
+
+    // Bảng màu dịu mắt, thân thiện:
+    // - Múi lục giác trắng kem ấm: RGB(250, 252, 250)
+    // - Múi ngũ giác xám than mềm (không đen đặc): RGB(45, 58, 75)
+    // - Rãnh chỉ khâu xám bạc dịu: RGB(203, 213, 225)
+    const pentagonRadius = 0.355;
+    const aaWidth = 0.014; // Độ rộng vùng làm mượt biên
+
+    for (let y = 0; y < canvas.height; y++) {
+        const v = (y + 0.5) / canvas.height;
+        const theta = v * Math.PI;
+        const sinTheta = Math.sin(theta);
+        const cosTheta = Math.cos(theta);
+
+        for (let x = 0; x < canvas.width; x++) {
+            const u = (x + 0.5) / canvas.width;
+            const lon = u * 2 * Math.PI - Math.PI;
+
+            const px = sinTheta * Math.cos(lon);
+            const py = cosTheta;
+            const pz = sinTheta * Math.sin(lon);
+
+            let minAngle1 = 10;
+            let minAngle2 = 10;
+
+            for (let i = 0; i < 12; i++) {
+                const vert = vertices[i];
+                const dot = Math.max(-1, Math.min(1, px * vert[0] + py * vert[1] + pz * vert[2]));
+                const angle = Math.acos(dot);
+                if (angle < minAngle1) {
+                    minAngle2 = minAngle1;
+                    minAngle1 = angle;
+                } else if (angle < minAngle2) {
+                    minAngle2 = angle;
+                }
+            }
+
+            const seamDiff = Math.abs(minAngle2 - minAngle1);
+
+            // Hệ số chuyển mượt từ tâm ngũ giác ra vùng lục giác trắng
+            const pentFactor = 1.0 - smoothStepEdge(pentagonRadius - aaWidth, pentagonRadius + aaWidth, minAngle1);
+
+            // Hệ số đường rãnh chỉ khâu mảnh, êm
+            const pentSeam = Math.exp(-Math.pow((minAngle1 - pentagonRadius) / 0.011, 2));
+            const hexSeam = (minAngle1 > pentagonRadius)
+                ? (1.0 - smoothStepEdge(0.006, 0.022, seamDiff))
+                : 0.0;
+            const seamStrength = Math.max(pentSeam * 0.7, hexSeam * 0.65);
+
+            // Hiệu ứng độ phồng nhẹ trên từng múi da bóng để nhìn êm và thật hơn
+            const pillowLight = 1.0 - 0.04 * Math.pow(minAngle1 / 0.55, 2);
+
+            // Trộn màu giữa Trắng kem và Xám than mềm
+            let r = (250 * (1 - pentFactor) + 45 * pentFactor) * pillowLight;
+            let g = (252 * (1 - pentFactor) + 58 * pentFactor) * pillowLight;
+            let b = (250 * (1 - pentFactor) + 75 * pentFactor) * pillowLight;
+
+            // Phủ nhẹ màu đường chỉ khâu
+            r = r * (1 - seamStrength) + 203 * seamStrength;
+            g = g * (1 - seamStrength) + 213 * seamStrength;
+            b = b * (1 - seamStrength) + 225 * seamStrength;
+
+            const idx = (y * canvas.width + x) * 4;
+            data[idx]     = Math.min(255, Math.max(0, Math.round(r)));
+            data[idx + 1] = Math.min(255, Math.max(0, Math.round(g)));
+            data[idx + 2] = Math.min(255, Math.max(0, Math.round(b)));
+            data[idx + 3] = 255;
+        }
+    }
+
+    ctx.putImageData(imgData, 0, 0);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.anisotropy = 8;
+    return texture;
+}
+
+// Hàm tạo Texture thảm sân cỏ tròn mềm mại, chuyển sắc dịu mắt
+function createPitchTurfTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+
+    // Nền cỏ xanh dịu mắt
+    const baseGrad = ctx.createRadialGradient(256, 256, 30, 256, 256, 256);
+    baseGrad.addColorStop(0, '#34D399');
+    baseGrad.addColorStop(1, '#16A34A');
+    ctx.fillStyle = baseGrad;
+    ctx.fillRect(0, 0, 512, 512);
+
+    // Sọc cỏ mịn tự nhiên (độ chênh màu nhẹ nhàng, không gắt)
+    const stripes = 8;
+    const stripeWidth = canvas.width / stripes;
+    for (let i = 0; i < stripes; i++) {
+        ctx.fillStyle = (i % 2 === 0) ? 'rgba(255, 255, 255, 0.07)' : 'rgba(15, 23, 42, 0.04)';
+        ctx.fillRect(i * stripeWidth, 0, stripeWidth, canvas.height);
+    }
+
+    // Bóng đổ êm ngay dưới bụng trái bóng (Ambient Occlusion Shadow)
+    const shadowGrad = ctx.createRadialGradient(256, 256, 15, 256, 256, 135);
+    shadowGrad.addColorStop(0, 'rgba(15, 23, 42, 0.24)');
+    shadowGrad.addColorStop(0.6, 'rgba(15, 23, 42, 0.08)');
+    shadowGrad.addColorStop(1, 'rgba(15, 23, 42, 0)');
+    ctx.fillStyle = shadowGrad;
+    ctx.beginPath();
+    ctx.arc(256, 256, 135, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Vạch vôi trắng mảnh thanh thoát
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.72)';
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.arc(256, 256, 208, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(24, 256);
+    ctx.lineTo(488, 256);
+    ctx.stroke();
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.anisotropy = 4;
+    return texture;
+}
 
 function initThreeScene() {
     const container = document.getElementById('canvas-container');
     if (!container) return;
 
-    let width = container.clientWidth;
-    let height = container.clientHeight;
+    let width = container.clientWidth || 500;
+    let height = container.clientHeight || 500;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
-    camera.position.z = 8;
+    const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 100);
+    camera.position.set(0, 0.85, 7.8);
 
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(width, height);
+    container.innerHTML = '';
     container.appendChild(renderer.domElement);
 
-    const footballGroup = new THREE.Group();
-    scene.add(footballGroup);
+    const stageGroup = new THREE.Group();
+    scene.add(stageGroup);
 
-    const innerGeo = new THREE.IcosahedronGeometry(2, 2);
-    const innerMat = new THREE.MeshPhongMaterial({
-        color: 0x0F172A,
-        emissive: 0x1E293B,
-        flatShading: true,
-        transparent: true,
-        opacity: 0.9
+    const ballTexture = createClassicSoccerBallTexture();
+
+    // 1. Trái bóng đá mềm mại (64 đoạn cầu mịn, chất liệu da bóng mờ êm dịu)
+    const ballGeo = new THREE.SphereGeometry(1.72, 64, 64);
+    const ballMat = new THREE.MeshStandardMaterial({
+        map: ballTexture,
+        bumpMap: ballTexture,
+        bumpScale: 0.015,
+        roughness: 0.48,
+        metalness: 0.02
     });
-    const innerBall = new THREE.Mesh(innerGeo, innerMat);
-    footballGroup.add(innerBall);
+    const soccerBall = new THREE.Mesh(ballGeo, ballMat);
+    soccerBall.position.y = 0.22;
+    stageGroup.add(soccerBall);
 
-    const outerGeo = new THREE.IcosahedronGeometry(2.05, 2);
-    const outerMat = new THREE.MeshBasicMaterial({
-        color: 0x39FF88,
-        wireframe: true,
-        transparent: true,
-        opacity: 0.4
+    // 2. Đế thảm sân cỏ tròn bo êm phía dưới
+    const turfGeo = new THREE.CylinderGeometry(2.32, 2.42, 0.14, 64);
+    const turfTopMat = new THREE.MeshStandardMaterial({
+        map: createPitchTurfTexture(),
+        roughness: 0.85,
+        metalness: 0.0
     });
-    const outerBall = new THREE.Mesh(outerGeo, outerMat);
-    footballGroup.add(outerBall);
+    const turfSideMat = new THREE.MeshStandardMaterial({ color: 0x16A34A, roughness: 0.7 });
+    const turfPad = new THREE.Mesh(turfGeo, [turfSideMat, turfTopMat, turfSideMat]);
+    turfPad.position.y = -1.72;
+    turfPad.rotation.x = 0.08;
+    stageGroup.add(turfPad);
 
-    const isMobile = window.innerWidth <= 768;
-    const particleCount = isMobile ? 200 : 500;
-    
-    const particlesGeo = new THREE.BufferGeometry();
-    const posArray = new Float32Array(particleCount * 3);
-
-    for(let i = 0; i < particleCount * 3; i++) {
-        posArray[i] = (Math.random() - 0.5) * 15;
-    }
-    particlesGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
-    
-    const particlesMat = new THREE.PointsMaterial({
-        size: 0.05,
-        color: 0x39FF88,
+    // 3. Vòng viền ánh sáng xanh pastel cực nhẹ quanh thảm cỏ
+    const ringGeo = new THREE.RingGeometry(2.48, 2.53, 64);
+    const ringMat = new THREE.MeshBasicMaterial({
+        color: 0x34D399,
+        side: THREE.DoubleSide,
         transparent: true,
-        opacity: 0.6,
-        blending: THREE.AdditiveBlending
+        opacity: 0.35
     });
-    
-    const particleMesh = new THREE.Points(particlesGeo, particlesMat);
-    scene.add(particleMesh);
+    const turfRing = new THREE.Mesh(ringGeo, ringMat);
+    turfRing.position.y = -1.64;
+    turfRing.rotation.x = Math.PI / 2 + 0.08;
+    stageGroup.add(turfRing);
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-    scene.add(ambientLight);
+    // 4. Hệ thống ánh sáng vòm tự nhiên (HemisphereLight) giúp bóng không bị đổ bóng đen gắt
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0xdcfce7, 0.95);
+    hemiLight.position.set(0, 10, 0);
+    scene.add(hemiLight);
 
-    const rimLight = new THREE.DirectionalLight(0x39FF88, 2);
-    rimLight.position.set(-5, 5, -5);
-    scene.add(rimLight);
+    const mainLight = new THREE.DirectionalLight(0xfffbeb, 0.55);
+    mainLight.position.set(4, 7, 6);
+    scene.add(mainLight);
 
-    const fillLight = new THREE.DirectionalLight(0x22C55E, 1);
-    fillLight.position.set(5, 0, 5);
-    scene.add(fillLight);
+    const softFillLight = new THREE.DirectionalLight(0xe0f2fe, 0.35);
+    softFillLight.position.set(-5, 2, 4);
+    scene.add(softFillLight);
 
     let mouseX = 0;
     let mouseY = 0;
-    let targetX = 0;
-    let targetY = 0;
-    const windowHalfX = window.innerWidth / 2;
-    const windowHalfY = window.innerHeight / 2;
+    let isHeroVisible = true;
 
     document.addEventListener('mousemove', (event) => {
-        mouseX = (event.clientX - windowHalfX);
-        mouseY = (event.clientY - windowHalfY);
-    });
+        if (!isHeroVisible) return;
+        mouseX = (event.clientX - window.innerWidth / 2) * 0.0006;
+        mouseY = (event.clientY - window.innerHeight / 2) * 0.0006;
+    }, { passive: true });
+
+    // Tự động dừng render 3D khi người dùng cuộn xuống dưới để web luôn mượt và nhẹ
+    const heroObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            isHeroVisible = entry.isIntersecting;
+        });
+    }, { threshold: 0.05 });
+    heroObserver.observe(container);
 
     window.addEventListener('resize', () => {
-        width = container.clientWidth;
-        height = container.clientHeight;
-        
+        width = container.clientWidth || 500;
+        height = container.clientHeight || 500;
         camera.aspect = width / height;
         camera.updateProjectionMatrix();
-        
         renderer.setSize(width, height);
     });
 
@@ -208,23 +365,21 @@ function initThreeScene() {
 
     function animate() {
         requestAnimationFrame(animate);
+        if (!isHeroVisible) return;
+
         const elapsedTime = clock.getElapsedTime();
 
-        footballGroup.rotation.y += 0.003;
-        footballGroup.rotation.x += 0.002;
-        footballGroup.position.y = Math.sin(elapsedTime * 1.5) * 0.2;
-        particleMesh.rotation.y = -elapsedTime * 0.05;
+        // Chuyển động xoay chậm rãi, êm ái
+        soccerBall.rotation.y += 0.0045;
+        soccerBall.rotation.x += 0.0018;
+        soccerBall.position.y = 0.22 + Math.sin(elapsedTime * 1.5) * 0.11;
 
-        targetX = mouseX * 0.001;
-        targetY = mouseY * 0.001;
+        turfPad.rotation.y = elapsedTime * 0.1;
 
-        footballGroup.rotation.y += 0.05 * (targetX - footballGroup.rotation.y);
-        footballGroup.rotation.x += 0.05 * (targetY - footballGroup.rotation.x);
-        
-        camera.position.x += (mouseX * 0.002 - camera.position.x) * 0.05;
-        camera.position.y += (-mouseY * 0.002 - camera.position.y) * 0.05;
-        camera.lookAt(scene.position);
+        stageGroup.rotation.y += (mouseX - stageGroup.rotation.y) * 0.04;
+        stageGroup.rotation.x += (mouseY * 0.4 - stageGroup.rotation.x) * 0.04;
 
+        camera.lookAt(0, -0.1, 0);
         renderer.render(scene, camera);
     }
 
@@ -365,9 +520,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                 summaryScoreEl.innerHTML = `
                                     <div>
                                         <div style="font-size:0.82rem; color:var(--text-muted);">Điểm đánh giá trung bình</div>
-                                        <div style="font-size:1.8rem; font-weight:800; color:#fbbf24;">${Number(revData.trung_binh).toFixed(1)} <span style="font-size:0.95rem; color:var(--text-muted);">/ 5.0 (${revData.tong_so} đánh giá)</span></div>
+                                        <div style="font-size:1.8rem; font-weight:800; color:#f59e0b;">${Number(revData.trung_binh).toFixed(1)} <span style="font-size:0.95rem; color:var(--text-muted);">/ 5.0 (${revData.tong_so} đánh giá)</span></div>
                                     </div>
-                                    <div style="color:#fbbf24; font-size:1.4rem;">★★★★★</div>
+                                    <div>${renderGuestAverageStars(revData.trung_binh, '1.35rem')}</div>
                                 `;
                                 renderGuestModalReviewsList();
                             } else {
@@ -409,10 +564,19 @@ async function loadClusters() {
 function renderClusters() {
     breadcrumbEl.style.display = 'none';
     let html = `
-        <div style="margin-bottom: 24px;">
-            <h2 style="font-size: 1.75rem; color: var(--text-main);">Danh Sách Cụm Sân</h2>
-        </div>
-        <div class="cluster-grid">
+        <div class="guest-view-animate">
+            <div style="margin-bottom: 26px; display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px;">
+                <div>
+                    <div style="font-size: 0.82rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 4px;">
+                        <i class="fa-solid fa-futbol"></i> Đặt sân trực tuyến nhanh chóng
+                    </div>
+                    <h2 style="font-size: 1.85rem; color: var(--text-main); margin: 0;">Danh Sách Cụm Sân</h2>
+                </div>
+                <span style="font-size: 0.9rem; color: var(--text-muted); background: #FFFFFF; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border-color);">
+                    Chọn một cơ sở bên dưới để xem sân và lịch trống
+                </span>
+            </div>
+            <div class="cluster-grid">
     `;
 
     appState.clusters.forEach(c => {
@@ -423,28 +587,28 @@ function renderClusters() {
         html += `
             <div class="cluster-card" onclick="loadPitches('${maCS}')">
                 <div class="cluster-img-box">
-                    ${c.HinhAnh ? `<img src="http://127.0.0.1:8000${c.HinhAnh}" class="cluster-img">` : `<div style="display:flex; height:100%; align-items:center; justify-content:center; background:#E5E7EB;"><i class="fa-solid fa-futbol fa-3x" style="color:#9CA3AF"></i></div>`}
+                    ${c.HinhAnh ? `<img src="http://127.0.0.1:8000${c.HinhAnh}" class="cluster-img">` : `<div style="display:flex; height:100%; align-items:center; justify-content:center; background:#E2E8F0;"><i class="fa-solid fa-futbol fa-3x" style="color:#94A3B8"></i></div>`}
                 </div>
                 <div class="cluster-info">
-                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:6px;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:8px;">
                         <h3 class="cluster-name" style="margin:0;">${c.TenCumSan}</h3>
-                        <button type="button" onclick="event.stopPropagation(); openGuestReviewsModal('${maCS}', '${c.TenCumSan.replace(/'/g, "\\'")}')" style="background:rgba(245, 158, 11, 0.15); border:1px solid rgba(245, 158, 11, 0.4); color:#fbbf24; padding:4px 9px; border-radius:999px; font-size:0.78rem; font-weight:700; cursor:pointer; white-space:nowrap;">
-                            <i class="fa-solid fa-star"></i> ${avgStar} <span style="font-weight:400; opacity:0.9;">${reviewText}</span>
+                        <button type="button" onclick="event.stopPropagation(); openGuestReviewsModal('${maCS}', '${c.TenCumSan.replace(/'/g, "\\'")}')" style="background:#FFFBEB; border:1px solid #FDE68A; color:#B45309; padding:4px 10px; border-radius:999px; font-size:0.78rem; font-weight:700; cursor:pointer; white-space:nowrap; transition: 0.2s;">
+                            <i class="fa-solid fa-star" style="color:#F59E0B;"></i> ${avgStar} <span style="font-weight:500; color:#92400E;">${reviewText}</span>
                         </button>
                     </div>
-                    <div class="cluster-meta"><i class="fa-solid fa-location-dot" style="color: #10B981;"></i> ${c.DiaChi}</div>
-                    <div class="cluster-meta"><i class="fa-solid fa-clock"></i> ${c.GioMoCua?.substring(0,5)} - ${c.GioDongCua?.substring(0,5)}</div>
+                    <div class="cluster-meta"><i class="fa-solid fa-location-dot" style="color: var(--primary);"></i> ${c.DiaChi}</div>
+                    <div class="cluster-meta" style="margin-bottom: 0;"><i class="fa-regular fa-clock" style="color: #0284C7;"></i> Giờ hoạt động: <strong style="color: var(--text-main);">${c.GioMoCua?.substring(0,5)} - ${c.GioDongCua?.substring(0,5)}</strong></div>
                 </div>
             </div>
         `;
     });
-    appContent.innerHTML = html + '</div>';
+    appContent.innerHTML = html + '</div></div>';
 }
 
 async function loadPitches(clusterId) {
     appState.currentCluster = appState.clusters.find(c => (c.MaCumSan || c.ID) == clusterId);
     renderBreadcrumb('pitches');
-    appContent.innerHTML = '<div style="text-align:center; padding: 40px;"><i class="fa-solid fa-spinner fa-spin fa-2x" style="color:#10B981"></i></div>';
+    appContent.innerHTML = '<div style="text-align:center; padding: 40px;"><i class="fa-solid fa-spinner fa-spin fa-2x" style="color:#16A34A"></i></div>';
 
     try {
         const res = await fetch(`${API_BASE_URL}/san-bong?cum_san_id=${clusterId}`);
@@ -453,18 +617,19 @@ async function loadPitches(clusterId) {
 
         const c = appState.currentCluster;
         let headerHtml = `
-            <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-left: 4px solid var(--primary); border-radius: 12px; padding: 20px 24px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+            <div class="guest-view-animate">
+            <div style="background: linear-gradient(135deg, #FFFFFF 0%, #F0FDF4 100%); border: 1px solid #BBF7D0; border-left: 5px solid var(--primary); border-radius: 14px; padding: 20px 24px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; box-shadow: var(--shadow-sm);">
                 <div>
-                    <div style="font-size: 0.8rem; color: var(--accent); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
-                        Đang xem danh sách sân thuộc cụm
+                    <div style="font-size: 0.78rem; color: #15803D; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
+                        <i class="fa-solid fa-circle-check"></i> Đang xem danh sách sân thuộc cụm
                     </div>
                     <h2 style="font-size: 1.5rem; color: var(--text-main); margin-bottom: 8px;">${c.TenCumSan}</h2>
                     <div style="display: flex; gap: 20px; flex-wrap: wrap; font-size: 0.9rem; color: var(--text-muted);">
                         <span><i class="fa-solid fa-location-dot" style="color: var(--primary); margin-right: 6px;"></i>${c.DiaChi}</span>
-                        <span><i class="fa-solid fa-clock" style="color: var(--accent); margin-right: 6px;"></i>Giờ mở cửa: ${c.GioMoCua?.substring(0,5)} - ${c.GioDongCua?.substring(0,5)}</span>
+                        <span><i class="fa-regular fa-clock" style="color: #0284C7; margin-right: 6px;"></i>Giờ mở cửa: <strong style="color: var(--text-main);">${c.GioMoCua?.substring(0,5)} - ${c.GioDongCua?.substring(0,5)}</strong></span>
                     </div>
                 </div>
-                <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.25); padding: 8px 16px; border-radius: 8px; color: var(--accent); font-weight: 600; font-size: 0.9rem;">
+                <div style="background: #DCFCE7; border: 1px solid #86EFAC; padding: 8px 16px; border-radius: 10px; color: #15803D; font-weight: 700; font-size: 0.9rem;">
                     <i class="fa-solid fa-futbol" style="margin-right: 6px;"></i> ${activePitches.length} sân đang hoạt động
                 </div>
             </div>
@@ -472,11 +637,11 @@ async function loadPitches(clusterId) {
 
         if (activePitches.length === 0) {
             appContent.innerHTML = headerHtml + `
-                <div style="text-align: center; padding: 50px 20px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px;">
-                    <i class="fa-solid fa-circle-exclamation fa-3x" style="color: var(--accent); margin-bottom: 16px;"></i>
+                <div style="text-align: center; padding: 50px 20px; background: #FFFFFF; border: 1px dashed #CBD5E1; border-radius: 14px;">
+                    <i class="fa-solid fa-circle-exclamation fa-3x" style="color: #F59E0B; margin-bottom: 16px;"></i>
                     <h3 style="color: var(--text-main); font-size: 1.25rem; margin-bottom: 8px;">Hiện không có sân bóng nào</h3>
                     <p style="color: var(--text-muted); font-size: 0.95rem;">Cụm sân này hiện chưa có sân con nào hoạt động. Vui lòng chọn cụm sân khác.</p>
-                </div>
+                </div></div>
             `;
             return;
         }
@@ -486,32 +651,32 @@ async function loadPitches(clusterId) {
             const maSB = sb.MaSanBong || sb.ID;
             const loaiName = sb.loaiSan?.TenLoaiSan || sb.loai_san?.TenLoaiSan || 'Khác';
             const specInfo = (sb.KichThuoc || sb.DienTich) 
-                ? `<div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px;"><i class="fa-solid fa-ruler-combined" style="color: var(--primary); margin-right: 4px;"></i>${sb.KichThuoc ? sb.KichThuoc : ''}${sb.KichThuoc && sb.DienTich ? ' • ' : ''}${sb.DienTich ? Number(sb.DienTich) + 'm²' : ''}</div>` 
+                ? `<div style="font-size: 0.8rem; color: #475569; margin-top: 4px;"><i class="fa-solid fa-ruler-combined" style="color: var(--primary); margin-right: 4px;"></i>${sb.KichThuoc ? sb.KichThuoc : ''}${sb.KichThuoc && sb.DienTich ? ' • ' : ''}${sb.DienTich ? Number(sb.DienTich) + 'm²' : ''}</div>` 
                 : '';
-            const moTaInfo = sb.MoTa ? `<div style="font-size: 0.76rem; color: var(--text-muted); margin-top: 4px; opacity: 0.85;">${sb.MoTa}</div>` : '';
+            const moTaInfo = sb.MoTa ? `<div style="font-size: 0.78rem; color: #64748B; margin-top: 4px;">${sb.MoTa}</div>` : '';
 
             html += `
                 <div class="pitch-card" onclick="loadSchedule('${clusterId}', '${maSB}')">
-                    <div style="padding: 20px; display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+                    <div style="padding: 20px 22px; display: flex; justify-content: space-between; align-items: center; gap: 12px;">
                         <div>
                             <div class="pitch-card-name">${sb.TenSan}</div>
-                            <div class="pitch-card-type"><i class="fa-solid fa-layer-group" style="color: var(--accent);"></i> ${loaiName}</div>
+                            <div class="pitch-card-type"><i class="fa-solid fa-layer-group" style="color: var(--primary);"></i> ${loaiName}</div>
                             ${specInfo}
                             ${moTaInfo}
                         </div>
-                        <span style="color: var(--accent); font-size: 0.85rem; font-weight: 600; flex-shrink: 0;">Xem lịch &rarr;</span>
+                        <span style="background: #F0FDF4; border: 1px solid #BBF7D0; color: #15803D; padding: 8px 14px; border-radius: 10px; font-size: 0.85rem; font-weight: 700; flex-shrink: 0;">Xem lịch &rarr;</span>
                     </div>
                 </div>
             `;
         });
-        appContent.innerHTML = html + '</div>';
+        appContent.innerHTML = html + '</div></div>';
     } catch (err) {
         appContent.innerHTML = '<p style="text-align:center; color:red;">Lỗi tải dữ liệu sân.</p>';
     }
 }
 
 async function loadSchedule(clusterId, pitchId) {
-    appContent.innerHTML = '<div style="text-align:center; padding: 40px;"><i class="fa-solid fa-spinner fa-spin fa-2x" style="color:#10B981"></i></div>';
+    appContent.innerHTML = '<div style="text-align:center; padding: 40px;"><i class="fa-solid fa-spinner fa-spin fa-2x" style="color:#16A34A"></i></div>';
 
     try {
         const [sbRes, gtRes, kgRes, dsRes] = await Promise.all([
@@ -556,60 +721,78 @@ async function loadSchedule(clusterId, pitchId) {
         }
 
         let html = `
-            <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-left: 4px solid var(--accent); border-radius: 12px; padding: 18px 24px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+            <div class="guest-view-animate">
+            <div style="background: linear-gradient(135deg, #FFFFFF 0%, #F0FDF4 100%); border: 1px solid #BBF7D0; border-left: 5px solid var(--primary); border-radius: 14px; padding: 18px 24px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; box-shadow: var(--shadow-sm);">
                 <div>
                     <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px;">
-                        <span style="background: rgba(57, 255, 136, 0.12); color: var(--accent); border: 1px solid rgba(57, 255, 136, 0.3); padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 700;">
+                        <span style="background: #DCFCE7; color: #15803D; border: 1px solid #86EFAC; padding: 4px 10px; border-radius: 8px; font-size: 0.8rem; font-weight: 700;">
                             <i class="fa-solid fa-building-flag" style="margin-right: 4px;"></i> ${c.TenCumSan}
                         </span>
-                        <i class="fa-solid fa-chevron-right" style="font-size: 0.75rem; color: var(--text-muted);"></i>
-                        <h2 style="font-size: 1.4rem; color: var(--text-main); margin: 0;">${pitch.TenSan}</h2>
-                        <span style="background: var(--bg-tertiary); color: var(--text-main); padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 600;">
+                        <i class="fa-solid fa-chevron-right" style="font-size: 0.75rem; color: #94A3B8;"></i>
+                        <h2 style="font-size: 1.4rem; color: #0F172A; margin: 0;">${pitch.TenSan}</h2>
+                        <span style="background: #F1F5F9; color: #334155; border: 1px solid #CBD5E1; padding: 4px 10px; border-radius: 8px; font-size: 0.8rem; font-weight: 700;">
                             <i class="fa-solid fa-layer-group" style="color: var(--primary); margin-right: 4px;"></i> ${loaiName}
                         </span>
                     </div>
-                    <div style="font-size: 0.88rem; color: var(--text-muted);">
+                    <div style="font-size: 0.88rem; color: #475569;">
                         <i class="fa-solid fa-location-dot" style="color: var(--primary); margin-right: 6px;"></i> ${c.DiaChi}
                     </div>
                 </div>
-                <div style="font-size: 0.85rem; color: var(--text-muted); background: var(--bg-main); padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border-color);">
-                    <i class="fa-solid fa-hand-pointer" style="color: var(--accent); margin-right: 6px;"></i> Nhấn vào ô <strong style="color: var(--accent);">TRỐNG</strong> để chọn khung giờ đặt sân
+                <div style="font-size: 0.85rem; color: #334155; background: #FFFFFF; padding: 10px 14px; border-radius: 10px; border: 1px solid #CBD5E1;">
+                    <i class="fa-solid fa-hand-pointer" style="color: var(--primary); margin-right: 6px;"></i> Nhấn vào ô <strong style="color: #15803D;">TRỐNG</strong> để chọn khung giờ đặt sân
                 </div>
             </div>
             
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px;">
+            <!-- Thanh Quy định & Chú thích màu trạng thái -->
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; background: #FFFFFF; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: var(--shadow-sm);">
                 <div style="position: relative; display: inline-block;">
-                    <button type="button" onclick="toggleGuestRuleDropdown(event)" style="background-color: var(--bg-secondary); color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 14px; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px;">
-                        <i class="fa-solid fa-circle-info" style="background-color: #f59e0b; color: #ffffff; border-radius: 50%; padding: 4px; font-size: 0.75rem;"></i> Quy định đặt & hủy sân
+                    <button type="button" onclick="toggleGuestRuleDropdown(event)" style="background-color: #FFFBEB; color: #B45309; border: 1px solid #FDE68A; padding: 8px 14px; border-radius: 8px; font-size: 0.85rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                        <i class="fa-solid fa-circle-info" style="color: #D97706;"></i> Xem quy định đặt & hủy sân
                     </button>
 
-                    <div id="guest-rule-dropdown-box" style="display: none; position: absolute; top: 115%; left: 0; width: 680px; max-width: 90vw; background-color: #1e293b; border: 1px solid #f59e0b; border-radius: 10px; padding: 18px 22px; box-shadow: 0 10px 25px rgba(0,0,0,0.4); z-index: 99;">
-                        <h4 style="color: #fbbf24; margin: 0 0 10px 0; font-size: 0.98rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">
-                            <i class="fa-solid fa-circle-info"></i> Quy định đặt sân phong trào
+                    <div id="guest-rule-dropdown-box" style="display: none; position: absolute; top: 118%; left: 0; width: 680px; max-width: 90vw; background-color: #FFFFFF; border: 1px solid #FDE68A; border-top: 4px solid #F59E0B; border-radius: 12px; padding: 18px 22px; box-shadow: 0 15px 35px rgba(15, 23, 42, 0.14); z-index: 99;">
+                        <h4 style="color: #92400E; margin: 0 0 10px 0; font-size: 0.98rem; font-weight: 800; display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-shield-halved" style="color: #F59E0B;"></i> Quy định đặt sân phong trào
                         </h4>
-                        <ul style="color: #e2e8f0; font-size: 0.88rem; margin: 0 0 0 18px; padding: 0; line-height: 1.7; list-style-type: disc;">
+                        <ul style="color: #334155; font-size: 0.88rem; margin: 0 0 0 18px; padding: 0; line-height: 1.7; list-style-type: disc;">
                             <li><strong>Đặt sân phong trào:</strong> Xem lịch và đặt trước trong vòng <strong>7 ngày tới</strong>, thanh toán tiền cọc trước <strong>30%</strong> qua cổng VNPay.</li>
                             <li style="margin-top: 6px;"><strong>Nhận vé điện tử:</strong> Sau khi thanh toán thành công, hệ thống sẽ gửi thông tin vé đặt sân và số điện thoại Hotline hỗ trợ trực tiếp về <strong>Email</strong> bạn đã đăng ký.</li>
                             <li style="margin-top: 6px;"><strong>Quy định hủy lịch & hoàn cọc:</strong> Khách vãng lai không tự hủy lịch trên hệ thống. Khi cần hỗ trợ hủy sân và hoàn cọc, vui lòng liên hệ Hotline của cụm sân/Admin trong vé Email và cung cấp <strong>mã xác thực OTP</strong> được gửi về Email đặt sân.</li>
                         </ul>
                     </div>
                 </div>
+
+                <!-- Chú thích 4 trạng thái khung giờ -->
+                <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 0.82rem; font-weight: 600; color: #475569;">
+                    <span style="display: inline-flex; align-items: center; gap: 6px;">
+                        <span style="width: 15px; height: 15px; border-radius: 4px; background: #DCFCE7; border: 1.5px solid #86EFAC; display: inline-block;"></span> Trống
+                    </span>
+                    <span style="display: inline-flex; align-items: center; gap: 6px;">
+                        <span style="width: 15px; height: 15px; border-radius: 4px; background: #EA580C; display: inline-block;"></span> Đang chọn
+                    </span>
+                    <span style="display: inline-flex; align-items: center; gap: 6px;">
+                        <span style="width: 15px; height: 15px; border-radius: 4px; background: #E2E8F0; border: 1px solid #CBD5E1; display: inline-block;"></span> Đã đặt
+                    </span>
+                    <span style="display: inline-flex; align-items: center; gap: 6px;">
+                        <span style="width: 15px; height: 15px; border-radius: 4px; background: #F8FAFC; border: 1px dashed #CBD5E1; display: inline-block;"></span> Quá giờ
+                    </span>
+                </div>
             </div>
 
-            <div class="schedule-container" style="position: relative; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 14px; overflow: visible;">
+            <div class="schedule-container" style="position: relative; background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 14px; overflow-x: auto;">
                 <table class="schedule-table" style="width: 100%; border-collapse: separate; border-spacing: 0; min-width: 900px; table-layout: auto;">
                     <thead>
                         <tr>
-                            <th style="width: 120px; min-width: 120px; padding: 14px 10px; border-bottom: 1px solid var(--border-color); background: var(--bg-tertiary); position: sticky; top: 80px; left: 0; z-index: 50; box-shadow: 0 3px 8px rgba(0,0,0,0.2); text-align: center; color: var(--text-main);">
+                            <th style="width: 130px; min-width: 130px; padding: 14px 10px; border-bottom: 2px solid #CBD5E1; border-right: 1px solid #E2E8F0; background: #F8FAFC; position: sticky; top: 0; left: 0; z-index: 50; text-align: center; color: #0F172A;">
                                 Khung giờ
                             </th>
-                            <th style="width: 100px; min-width: 100px; padding: 14px 10px; border-bottom: 1px solid var(--border-color); background: var(--bg-tertiary); position: sticky; top: 80px; left: 120px; z-index: 49; box-shadow: 4px 0 6px -2px rgba(0,0,0,0.2), 0 3px 8px rgba(0,0,0,0.2); text-align: center; color: var(--text-main);">
-                                Giá tiền
+                            <th style="width: 105px; min-width: 105px; padding: 14px 10px; border-bottom: 2px solid #CBD5E1; border-right: 2px solid #CBD5E1; background: #F8FAFC; position: sticky; top: 0; left: 130px; z-index: 49; text-align: center; color: #0F172A;">
+                                Giá sân
                             </th>
                             ${dateArray.map((d) => `
-                                <th style="min-width: 105px; padding: 10px 8px; text-align: center; white-space: nowrap; border-bottom: 1px solid var(--border-color); background: var(--bg-tertiary); position: sticky; top: 80px; z-index: 40; box-shadow: 0 3px 8px rgba(0,0,0,0.2); color: var(--text-main);">
-                                    <div style="font-size: 0.75rem; font-weight: 700; color: ${d.isWeekend ? '#fbbf24' : '#94a3b8'}; line-height: 1.2; margin-bottom: 2px;">${d.dayLabel}</div>
-                                    <div style="font-size: 0.92rem; font-weight: 800; color: var(--text-main);">${d.short}</div>
+                                <th style="min-width: 108px; padding: 10px 8px; text-align: center; white-space: nowrap; border-bottom: 2px solid #CBD5E1; border-right: 1px solid #F1F5F9; background: ${d.isWeekend ? '#FFFBEB' : '#F8FAFC'}; position: sticky; top: 0; z-index: 40; color: #0F172A;">
+                                    <div style="font-size: 0.74rem; font-weight: 700; color: ${d.isWeekend ? '#D97706' : '#64748B'}; line-height: 1.2; margin-bottom: 2px;">${d.dayLabel}</div>
+                                    <div style="font-size: 0.92rem; font-weight: 800; color: #0F172A;">${d.short}</div>
                                 </th>
                             `).join('')}
                         </tr>
@@ -627,10 +810,10 @@ async function loadSchedule(clusterId, pitchId) {
             
             html += `
                 <tr>
-                    <td style="width: 120px; min-width: 120px; background: var(--bg-secondary); position: sticky; left: 0; z-index: 15; border-right: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); text-align: center; padding: 12px 10px; white-space: nowrap;">
+                    <td style="width: 130px; min-width: 130px; background: #FFFFFF; position: sticky; left: 0; z-index: 15; border-right: 1px solid #E2E8F0; border-bottom: 1px solid #F1F5F9; text-align: center; padding: 10px; white-space: nowrap; color: #0F172A;">
                         <strong>${timeStr}</strong>
                     </td>
-                    <td style="width: 100px; min-width: 100px; background: var(--bg-secondary); position: sticky; left: 120px; z-index: 14; color: var(--accent); font-weight: 600; border-right: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); box-shadow: 4px 0 6px -2px rgba(0,0,0,0.2); text-align: center; padding: 12px 10px;">
+                    <td style="width: 105px; min-width: 105px; background: #FFFFFF; position: sticky; left: 130px; z-index: 14; color: #15803D; font-weight: 700; border-right: 2px solid #E2E8F0; border-bottom: 1px solid #F1F5F9; text-align: center; padding: 10px;">
                         ${priceVal}
                     </td>
             `;
@@ -644,19 +827,19 @@ async function loadSchedule(clusterId, pitchId) {
                 const slotDataStr = `'${timeStr}', '${priceVal}', '${date.short}', '${maKG}'`;
 
                 if (isPast) {
-                    html += `<td style="text-align:center; border-bottom: 1px solid var(--border-color);"><button class="slot-btn past" data-slot-id="${slotId}" disabled>Quá giờ</button></td>`;
+                    html += `<td style="text-align:center; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F8FAFC;"><button class="slot-btn past" data-slot-id="${slotId}" disabled>Quá giờ</button></td>`;
                 } else if (isBooked) {
-                    html += `<td style="text-align:center; border-bottom: 1px solid var(--border-color);"><button class="slot-btn booked" data-slot-id="${slotId}" data-slot-data="${slotDataStr}" disabled>Đã đặt</button></td>`;
+                    html += `<td style="text-align:center; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F8FAFC;"><button class="slot-btn booked" data-slot-id="${slotId}" data-slot-data="${slotDataStr}" disabled>Đã đặt</button></td>`;
                 } else if (isSelected) {
-                    html += `<td style="text-align:center; border-bottom: 1px solid var(--border-color);"><button class="slot-btn available selected" data-slot-id="${slotId}" data-slot-data="${slotDataStr}" onclick="triggerModal(this, ${slotDataStr})">ĐÃ CHỌN ✓</button></td>`;
+                    html += `<td style="text-align:center; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F8FAFC;"><button class="slot-btn available selected" data-slot-id="${slotId}" data-slot-data="${slotDataStr}" onclick="triggerModal(this, ${slotDataStr})">ĐÃ CHỌN ✓</button></td>`;
                 } else {
-                    html += `<td style="text-align:center; border-bottom: 1px solid var(--border-color);"><button class="slot-btn available" data-slot-id="${slotId}" data-slot-data="${slotDataStr}" onclick="triggerModal(this, ${slotDataStr})">TRỐNG</button></td>`;
+                    html += `<td style="text-align:center; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F8FAFC;"><button class="slot-btn available" data-slot-id="${slotId}" data-slot-data="${slotDataStr}" onclick="triggerModal(this, ${slotDataStr})">TRỐNG</button></td>`;
                 }
             });
             html += `</tr>`;
         });
 
-        appContent.innerHTML = html + '</tbody></table></div>';
+        appContent.innerHTML = html + '</tbody></table></div></div>';
     } catch (err) {
         appContent.innerHTML = '<p style="text-align:center; color:red;">Lỗi tải bảng lịch.</p>';
     }
@@ -957,7 +1140,7 @@ window.showGuestPaymentResultModal = function(status, maHoaDon = null) {
         iconHtml = '<i class="fa-solid fa-circle-check" style="font-size: 3.5rem; color: #22C55E;"></i>';
         title = 'Đặt sân thành công!';
         const hdLabel = invoiceIds.length > 0 ? ` (Mã hóa đơn: <strong style="color:#22C55E;">#${invoiceIds.join(', #')}</strong>)` : '';
-        message = `Thanh toán qua VNPay đã hoàn tất${hdLabel}. Chúng tôi đã gửi Hóa đơn và Vé điện tử QR về Email của bạn.<br><br><strong style="color:#f8fafc;">Bạn có muốn xuất hóa đơn đặt sân ngay bây giờ không?</strong>`;
+        message = `Thanh toán qua VNPay đã hoàn tất${hdLabel}. Chúng tôi đã gửi Hóa đơn và Vé điện tử QR về Email của bạn.<br><br><strong style="color:#0f172a;">Bạn có muốn xuất hóa đơn đặt sân ngay bây giờ không?</strong>`;
         btnColor = '#22C55E';
         guestSelectedSlots = [];
         updateGuestFloatingCart();
@@ -1152,6 +1335,25 @@ let guestModalReviewPage = 1;
 let currentGuestViewedReviewClusterId = null;
 const GUEST_REVIEWS_PER_PAGE = 6;
 
+// Hàm vẽ dải 5 ngôi sao theo đúng tỷ lệ phần trăm điểm trung bình (VD: 4.0 -> 4 sao vàng, 1 sao xám; 4.7 -> 4 sao vàng + sao thứ 5 vàng 70%)
+window.renderGuestAverageStars = function(avgScore, fontSize = '1.35rem') {
+    const score = Math.max(0, Math.min(5, Number(avgScore) || 0));
+    let html = `<div style="display: inline-flex; align-items: center; gap: 3px; font-size: ${fontSize}; line-height: 1;" title="${score.toFixed(1)} / 5.0 sao">`;
+    for (let i = 1; i <= 5; i++) {
+        const fillPct = Math.max(0, Math.min(1, score - (i - 1))) * 100;
+        html += `
+            <span style="position: relative; display: inline-block; color: #CBD5E1;">
+                <i class="fa-solid fa-star"></i>
+                <span style="position: absolute; top: 0; left: 0; width: ${fillPct}%; overflow: hidden; color: #F59E0B; white-space: nowrap;">
+                    <i class="fa-solid fa-star"></i>
+                </span>
+            </span>
+        `;
+    }
+    html += `</div>`;
+    return html;
+};
+
 window.openGuestReviewsModal = async function(idCumSan, tenCumSan) {
     currentGuestViewedReviewClusterId = idCumSan;
 
@@ -1170,14 +1372,20 @@ window.openGuestReviewsModal = async function(idCumSan, tenCumSan) {
         document.body.appendChild(modal);
     }
 
+    // Khung .modal-card đặt overflow: hidden và tách riêng phần Header cố định + phần Body cuộn bên trong để 4 góc luôn bo tròn đẹp
     modal.innerHTML = `
-        <div class="modal-card" style="max-width: 580px; width: 92%; max-height: 86vh; overflow-y: auto; padding: 20px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid var(--border-color);">
-                <h3 style="margin:0; font-size:1.15rem; color:var(--text-main);"><i class="fa-solid fa-star" style="color:#fbbf24; margin-right:6px;"></i>Đánh giá: ${tenCumSan}</h3>
-                <button class="modal-close-btn" style="position:static;" onclick="document.getElementById('guest-reviews-modal').classList.remove('active'); setTimeout(()=>document.getElementById('guest-reviews-modal').style.display='none',200)"><i class="fa-solid fa-xmark"></i></button>
+        <div class="modal-card" style="max-width: 580px; width: 92%; max-height: 86vh; padding: 0; overflow: hidden; display: flex; flex-direction: column; border-radius: 18px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; padding: 16px 22px; background: #FFFFFF; border-bottom:1px solid var(--border-color); flex-shrink: 0;">
+                <h3 style="margin:0; font-size:1.15rem; color:var(--text-main); display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-star" style="color:#F59E0B;"></i>
+                    <span>Đánh giá: ${tenCumSan}</span>
+                </h3>
+                <button class="modal-close-btn" style="position:static;" onclick="document.getElementById('guest-reviews-modal').classList.remove('active'); setTimeout(()=>document.getElementById('guest-reviews-modal').style.display='none',200)">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
             </div>
-            <div id="guest-reviews-content" style="text-align:left;">
-                <div style="text-align:center; padding:30px;"><i class="fa-solid fa-spinner fa-spin fa-2x" style="color:#10B981"></i></div>
+            <div id="guest-reviews-content" style="text-align:left; padding: 18px 22px 20px; overflow-y: auto; flex: 1;">
+                <div style="text-align:center; padding:30px;"><i class="fa-solid fa-spinner fa-spin fa-2x" style="color:#16A34A"></i></div>
             </div>
         </div>
     `;
@@ -1199,12 +1407,14 @@ window.openGuestReviewsModal = async function(idCumSan, tenCumSan) {
         guestModalReviewPage = 1;
 
         box.innerHTML = `
-            <div style="background:var(--bg-tertiary); border:1px solid var(--border-color); border-radius:10px; padding:14px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between;">
+            <div style="background:var(--bg-tertiary); border:1px solid var(--border-color); border-radius:12px; padding:14px 18px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
                 <div>
-                    <div style="font-size:0.82rem; color:var(--text-muted);">Điểm đánh giá trung bình</div>
-                    <div style="font-size:1.8rem; font-weight:800; color:#fbbf24;">${Number(data.trung_binh).toFixed(1)} <span style="font-size:0.95rem; color:var(--text-muted);">/ 5.0 (${data.tong_so} đánh giá)</span></div>
+                    <div style="font-size:0.82rem; color:var(--text-muted); font-weight:600;">Điểm đánh giá trung bình</div>
+                    <div style="font-size:1.85rem; font-weight:800; color:#F59E0B; line-height:1.2; margin-top:2px;">
+                        ${Number(data.trung_binh).toFixed(1)} <span style="font-size:0.95rem; color:var(--text-muted); font-weight:600;">/ 5.0 (${data.tong_so} đánh giá)</span>
+                    </div>
                 </div>
-                <div style="color:#fbbf24; font-size:1.4rem;">★★★★★</div>
+                <div>${renderGuestAverageStars(data.trung_binh, '1.35rem')}</div>
             </div>
 
             <div id="guest-review-filter-btns" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--border-color);"></div>
@@ -1246,9 +1456,9 @@ function renderGuestModalReviewsList() {
         filterBox.innerHTML = buttons.map(b => {
             const active = guestModalReviewSort === b.key;
             const style = active
-                ? 'background: #10B981; color: #0F172A; border: 1px solid #10B981;'
-                : 'background: var(--bg-secondary); color: var(--text-muted); border: 1px solid var(--border-color);';
-            return `<button type="button" onclick="setGuestModalReviewSort('${b.key}')" style="${style} padding: 5px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; cursor: pointer;">${b.label}</button>`;
+                ? 'background: #16A34A; color: #FFFFFF; border: 1px solid #16A34A;'
+                : 'background: #FFFFFF; color: #475569; border: 1px solid #CBD5E1;';
+            return `<button type="button" onclick="setGuestModalReviewSort('${b.key}')" style="${style} padding: 6px 14px; border-radius: 999px; font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: 0.15s;">${b.label}</button>`;
         }).join('');
     }
 
@@ -1272,18 +1482,20 @@ function renderGuestModalReviewsList() {
         const dateStr = d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` : '';
         const maGiai = r.dat_san?.MaGiaiDau || r.dat_san?.ID_GiaiDau || r.dat_san?.giai_dau?.MaGiaiDau || r.dat_san?.giai_dau?.ID || null;
         const isGiaiDau = Boolean(maGiai);
+
+        // Nhãn Giải đấu & Sân bóng rõ nét, độ tương phản cao trên nền sáng
         const subTag = isGiaiDau
-            ? `<span style="font-size:0.75rem; background:rgba(99,102,241,0.2); color:#a5b4fc; padding:2px 7px; border-radius:6px; margin-left:6px;"><i class="fa-solid fa-trophy"></i> Giải đấu: ${r.dat_san?.giai_dau?.TenGiaiDau || ('#GD-' + maGiai)}</span>`
-            : (r.dat_san?.san_bong?.TenSan ? `<span style="font-size:0.75rem; color:var(--text-muted); margin-left:6px;">(${r.dat_san.san_bong.TenSan})</span>` : '');
+            ? `<span style="font-size:0.76rem; font-weight:600; background:#EEF2FF; color:#4338CA; border:1px solid #C7D2FE; padding:2px 8px; border-radius:6px; margin-left:6px; display:inline-block;"><i class="fa-solid fa-trophy"></i> Giải đấu: ${r.dat_san?.giai_dau?.TenGiaiDau || ('#GD-' + maGiai)}</span>`
+            : (r.dat_san?.san_bong?.TenSan ? `<span style="font-size:0.76rem; font-weight:600; color:#475569; background:#F1F5F9; border:1px solid #E2E8F0; padding:2px 8px; border-radius:6px; margin-left:6px; display:inline-block;">${r.dat_san.san_bong.TenSan}</span>` : '');
 
         return `
-            <div style="padding:12px 0; border-bottom:1px solid var(--border-color);">
+            <div style="padding:12px 0; border-bottom:1px solid #F1F5F9;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; flex-wrap:wrap; gap:4px;">
-                    <div><strong style="color:var(--text-main); font-size:0.92rem;">${r.nguoi_dung?.HoTen || 'Khách hàng'}</strong>${subTag}</div>
-                    <span style="color:var(--text-muted); font-size:0.78rem;">${dateStr}</span>
+                    <div><strong style="color:var(--text-main); font-size:0.93rem;">${r.nguoi_dung?.HoTen || 'Khách hàng'}</strong>${subTag}</div>
+                    <span style="color:#64748B; font-size:0.78rem;">${dateStr}</span>
                 </div>
-                <div style="color:#fbbf24; font-size:0.9rem; margin-bottom:4px;">${stars}</div>
-                <div style="color:var(--text-muted); font-size:0.88rem;">${r.NoiDung || '<i>(Không có lời bình)</i>'}</div>
+                <div style="color:#F59E0B; font-size:0.95rem; letter-spacing:1px; margin-bottom:4px;">${stars}</div>
+                <div style="color:#334155; font-size:0.89rem; line-height:1.5;">${r.NoiDung || '<span style="color:#94A3B8; font-style:italic;">(Khách hàng không để lại bình luận)</span>'}</div>
             </div>
         `;
     }).join('');
@@ -1295,7 +1507,7 @@ function renderGuestModalReviewsList() {
             const isPrevDisabled = guestModalReviewPage === 1;
             const isNextDisabled = guestModalReviewPage === totalPages;
 
-            const baseArrowStyle = `width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-main); transition: 0.2s;`;
+            const baseArrowStyle = `width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid #CBD5E1; background: #FFFFFF; color: #0F172A; transition: 0.2s;`;
             const prevStyle = baseArrowStyle + (isPrevDisabled ? ' opacity: 0.35; cursor: not-allowed;' : ' cursor: pointer;');
             const nextStyle = baseArrowStyle + (isNextDisabled ? ' opacity: 0.35; cursor: not-allowed;' : ' cursor: pointer;');
 
@@ -1304,8 +1516,8 @@ function renderGuestModalReviewsList() {
             for (let i = 1; i <= totalPages; i++) {
                 const active = i === guestModalReviewPage;
                 const st = active 
-                    ? 'background:#10B981; color:#0F172A; border-color:#10B981; font-weight:700;' 
-                    : 'background:var(--bg-secondary); color:var(--text-main); border-color:var(--border-color);';
+                    ? 'background:#16A34A; color:#FFFFFF; border-color:#16A34A; font-weight:700;' 
+                    : 'background:#FFFFFF; color:#0F172A; border-color:#CBD5E1;';
                 pHtml += `<button type="button" style="min-width: 34px; height: 34px; padding: 0 10px; border-radius: 8px; border: 1px solid; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; ${st}" onclick="changeGuestModalReviewPage(${i})">${i}</button>`;
             }
             

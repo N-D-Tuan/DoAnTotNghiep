@@ -5794,6 +5794,24 @@ let customerModalReviewPage = 1;
 let currentViewedReviewClusterId = null;
 const CUSTOMER_REVIEWS_PER_PAGE = 6;
 
+window.renderCustomerAverageStars = function(avgScore, fontSize = '1rem') {
+    const score = Math.max(0, Math.min(5, Number(avgScore) || 0));
+    let html = `<div style="display: inline-flex; align-items: center; gap: 3px; font-size: ${fontSize}; line-height: 1; margin: 5px 0;" title="${score.toFixed(1)} / 5.0 sao">`;
+    for (let i = 1; i <= 5; i++) {
+        const fillPct = Math.max(0, Math.min(1, score - (i - 1))) * 100;
+        html += `
+            <span style="position: relative; display: inline-block; color: #cbd5e1;">
+                <i class="fa-solid fa-star"></i>
+                <span style="position: absolute; top: 0; left: 0; width: ${fillPct}%; overflow: hidden; color: #f59e0b; white-space: nowrap;">
+                    <i class="fa-solid fa-star"></i>
+                </span>
+            </span>
+        `;
+    }
+    html += `</div>`;
+    return html;
+};
+
 window.openClusterReviewsModal = async function(idCumSan, tenCumSan) {
     currentViewedReviewClusterId = idCumSan;
 
@@ -5845,7 +5863,7 @@ window.openClusterReviewsModal = async function(idCumSan, tenCumSan) {
             <div style="display: flex; align-items: center; gap: 18px; background: #fffbeb; border: 1px solid #fde68a; padding: 16px; border-radius: 12px; margin-bottom: 14px;">
                 <div style="text-align: center; padding-right: 18px; border-right: 1px dashed #fcd34d;">
                     <div style="font-size: 2.2rem; font-weight: 800; color: #d97706; line-height: 1;">${Number(data.trung_binh).toFixed(1)}<span style="font-size: 1rem; color: #92400e;">/5</span></div>
-                    <div style="color: #f59e0b; font-size: 1rem; margin: 4px 0;">★★★★★</div>
+                    ${renderCustomerAverageStars(data.trung_binh, '1rem')}
                     <div style="font-size: 0.78rem; color: #78350f; font-weight: 600;">${data.tong_so} đánh giá</div>
                 </div>
                 <div style="flex: 1; font-size: 0.8rem; color: #475569;">
@@ -5906,7 +5924,7 @@ async function refreshOpenCustomerReviewsModal() {
             summaryBox.innerHTML = `
                 <div style="text-align: center; padding-right: 18px; border-right: 1px dashed #fcd34d;">
                     <div style="font-size: 2.2rem; font-weight: 800; color: #d97706; line-height: 1;">${Number(data.trung_binh).toFixed(1)}<span style="font-size: 1rem; color: #92400e;">/5</span></div>
-                    <div style="color: #f59e0b; font-size: 1rem; margin: 4px 0;">★★★★★</div>
+                    ${renderCustomerAverageStars(data.trung_binh, '1rem')}
                     <div style="font-size: 0.78rem; color: #78350f; font-weight: 600;">${data.tong_so} đánh giá</div>
                 </div>
                 <div style="flex: 1; font-size: 0.8rem; color: #475569;">
