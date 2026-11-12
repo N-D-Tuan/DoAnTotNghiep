@@ -1879,6 +1879,7 @@ function renderQuanLyGiaiDau() {
     currentGDPage = 1;
     currentGDFilter = 'All';
     currentGDSearch = '';
+    currentGDDate = '';
     allGiaiDauData = [];
 
     // 1. Cập nhật trạng thái Active trên Menu
@@ -1886,44 +1887,59 @@ function renderQuanLyGiaiDau() {
     const menuLink = Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('YÊU CẦU GIẢI ĐẤU'));
     if (menuLink) menuLink.classList.add('active');
 
-    // 2. Render khung giao diện chính tích hợp Bộ lọc, Tìm kiếm và Modal Confirm
+    // 2. Render khung giao diện chính (Tách khối Bộ lọc ra ngoài Panel chứa Table)
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
-        <div class="page-header">
+        <div class="page-header" style="margin-bottom: 20px;">
             <div>
                 <h1 class="page-title">Quản lý Yêu cầu Giải đấu</h1>
                 <p class="text-muted">Kiểm tra ma trận lịch sân và xét duyệt các đơn đăng ký tổ chức giải đấu</p>
             </div>
-            <div style="background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; padding: 8px 16px; border-radius: 8px; font-size: 0.88rem; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;">
+            <div style="background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; padding: 8px 16px; border-radius: 10px; font-size: 0.88rem; font-weight: 700; display: inline-flex; align-items: center; gap: 8px;">
                 <i class="fa-solid fa-hourglass-half" style="color: #ea580c;"></i>
                 <span>Đơn chờ duyệt: <strong id="gd-pending-count" style="color: #ea580c; font-size: 1.05rem;">0</strong></span>
             </div>
         </div>
         
-        <!-- Khu vực thông báo tùy chỉnh (Thay thế alert) -->
         <div id="giaidau-alert" class="modal-alert" style="display: none; margin-bottom: 16px;"></div>
 
-        <div class="panel">
-            <!-- Khu vực Tìm kiếm và Lọc -->
-            <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
-                <div style="position: relative; flex: 1; min-width: 250px;">
-                    <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
-                    <input type="text" id="gd-search-input" class="form-control" style="padding-left: 35px;" placeholder="Tìm tên khách hàng, tên sân, tên giải..." oninput="handleGDSearch(this.value)">
-                </div>
-                <input type="date" id="gd-date-filter" class="form-control" style="width: 150px;" onchange="handleGDDate(this.value)">
-                <select class="form-control" style="width: 200px;" onchange="handleGDFilter(this.value)">
-                    <option value="All">Tất cả trạng thái</option>
-                    <option value="ChoDuyet">Chờ duyệt</option>
-                    <option value="DaDuyet">Đã duyệt</option>
-                    <option value="TuChoi">Từ chối</option>
-                    <option value="HetHan">Hết hạn</option>
-                    <option value="HoanThanh">Hoàn thành</option>
-                    <option value="DaHuy">Đã hủy</option>
-                </select>
+        <!-- KHỐI BỘ LỌC & TÌM KIẾM ĐỘC LẬP NẰM NGOÀI BẢNG -->
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px 20px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03); display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;">
+            <div style="position: relative; flex: 1; min-width: 260px;">
+                <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #64748b; font-size: 0.9rem;"></i>
+                <input type="text" id="gd-search-input" class="form-control" style="padding-left: 38px; height: 40px; background: #f8fafc; border-color: #cbd5e1; border-radius: 9px; font-size: 0.9rem;" placeholder="Tìm tên khách hàng, tên sân, tên giải..." oninput="handleGDSearch(this.value)">
             </div>
 
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <div style="display: inline-flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 6px 0 12px; height: 40px; gap: 6px;">
+                    <i class="fa-regular fa-calendar" style="color: var(--primary); font-size: 0.88rem;"></i>
+                    <span style="font-size: 0.82rem; font-weight: 600; color: #64748b; white-space: nowrap;">Ngày nộp:</span>
+                    <input type="date" id="gd-date-filter" style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%;" onchange="handleGDDate(this.value)">
+                    <button type="button" onclick="document.getElementById('gd-date-filter').value=''; handleGDDate('');" title="Xem tất cả các ngày" style="background: #e2e8f0; border: none; color: #334155; padding: 4px 9px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: 0.15s;" onmouseover="this.style.background='#cbd5e1'" onmouseout="this.style.background='#e2e8f0'">
+                        Tất cả
+                    </button>
+                </div>
+
+                <div style="display: inline-flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 10px 0 12px; height: 40px; gap: 6px;">
+                    <i class="fa-solid fa-filter" style="color: var(--primary); font-size: 0.85rem;"></i>
+                    <span style="font-size: 0.82rem; font-weight: 600; color: #64748b; white-space: nowrap;">Trạng thái:</span>
+                    <select style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%; padding-right: 4px;" onchange="handleGDFilter(this.value)">
+                        <option value="All">Tất cả trạng thái</option>
+                        <option value="ChoDuyet">Chờ duyệt</option>
+                        <option value="DaDuyet">Đã duyệt</option>
+                        <option value="TuChoi">Từ chối</option>
+                        <option value="HetHan">Hết hạn</option>
+                        <option value="HoanThanh">Hoàn thành</option>
+                        <option value="DaHuy">Đã hủy</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- KHỐI BẢNG DỮ LIỆU -->
+        <div class="panel" style="padding: 0; overflow: hidden;">
             <div class="table-responsive" style="min-height: 350px;">
-                <table class="admin-table">
+                <table class="admin-table" style="margin: 0;">
                     <thead style="background: #F8FAFC;">
                         <tr>
                             <th>Khách Hàng</th>
@@ -1935,16 +1951,15 @@ function renderQuanLyGiaiDau() {
                         </tr>
                     </thead>
                     <tbody id="giaidau-table-body">
-                        <tr><td colspan="6" class="text-center" style="text-align:center;">Đang tải dữ liệu...</td></tr>
+                        <tr><td colspan="6" class="text-center" style="text-align:center; padding: 40px;">Đang tải dữ liệu...</td></tr>
                     </tbody>
                 </table>
             </div>
 
-            <!-- Vùng hiển thị nút Phân trang -->
-            <div id="gd-pagination" style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 15px; margin-bottom: 15px; padding-top: 15px; border-top: 1px solid var(--border);"></div>
+            <div id="gd-pagination" style="display: flex; justify-content: center; align-items: center; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--border); background: #ffffff;"></div>
         </div>
 
-        <!-- Modal Xác nhận (Thay thế confirm() mặc định của trình duyệt) -->
+        <!-- Modal Xác nhận -->
         <div id="gd-confirm-modal" class="modal-overlay" style="display: none; z-index: 9999;">
             <div class="modal-content" style="max-width: 400px; text-align: center; padding: 30px 20px;">
                 <div style="font-size: 3.5rem; color: #f59e0b; margin-bottom: 15px;"><i class="fa-solid fa-circle-exclamation"></i></div>
@@ -1965,7 +1980,6 @@ function renderQuanLyGiaiDau() {
         </div>
     `;
 
-    // 3. Gọi API lấy toàn bộ dữ liệu 1 lần
     loadDanhSachGiaiDauAdmin();
 }
 
@@ -2570,34 +2584,55 @@ function renderQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = null) {
 
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
-        <div class="page-header" style="margin-bottom: 24px;">
-            <h1 class="page-title">Quản lý Lịch Đặt Sân</h1>
-            <p class="text-muted">Chốt trạng thái khách đến sân và quản lý theo từng Hóa đơn đặt sân.</p>
+        <div class="page-header" style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+            <div>
+                <h1 class="page-title">Quản lý Lịch Đặt Sân</h1>
+                <p class="text-muted">Chốt trạng thái khách đến sân, hỗ trợ dời lịch và quản lý theo từng Hóa đơn đặt sân.</p>
+            </div>
+            <button type="button" class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 10px; background: #0f172a; border-color: #0f172a; font-weight: 700; box-shadow: 0 4px 10px rgba(15, 23, 42, 0.15); white-space: nowrap;" onclick="openAdminQrScannerModal()">
+                <i class="fa-solid fa-qrcode" style="color: #4ade80;"></i> Quét mã vé QR
+            </button>
         </div>
 
         <div id="datsan-alert" class="modal-alert" style="display: none; margin-bottom: 16px;"></div>
 
-        <div class="panel">
-            <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
-                <div style="position: relative; flex: 1; min-width: 250px;">
-                    <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
-                    <input type="text" id="ds-search-input" class="form-control" style="padding-left: 35px;" placeholder="Tìm Mã HĐ, Mã vé (PT-..., GD-...), SĐT, Tên khách..." oninput="handleDSSearch(this.value)">
-                </div>
-                <button type="button" class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 0 18px; background: #0f172a; border-color: #0f172a; white-space: nowrap;" onclick="openAdminQrScannerModal()">
-                    <i class="fa-solid fa-qrcode"></i> Quét mã vé
-                </button>
-                <input type="date" class="form-control" style="width: 150px;" id="ds-date-input" onchange="handleDSDate(this.value)">
-                <select class="form-control" id="ds-status-select" style="width: 210px;" onchange="handleDSFilter(this.value)" title="Lọc theo trạng thái Hóa đơn đặt sân">
-                    <option value="All" ${defaultStatus === 'All' ? 'selected' : ''}>Tất cả trạng thái HĐ</option>
-                    <option value="DaCoc" ${defaultStatus === 'DaCoc' ? 'selected' : ''}>Đã cọc</option>
-                    <option value="HoanThanh" ${defaultStatus === 'HoanThanh' ? 'selected' : ''}>Hoàn thành</option>
-                    <option value="DaHuy" ${defaultStatus === 'DaHuy' ? 'selected' : ''}>Đã hủy</option>
-                    <option value="KhongDen" ${defaultStatus === 'KhongDen' ? 'selected' : ''}>Không đến</option>
-                </select>                
+        <!-- KHỐI BỘ LỌC & TÌM KIẾM ĐỘC LẬP NẰM NGOÀI BẢNG -->
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px 20px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03); display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;">
+            <!-- Ô tìm kiếm từ khóa -->
+            <div style="position: relative; flex: 1; min-width: 260px;">
+                <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #64748b; font-size: 0.9rem;"></i>
+                <input type="text" id="ds-search-input" class="form-control" style="padding-left: 38px; height: 40px; background: #f8fafc; border-color: #cbd5e1; border-radius: 9px; font-size: 0.9rem;" placeholder="Tìm Mã HĐ, Mã vé (#PT-..., #GD-...), SĐT, Tên khách..." oninput="handleDSSearch(this.value)">
             </div>
 
+            <!-- Cụm lọc Ngày đá & Trạng thái Hóa đơn -->
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <div style="display: inline-flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 6px 0 12px; height: 40px; gap: 6px;">
+                    <i class="fa-regular fa-calendar" style="color: var(--primary); font-size: 0.88rem;"></i>
+                    <span style="font-size: 0.82rem; font-weight: 600; color: #64748b; white-space: nowrap;">Ngày đá:</span>
+                    <input type="date" id="ds-date-input" style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%;" onchange="handleDSDate(this.value)">
+                    <button type="button" onclick="document.getElementById('ds-date-input').value=''; handleDSDate('');" title="Xem tất cả các ngày" style="background: #e2e8f0; border: none; color: #334155; padding: 4px 9px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: 0.15s;" onmouseover="this.style.background='#cbd5e1'" onmouseout="this.style.background='#e2e8f0'">
+                        Tất cả
+                    </button>
+                </div>
+
+                <div style="display: inline-flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 10px 0 12px; height: 40px; gap: 6px;">
+                    <i class="fa-solid fa-filter" style="color: var(--primary); font-size: 0.85rem;"></i>
+                    <span style="font-size: 0.82rem; font-weight: 600; color: #64748b; white-space: nowrap;">Trạng thái HĐ:</span>
+                    <select id="ds-status-select" style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%; padding-right: 4px;" onchange="handleDSFilter(this.value)" title="Lọc theo trạng thái Hóa đơn đặt sân">
+                        <option value="All" ${defaultStatus === 'All' ? 'selected' : ''}>Tất cả trạng thái</option>
+                        <option value="DaCoc" ${defaultStatus === 'DaCoc' ? 'selected' : ''}>Đã cọc</option>
+                        <option value="HoanThanh" ${defaultStatus === 'HoanThanh' ? 'selected' : ''}>Hoàn thành</option>
+                        <option value="DaHuy" ${defaultStatus === 'DaHuy' ? 'selected' : ''}>Đã hủy</option>
+                        <option value="KhongDen" ${defaultStatus === 'KhongDen' ? 'selected' : ''}>Không đến</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- KHỐI BẢNG DỮ LIỆU -->
+        <div class="panel" style="padding: 0; overflow: hidden;">
             <div class="table-responsive" style="min-height: 350px;">
-                <table class="admin-table">
+                <table class="admin-table" style="margin: 0;">
                     <thead style="background: #F8FAFC;">
                         <tr>
                             <th style="text-align: center; width: 100px; white-space: nowrap;">Mã vé</th>
@@ -2610,11 +2645,11 @@ function renderQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = null) {
                         </tr>
                     </thead>
                     <tbody id="datsan-table-body">
-                        <tr><td colspan="7" class="text-center" style="text-align: center;">Đang tải dữ liệu...</td></tr>
+                        <tr><td colspan="7" class="text-center" style="text-align: center; padding: 40px;">Đang tải dữ liệu...</td></tr>
                     </tbody>
                 </table>
             </div>
-            <div id="ds-pagination" style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 15px; margin-bottom: 15px; padding-top: 15px; border-top: 1px solid var(--border);"></div>
+            <div id="ds-pagination" style="display: flex; justify-content: center; align-items: center; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--border); background: #ffffff;"></div>
         </div>
     `;
 
@@ -2830,25 +2865,25 @@ function renderDSTable(invoiceGroups) {
             html += `
                 <tr style="background: #f0fdf4; border-top: 2px solid #86efac; border-bottom: 1px solid #bbf7d0;">
                     <td colspan="7" style="padding: 10px 16px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                                <span style="background: #0b5d3b; color: #fff; font-family: monospace; font-weight: 700; padding: 4px 10px; border-radius: 6px; font-size: 0.88rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: nowrap;">
+                            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0;">
+                                <span style="background: #0b5d3b; color: #fff; font-family: monospace; font-weight: 700; padding: 4px 10px; border-radius: 6px; font-size: 0.86rem; white-space: nowrap;">
                                     <i class="fa-solid fa-file-invoice-dollar"></i> Hóa đơn #${group.maHoaDon}
                                 </span>
                                 ${hdStatusBadgeHtml}
-                                <span style="font-size: 0.88rem; color: #0f172a;">Khách: <strong>${tenKhach}</strong> (${sdtKhach})</span>
-                                <span style="font-size: 0.84rem; color: #475569;">
+                                <span style="font-size: 0.86rem; color: #0f172a; white-space: nowrap;">Khách: <strong>${tenKhach}</strong> (${sdtKhach})</span>
+                                <span style="font-size: 0.83rem; color: #475569; white-space: nowrap;">
                                     &bull; Tổng HĐ (${allMatchesInInvoice.length} trận): <strong style="color:#0f172a;">${tongHD.toLocaleString('vi-VN')}đ</strong> 
                                     | Đã cọc: <strong style="color:#047857;">${cocHD.toLocaleString('vi-VN')}đ</strong>
-                                    | Còn phải thu: <strong style="color:#ea580c; font-size:0.92rem; background:#fff7ed; padding:2px 8px; border-radius:6px; border:1px solid #fed7aa;">${conPhaiThuHD.toLocaleString('vi-VN')}đ</strong>
+                                    | Còn phải thu: <strong style="color:#ea580c; font-size:0.88rem; background:#fff7ed; padding:2px 8px; border-radius:6px; border:1px solid #fed7aa;">${conPhaiThuHD.toLocaleString('vi-VN')}đ</strong>
                                 </span>
                             </div>
-                            <div style="display: flex; gap: 8px; align-items: center;">
-                                <button type="button" class="btn-outline-sm" style="background: #fff; color: #2563eb; border-color: #93c5fd; padding: 5px 11px; font-size: 0.8rem; font-weight: 700;" onclick="printAdminBookingInvoice('${group.maHoaDon}')">
+                            <div style="display: flex; gap: 8px; align-items: center; flex-shrink: 0; white-space: nowrap;">
+                                <button type="button" class="btn-outline-sm" style="background: #fff; color: #2563eb; border-color: #93c5fd; padding: 5px 11px; font-size: 0.8rem; font-weight: 700; white-space: nowrap;" onclick="printAdminBookingInvoice('${group.maHoaDon}')">
                                     <i class="fa-solid fa-print"></i> Xuất hóa đơn
                                 </button>
                                 ${activeDaCocCount > 0 ? `
-                                <button type="button" class="btn-outline-sm" style="background: #fef2f2; color: #dc2626; border-color: #fca5a5; padding: 5px 11px; font-size: 0.8rem; font-weight: 700;" onclick="openAdminCancelInvoiceModal('${group.maHoaDon}', ${activeDaCocCount}, ${isMember}, '${tenKhach.replace(/'/g, "\\'")}', '${emailKhach}', ${cocHD})">
+                                <button type="button" class="btn-outline-sm" style="background: #fef2f2; color: #dc2626; border-color: #fca5a5; padding: 5px 11px; font-size: 0.8rem; font-weight: 700; white-space: nowrap;" onclick="openAdminCancelInvoiceModal('${group.maHoaDon}', ${activeDaCocCount}, ${isMember}, '${tenKhach.replace(/'/g, "\\'")}', '${emailKhach}', ${cocHD})">
                                     <i class="fa-solid fa-ban"></i> Hủy lịch / Hóa đơn (${activeDaCocCount} trận)
                                 </button>` : ''}
                             </div>
@@ -3575,12 +3610,12 @@ function renderQuanLyHuySan() {
 
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
-        <div class="page-header">
+        <div class="page-header" style="margin-bottom: 20px;">
             <div>
                 <h1 class="page-title">Quản lý Yêu cầu Hủy Sân Gấp</h1>
                 <p class="text-muted">Xét duyệt các yêu cầu hủy lịch sát giờ và hoàn tiền cọc cho khách hàng</p>
             </div>
-            <div style="background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; padding: 8px 16px; border-radius: 8px; font-size: 0.88rem; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;">
+            <div style="background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; padding: 8px 16px; border-radius: 10px; font-size: 0.88rem; font-weight: 700; display: inline-flex; align-items: center; gap: 8px;">
                 <i class="fa-solid fa-clock-rotate-left" style="color: #ea580c;"></i>
                 <span>Đơn chờ duyệt: <strong id="uc-pending-count" style="color: #ea580c; font-size: 1.05rem;">0</strong></span>
             </div>
@@ -3588,23 +3623,40 @@ function renderQuanLyHuySan() {
         
         <div id="huysan-alert" class="modal-alert" style="display: none; margin-bottom: 16px;"></div>
 
-        <div class="panel">
-            <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
-                <div style="position: relative; flex: 1; min-width: 250px;">
-                    <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
-                    <input type="text" class="form-control" style="padding-left: 35px;" placeholder="Tìm tên khách, tên sân, cụm sân..." oninput="handleUCSearch(this.value)">
-                </div>
-                <input type="date" class="form-control" style="width: 150px;" onchange="handleUCDate(this.value)">
-                <select class="form-control" style="width: 200px;" onchange="handleUCFilter(this.value)">
-                    <option value="All">Tất cả trạng thái</option>
-                    <option value="ChoDuyet">Chờ duyệt</option>
-                    <option value="DaDuyet">Đã duyệt</option>
-                    <option value="TuChoi">Từ chối</option>
-                </select>
+        <!-- KHỐI BỘ LỌC & TÌM KIẾM ĐỘC LẬP NẰM NGOÀI BẢNG -->
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px 20px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03); display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;">
+            <div style="position: relative; flex: 1; min-width: 260px;">
+                <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #64748b; font-size: 0.9rem;"></i>
+                <input type="text" class="form-control" style="padding-left: 38px; height: 40px; background: #f8fafc; border-color: #cbd5e1; border-radius: 9px; font-size: 0.9rem;" placeholder="Tìm tên khách, tên sân, cụm sân..." oninput="handleUCSearch(this.value)">
             </div>
 
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <div style="display: inline-flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 6px 0 12px; height: 40px; gap: 6px;">
+                    <i class="fa-regular fa-calendar" style="color: var(--primary); font-size: 0.88rem;"></i>
+                    <span style="font-size: 0.82rem; font-weight: 600; color: #64748b; white-space: nowrap;">Ngày gửi:</span>
+                    <input type="date" id="uc-date-filter" style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%;" onchange="handleUCDate(this.value)">
+                    <button type="button" onclick="document.getElementById('uc-date-filter').value=''; handleUCDate('');" title="Xem tất cả các ngày" style="background: #e2e8f0; border: none; color: #334155; padding: 4px 9px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: 0.15s;" onmouseover="this.style.background='#cbd5e1'" onmouseout="this.style.background='#e2e8f0'">
+                        Tất cả
+                    </button>
+                </div>
+
+                <div style="display: inline-flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 10px 0 12px; height: 40px; gap: 6px;">
+                    <i class="fa-solid fa-filter" style="color: var(--primary); font-size: 0.85rem;"></i>
+                    <span style="font-size: 0.82rem; font-weight: 600; color: #64748b; white-space: nowrap;">Trạng thái:</span>
+                    <select style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%; padding-right: 4px;" onchange="handleUCFilter(this.value)">
+                        <option value="All">Tất cả trạng thái</option>
+                        <option value="ChoDuyet">Chờ duyệt</option>
+                        <option value="DaDuyet">Đã duyệt</option>
+                        <option value="TuChoi">Từ chối</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- KHỐI BẢNG DỮ LIỆU -->
+        <div class="panel" style="padding: 0; overflow: hidden;">
             <div class="table-responsive" style="min-height: 350px;">
-                <table class="admin-table">
+                <table class="admin-table" style="margin: 0;">
                     <thead style="background: #F8FAFC;">
                         <tr>
                             <th>Khách Hàng</th>
@@ -3616,11 +3668,11 @@ function renderQuanLyHuySan() {
                         </tr>
                     </thead>
                     <tbody id="huysan-table-body">
-                        <tr><td colspan="6" class="text-center" style="text-align: center;">Đang tải dữ liệu...</td></tr>
+                        <tr><td colspan="6" class="text-center" style="text-align: center; padding: 40px;">Đang tải dữ liệu...</td></tr>
                     </tbody>
                 </table>
             </div>
-            <div id="uc-pagination" style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 15px; margin-bottom: 15px; padding-top: 15px; border-top: 1px solid var(--border);"></div>
+            <div id="uc-pagination" style="display: flex; justify-content: center; align-items: center; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--border); background: #ffffff;"></div>
         </div>
     `;
     loadDanhSachHuySanAdmin();
@@ -6994,7 +7046,7 @@ async function openManagerShiftModal(caId, tenCa, ngayLam, displayDate, cacheKey
     } catch (e) {
         document.getElementById('manager-assign-staff-id').innerHTML = '<option value="">Lỗi tải danh sách nhân sự</option>';
     } finally {
-        btn.innerHTML = 'Lưu tạm';
+        btn.innerHTML = 'Lưu';
         btn.disabled = false;
     }
 }
@@ -8522,41 +8574,60 @@ async function renderQuanLyKhuyenMai() {
 
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
-        <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+        <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
             <div>
                 <h1 class="page-title">Quản lý Chương trình Khuyến mãi</h1>
                 <p class="text-muted">${subDesc}</p>
             </div>
-            <button class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px;" onclick="openPromoModal()">
+            <button class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 10px; font-weight: 700;" onclick="openPromoModal()">
                 <i class="fa-solid fa-plus"></i> Tạo Mã Khuyến Mãi
             </button>
         </div>
 
-        <div class="panel">
-            <!-- Thanh Tìm kiếm & Bộ lọc -->
-            <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; align-items: center;">
-                <div style="position: relative; flex: 1; min-width: 240px;">
-                    <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
-                    <input type="text" id="promo-search-input" class="form-control" style="padding-left: 36px;" placeholder="Tìm theo Mã KM, tên chương trình, cụm sân..." oninput="handlePromoSearch(this.value)">
-                </div>
-                <select class="form-control" style="width: 175px;" onchange="handlePromoScopeFilter(this.value)">
-                    ${scopeFilterOptionsHtml}
-                </select>
-                <select class="form-control" style="width: 170px;" onchange="handlePromoTypeFilter(this.value)">
-                    <option value="All">Tất cả loại giảm</option>
-                    <option value="PhanTram">Giảm theo %</option>
-                    <option value="CoDinh">Giảm tiền cố định</option>
-                </select>
-                <select class="form-control" style="width: 175px;" onchange="handlePromoStatusFilter(this.value)">
-                    <option value="All">Tất cả trạng thái</option>
-                    <option value="DangApDung">Đang áp dụng</option>
-                    <option value="HetHan">Hết hạn / Khóa</option>
-                </select>
+        <!-- KHỐI BỘ LỌC & TÌM KIẾM ĐỘC LẬP NẰM NGOÀI BẢNG -->
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px 20px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+            <!-- Ô tìm kiếm -->
+            <div style="position: relative; flex: 1; min-width: 240px;">
+                <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #64748b; font-size: 0.9rem;"></i>
+                <input type="text" id="promo-search-input" class="form-control" style="padding-left: 38px; height: 40px; background: #f8fafc; border-color: #cbd5e1; border-radius: 9px; font-size: 0.9rem;" placeholder="Tìm theo Mã KM, tên chương trình, cụm sân..." oninput="handlePromoSearch(this.value)">
             </div>
 
-            <!-- Bảng dữ liệu -->
+            <!-- Cụm 3 bộ lọc: Phạm vi, Loại giảm, Trạng thái -->
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <div style="display: inline-flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 10px 0 12px; height: 40px; gap: 6px;">
+                    <i class="fa-solid fa-layer-group" style="color: var(--primary); font-size: 0.85rem;"></i>
+                    <span style="font-size: 0.82rem; font-weight: 600; color: #64748b; white-space: nowrap;">Phạm vi:</span>
+                    <select style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%; padding-right: 4px;" onchange="handlePromoScopeFilter(this.value)">
+                        ${scopeFilterOptionsHtml}
+                    </select>
+                </div>
+
+                <div style="display: inline-flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 10px 0 12px; height: 40px; gap: 6px;">
+                    <i class="fa-solid fa-tags" style="color: var(--primary); font-size: 0.85rem;"></i>
+                    <span style="font-size: 0.82rem; font-weight: 600; color: #64748b; white-space: nowrap;">Loại giảm:</span>
+                    <select style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%; padding-right: 4px;" onchange="handlePromoTypeFilter(this.value)">
+                        <option value="All">Tất cả loại giảm</option>
+                        <option value="PhanTram">Giảm theo %</option>
+                        <option value="CoDinh">Giảm tiền cố định</option>
+                    </select>
+                </div>
+
+                <div style="display: inline-flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 10px 0 12px; height: 40px; gap: 6px;">
+                    <i class="fa-solid fa-filter" style="color: var(--primary); font-size: 0.85rem;"></i>
+                    <span style="font-size: 0.82rem; font-weight: 600; color: #64748b; white-space: nowrap;">Trạng thái:</span>
+                    <select style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%; padding-right: 4px;" onchange="handlePromoStatusFilter(this.value)">
+                        <option value="All">Tất cả trạng thái</option>
+                        <option value="DangApDung">Đang áp dụng</option>
+                        <option value="HetHan">Hết hạn / Khóa</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- KHỐI BẢNG DỮ LIỆU -->
+        <div class="panel" style="padding: 0; overflow: hidden;">
             <div class="table-responsive" style="min-height: 340px;">
-                <table class="admin-table" style="min-width: 1050px;">
+                <table class="admin-table" style="min-width: 1050px; margin: 0;">
                     <thead style="background: #F8FAFC;">
                         <tr>
                             <th style="white-space: nowrap; width: 95px;">Mã KM</th>
@@ -8577,7 +8648,7 @@ async function renderQuanLyKhuyenMai() {
             </div>
 
             <!-- Phân trang -->
-            <div id="admin-promo-pagination" style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);"></div>
+            <div id="admin-promo-pagination" style="display: flex; justify-content: center; align-items: center; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--border); background: #ffffff;"></div>
         </div>
     `;
 

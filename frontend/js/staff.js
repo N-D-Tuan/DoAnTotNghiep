@@ -1477,26 +1477,131 @@ function openOfflineBookingSuccessInvoiceModal(maHoaDon, maHoaDons = []) {
 }
 
 // ======================================================
-// MODULE: NHÂN VIÊN - QUẢN LÝ ĐẶT SÂN (CHỐT SÂN)
+// MODULE: NHÂN VIÊN - QUẢN LÝ ĐẶT SÂN (KIỂM TRA CA TRỰC & ĐIỂM DANH)
 // ======================================================
 let staffDatSanData = [];
 let staffDSPage = 1;
-const staffDSItemsPerPage = 5; // Phân trang theo đơn vị 5 Hóa đơn / 1 trang (giữ trọn vẹn các trận trong cùng 1 hóa đơn)
+const staffDSItemsPerPage = 5; // Phân trang 5 Hóa đơn / 1 trang
 let staffDSFilter = 'DaCoc';
-// Mặc định hiển thị ngày hôm nay (tính theo múi giờ local)
 let staffDSDate = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10);
 let staffDSSearch = '';
 
-function renderStaffQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = null) {
-    staffDSPage = 1; 
-    staffDSFilter = defaultStatus; 
-    staffDSSearch = ''; 
+// Trạng thái Ca trực hiện tại của Nhân viên
+let staffShiftContext = {
+    status: 'LOADING', // 'ACTIVE' (Đang trong ca & đã điểm danh) | 'NOT_CHECKED_IN' (Đến giờ ca nhưng chưa điểm danh) | 'ENDED' (Đã hết ca/chốt ca) | 'NO_SHIFT' (Hôm nay không có ca hoặc chưa tới giờ)
+    activeShift: null, // Ca đang trực (đã điểm danh)
+    pendingShift: null, // Ca sắp tới/đang diễn ra nhưng chưa bấm điểm danh
+    endedShifts: [],   // Các ca đã kết thúc trong hôm nay
+    allTodayShifts: [],
+    viewScope: 'CURRENT_SHIFT' // 'CURRENT_SHIFT' (Chỉ xem trận của ca đang trực) | 'OTHER_SHIFTS' (Tra cứu các ca/ngày khác)
+};
 
-    if (defaultDate !== null) {
-        staffDSDate = defaultDate;
-    } else {
-        staffDSDate = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10);
+// Hàm chuyển chuỗi "HH:MM" thành tổng số phút trong ngày để so sánh chính xác
+function timeStrToMinutesStaff(timeStr) {
+    if (!timeStr) return 0;
+    const parts = String(timeStr).substring(0, 5).split(':').map(Number);
+    return (parts[0] || 0) * 60 + (parts[1] || 0);
+}
+
+// Hàm kiểm tra Nhân viên có đang trong ca làm việc (và đã điểm danh) hay không
+async function evaluateStaffActiveShiftStatus() {
+    const todayStr = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10);
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+    const now = new Date();
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+    try {
+        const lichRes = await fetch(`${API_BASE_URL}/lich-lam-viec?tu_ngay=${todayStr}&den_ngay=${todayStr}&_t=${now.getTime()}`);
+        const res = await lichRes.json();
+
+        const myShifts = (res.data || []).filter(l =>
+            String(l.ID_NhanVien) === String(currentUser.ID) &&
+            l.TrangThaiXepLich === 'DaDuyet'
+        );
+
+        staffShiftContext.allTodayShifts = myShifts;
+        staffShiftContext.activeShift = null;
+        staffShiftContext.pendingShift = null;
+        staffShiftContext.endedShifts = [];
+
+        if (myShifts.length === 0) {
+            staffShiftContext.status = 'NO_SHIFT';
+            return staffShiftContext;
+        }
+
+        // Duyệt từng ca làm việc đã duyệt trong hôm nay
+        for (const shift of myShifts) {
+            const ca = shift.ca_lam_viec || shift.caLamViec;
+            if (!ca) continue;
+
+            const startMin = timeStrToMinutesStaff(ca.GioBatDau);
+            const endMin = timeStrToMinutesStaff(ca.GioKetThuc);
+
+            // Cho phép mở ca từ trước giờ bắt đầu 30 phút đến sau giờ kết thúc 30 phút (30p ân hạn chốt sổ cuối ca)
+            const isWithinShiftTimeWindow = (nowMinutes >= (startMin - 30) && nowMinutes <= (endMin + 30));
+
+            if (shift.TrangThaiDiemDanh === 'DaLam') {
+                if (isWithinShiftTimeWindow) {
+                    staffShiftContext.activeShift = shift;
+                } else if (nowMinutes > (endMin + 30)) {
+                    staffShiftContext.endedShifts.push(shift);
+                } else {
+                    // Đã điểm danh sớm và đang chờ vào giờ ca
+                    staffShiftContext.activeShift = shift;
+                }
+            } else if (shift.TrangThaiDiemDanh === 'ChuaLam') {
+                if (isWithinShiftTimeWindow) {
+                    staffShiftContext.pendingShift = shift;
+                }
+            }
+        }
+
+        if (staffShiftContext.activeShift) {
+            staffShiftContext.status = 'ACTIVE';
+        } else if (staffShiftContext.pendingShift) {
+            staffShiftContext.status = 'NOT_CHECKED_IN';
+        } else if (staffShiftContext.endedShifts.length > 0) {
+            staffShiftContext.status = 'ENDED';
+        } else {
+            staffShiftContext.status = 'NO_SHIFT';
+        }
+    } catch (e) {
+        console.error('Lỗi kiểm tra trạng thái ca trực:', e);
+        staffShiftContext.status = 'NO_SHIFT';
     }
+
+    return staffShiftContext;
+}
+
+// Kiểm tra 1 trận đặt sân có nằm trong khung giờ của Ca đang trực hay không
+function isBookingInStaffActiveShift(bookingItem, shiftObj) {
+    if (!bookingItem || !shiftObj) return false;
+    const todayStr = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10);
+
+    // Phải là trận diễn ra trong ngày hôm nay
+    if (bookingItem.NgayDa !== todayStr) return false;
+
+    const ca = shiftObj.ca_lam_viec || shiftObj.caLamViec;
+    if (!ca || !bookingItem.khung_gio) return true;
+
+    const shiftStart = timeStrToMinutesStaff(ca.GioBatDau);
+    const shiftEnd = timeStrToMinutesStaff(ca.GioKetThuc);
+
+    const matchStart = timeStrToMinutesStaff(bookingItem.khung_gio.GioBatDau);
+    const matchEnd = timeStrToMinutesStaff(bookingItem.khung_gio.GioKetThuc);
+
+    // Trận đấu có thời gian giao thoa với khung giờ của Ca làm việc (ví dụ trận bắt đầu trong khoảng từ GioBatDau đến GioKetThuc của ca)
+    return (matchStart < shiftEnd && matchEnd > shiftStart);
+}
+
+async function renderStaffQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = null) {
+    staffDSPage = 1;
+    staffDSFilter = defaultStatus;
+    staffDSSearch = '';
+    staffShiftContext.viewScope = 'CURRENT_SHIFT';
+
+    const todayStr = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10);
+    staffDSDate = defaultDate !== null ? defaultDate : todayStr;
 
     // Active menu
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
@@ -1505,43 +1610,179 @@ function renderStaffQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = null) {
 
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
+        <div style="text-align: center; padding: 60px 20px; color: var(--text-muted);">
+            <i class="fa-solid fa-spinner fa-spin text-primary" style="font-size: 2.2rem; margin-bottom: 12px;"></i>
+            <div>Đang kiểm tra trạng thái điểm danh và ca làm việc của bạn...</div>
+        </div>
+    `;
+
+    const shiftState = await evaluateStaffActiveShiftStatus();
+
+    // =========================================================================
+    // TRƯỜNG HỢP 1: CHƯA ĐIỂM DANH / ĐÃ CHỐT CA / KHÔNG TRONG CA TRỰC -> KHÓA XEM ĐẶT SÂN
+    // =========================================================================
+    if (shiftState.status !== 'ACTIVE') {
+        let iconClass = 'fa-user-lock';
+        let iconBg = '#fef3c7';
+        let iconColor = '#d97706';
+        let titleText = 'Bạn hiện không trong ca làm việc';
+        let subText = 'Theo quy định phân quyền của hệ thống, nhân viên chỉ được phép xem và xử lý danh sách đặt sân khi đang trong ca trực và đã điểm danh nhận ca.';
+        let shiftBadgesHtml = '';
+        let actionBtnHtml = `
+            <button type="button" class="btn-primary" style="padding: 12px 24px; border-radius: 10px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px;" onclick="renderDiemDanhNhanCa()">
+                <i class="fa-solid fa-fingerprint"></i> Đi tới trang Điểm danh nhận ca
+            </button>
+        `;
+
+        if (shiftState.status === 'NOT_CHECKED_IN' && shiftState.pendingShift) {
+            const ca = shiftState.pendingShift.ca_lam_viec || shiftState.pendingShift.caLamViec || {};
+            const timeRange = ca.GioBatDau ? `${ca.GioBatDau.substring(0,5)} - ${ca.GioKetThuc.substring(0,5)}` : '';
+            iconClass = 'fa-fingerprint';
+            iconBg = '#fffbeb';
+            iconColor = '#f59e0b';
+            titleText = `Bạn chưa điểm danh nhận ca (${ca.TenCa || 'Ca hiện tại'})!`;
+            subText = `Ca trực <strong>${ca.TenCa || ''} (${timeRange})</strong> của bạn đã đến giờ mở ca. Vui lòng bấm điểm danh nhận ca trước khi vào xem và chốt lịch đặt sân của khách.`;
+        } else if (shiftState.status === 'ENDED') {
+            const lastShift = shiftState.endedShifts[shiftState.endedShifts.length - 1];
+            const ca = lastShift?.ca_lam_viec || lastShift?.caLamViec || {};
+            const timeRange = ca.GioBatDau ? `${ca.GioBatDau.substring(0,5)} - ${ca.GioKetThuc.substring(0,5)}` : '';
+            iconClass = 'fa-lock';
+            iconBg = '#f1f5f9';
+            iconColor = '#475569';
+            titleText = `Ca làm việc (${ca.TenCa || ''}) đã kết thúc & chốt sổ!`;
+            subText = `Thời gian trực ca <strong>${ca.TenCa || ''} (${timeRange})</strong> của bạn đã kết thúc. Hệ thống đã tự động đóng quyền xem và thao tác đặt sân của ca này để bàn giao cho ca tiếp theo.`;
+            actionBtnHtml = `
+                <button type="button" class="btn-outline" style="padding: 11px 22px; border-radius: 10px; font-weight: 700;" onclick="renderLichLamViecStaff()">
+                    <i class="fa-solid fa-calendar-week" style="margin-right: 6px;"></i> Xem lịch làm việc của bạn
+                </button>
+            `;
+        }
+
+        if (shiftState.allTodayShifts.length > 0) {
+            shiftBadgesHtml = `
+                <div style="margin: 18px auto 24px; max-width: 520px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 18px; text-align: left;">
+                    <div style="font-size: 0.8rem; font-weight: 700; color: #475569; text-transform: uppercase; margin-bottom: 8px;">
+                        <i class="fa-regular fa-clock"></i> Ca làm việc của bạn trong hôm nay:
+                    </div>
+                    ${shiftState.allTodayShifts.map(s => {
+                        const ca = s.ca_lam_viec || s.caLamViec || {};
+                        const tStr = ca.GioBatDau ? `${ca.GioBatDau.substring(0,5)} - ${ca.GioKetThuc.substring(0,5)}` : '';
+                        const stMap = {
+                            'ChuaLam': '<span style="background:#fef3c7; color:#b45309; padding:3px 9px; border-radius:99px; font-size:0.76rem; font-weight:700;">Chưa điểm danh</span>',
+                            'DaLam': '<span style="background:#d1fae5; color:#047857; padding:3px 9px; border-radius:99px; font-size:0.76rem; font-weight:700;">Đã điểm danh</span>',
+                            'VangMat': '<span style="background:#fee2e2; color:#b91c1c; padding:3px 9px; border-radius:99px; font-size:0.76rem; font-weight:700;">Vắng mặt</span>'
+                        };
+                        return `
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px dashed #e2e8f0; font-size: 0.9rem;">
+                                <span><strong style="color: #0f172a;">${ca.TenCa || 'Ca trực'}</strong> <span style="color: #64748b;">(${tStr})</span></span>
+                                ${stMap[s.TrangThaiDiemDanh] || ''}
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        }
+
+        contentArea.innerHTML = `
+            <div class="page-header staff-hero-header">
+                <div>
+                    <div class="staff-hero-badge"><i class="fa-solid fa-clipboard-check"></i> Nghiệp vụ Sân Bóng</div>
+                    <h1 class="page-title">Quản lý Lịch Đặt Sân</h1>
+                    <p class="text-muted">Chức năng chỉ mở khi nhân viên đang trong ca làm việc và đã điểm danh nhận ca.</p>
+                </div>
+            </div>
+
+            <div class="panel" style="padding: 50px 24px; text-align: center; border-top: 4px solid ${iconColor};">
+                <div style="width: 76px; height: 76px; border-radius: 50%; background: ${iconBg}; color: ${iconColor}; display: inline-flex; align-items: center; justify-content: center; font-size: 2.2rem; margin-bottom: 16px;">
+                    <i class="fa-solid ${iconClass}"></i>
+                </div>
+                <h2 style="font-size: 1.4rem; font-weight: 800; color: #0f172a; margin-bottom: 10px;">${titleText}</h2>
+                <p style="max-width: 560px; margin: 0 auto 20px; color: #475569; font-size: 0.95rem; line-height: 1.6;">
+                    ${subText}
+                </p>
+                ${shiftBadgesHtml}
+                <div style="display: flex; justify-content: center; gap: 12px; flex-wrap: wrap;">
+                    ${actionBtnHtml}
+                    <button type="button" class="btn-outline" style="padding: 12px 20px; border-radius: 10px; font-weight: 600;" onclick="renderStaffQuanLyDatSan()">
+                        <i class="fa-solid fa-rotate-right" style="margin-right: 6px;"></i> Kiểm tra lại
+                    </button>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    // =========================================================================
+    // TRƯỜNG HỢP 2: ĐANG TRONG CA & ĐÃ ĐIỂM DANH -> MỞ GIAO DIỆN QUẢN LÝ ĐẶT SÂN THEO CA
+    // =========================================================================
+    const activeShift = shiftState.activeShift;
+    const caInfo = activeShift.ca_lam_viec || activeShift.caLamViec || {};
+    const tenCaActive = caInfo.TenCa || 'Ca hiện tại';
+    const gioCaActive = caInfo.GioBatDau ? `${caInfo.GioBatDau.substring(0,5)} - ${caInfo.GioKetThuc.substring(0,5)}` : '';
+    const viTriActive = activeShift.CongViec === 'ThuNgan' ? 'Thu Ngân' : 'Phục Vụ';
+
+    contentArea.innerHTML = `
         <div class="page-header staff-hero-header">
             <div>
                 <div class="staff-hero-badge"><i class="fa-solid fa-clipboard-check"></i> Nghiệp vụ Sân Bóng</div>
                 <h1 class="page-title">Quản lý Lịch Đặt Sân</h1>
-                <p class="text-muted">Tra cứu hóa đơn, quét mã QR check-in và chốt trạng thái khách đến nhận sân tại cơ sở.</p>
+                <p class="text-muted">Xử lý check-in, chốt sân cho các trận thuộc <strong>${tenCaActive} (${gioCaActive})</strong> hoặc tra cứu lịch khách hàng.</p>
             </div>
-            <button type="button" class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 10px; background: #0f172a; border-color: #0f172a; font-weight: 700; box-shadow: 0 4px 10px rgba(15, 23, 42, 0.15);" onclick="openStaffQrScannerModal()">
-                <i class="fa-solid fa-qrcode" style="color: #4ade80;"></i> Quét QR Check-in nhanh
-            </button>
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <div style="background: #ecfdf5; border: 1.5px solid #6ee7b7; color: #065f46; padding: 8px 14px; border-radius: 10px; font-size: 0.84rem; font-weight: 700; display: inline-flex; align-items: center; gap: 8px;">
+                    <span style="width: 9px; height: 9px; border-radius: 50%; background: #10b981; display: inline-block; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);"></span>
+                    <span>Đang trực: <strong>${tenCaActive}</strong> (${gioCaActive}) &bull; ${viTriActive}</span>
+                </div>
+                <button type="button" class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 10px; background: #0f172a; border-color: #0f172a; font-weight: 700; box-shadow: 0 4px 10px rgba(15, 23, 42, 0.15);" onclick="openStaffQrScannerModal()">
+                    <i class="fa-solid fa-qrcode" style="color: #4ade80;"></i> Quét QR Check-in nhanh
+                </button>
+            </div>
         </div>
 
         <div id="staff-datsan-alert" class="modal-alert" style="display: none; margin-bottom: 16px;"></div>
 
-        <div class="panel">
-            <!-- Thanh công cụ Tìm kiếm & Bộ lọc (Đã bỏ nút Quét mã bị trùng và thiết kế lại cân đối) -->
-            <div style="display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; background: #f8fafc; padding: 14px 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
-                <!-- Ô tìm kiếm từ khóa -->
-                <div style="position: relative; flex: 1; min-width: 260px;">
-                    <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #64748b; font-size: 0.9rem;"></i>
-                    <input type="text" id="staff-ds-search-input" class="form-control" style="padding-left: 38px; height: 40px; background: #ffffff; border-color: #cbd5e1; border-radius: 9px; font-size: 0.9rem;" placeholder="Tìm Mã HĐ, Mã vé (#PT-..., #GD-...), SĐT, Tên khách..." oninput="handleStaffDSSearch(this.value)">
+        <!-- KHỐI ĐIỀU KHIỂN CHẾ ĐỘ XEM & BỘ LỌC TÌM KIẾM (NẰM TÁCH BIỆT BÊN NGOÀI TABLE) -->
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px 20px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);">
+            <!-- Tầng 1: Nút chuyển chế độ (Trái) & Khung #staff-scope-hint cố định 1 vị trí (Phải) -->
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 14px; padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid #f1f5f9; flex-wrap: nowrap;">
+                <div style="display: inline-flex; background: #f1f5f9; padding: 4px; border-radius: 10px; border: 1px solid #cbd5e1; gap: 4px; flex-shrink: 0;">
+                    <button type="button" id="btn-scope-current-shift" onclick="switchStaffBookingScope('CURRENT_SHIFT')" style="height: 36px; padding: 0 16px; border-radius: 7px; border: none; background: #10b981; color: #ffffff; font-weight: 700; font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; transition: 0.2s; white-space: nowrap;">
+                        <i class="fa-solid fa-bolt"></i> Đặt sân trong ${tenCaActive} (${gioCaActive})
+                    </button>
+                    <button type="button" id="btn-scope-other-shifts" onclick="switchStaffBookingScope('OTHER_SHIFTS')" style="height: 36px; padding: 0 16px; border-radius: 7px; border: none; background: transparent; color: #475569; font-weight: 600; font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; transition: 0.2s; white-space: nowrap;">
+                        <i class="fa-solid fa-clock-rotate-left"></i> Tra cứu các ca / ngày khác
+                    </button>
                 </div>
 
-                <!-- Cụm lọc Ngày đá & Trạng thái HĐ -->
+                <!-- Khung #staff-scope-hint giữ cố định chiều cao và vị trí bên phải, không bao giờ nhảy dòng -->
+                <div id="staff-scope-hint" style="height: 38px; padding: 0 14px; border-radius: 9px; font-size: 0.82rem; font-weight: 600; color: #047857; background: #f0fdf4; border: 1px solid #bbf7d0; display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0;">
+                    <i class="fa-solid fa-circle-check" style="flex-shrink: 0;"></i>
+                    <span style="overflow: hidden; text-overflow: ellipsis;">Đang hiển thị các trận thuộc khung giờ <strong>${tenCaActive} (${gioCaActive})</strong> hôm nay</span>
+                </div>
+            </div>
+
+            <!-- Tầng 2: Thanh công cụ Tìm kiếm, Lọc Ngày đá & Trạng thái -->
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                <div style="position: relative; flex: 1; min-width: 260px;">
+                    <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #64748b; font-size: 0.9rem;"></i>
+                    <input type="text" id="staff-ds-search-input" class="form-control" style="padding-left: 38px; height: 40px; background: #f8fafc; border-color: #cbd5e1; border-radius: 9px; font-size: 0.9rem;" placeholder="Tìm Mã HĐ, Mã vé (#PT-..., #GD-...), SĐT, Tên khách..." oninput="handleStaffDSSearch(this.value)">
+                </div>
+
                 <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                    <div style="display: inline-flex; align-items: center; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 6px 0 12px; height: 40px; gap: 6px;">
+                    <!-- Bộ chọn ngày (Chỉ hiển thị khi sang chế độ Tra cứu các ca/ngày khác) -->
+                    <div id="staff-date-filter-box" style="display: none; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 6px 0 12px; height: 40px; gap: 6px;">
                         <i class="fa-regular fa-calendar" style="color: var(--primary); font-size: 0.88rem;"></i>
                         <span style="font-size: 0.82rem; font-weight: 600; color: #64748b; white-space: nowrap;">Ngày đá:</span>
                         <input type="date" id="staff-ds-date-input" style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%;" onchange="handleStaffDSDate(this.value)">
-                        <button type="button" onclick="document.getElementById('staff-ds-date-input').value=''; handleStaffDSDate('');" title="Xem tất cả các ngày" style="background: #f1f5f9; border: none; color: #475569; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: 0.15s;" onmouseover="this.style.background='#e2e8f0'; this.style.color='#0f172a'" onmouseout="this.style.background='#f1f5f9'; this.style.color='#475569'">
+                        <button type="button" onclick="document.getElementById('staff-ds-date-input').value=''; handleStaffDSDate('');" title="Xem tất cả các ngày" style="background: #e2e8f0; border: none; color: #334155; padding: 4px 9px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: 0.15s;" onmouseover="this.style.background='#cbd5e1'" onmouseout="this.style.background='#e2e8f0'">
                             Tất cả
                         </button>
                     </div>
 
-                    <div style="display: inline-flex; align-items: center; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 10px 0 12px; height: 40px; gap: 6px;">
+                    <div style="display: inline-flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 10px 0 12px; height: 40px; gap: 6px;">
                         <i class="fa-solid fa-filter" style="color: var(--primary); font-size: 0.85rem;"></i>
-                        <span style="font-size: 0.82rem; font-weight: 600; color: #64748b; white-space: nowrap;">Trạng thái HĐ:</span>
-                        <select id="staff-ds-status-select" style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%; padding-right: 4px;" onchange="handleStaffDSFilter(this.value)" title="Lọc theo trạng thái Hóa đơn đặt sân">
+                        <span style="font-size: 0.82rem; font-weight: 600; color: #64748b; white-space: nowrap;">Trạng thái:</span>
+                        <select id="staff-ds-status-select" style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%; padding-right: 4px;" onchange="handleStaffDSFilter(this.value)">
                             <option value="All" ${defaultStatus === 'All' ? 'selected' : ''}>Tất cả trạng thái</option>
                             <option value="DaCoc" ${defaultStatus === 'DaCoc' ? 'selected' : ''}>Đã cọc</option>
                             <option value="HoanThanh" ${defaultStatus === 'HoanThanh' ? 'selected' : ''}>Hoàn thành</option>
@@ -1551,9 +1792,12 @@ function renderStaffQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = null) {
                     </div>
                 </div>
             </div>
+        </div>
 
+        <!-- KHỐI BẢNG DỮ LIỆU ĐẶT SÂN -->
+        <div class="panel" style="padding: 0; overflow: hidden;">
             <div class="table-responsive" style="min-height: 350px;">
-                <table class="admin-table">
+                <table class="admin-table" style="margin: 0;">
                     <thead style="background: #F8FAFC;">
                         <tr>
                             <th style="text-align: center; width: 100px; white-space: nowrap;">Mã vé</th>
@@ -1562,24 +1806,84 @@ function renderStaffQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = null) {
                             <th>Khung giờ</th>
                             <th>Giá sân / Cọc</th>
                             <th>Trạng thái</th>
-                            <th style="text-align: center;">Chốt sân</th>
+                            <th style="text-align: center;">Thao tác</th>
                         </tr>
                     </thead>
                     <tbody id="staff-datsan-table-body">
-                        <tr><td colspan="7" class="text-center" style="text-align: center;">Đang tải dữ liệu...</td></tr>
+                        <tr><td colspan="7" class="text-center" style="text-align: center; padding: 40px;">Đang tải dữ liệu...</td></tr>
                     </tbody>
                 </table>
             </div>
-            <div id="staff-ds-pagination" style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 15px; margin-bottom: 15px; padding-top: 15px; border-top: 1px solid var(--border);"></div>
+            <div id="staff-ds-pagination" style="display: flex; justify-content: center; align-items: center; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--border); background: #ffffff;"></div>
         </div>
     `;
 
-    document.getElementById('staff-ds-date-input').value = staffDSDate;
+    const dateInput = document.getElementById('staff-ds-date-input');
+    if (dateInput) dateInput.value = staffDSDate;
+
     loadStaffDanhSachDatSan();
 }
 
+// Chuyển đổi giữa Tab "Đặt sân trong Ca hiện tại" và Tab "Tra cứu các ca / ngày khác"
+window.switchStaffBookingScope = function(scope) {
+    staffShiftContext.viewScope = scope;
+    staffDSPage = 1;
+
+    const btnCurrent = document.getElementById('btn-scope-current-shift');
+    const btnOther = document.getElementById('btn-scope-other-shifts');
+    const dateBox = document.getElementById('staff-date-filter-box');
+    const hintBox = document.getElementById('staff-scope-hint');
+
+    const caInfo = staffShiftContext.activeShift?.ca_lam_viec || staffShiftContext.activeShift?.caLamViec || {};
+    const tenCaActive = caInfo.TenCa || 'Ca hiện tại';
+    const gioCaActive = caInfo.GioBatDau ? `${caInfo.GioBatDau.substring(0,5)} - ${caInfo.GioKetThuc.substring(0,5)}` : '';
+    const todayStr = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10);
+
+    if (scope === 'CURRENT_SHIFT') {
+        staffDSDate = todayStr;
+        if (btnCurrent) {
+            btnCurrent.style.background = '#10b981';
+            btnCurrent.style.color = '#ffffff';
+            btnCurrent.style.fontWeight = '700';
+        }
+        if (btnOther) {
+            btnOther.style.background = 'transparent';
+            btnOther.style.color = '#475569';
+            btnOther.style.fontWeight = '600';
+        }
+        if (dateBox) dateBox.style.display = 'none';
+        if (hintBox) {
+            hintBox.style.background = '#f0fdf4';
+            hintBox.style.borderColor = '#bbf7d0';
+            hintBox.style.color = '#047857';
+            hintBox.innerHTML = `<i class="fa-solid fa-circle-check" style="flex-shrink:0;"></i> <span style="overflow:hidden; text-overflow:ellipsis;">Đang hiển thị các trận thuộc khung giờ <strong>${tenCaActive} (${gioCaActive})</strong> hôm nay</span>`;
+        }
+    } else {
+        if (btnOther) {
+            btnOther.style.background = '#2563eb';
+            btnOther.style.color = '#ffffff';
+            btnOther.style.fontWeight = '700';
+        }
+        if (btnCurrent) {
+            btnCurrent.style.background = 'transparent';
+            btnCurrent.style.color = '#475569';
+            btnCurrent.style.fontWeight = '600';
+        }
+        if (dateBox) dateBox.style.display = 'inline-flex';
+        if (hintBox) {
+            hintBox.style.background = '#eff6ff';
+            hintBox.style.borderColor = '#bfdbfe';
+            hintBox.style.color = '#1d4ed8';
+            hintBox.innerHTML = `<i class="fa-solid fa-circle-info" style="flex-shrink:0;"></i> <span style="overflow:hidden; text-overflow:ellipsis;">Chế độ tra cứu: Ca cũ chỉ xem & in HĐ &bull; Ngày tới hỗ trợ Dời lịch & Hủy vé</span>`;
+        }
+    }
+
+    applyStaffDSFiltersAndRender();
+};
+
 function showStaffDSAlert(message, isSuccess) {
     const alertBox = document.getElementById('staff-datsan-alert');
+    if (!alertBox) return;
     alertBox.textContent = message; 
     alertBox.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
     alertBox.style.display = 'block'; 
@@ -1591,6 +1895,13 @@ function handleStaffDSDate(val) { staffDSDate = val; staffDSPage = 1; applyStaff
 function handleStaffDSFilter(val) { staffDSFilter = val; staffDSPage = 1; applyStaffDSFiltersAndRender(); }
 
 async function loadStaffDanhSachDatSan() {
+    // Kiểm tra lại xem ca trực còn hiệu lực không trước khi tải dữ liệu
+    const shiftState = await evaluateStaffActiveShiftStatus();
+    if (shiftState.status !== 'ACTIVE') {
+        renderStaffQuanLyDatSan(staffDSFilter, staffDSDate);
+        return;
+    }
+
     try {
         const response = await fetch(`${API_BASE_URL}/admin/dat-san`);
         const res = await response.json();
@@ -1601,7 +1912,6 @@ async function loadStaffDanhSachDatSan() {
     } catch (error) { showStaffDSAlert('Lỗi kết nối máy chủ.', false); }
 }
 
-// Hàm tạo toàn bộ biến thể mã vé (mới & cũ) cho Nhân viên tìm kiếm
 function getStaffBookingCodeVariants(item) {
     const rawId = String(item.MaDatSan || item.ID || '').toUpperCase().trim();
     const rawGiaiId = String(item.MaGiaiDau || item.ID_GiaiDau || '').toUpperCase().trim();
@@ -1643,7 +1953,6 @@ function getStaffBookingCodeVariants(item) {
     return variants;
 }
 
-// Hàm lấy Trạng thái của Hóa đơn đặt sân (Ưu tiên lấy từ HoaDonDatSan.TrangThai)
 function getStaffInvoiceStatus(hoaDonObj, items = []) {
     if (hoaDonObj && hoaDonObj.TrangThai) {
         return hoaDonObj.TrangThai;
@@ -1657,7 +1966,6 @@ function getStaffInvoiceStatus(hoaDonObj, items = []) {
 }
 
 function applyStaffDSFiltersAndRender() {
-    // 1. Lọc theo CumSan của nhân viên đang đăng nhập
     const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
     let clusterBookings = staffDatSanData;
     
@@ -1670,7 +1978,7 @@ function applyStaffDSFiltersAndRender() {
 
     const searchTerm = staffDSSearch.toLowerCase().trim().replace(/^#/, '');
 
-    // 2. Gom nhóm toàn bộ các đặt sân thuộc cụm sân theo Hóa đơn (Nếu là Giải đấu thì đảm bảo gom chung toàn bộ các trận của giải đó vào 1 Hóa đơn)
+    // Gom nhóm theo Hóa đơn đặt sân
     const invoiceMap = new Map();
     const tournamentKeyMap = new Map();
 
@@ -1704,7 +2012,6 @@ function applyStaffDSFiltersAndRender() {
         group.items.push(item);
     });
 
-    // Sắp xếp các trận bên trong mỗi hóa đơn theo Ngày đá và Giờ bắt đầu tăng dần
     const allInvoiceGroups = Array.from(invoiceMap.values()).map(group => {
         group.items.sort((a, b) => {
             const dateCmp = String(a.NgayDa || '').localeCompare(String(b.NgayDa || ''));
@@ -1717,17 +2024,31 @@ function applyStaffDSFiltersAndRender() {
         return group;
     });
 
-    // 3. Lọc theo cấp độ HÓA ĐƠN ĐẶT SÂN
+    // Lọc theo phạm vi Ca trực (CURRENT_SHIFT) hoặc Tra cứu (OTHER_SHIFTS)
+    const isCurrentShiftScope = (staffShiftContext.viewScope === 'CURRENT_SHIFT');
+    const activeShift = staffShiftContext.activeShift;
+
     const filteredGroups = allInvoiceGroups.filter(group => {
-        // 3.1. Lọc theo Trạng thái của Hóa đơn đặt sân
-        const matchStatus = (staffDSFilter === 'All' || group.trangThaiHoaDon === staffDSFilter);
+        // 1. Nếu đang ở Tab "Đặt sân trong Ca hiện tại": Hóa đơn phải có ít nhất 1 trận diễn ra trong khung giờ của Ca đang trực hôm nay
+        if (isCurrentShiftScope && activeShift) {
+            const hasMatchInCurrentShift = group.items.some(item => isBookingInStaffActiveShift(item, activeShift));
+            if (!hasMatchInCurrentShift) return false;
 
-        // 3.2. Lọc theo Ngày đá (Nếu hóa đơn có ít nhất 1 trận đá trong ngày đang chọn -> Hiển thị trọn vẹn hóa đơn đó)
-        const matchDate = staffDSDate
-            ? group.items.some(item => item.NgayDa === staffDSDate)
-            : true;
+            // Lọc theo trạng thái của các trận trong ca (hoặc trạng thái hóa đơn)
+            const matchShiftStatus = (staffDSFilter === 'All')
+                || group.trangThaiHoaDon === staffDSFilter
+                || group.items.some(item => isBookingInStaffActiveShift(item, activeShift) && item.TrangThai === staffDSFilter);
+            if (!matchShiftStatus) return false;
+        } else {
+            // 2. Nếu đang ở Tab "Tra cứu các ca / ngày khác":
+            const matchStatus = (staffDSFilter === 'All' || group.trangThaiHoaDon === staffDSFilter);
+            const matchDate = staffDSDate
+                ? group.items.some(item => item.NgayDa === staffDSDate)
+                : true;
+            if (!matchStatus || !matchDate) return false;
+        }
 
-        // 3.3. Lọc theo Từ khóa tìm kiếm
+        // 3. Lọc theo Từ khóa tìm kiếm
         const maHDLower = String(group.maHoaDon || '').toLowerCase();
         const matchInvoiceCode = searchTerm !== '' && (maHDLower.includes(searchTerm) || (`#${maHDLower}`).includes(searchTerm));
 
@@ -1747,12 +2068,9 @@ function applyStaffDSFiltersAndRender() {
                 || tenGiai.includes(searchTerm);
         });
 
-        const matchSearch = searchTerm === '' || matchInvoiceCode || matchAnyItemSearch;
-
-        return matchStatus && matchDate && matchSearch;
+        return (searchTerm === '' || matchInvoiceCode || matchAnyItemSearch);
     });
 
-    // 4. Phân trang theo số lượng HÓA ĐƠN (Không cắt lẻ các trận trong cùng 1 hóa đơn)
     const totalPages = Math.ceil(filteredGroups.length / staffDSItemsPerPage) || 1;
     if (staffDSPage > totalPages) staffDSPage = totalPages;
     const startIdx = (staffDSPage - 1) * staffDSItemsPerPage;
@@ -1763,10 +2081,18 @@ function applyStaffDSFiltersAndRender() {
 
 function renderStaffDSTable(invoiceGroups) {
     const tbody = document.getElementById('staff-datsan-table-body');
+    if (!tbody) return;
     if (!invoiceGroups || invoiceGroups.length === 0) {
-        return tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="text-align: center; padding: 40px;">Không có dữ liệu.</td></tr>`;
+        const emptyMsg = (staffShiftContext.viewScope === 'CURRENT_SHIFT')
+            ? 'Không có lịch đặt sân nào thuộc khung giờ ca trực hiện tại của bạn.'
+            : 'Không tìm thấy dữ liệu đặt sân phù hợp với bộ lọc.';
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="text-align: center; padding: 45px 20px;">${emptyMsg}</td></tr>`;
+        return;
     }
 
+    const todayStr = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10);
+    const activeShift = staffShiftContext.activeShift;
+    const isCurrentShiftScope = (staffShiftContext.viewScope === 'CURRENT_SHIFT');
     let html = '';
 
     invoiceGroups.forEach(group => {
@@ -1777,14 +2103,14 @@ function renderStaffDSTable(invoiceGroups) {
         const isMember = Boolean(first.ID_NguoiDung);
 
         const allMatchesInInvoice = group.items;
-        const activeDaCocCount = allMatchesInInvoice.filter(d => d.TrangThai === 'DaCoc').length;
+        // Chỉ cho phép hủy theo hóa đơn đối với các trận chưa qua ngày đá cũ
+        const cancellableDaCocCount = allMatchesInInvoice.filter(d => d.TrangThai === 'DaCoc' && d.NgayDa >= todayStr).length;
         const hdObj = group.hoaDonObj;
         const tongHD = hdObj ? Number(hdObj.TongTien ?? hdObj.TongTienSan) : allMatchesInInvoice.reduce((s, d) => s + Number(d.TongTien), 0);
         const cocHD = (hdObj && hdObj.TienDaCoc !== undefined) ? Number(hdObj.TienDaCoc) : allMatchesInInvoice.reduce((s, d) => s + Number(d.TienCoc), 0);
         const trangThaiHD = group.trangThaiHoaDon || getStaffInvoiceStatus(hdObj, allMatchesInInvoice);
         const conPhaiThuHD = (trangThaiHD === 'DaHuy') ? 0 : Math.max(0, tongHD - cocHD);
 
-        // Badge trạng thái của Hóa đơn đặt sân
         let hdBadgeColor = '#6b7280', hdBadgeBg = '#f3f4f6', hdViStatus = trangThaiHD;
         if (trangThaiHD === 'DaCoc') { hdBadgeColor = '#b45309'; hdBadgeBg = '#fef3c7'; hdViStatus = 'Đã cọc'; }
         else if (trangThaiHD === 'DaHuy') { hdBadgeColor = '#b91c1c'; hdBadgeBg = '#fee2e2'; hdViStatus = 'Đã hủy'; }
@@ -1797,26 +2123,26 @@ function renderStaffDSTable(invoiceGroups) {
             html += `
                 <tr style="background: #f0fdf4; border-top: 2px solid #86efac; border-bottom: 1px solid #bbf7d0;">
                     <td colspan="7" style="padding: 10px 16px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                                <span style="background: #0b5d3b; color: #fff; font-family: monospace; font-weight: 700; padding: 4px 10px; border-radius: 6px; font-size: 0.88rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: nowrap;">
+                            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0;">
+                                <span style="background: #0b5d3b; color: #fff; font-family: monospace; font-weight: 700; padding: 4px 10px; border-radius: 6px; font-size: 0.86rem; white-space: nowrap;">
                                     <i class="fa-solid fa-file-invoice-dollar"></i> Hóa đơn #${group.maHoaDon}
                                 </span>
                                 ${hdStatusBadgeHtml}
-                                <span style="font-size: 0.88rem; color: #0f172a;">Khách: <strong>${tenKhach}</strong> (${sdtKhach})</span>
-                                <span style="font-size: 0.84rem; color: #475569;">
+                                <span style="font-size: 0.86rem; color: #0f172a; white-space: nowrap;">Khách: <strong>${tenKhach}</strong> (${sdtKhach})</span>
+                                <span style="font-size: 0.83rem; color: #475569; white-space: nowrap;">
                                     &bull; Tổng HĐ (${allMatchesInInvoice.length} trận): <strong style="color:#0f172a;">${tongHD.toLocaleString('vi-VN')}đ</strong> 
                                     | Đã cọc: <strong style="color:#047857;">${cocHD.toLocaleString('vi-VN')}đ</strong>
-                                    | Còn phải thu: <strong style="color:#ea580c; font-size:0.92rem; background:#fff7ed; padding:2px 8px; border-radius:6px; border:1px solid #fed7aa;">${conPhaiThuHD.toLocaleString('vi-VN')}đ</strong>
+                                    | Còn phải thu: <strong style="color:#ea580c; font-size:0.88rem; background:#fff7ed; padding:2px 8px; border-radius:6px; border:1px solid #fed7aa;">${conPhaiThuHD.toLocaleString('vi-VN')}đ</strong>
                                 </span>
                             </div>
-                            <div style="display: flex; gap: 8px; align-items: center;">
-                                <button type="button" class="btn-outline-sm" style="background: #fff; color: #2563eb; border-color: #93c5fd; padding: 5px 11px; font-size: 0.8rem; font-weight: 700;" onclick="printAdminBookingInvoice('${group.maHoaDon}')">
+                            <div style="display: flex; gap: 8px; align-items: center; flex-shrink: 0; white-space: nowrap;">
+                                <button type="button" class="btn-outline-sm" style="background: #fff; color: #2563eb; border-color: #93c5fd; padding: 5px 11px; font-size: 0.8rem; font-weight: 700; white-space: nowrap;" onclick="printAdminBookingInvoice('${group.maHoaDon}')">
                                     <i class="fa-solid fa-print"></i> Xuất hóa đơn
                                 </button>
-                                ${activeDaCocCount > 0 ? `
-                                <button type="button" class="btn-outline-sm" style="background: #fef2f2; color: #dc2626; border-color: #fca5a5; padding: 5px 11px; font-size: 0.8rem; font-weight: 700;" onclick="openAdminCancelInvoiceModal('${group.maHoaDon}', ${activeDaCocCount}, ${isMember}, '${tenKhach.replace(/'/g, "\\'")}', '${emailKhach}', ${cocHD})">
-                                    <i class="fa-solid fa-ban"></i> Hủy lịch / Hóa đơn (${activeDaCocCount} trận)
+                                ${cancellableDaCocCount > 0 ? `
+                                <button type="button" class="btn-outline-sm" style="background: #fef2f2; color: #dc2626; border-color: #fca5a5; padding: 5px 11px; font-size: 0.8rem; font-weight: 700; white-space: nowrap;" onclick="openAdminCancelInvoiceModal('${group.maHoaDon}', ${cancellableDaCocCount}, ${isMember}, '${tenKhach.replace(/'/g, "\\'")}', '${emailKhach}', ${cocHD})">
+                                    <i class="fa-solid fa-ban"></i> Hủy lịch / Hóa đơn (${cancellableDaCocCount} trận)
                                 </button>` : ''}
                             </div>
                         </div>
@@ -1825,8 +2151,14 @@ function renderStaffDSTable(invoiceGroups) {
             `;
         }
 
-        // Vẽ toàn bộ các dòng trận đấu thuộc hóa đơn này ngay bên dưới
+        // Nếu đang ở Tab "Đặt sân trong Ca hiện tại": Chỉ hiển thị các trận thuộc ca hiện tại (hoặc làm mờ các trận khác ngày trong cùng hóa đơn để nhân viên không chốt nhầm)
         group.items.forEach(item => {
+            const isInActiveShift = activeShift ? isBookingInStaffActiveShift(item, activeShift) : false;
+
+            // Ở tab Ca hiện tại: nếu hóa đơn chỉ có 1 số trận thuộc ca hiện tại thì ưu tiên hiển thị rõ trận trong ca
+            const isPastDate = item.NgayDa < todayStr;
+            const isFutureDate = item.NgayDa > todayStr;
+
             let badgeColor = '#6b7280', badgeBg = '#f3f4f6', viStatus = item.TrangThai;
             if(item.TrangThai === 'DaCoc') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; viStatus = 'Đã cọc'; }
             else if(item.TrangThai === 'DaHuy') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; viStatus = 'Đã hủy'; }
@@ -1854,16 +2186,35 @@ function renderStaffDSTable(invoiceGroups) {
                 ? `<span style="white-space: nowrap; display: inline-block;">${item.khung_gio.GioBatDau.substring(0,5)} - ${item.khung_gio.GioKetThuc.substring(0,5)}</span>`
                 : '';
 
+            // Phân quyền nút thao tác rõ ràng theo Ca trực:
+            // - Trận thuộc Ca hiện tại: Mở đầy đủ [Dời lịch] + [Chốt sân]
+            // - Trận thuộc Ngày tương lai / Ca sau (khách gọi hỗ trợ): Mở [Dời lịch], nhưng chưa cho bấm [Hoàn thành/Không đến] trước ca
+            // - Trận thuộc Ca cũ / Ngày trước: Khóa thao tác chốt (Chỉ xem chi tiết / Liên hệ Quản lý sân)
             let actionHtml = '';
             if (item.TrangThai === 'DaCoc') {
-                actionHtml = `
-                    <div style="display: inline-flex; gap: 6px; align-items: center;">
-                        <button type="button" class="btn-outline-sm" style="padding: 6px 10px; font-size: 0.82rem; white-space: nowrap; color: #2563eb; border-color: #bfdbfe; background: #eff6ff; font-weight: 700;" onclick="event.stopPropagation(); openAdminRescheduleModal('${item.ID}')">
-                            <i class="fa-solid fa-calendar-day"></i> Dời lịch
-                        </button>
-                        <button type="button" class="btn-primary" style="padding: 6px 12px; font-size: 0.85rem; white-space: nowrap;" onclick="event.stopPropagation(); openStaffDSConfirmModal('${item.ID}')">Chốt sân</button>
-                    </div>
-                `;
+                if (isInActiveShift) {
+                    actionHtml = `
+                        <div style="display: inline-flex; gap: 6px; align-items: center;">
+                            <button type="button" class="btn-outline-sm" style="padding: 6px 10px; font-size: 0.82rem; white-space: nowrap; color: #2563eb; border-color: #bfdbfe; background: #eff6ff; font-weight: 700;" onclick="event.stopPropagation(); openAdminRescheduleModal('${item.ID}')">
+                                <i class="fa-solid fa-calendar-day"></i> Dời lịch
+                            </button>
+                            <button type="button" class="btn-primary" style="padding: 6px 12px; font-size: 0.85rem; white-space: nowrap;" onclick="event.stopPropagation(); openStaffDSConfirmModal('${item.ID}')">Chốt sân</button>
+                        </div>
+                    `;
+                } else if (isPastDate || (!isInActiveShift && item.NgayDa === todayStr && timeStrToMinutesStaff(item.khung_gio?.GioKetThuc) <= timeStrToMinutesStaff((activeShift?.ca_lam_viec || activeShift?.caLamViec)?.GioBatDau))) {
+                    // Trận của ngày trước hoặc ca sáng đã qua
+                    actionHtml = `<span style="color: #64748b; font-size: 0.78rem; background: #f1f5f9; padding: 4px 8px; border-radius: 6px; border: 1px dashed #cbd5e1; white-space: nowrap; display: inline-block;" title="Ca cũ đã đóng sổ, vui lòng báo Quản lý sân nếu cần chốt bù"><i class="fa-solid fa-lock"></i> Ca cũ (Chỉ xem)</span>`;
+                } else {
+                    // Trận của ca sau hoặc ngày mai (Hỗ trợ khách Dời lịch / Hủy trước giờ đá, chưa mở chốt Hoàn thành)
+                    actionHtml = `
+                        <div style="display: inline-flex; gap: 6px; align-items: center;">
+                            <button type="button" class="btn-outline-sm" style="padding: 6px 10px; font-size: 0.8rem; white-space: nowrap; color: #2563eb; border-color: #bfdbfe; background: #eff6ff; font-weight: 700;" onclick="event.stopPropagation(); openAdminRescheduleModal('${item.ID}')">
+                                <i class="fa-solid fa-calendar-day"></i> Dời lịch
+                            </button>
+                            <span style="color: #0284c7; font-size: 0.76rem; background: #e0f2fe; padding: 4px 8px; border-radius: 6px; font-weight: 600; white-space: nowrap;">Chưa tới ca</span>
+                        </div>
+                    `;
+                }
             } else {
                 actionHtml = `<span style="color: var(--text-muted); font-size: 0.85rem; white-space: nowrap;">Đã xử lý</span>`;
             }
@@ -1871,7 +2222,13 @@ function renderStaffDSTable(invoiceGroups) {
             const tenKhachHienThi = item.ID_NguoiDung ? (item.nguoi_dung?.HoTen || 'N/A') : (item.TenNguoiDat || item.TenKhachVangLai || 'N/A');
             const sdtKhachHienThi = item.ID_NguoiDung ? (item.nguoi_dung?.SoDienThoai || '') : (item.SDTNguoiDat || item.SDTKhachVangLai || '');
 
-            html += `<tr onclick="openBookingDetailModalStaff('${item.ID}')" style="cursor: pointer; transition: background-color 0.15s;" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor=''">
+            const shiftTag = isInActiveShift
+                ? `<span style="font-size: 0.7rem; background: #dcfce7; color: #15803d; border: 1px solid #86efac; padding: 1px 6px; border-radius: 4px; font-weight: 700; margin-left: 6px;">Trong ca trực</span>`
+                : (isCurrentShiftScope ? `<span style="font-size: 0.7rem; background: #f1f5f9; color: #64748b; padding: 1px 6px; border-radius: 4px; margin-left: 6px;">Khác ca (Cùng HĐ)</span>` : '');
+
+            const rowOpacity = (isCurrentShiftScope && !isInActiveShift) ? 'opacity: 0.68; background: #fafafa;' : '';
+
+            html += `<tr onclick="openBookingDetailModalStaff('${item.ID}')" style="cursor: pointer; transition: background-color 0.15s; ${rowOpacity}" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor=''">
                 <td style="text-align: center; padding-left: 20px;">
                     <span style="padding: 5px 10px; border-radius: 8px; font-weight: 700; font-family: monospace; font-size: 0.9rem; display: inline-block; white-space: nowrap; ${badgeClassVe}">
                         ${maVeDisplay}
@@ -1886,7 +2243,7 @@ function renderStaffDSTable(invoiceGroups) {
                     <div style="font-size: 0.85rem; color: var(--text-muted); white-space: nowrap;"><i class="fa-solid fa-location-dot"></i> ${item.san_bong?.cum_san?.TenCumSan || (window.currentClusterNameStaff || '')}</div>
                     ${htmlTenGiai}
                 </td>
-                <td><span style="font-size: 0.9rem;">Ngày: ${dateStr}</span><br><strong style="color: var(--primary);">Giờ: ${timeStr}</strong></td>
+                <td><span style="font-size: 0.9rem;">Ngày: ${dateStr}</span>${shiftTag}<br><strong style="color: var(--primary);">Giờ: ${timeStr}</strong></td>
                 <td style="white-space: nowrap;">
                     <strong style="color: #0f172a;">${Number(item.TongTien).toLocaleString('vi-VN')}đ</strong><br>
                     <span style="font-size: 0.8rem; color: #047857; font-weight: 600;">Cọc: ${Number(item.TienCoc).toLocaleString('vi-VN')}đ</span>
