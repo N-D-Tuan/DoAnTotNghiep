@@ -21,9 +21,19 @@ class CaLamViecController extends Controller
             ->orderBy('MaCaLamViec', 'asc')
             ->get();
 
+        $allDbIds = $allCa->pluck('MaCaLamViec')->toArray();
         $activeIds = Cache::get("active_shift_ids_cumsan_{$maCumSan}");
-        if (!is_array($activeIds) || empty($activeIds)) {
-            $activeIds = $allCa->pluck('MaCaLamViec')->toArray();
+
+        // TỰ CHỮA LÀNH CACHE: Chỉ giữ lại các ID thực sự còn tồn tại trong DB.
+        // Nếu đã đổi mã bên table-forms làm lệch Cache cũ -> Tự động đồng bộ lại toàn bộ mã mới trong DB!
+        if (is_array($activeIds)) {
+            $activeIds = array_values(array_intersect($activeIds, $allDbIds));
+        }
+        if (empty($activeIds)) {
+            $activeIds = $allDbIds;
+            if (!empty($activeIds)) {
+                Cache::forever("active_shift_ids_cumsan_{$maCumSan}", $activeIds);
+            }
         }
 
         if ($request->filled('tu_ngay') && $request->filled('den_ngay') && $request->query('mode') !== 'config') {
@@ -43,15 +53,33 @@ class CaLamViecController extends Controller
             if (!empty($usedCaIds)) {
                 $savedSnapshot = Cache::get($snapshotKey);
                 if (is_array($savedSnapshot) && !empty($savedSnapshot)) {
-                    $existingDbIds = $allCa->pluck('MaCaLamViec')->toArray();
+                    // Chỉ giữ các ca trong Snapshot nếu mã đó vẫn còn tồn tại trong bảng CaLamViec hiện tại
                     $validSnapshot = collect($savedSnapshot)
-                        ->filter(function ($item) use ($existingDbIds, $usedCaIds) {
+                        ->filter(function ($item) use ($allDbIds) {
                             $id = $item['MaCaLamViec'] ?? $item['ID'] ?? null;
-                            return in_array($id, $existingDbIds) || in_array($id, $usedCaIds);
+                            return in_array($id, $allDbIds);
                         })
                         ->unique('TenCa')
                         ->values()
                         ->toArray();
+
+                    // Đảm bảo mọi ca đang có lịch trực ($usedCaIds) đều có mặt trong kết quả trả về
+                    $snapshotIds = collect($validSnapshot)->map(fn($i) => $i['MaCaLamViec'] ?? $i['ID'] ?? null)->filter()->toArray();
+                    $missingUsedIds = array_diff($usedCaIds, $snapshotIds);
+
+                    if (!empty($missingUsedIds) || empty($validSnapshot)) {
+                        $mergedIds = array_unique(array_merge($activeIds, $usedCaIds));
+                        $caTheoTuan = $allCa->whereIn('MaCaLamViec', $mergedIds)->unique('TenCa')->values();
+                        Cache::put($snapshotKey, $caTheoTuan->toArray(), now()->addDays(30));
+
+                        return response()->json([
+                            'success'           => true,
+                            'data'              => $caTheoTuan,
+                            'is_locked_by_week' => true,
+                            'gio_mo_cua'        => $cumSan ? substr($cumSan->GioMoCua, 0, 5) : '06:00',
+                            'gio_dong_cua'      => $cumSan ? substr($cumSan->GioDongCua, 0, 5) : '22:00',
+                        ]);
+                    }
 
                     if (count($validSnapshot) !== count($savedSnapshot)) {
                         Cache::put($snapshotKey, $validSnapshot, now()->addDays(30));
@@ -212,15 +240,18 @@ class CaLamViecController extends Controller
                     $gioBD = substr(trim($s['GioBatDau']), 0, 5) . ':00';
                     $gioKT = substr(trim($s['GioKetThuc']), 0, 5) . ':00';
 
-                    $existingCa = CaLamViec::where('MaCumSan', $maCumSan)
-                        ->where('TenCa', $tenCa)
-                        ->orderBy('MaCaLamViec', 'asc')
-                        ->first();
-
-                    if (!$existingCa && $maCa) {
+                    $existingCa = null;
+                    if ($maCa) {
                         $existingCa = CaLamViec::where('MaCumSan', $maCumSan)
                             ->where('MaCaLamViec', $maCa)
                             ->whereNotIn('MaCaLamViec', $newActiveIds)
+                            ->first();
+                    }
+
+                    if (!$existingCa) {
+                        $existingCa = CaLamViec::where('MaCumSan', $maCumSan)
+                            ->where('TenCa', $tenCa)
+                            ->orderBy('MaCaLamViec', 'asc')
                             ->first();
                     }
 
@@ -256,9 +287,8 @@ class CaLamViecController extends Controller
                     $hasSchedule = LichLamViec::where('MaCaLamViec', $oldCa->MaCaLamViec)
                         ->whereIn('TrangThaiXepLich', ['DaDuyet', 'DangKy'])
                         ->exists();
-                    $hasHandover = DB::table('BanGiaoCa')->where('MaCaLamViec', $oldCa->MaCaLamViec)->exists();
 
-                    if (!$hasSchedule && !$hasHandover) {
+                    if (!$hasSchedule) {
                         LichLamViec::where('MaCaLamViec', $oldCa->MaCaLamViec)->delete();
                         $oldCa->delete();
                     }

@@ -123,6 +123,11 @@ class DatabaseFormController extends Controller
                     ->where('tokenable_id', $oldVal)
                     ->update(['tokenable_id' => $newVal]);
             }
+
+            // Xóa Cache cũ nếu đổi mã CaLamViec hoặc CumSan để lưới lịch đồng bộ ngay mã mới
+            if (in_array($table, ['CaLamViec', 'CumSan'])) {
+                \Illuminate\Support\Facades\Cache::flush();
+            }
         } finally {
             DB::statement('SET FOREIGN_KEY_CHECKS=1');
         }
