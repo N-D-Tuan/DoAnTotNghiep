@@ -750,13 +750,19 @@ function renderQuanLySan() {
         <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
             <div>
                 <h1 class="page-title">Quản lý Cụm Sân</h1>
-                <p class="text-muted">Chọn một cụm sân để xem danh sách sân con, cấu hình giá và quản lý danh mục loại sân</p>
+                <p class="text-muted">Chọn một cụm sân để xem danh sách sân con, cấu hình giá và quản lý danh mục dùng chung toàn hệ thống</p>
             </div>
-            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                <button type="button" class="btn-outline-sm" style="padding: 10px 16px; font-size: 0.92rem; font-weight: 700; color: var(--primary); border-color: var(--primary); background: #f0fdf4; border-radius: 8px; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#dcfce7'" onmouseout="this.style.background='#f0fdf4'" onclick="openLoaiSanManagerModal()">
-                    <i class="fa-solid fa-futbol"></i> Quản lý Loại Sân
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <button type="button" class="btn-outline-sm" style="padding: 9px 14px; font-size: 0.88rem; font-weight: 700; color: var(--primary); border-color: #86efac; background: #f0fdf4; border-radius: 8px; display: inline-flex; align-items: center; gap: 7px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#dcfce7'" onmouseout="this.style.background='#f0fdf4'" onclick="openSystemCatalogModal('LoaiSan')">
+                    <i class="fa-solid fa-futbol"></i> Loại Sân
                 </button>
-                <button type="button" class="btn-primary" style="display: inline-flex; align-items: center; gap: 6px;" onclick="openCumSanModal()">
+                <button type="button" class="btn-outline-sm" style="padding: 9px 14px; font-size: 0.88rem; font-weight: 700; color: #0369a1; border-color: #bae6fd; background: #f0f9ff; border-radius: 8px; display: inline-flex; align-items: center; gap: 7px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#e0f2fe'" onmouseout="this.style.background='#f0f9ff'" onclick="openSystemCatalogModal('Phuong')">
+                    <i class="fa-solid fa-map-location-dot"></i> Phường / Xã
+                </button>
+                <button type="button" class="btn-outline-sm" style="padding: 9px 14px; font-size: 0.88rem; font-weight: 700; color: #b45309; border-color: #fde68a; background: #fffbeb; border-radius: 8px; display: inline-flex; align-items: center; gap: 7px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#fef3c7'" onmouseout="this.style.background='#fffbeb'" onclick="openSystemCatalogModal('KhungGio')">
+                    <i class="fa-regular fa-clock"></i> Khung Giờ
+                </button>
+                <button type="button" class="btn-primary" style="padding: 9px 16px; display: inline-flex; align-items: center; gap: 6px;" onclick="openCumSanModal()">
                     <i class="fa-solid fa-plus"></i> Thêm Cụm Sân
                 </button>
             </div>
@@ -1532,7 +1538,7 @@ function generateTimeOptions(selectId, defaultTime) {
     const select = document.getElementById(selectId);
     select.innerHTML = '';
     
-    for (let h = 5; h <= 23; h++) { // Tạo từ 05:00 đến 23:30
+    for (let h = 0; h <= 23; h++) { // Tạo từ 00:00 đến 23:30
         let hour = h.toString().padStart(2, '0');
         select.innerHTML += `<option value="${hour}:00">${hour}:00</option>`;
         select.innerHTML += `<option value="${hour}:30">${hour}:30</option>`;
@@ -7764,7 +7770,7 @@ async function submitCauHinhCa() {
                 } else if (activeTab.includes('Tuần Sau')) {
                     loadAdminCalendarData(1, 'grid-next-week');
                 }
-            }, 1400);
+            }, 2000);
         } else {
             showCauHinhCaAlert(data.message || 'Lỗi khi lưu cấu hình ca!', false);
         }
@@ -10279,24 +10285,47 @@ window.validateAdminModalCodeRealtime = function(inputEl, table, feedbackId, sav
 };
 
 // ======================================================
-// MODULE: QUẢN LÝ DANH MỤC LOẠI SÂN (CHỈ DÀNH RIÊNG CHO ADMIN)
-// - Hỗ trợ Thêm mới / Chỉnh sửa Mã (A-Z0-9 hoặc tự sinh) & Tên loại sân
-// - Kiểm tra trùng Mã & Tên Realtime
-// - Chặn xóa nếu đang có Sân con sử dụng + Xác nhận xóa bằng Modal
+// MODULE: QUẢN LÝ DANH MỤC HỆ THỐNG (LOẠI SÂN - PHƯỜNG/XÃ - KHUNG GIỜ)
+// - Chỉ dành riêng cho Admin
+// - Thiết kế gọn trong 1 Modal 3 Tab ngay tại mục Quản lý Cụm Sân
+// - Hỗ trợ Thêm / Sửa Mã (A-Z0-9 hoặc tự sinh), kiểm tra trùng Realtime & Xóa an toàn
 // ======================================================
-let adminLoaiSanListCache = [];
-let editingLoaiSanId = null;
-let isLoaiSanCodeDuplicate = false;
-let pendingDeleteLoaiSanId = null;
+let currentCatalogTab = 'LoaiSan'; // 'LoaiSan' | 'Phuong' | 'KhungGio'
+let adminCatalogCache = {
+    LoaiSan: [],
+    Phuong: [],
+    KhungGio: []
+};
+let editingCatalogId = null;
+let isCatalogCodeDuplicate = false;
+let pendingDeleteCatalogItem = null;
 
-window.openLoaiSanManagerModal = async function() {
+function generateHalfHourSelectOptions(selectedVal = '06:00') {
+    let html = '';
+    for (let h = 0; h <= 23; h++) {
+        const hh = String(h).padStart(2, '0');
+        const t00 = `${hh}:00`;
+        const t30 = `${hh}:30`;
+        html += `<option value="${t00}" ${selectedVal === t00 ? 'selected' : ''}>${t00}</option>`;
+        html += `<option value="${t30}" ${selectedVal === t30 ? 'selected' : ''}>${t30}</option>`;
+    }
+    return html;
+}
+
+// Giữ lại hàm openLoaiSanManagerModal() để tương thích ngược
+window.openLoaiSanManagerModal = function() {
+    openSystemCatalogModal('LoaiSan');
+};
+
+window.openSystemCatalogModal = async function(initialTab = 'LoaiSan') {
     const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user') || '{}');
     if (currentUser.VaiTro !== 'Admin') {
-        return showSystemModal('Từ chối truy cập', 'Chức năng Quản lý Loại Sân chỉ dành riêng cho Admin hệ thống!', 'error');
+        return showSystemModal('Từ chối truy cập', 'Chức năng Thiết lập Danh mục Hệ thống chỉ dành riêng cho Admin!', 'error');
     }
 
-    editingLoaiSanId = null;
-    isLoaiSanCodeDuplicate = false;
+    currentCatalogTab = initialTab;
+    editingCatalogId = null;
+    isCatalogCodeDuplicate = false;
 
     let modal = document.getElementById('admin-loaisan-manager-modal');
     if (!modal) {
@@ -10311,16 +10340,16 @@ window.openLoaiSanManagerModal = async function() {
     }
 
     modal.innerHTML = `
-        <div class="modal-content" style="max-width: 860px; width: 95%; padding: 0; border-radius: 16px; overflow: hidden; background: #ffffff; box-shadow: 0 20px 45px rgba(15, 23, 42, 0.22); max-height: 90vh; display: flex; flex-direction: column;">
+        <div class="modal-content" style="max-width: 880px; width: 95%; padding: 0; border-radius: 16px; overflow: hidden; background: #ffffff; box-shadow: 0 20px 45px rgba(15, 23, 42, 0.22); max-height: 90vh; display: flex; flex-direction: column;">
             <!-- Header -->
             <div style="padding: 18px 26px; background: linear-gradient(135deg, #0b5d3b 0%, #087f4f 100%); color: #ffffff; display: flex; justify-content: space-between; align-items: center;">
                 <div style="display: flex; align-items: center; gap: 12px;">
                     <div style="width: 42px; height: 42px; border-radius: 10px; background: rgba(255,255,255,0.16); display: flex; align-items: center; justify-content: center; font-size: 1.25rem; color: #f5c542;">
-                        <i class="fa-solid fa-futbol"></i>
+                        <i class="fa-solid fa-sliders"></i>
                     </div>
                     <div>
-                        <h3 style="margin: 0; font-size: 1.2rem; font-weight: 800; letter-spacing: -0.2px;">Quản lý Danh mục Loại Sân</h3>
-                        <div style="font-size: 0.84rem; opacity: 0.92; margin-top: 2px;">Danh mục dùng chung cho toàn bộ Cụm sân trên hệ thống (Đặc quyền Admin)</div>
+                        <h3 style="margin: 0; font-size: 1.18rem; font-weight: 800; letter-spacing: -0.2px;">Thiết lập Danh mục Hệ thống (Đặc quyền Admin)</h3>
+                        <div style="font-size: 0.83rem; opacity: 0.92; margin-top: 2px;">Quản lý tập trung Loại Sân, Khu vực Phường/Xã và Khung Giờ chuẩn cho toàn bộ Cụm sân</div>
                     </div>
                 </div>
                 <button type="button" onclick="closeLoaiSanManagerModal()" style="background: rgba(255,255,255,0.14); border: none; color: #fff; width: 34px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 1.15rem; display: flex; align-items: center; justify-content: center;">
@@ -10328,78 +10357,32 @@ window.openLoaiSanManagerModal = async function() {
                 </button>
             </div>
 
-            <!-- Body -->
-            <div style="padding: 22px 26px; overflow-y: auto; flex: 1;">
-                <!-- Khung Form Thêm / Sửa Loại Sân -->
-                <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 12px; padding: 18px 20px; margin-bottom: 22px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; min-height: 30px; margin-bottom: 14px;">
-                        <div id="ls-form-title" style="font-weight: 800; color: #0f172a; font-size: 1rem; display: flex; align-items: center; gap: 8px;">
-                            <i class="fa-solid fa-circle-plus" style="color: var(--primary);"></i>
-                            <span>Thêm Loại Sân Mới</span>
-                        </div>
-                        <button type="button" id="btn-cancel-edit-ls" onclick="resetLoaiSanForm()" style="display: none; padding: 5px 12px; font-size: 0.8rem; border-radius: 6px; border: 1px solid #fecaca; background: #fef2f2; color: #dc2626; font-weight: 700; cursor: pointer;">
-                            <i class="fa-solid fa-rotate-left"></i> Hủy chế độ sửa
-                        </button>
-                    </div>
-
-                    <div style="display: grid; grid-template-columns: 280px 1fr 155px; gap: 14px; align-items: start;">
-                        <div>
-                            <label style="font-size: 0.84rem; font-weight: 700; color: #334155; display: block; height: 22px; line-height: 22px; margin-bottom: 6px; white-space: nowrap;">
-                                Mã loại sân <span style="color: var(--primary); font-weight: 600;">(Tùy chọn A-Z0-9)</span>
-                            </label>
-                            <input type="text" id="ls-ma-input" class="form-control" maxlength="36" placeholder="Bỏ trống tự sinh hoặc VD: LS5..." style="height: 42px; box-sizing: border-box; font-family: monospace; font-weight: 700; text-transform: uppercase; background: #ffffff;" oninput="validateLoaiSanCodeRealtime(this)">
-                            <div id="ls-ma-feedback" style="display: none; font-size: 0.78rem; font-weight: 600; margin-top: 5px; line-height: 1.35;"></div>
-                        </div>
-                        <div>
-                            <label style="font-size: 0.84rem; font-weight: 700; color: #334155; display: block; height: 22px; line-height: 22px; margin-bottom: 6px; white-space: nowrap;">
-                                Tên loại sân <span style="color: #ef4444;">*</span>
-                            </label>
-                            <input type="text" id="ls-ten-input" class="form-control" maxlength="100" placeholder="VD: Sân 5 người, Sân 7 người, Sân 11 người..." style="height: 42px; box-sizing: border-box; background: #ffffff;">
-                        </div>
-                        <div>
-                            <div style="height: 22px; margin-bottom: 6px;"></div>
-                            <button type="button" id="btn-submit-loaisan" class="btn-primary" style="width: 100%; height: 42px; padding: 0 16px; box-sizing: border-box; white-space: nowrap; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 7px;" onclick="saveLoaiSanAdmin()">
-                                <i class="fa-solid fa-floppy-disk"></i> <span id="btn-submit-loaisan-text">Thêm mới</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Danh sách Loại Sân hiện có -->
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
-                    <div style="font-weight: 700; color: #0f172a; font-size: 0.96rem; white-space: nowrap;">
-                        <i class="fa-solid fa-list-check" style="color: var(--primary); margin-right: 6px;"></i>
-                        Danh sách Loại sân hiện có (<span id="ls-total-count">0</span>)
-                    </div>
-                    <span style="font-size: 0.8rem; color: #64748b;">* Khi đổi Mã loại sân, các sân con và bảng giá sẽ tự động đồng bộ theo</span>
-                </div>
-
-                <div class="table-responsive" style="max-height: 340px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 10px;">
-                    <table class="admin-table" style="margin: 0; width: 100%;">
-                        <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 5;">
-                            <tr>
-                                <th style="width: 150px; white-space: nowrap;">Mã Loại Sân</th>
-                                <th>Tên Loại Sân</th>
-                                <th style="text-align: center; width: 170px; white-space: nowrap;">Đang sử dụng</th>
-                                <th style="text-align: center; width: 170px; white-space: nowrap;">Hành động</th>
-                            </tr>
-                        </thead>
-                        <tbody id="admin-loaisan-tbody">
-                            <tr><td colspan="4" style="text-align: center; padding: 30px; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải danh sách loại sân...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
+            <!-- Thanh 3 Tab chuyển đổi mượt mà -->
+            <div style="display: flex; gap: 8px; padding: 12px 26px 0 26px; background: #f8fafc; border-bottom: 1px solid #cbd5e1;">
+                <button type="button" id="cat-tab-LoaiSan" onclick="switchSystemCatalogTab('LoaiSan')" style="padding: 10px 18px; border-radius: 10px 10px 0 0; border: 1px solid transparent; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: 0.15s;">
+                    <i class="fa-solid fa-futbol"></i> Loại Sân
+                </button>
+                <button type="button" id="cat-tab-Phuong" onclick="switchSystemCatalogTab('Phuong')" style="padding: 10px 18px; border-radius: 10px 10px 0 0; border: 1px solid transparent; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: 0.15s;">
+                    <i class="fa-solid fa-map-location-dot"></i> Phường / Xã
+                </button>
+                <button type="button" id="cat-tab-KhungGio" onclick="switchSystemCatalogTab('KhungGio')" style="padding: 10px 18px; border-radius: 10px 10px 0 0; border: 1px solid transparent; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: 0.15s;">
+                    <i class="fa-regular fa-clock"></i> Khung Giờ Hoạt Động
+                </button>
             </div>
 
+            <!-- Body động theo Tab -->
+            <div id="system-catalog-modal-body" style="padding: 20px 26px; overflow-y: auto; flex: 1;"></div>
+
             <!-- Footer -->
-            <div style="padding: 14px 26px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end;">
-                <button type="button" class="btn-outline-sm" style="padding: 9px 24px; font-weight: 600;" onclick="closeLoaiSanManagerModal()">Đóng cửa sổ</button>
+            <div style="padding: 13px 26px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 0.8rem; color: #64748b;"><i class="fa-solid fa-shield-halved" style="color: var(--primary);"></i> Khi đổi Mã khóa chính, các bảng liên kết sẽ tự động cập nhật đồng bộ.</span>
+                <button type="button" class="btn-outline-sm" style="padding: 8px 24px; font-weight: 600;" onclick="closeLoaiSanManagerModal()">Đóng cửa sổ</button>
             </div>
         </div>
     `;
 
     modal.style.display = 'flex';
-    await loadAdminLoaiSanList();
+    await switchSystemCatalogTab(initialTab);
 };
 
 window.closeLoaiSanManagerModal = function() {
@@ -10407,225 +10390,451 @@ window.closeLoaiSanManagerModal = function() {
     if (modal) modal.style.display = 'none';
 };
 
-async function loadAdminLoaiSanList() {
-    const tbody = document.getElementById('admin-loaisan-tbody');
+window.switchSystemCatalogTab = async function(tabName) {
+    currentCatalogTab = tabName;
+    editingCatalogId = null;
+    isCatalogCodeDuplicate = false;
+
+    ['LoaiSan', 'Phuong', 'KhungGio'].forEach(t => {
+        const btn = document.getElementById(`cat-tab-${t}`);
+        if (!btn) return;
+        if (t === tabName) {
+            btn.style.background = '#ffffff';
+            btn.style.color = 'var(--primary)';
+            btn.style.borderColor = '#cbd5e1';
+            btn.style.borderBottomColor = '#ffffff';
+            btn.style.marginBottom = '-1px';
+        } else {
+            btn.style.background = 'transparent';
+            btn.style.color = '#64748b';
+            btn.style.borderColor = 'transparent';
+            btn.style.marginBottom = '0';
+        }
+    });
+
+    const bodyEl = document.getElementById('system-catalog-modal-body');
+    if (!bodyEl) return;
+
+    if (tabName === 'LoaiSan') {
+        bodyEl.innerHTML = `
+            <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 12px; padding: 16px 20px; margin-bottom: 18px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; min-height: 28px; margin-bottom: 12px;">
+                    <div id="cat-form-title" style="font-weight: 800; color: #0f172a; font-size: 0.98rem; display: flex; align-items: center; gap: 8px;">
+                        <i class="fa-solid fa-circle-plus" style="color: var(--primary);"></i>
+                        <span>Thêm Loại Sân Mới</span>
+                    </div>
+                    <button type="button" id="btn-cancel-edit-cat" onclick="resetCatalogForm()" style="display: none; padding: 4px 12px; font-size: 0.78rem; border-radius: 6px; border: 1px solid #fecaca; background: #fef2f2; color: #dc2626; font-weight: 700; cursor: pointer;">
+                        <i class="fa-solid fa-rotate-left"></i> Hủy chế độ sửa
+                    </button>
+                </div>
+                <div style="display: grid; grid-template-columns: 260px 1fr 150px; gap: 12px; align-items: start;">
+                    <div>
+                        <label style="font-size: 0.82rem; font-weight: 700; color: #334155; display: block; margin-bottom: 5px;">Mã loại sân <span style="color: var(--primary); font-weight: 600;">(Tùy chọn A-Z0-9)</span></label>
+                        <input type="text" id="cat-code-input" class="form-control" maxlength="36" placeholder="Tự sinh (LS001) hoặc nhập..." style="height: 40px; font-family: monospace; font-weight: 700; text-transform: uppercase; background: #fff;" oninput="validateCatalogCodeRealtime(this)">
+                        <div id="cat-code-feedback" style="display: none; font-size: 0.76rem; font-weight: 600; margin-top: 4px;"></div>
+                    </div>
+                    <div>
+                        <label style="font-size: 0.82rem; font-weight: 700; color: #334155; display: block; margin-bottom: 5px;">Tên loại sân <span style="color: #ef4444;">*</span></label>
+                        <input type="text" id="cat-name-input" class="form-control" maxlength="100" placeholder="VD: Sân 5 người, Sân 7 người, Sân 11 người..." style="height: 40px; background: #fff;">
+                    </div>
+                    <div>
+                        <div style="height: 21px; margin-bottom: 5px;"></div>
+                        <button type="button" id="btn-submit-catalog" class="btn-primary" style="width: 100%; height: 40px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 6px;" onclick="saveCatalogItemAdmin()">
+                            <i class="fa-solid fa-floppy-disk"></i> <span id="btn-submit-catalog-text">Thêm mới</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div style="font-weight: 700; color: #0f172a; font-size: 0.94rem; margin-bottom: 10px;">
+                <i class="fa-solid fa-list-check" style="color: var(--primary); margin-right: 6px;"></i>Danh sách Loại sân hiện có (<span id="cat-total-count">0</span>)
+            </div>
+            <div class="table-responsive" style="max-height: 320px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 10px;">
+                <table class="admin-table" style="margin: 0; width: 100%;">
+                    <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 5;">
+                        <tr>
+                            <th style="width: 150px;">Mã Loại Sân</th>
+                            <th>Tên Loại Sân</th>
+                            <th style="text-align: center; width: 170px;">Đang sử dụng</th>
+                            <th style="text-align: center; width: 170px;">Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-catalog-tbody"></tbody>
+                </table>
+            </div>
+        `;
+    } else if (tabName === 'Phuong') {
+        bodyEl.innerHTML = `
+            <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 12px; padding: 16px 20px; margin-bottom: 18px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; min-height: 28px; margin-bottom: 12px;">
+                    <div id="cat-form-title" style="font-weight: 800; color: #0f172a; font-size: 0.98rem; display: flex; align-items: center; gap: 8px;">
+                        <i class="fa-solid fa-circle-plus" style="color: #0284c7;"></i>
+                        <span>Thêm Phường / Xã Mới</span>
+                    </div>
+                    <button type="button" id="btn-cancel-edit-cat" onclick="resetCatalogForm()" style="display: none; padding: 4px 12px; font-size: 0.78rem; border-radius: 6px; border: 1px solid #fecaca; background: #fef2f2; color: #dc2626; font-weight: 700; cursor: pointer;">
+                        <i class="fa-solid fa-rotate-left"></i> Hủy chế độ sửa
+                    </button>
+                </div>
+                <div style="display: grid; grid-template-columns: 260px 1fr 150px; gap: 12px; align-items: start;">
+                    <div>
+                        <label style="font-size: 0.82rem; font-weight: 700; color: #334155; display: block; margin-bottom: 5px;">Mã Phường <span style="color: var(--primary); font-weight: 600;">(Tùy chọn A-Z0-9)</span></label>
+                        <input type="text" id="cat-code-input" class="form-control" maxlength="36" placeholder="Tự sinh (P001) hoặc nhập..." style="height: 40px; font-family: monospace; font-weight: 700; text-transform: uppercase; background: #fff;" oninput="validateCatalogCodeRealtime(this)">
+                        <div id="cat-code-feedback" style="display: none; font-size: 0.76rem; font-weight: 600; margin-top: 4px;"></div>
+                    </div>
+                    <div>
+                        <label style="font-size: 0.82rem; font-weight: 700; color: #334155; display: block; margin-bottom: 5px;">Tên Phường / Xã <span style="color: #ef4444;">*</span></label>
+                        <input type="text" id="cat-name-input" class="form-control" maxlength="100" placeholder="VD: Phường Thanh Bình, Phường Hòa Thuận Tây..." style="height: 40px; background: #fff;">
+                    </div>
+                    <div>
+                        <div style="height: 21px; margin-bottom: 5px;"></div>
+                        <button type="button" id="btn-submit-catalog" class="btn-primary" style="width: 100%; height: 40px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 6px;" onclick="saveCatalogItemAdmin()">
+                            <i class="fa-solid fa-floppy-disk"></i> <span id="btn-submit-catalog-text">Thêm mới</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div style="font-weight: 700; color: #0f172a; font-size: 0.94rem; margin-bottom: 10px;">
+                <i class="fa-solid fa-map-location-dot" style="color: #0284c7; margin-right: 6px;"></i>Danh sách Phường / Xã hiện có (<span id="cat-total-count">0</span>)
+            </div>
+            <div class="table-responsive" style="max-height: 320px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 10px;">
+                <table class="admin-table" style="margin: 0; width: 100%;">
+                    <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 5;">
+                        <tr>
+                            <th style="width: 150px;">Mã Phường</th>
+                            <th>Tên Phường / Khu vực</th>
+                            <th style="text-align: center; width: 170px;">Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-catalog-tbody"></tbody>
+                </table>
+            </div>
+        `;
+    } else if (tabName === 'KhungGio') {
+        bodyEl.innerHTML = `
+            <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 12px; padding: 16px 20px; margin-bottom: 18px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; min-height: 28px; margin-bottom: 12px;">
+                    <div id="cat-form-title" style="font-weight: 800; color: #0f172a; font-size: 0.98rem; display: flex; align-items: center; gap: 8px;">
+                        <i class="fa-solid fa-circle-plus" style="color: #d97706;"></i>
+                        <span>Thêm Khung Giờ Đá Sân Mới</span>
+                    </div>
+                    <button type="button" id="btn-cancel-edit-cat" onclick="resetCatalogForm()" style="display: none; padding: 4px 12px; font-size: 0.78rem; border-radius: 6px; border: 1px solid #fecaca; background: #fef2f2; color: #dc2626; font-weight: 700; cursor: pointer;">
+                        <i class="fa-solid fa-rotate-left"></i> Hủy chế độ sửa
+                    </button>
+                </div>
+                <div style="display: grid; grid-template-columns: 240px 1fr 1fr 150px; gap: 12px; align-items: start;">
+                    <div>
+                        <label style="font-size: 0.82rem; font-weight: 700; color: #334155; display: block; margin-bottom: 5px;">Mã khung giờ <span style="color: var(--primary); font-weight: 600;">(A-Z0-9)</span></label>
+                        <input type="text" id="cat-code-input" class="form-control" maxlength="36" placeholder="Tự sinh (KG001) hoặc nhập..." style="height: 40px; font-family: monospace; font-weight: 700; text-transform: uppercase; background: #fff;" oninput="validateCatalogCodeRealtime(this)">
+                        <div id="cat-code-feedback" style="display: none; font-size: 0.76rem; font-weight: 600; margin-top: 4px;"></div>
+                    </div>
+                    <div>
+                        <label style="font-size: 0.82rem; font-weight: 700; color: #334155; display: block; margin-bottom: 5px;">Giờ bắt đầu <span style="color: #ef4444;">*</span></label>
+                        <select id="cat-start-input" class="form-control" style="height: 40px; font-weight: 700; background: #fff;">
+                            ${generateHalfHourSelectOptions('06:00')}
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size: 0.82rem; font-weight: 700; color: #334155; display: block; margin-bottom: 5px;">Giờ kết thúc <span style="color: #ef4444;">*</span></label>
+                        <select id="cat-end-input" class="form-control" style="height: 40px; font-weight: 700; background: #fff;">
+                            ${generateHalfHourSelectOptions('07:00')}
+                        </select>
+                    </div>
+                    <div>
+                        <div style="height: 21px; margin-bottom: 5px;"></div>
+                        <button type="button" id="btn-submit-catalog" class="btn-primary" style="width: 100%; height: 40px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 6px;" onclick="saveCatalogItemAdmin()">
+                            <i class="fa-solid fa-floppy-disk"></i> <span id="btn-submit-catalog-text">Thêm mới</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div style="font-weight: 700; color: #0f172a; font-size: 0.94rem; margin-bottom: 10px;">
+                <i class="fa-regular fa-clock" style="color: #d97706; margin-right: 6px;"></i>Danh sách Khung Giờ hiện có (<span id="cat-total-count">0</span>)
+            </div>
+            <div class="table-responsive" style="max-height: 320px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 10px;">
+                <table class="admin-table" style="margin: 0; width: 100%;">
+                    <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 5;">
+                        <tr>
+                            <th style="width: 150px;">Mã Khung Giờ</th>
+                            <th>Khung Giờ Thi Đấu</th>
+                            <th style="text-align: center; width: 150px;">Thời lượng</th>
+                            <th style="text-align: center; width: 170px;">Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-catalog-tbody"></tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    await loadAdminCatalogData(tabName);
+};
+
+async function loadAdminCatalogData(tabName) {
+    const tbody = document.getElementById('admin-catalog-tbody');
     if (!tbody) return;
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 30px; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải dữ liệu...</td></tr>`;
 
     try {
-        const res = await fetch(`${API_BASE_URL}/loai-san`);
-        const json = await res.json();
-        adminLoaiSanListCache = json.data || [];
+        if (tabName === 'LoaiSan') {
+            const res = await fetch(`${API_BASE_URL}/loai-san`);
+            const json = await res.json();
+            adminCatalogCache.LoaiSan = json.data || [];
+            adminLoaiSanListCache = adminCatalogCache.LoaiSan;
+            const list = adminCatalogCache.LoaiSan;
 
-        const countEl = document.getElementById('ls-total-count');
-        if (countEl) countEl.textContent = adminLoaiSanListCache.length;
+            const countEl = document.getElementById('cat-total-count');
+            if (countEl) countEl.textContent = list.length;
 
-        if (adminLoaiSanListCache.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 35px; color: var(--text-muted);">Chưa có loại sân nào. Hãy thêm loại sân đầu tiên ở khung phía trên!</td></tr>`;
-            return;
+            if (list.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 30px; color: var(--text-muted);">Chưa có loại sân nào.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = list.map(ls => {
+                const maLS = ls.MaLoaiSan || ls.ID;
+                const soSanCon = Number(ls.so_san_con || 0);
+                const soBangGia = Number(ls.so_bang_gia || 0);
+                const isInUse = (soSanCon > 0 || soBangGia > 0);
+                const safeTen = (ls.TenLoaiSan || '').replace(/'/g, "\\'");
+
+                const usageBadge = isInUse
+                    ? `<span style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; padding: 3px 9px; border-radius: 99px; font-size: 0.78rem; font-weight: 700;">${soSanCon} sân con</span>`
+                    : `<span style="background: #f1f5f9; color: #64748b; padding: 3px 9px; border-radius: 99px; font-size: 0.78rem; font-weight: 600;">Chưa dùng</span>`;
+
+                return `
+                    <tr>
+                        <td><span style="font-family: monospace; font-weight: 800; font-size: 0.88rem; color: #0f172a; background: #f1f5f9; border: 1px solid #cbd5e1; padding: 4px 10px; border-radius: 6px;">#${maLS}</span></td>
+                        <td><strong style="color: #0f172a;">${ls.TenLoaiSan}</strong></td>
+                        <td style="text-align: center;">${usageBadge}</td>
+                        <td style="text-align: center;">
+                            <div style="display: inline-flex; gap: 6px;">
+                                <button type="button" class="action-btn" onclick="startEditCatalogItem('LoaiSan', '${maLS}')"><i class="fa-solid fa-pen-to-square"></i> Sửa</button>
+                                <button type="button" class="action-btn" style="color: #ef4444; border-color: #fecaca; background: #fef2f2;" onclick="openDeleteCatalogConfirmModal('LoaiSan', '${maLS}', '${safeTen}')"><i class="fa-solid fa-trash-can"></i> Xóa</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        } else if (tabName === 'Phuong') {
+            const res = await fetch(`${API_BASE_URL}/phuong`);
+            const json = await res.json();
+            adminCatalogCache.Phuong = json.data || [];
+            const list = adminCatalogCache.Phuong;
+
+            const countEl = document.getElementById('cat-total-count');
+            if (countEl) countEl.textContent = list.length;
+
+            if (list.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; padding: 30px; color: var(--text-muted);">Chưa có Phường/Xã nào.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = list.map(p => {
+                const maP = p.MaPhuong || p.ID;
+                const safeTen = (p.TenPhuong || '').replace(/'/g, "\\'");
+                return `
+                    <tr>
+                        <td><span style="font-family: monospace; font-weight: 800; font-size: 0.88rem; color: #0f172a; background: #f1f5f9; border: 1px solid #cbd5e1; padding: 4px 10px; border-radius: 6px;">#${maP}</span></td>
+                        <td><strong style="color: #0f172a;">${p.TenPhuong}</strong></td>
+                        <td style="text-align: center;">
+                            <div style="display: inline-flex; gap: 6px;">
+                                <button type="button" class="action-btn" onclick="startEditCatalogItem('Phuong', '${maP}')"><i class="fa-solid fa-pen-to-square"></i> Sửa</button>
+                                <button type="button" class="action-btn" style="color: #ef4444; border-color: #fecaca; background: #fef2f2;" onclick="openDeleteCatalogConfirmModal('Phuong', '${maP}', '${safeTen}')"><i class="fa-solid fa-trash-can"></i> Xóa</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        } else if (tabName === 'KhungGio') {
+            const res = await fetch(`${API_BASE_URL}/khung-gio`);
+            const json = await res.json();
+            adminCatalogCache.KhungGio = (json.data || []).sort((a, b) => String(a.GioBatDau).localeCompare(String(b.GioBatDau)));
+            const list = adminCatalogCache.KhungGio;
+
+            const countEl = document.getElementById('cat-total-count');
+            if (countEl) countEl.textContent = list.length;
+
+            if (list.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 30px; color: var(--text-muted);">Chưa có khung giờ nào.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = list.map(kg => {
+                const maKG = kg.MaKhungGio || kg.ID;
+                const start = String(kg.GioBatDau).substring(0, 5);
+                const end = String(kg.GioKetThuc).substring(0, 5);
+                const [sh, sm] = start.split(':').map(Number);
+                const [eh, em] = end.split(':').map(Number);
+                const mins = (eh * 60 + em) - (sh * 60 + sm);
+                const label = `${start} - ${end}`;
+
+                return `
+                    <tr>
+                        <td><span style="font-family: monospace; font-weight: 800; font-size: 0.88rem; color: #0f172a; background: #f1f5f9; border: 1px solid #cbd5e1; padding: 4px 10px; border-radius: 6px;">#${maKG}</span></td>
+                        <td><strong style="color: var(--primary); font-size: 0.95rem;"><i class="fa-regular fa-clock" style="margin-right: 5px;"></i>${label}</strong></td>
+                        <td style="text-align: center;"><span style="background: #fffbeb; color: #b45309; border: 1px solid #fde68a; padding: 3px 9px; border-radius: 99px; font-size: 0.78rem; font-weight: 700;">${mins > 0 ? mins + ' phút' : '--'}</span></td>
+                        <td style="text-align: center;">
+                            <div style="display: inline-flex; gap: 6px;">
+                                <button type="button" class="action-btn" onclick="startEditCatalogItem('KhungGio', '${maKG}')"><i class="fa-solid fa-pen-to-square"></i> Sửa</button>
+                                <button type="button" class="action-btn" style="color: #ef4444; border-color: #fecaca; background: #fef2f2;" onclick="openDeleteCatalogConfirmModal('KhungGio', '${maKG}', '${label}')"><i class="fa-solid fa-trash-can"></i> Xóa</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
         }
-
-        tbody.innerHTML = adminLoaiSanListCache.map(ls => {
-            const maLS = ls.MaLoaiSan || ls.ID;
-            const soSanCon = Number(ls.so_san_con || 0);
-            const soBangGia = Number(ls.so_bang_gia || 0);
-            const isInUse = (soSanCon > 0 || soBangGia > 0);
-            const safeTen = (ls.TenLoaiSan || '').replace(/'/g, "\\'");
-
-            const usageBadge = isInUse
-                ? `<span style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; padding: 3px 9px; border-radius: 99px; font-size: 0.78rem; font-weight: 700; white-space: nowrap;">
-                        <i class="fa-solid fa-check-circle"></i> ${soSanCon} sân con
-                   </span>`
-                : `<span style="background: #f1f5f9; color: #64748b; padding: 3px 9px; border-radius: 99px; font-size: 0.78rem; font-weight: 600; white-space: nowrap;">
-                        Chưa dùng
-                   </span>`;
-
-            const deleteBtnHtml = isInUse
-                ? `<button type="button" class="action-btn" style="color: #94a3b8; border-color: #e2e8f0; background: #f8fafc; cursor: pointer;" title="Loại sân đang có sân con hoặc bảng giá sử dụng" onclick="showSystemModal('Không thể xóa', 'Loại sân <strong>${safeTen} (#${maLS})</strong> đang có <strong>${soSanCon} sân con</strong> và <strong>${soBangGia} cấu hình giá</strong> sử dụng nên được bảo vệ không thể xóa!', 'error')">
-                        <i class="fa-solid fa-shield-halved"></i>
-                   </button>`
-                : `<button type="button" class="action-btn" style="color: #ef4444; border-color: #fecaca; background: #fef2f2;" onclick="openDeleteLoaiSanConfirmModal('${maLS}', '${safeTen}')">
-                        <i class="fa-solid fa-trash-can"></i> Xóa
-                   </button>`;
-
-            return `
-                <tr>
-                    <td>
-                        <span style="font-family: monospace; font-weight: 800; font-size: 0.88rem; color: #0f172a; background: #f1f5f9; border: 1px solid #cbd5e1; padding: 4px 10px; border-radius: 6px; display: inline-block;">#${maLS}</span>
-                    </td>
-                    <td>
-                        <strong style="color: #0f172a; font-size: 0.94rem;">${ls.TenLoaiSan}</strong>
-                    </td>
-                    <td style="text-align: center;">${usageBadge}</td>
-                    <td style="text-align: center;">
-                        <div style="display: inline-flex; gap: 6px; align-items: center;">
-                            <button type="button" class="action-btn" onclick="startEditLoaiSan('${maLS}', '${safeTen}')">
-                                <i class="fa-solid fa-pen-to-square"></i> Sửa
-                            </button>
-                            ${deleteBtnHtml}
-                        </div>
-                    </td>
-                </tr>
-            `;
-        }).join('');
     } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 30px; color: #ef4444;">Lỗi tải danh sách loại sân!</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 30px; color: #ef4444;">Lỗi tải dữ liệu từ máy chủ!</td></tr>`;
     }
 }
 
-window.validateLoaiSanCodeRealtime = function(inputEl) {
+window.validateCatalogCodeRealtime = function(inputEl) {
     if (!inputEl) return;
     const cleaned = inputEl.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    if (inputEl.value !== cleaned) {
-        inputEl.value = cleaned;
-    }
+    if (inputEl.value !== cleaned) inputEl.value = cleaned;
 
     const val = inputEl.value.trim().toUpperCase();
-    const originalId = editingLoaiSanId ? String(editingLoaiSanId).toUpperCase() : null;
-    const feedbackEl = document.getElementById('ls-ma-feedback');
-    const btnSave = document.getElementById('btn-submit-loaisan');
+    const originalId = editingCatalogId ? String(editingCatalogId).toUpperCase() : null;
+    const feedbackEl = document.getElementById('cat-code-feedback');
+    const btnSave = document.getElementById('btn-submit-catalog');
 
     if (val === '' || (originalId && val === originalId)) {
-        isLoaiSanCodeDuplicate = false;
+        isCatalogCodeDuplicate = false;
         inputEl.style.borderColor = '#cbd5e1';
-        if (feedbackEl) {
-            feedbackEl.style.display = 'none';
-            feedbackEl.innerHTML = '';
-        }
-        if (btnSave) {
-            btnSave.disabled = false;
-            btnSave.style.opacity = '1';
-            btnSave.style.cursor = 'pointer';
-        }
+        if (feedbackEl) { feedbackEl.style.display = 'none'; feedbackEl.innerHTML = ''; }
+        if (btnSave) { btnSave.disabled = false; btnSave.style.opacity = '1'; btnSave.style.cursor = 'pointer'; }
         return;
     }
 
-    const isDup = adminLoaiSanListCache.some(ls => String(ls.MaLoaiSan || ls.ID || '').toUpperCase() === val);
+    const list = adminCatalogCache[currentCatalogTab] || [];
+    const pkField = currentCatalogTab === 'LoaiSan' ? 'MaLoaiSan' : (currentCatalogTab === 'Phuong' ? 'MaPhuong' : 'MaKhungGio');
+    const isDup = list.some(item => String(item[pkField] || item.ID || '').toUpperCase() === val);
+
     if (isDup) {
-        isLoaiSanCodeDuplicate = true;
+        isCatalogCodeDuplicate = true;
         inputEl.style.borderColor = '#e11d48';
         if (feedbackEl) {
             feedbackEl.style.display = 'block';
             feedbackEl.style.color = '#e11d48';
             feedbackEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Mã <strong>[${val}]</strong> đã tồn tại!`;
         }
-        if (btnSave) {
-            btnSave.disabled = true;
-            btnSave.style.opacity = '0.5';
-            btnSave.style.cursor = 'not-allowed';
-        }
+        if (btnSave) { btnSave.disabled = true; btnSave.style.opacity = '0.5'; btnSave.style.cursor = 'not-allowed'; }
     } else {
-        isLoaiSanCodeDuplicate = false;
+        isCatalogCodeDuplicate = false;
         inputEl.style.borderColor = '#0d8a5e';
         if (feedbackEl) {
             feedbackEl.style.display = 'block';
             feedbackEl.style.color = '#0d8a5e';
             feedbackEl.innerHTML = `<i class="fa-solid fa-circle-check"></i> Mã <strong>[${val}]</strong> hợp lệ.`;
         }
-        if (btnSave) {
-            btnSave.disabled = false;
-            btnSave.style.opacity = '1';
-            btnSave.style.cursor = 'pointer';
-        }
+        if (btnSave) { btnSave.disabled = false; btnSave.style.opacity = '1'; btnSave.style.cursor = 'pointer'; }
     }
 };
 
-window.startEditLoaiSan = function(maLS, tenLS) {
-    editingLoaiSanId = maLS;
-    isLoaiSanCodeDuplicate = false;
+window.startEditCatalogItem = function(tabName, id) {
+    const list = adminCatalogCache[tabName] || [];
+    const pkField = tabName === 'LoaiSan' ? 'MaLoaiSan' : (tabName === 'Phuong' ? 'MaPhuong' : 'MaKhungGio');
+    const item = list.find(x => String(x[pkField] || x.ID) === String(id));
+    if (!item) return;
 
-    const titleEl = document.getElementById('ls-form-title');
-    const cancelBtn = document.getElementById('btn-cancel-edit-ls');
-    const maInput = document.getElementById('ls-ma-input');
-    const tenInput = document.getElementById('ls-ten-input');
-    const feedbackEl = document.getElementById('ls-ma-feedback');
-    const btnText = document.getElementById('btn-submit-loaisan-text');
-    const btnSave = document.getElementById('btn-submit-loaisan');
+    editingCatalogId = id;
+    isCatalogCodeDuplicate = false;
+
+    const titleEl = document.getElementById('cat-form-title');
+    const cancelBtn = document.getElementById('btn-cancel-edit-cat');
+    const codeInput = document.getElementById('cat-code-input');
+    const feedbackEl = document.getElementById('cat-code-feedback');
+    const btnText = document.getElementById('btn-submit-catalog-text');
 
     if (titleEl) {
-        titleEl.innerHTML = `<i class="fa-solid fa-pen-to-square" style="color: #2563eb;"></i> <span style="color: #1e40af;">Chỉnh sửa Loại Sân #${maLS}</span>`;
+        titleEl.innerHTML = `<i class="fa-solid fa-pen-to-square" style="color: #2563eb;"></i> <span style="color: #1e40af;">Chỉnh sửa mục #${id}</span>`;
     }
     if (cancelBtn) cancelBtn.style.display = 'inline-block';
-    if (maInput) {
-        maInput.value = maLS;
-        maInput.style.borderColor = '#cbd5e1';
+    if (codeInput) {
+        codeInput.value = id;
+        codeInput.style.borderColor = '#cbd5e1';
     }
-    if (tenInput) {
-        tenInput.value = tenLS;
-        tenInput.focus();
-    }
-    if (feedbackEl) {
-        feedbackEl.style.display = 'none';
-        feedbackEl.innerHTML = '';
-    }
+    if (feedbackEl) { feedbackEl.style.display = 'none'; feedbackEl.innerHTML = ''; }
     if (btnText) btnText.textContent = 'Lưu cập nhật';
-    if (btnSave) {
-        btnSave.disabled = false;
-        btnSave.style.opacity = '1';
-        btnSave.style.cursor = 'pointer';
+
+    if (tabName === 'LoaiSan') {
+        const nameInput = document.getElementById('cat-name-input');
+        if (nameInput) { nameInput.value = item.TenLoaiSan || ''; nameInput.focus(); }
+    } else if (tabName === 'Phuong') {
+        const nameInput = document.getElementById('cat-name-input');
+        if (nameInput) { nameInput.value = item.TenPhuong || ''; nameInput.focus(); }
+    } else if (tabName === 'KhungGio') {
+        const startEl = document.getElementById('cat-start-input');
+        const endEl = document.getElementById('cat-end-input');
+        if (startEl) startEl.value = String(item.GioBatDau).substring(0, 5);
+        if (endEl) endEl.value = String(item.GioKetThuc).substring(0, 5);
     }
 };
 
-window.resetLoaiSanForm = function() {
-    editingLoaiSanId = null;
-    isLoaiSanCodeDuplicate = false;
-
-    const titleEl = document.getElementById('ls-form-title');
-    const cancelBtn = document.getElementById('btn-cancel-edit-ls');
-    const maInput = document.getElementById('ls-ma-input');
-    const tenInput = document.getElementById('ls-ten-input');
-    const feedbackEl = document.getElementById('ls-ma-feedback');
-    const btnText = document.getElementById('btn-submit-loaisan-text');
-    const btnSave = document.getElementById('btn-submit-loaisan');
-
-    if (titleEl) {
-        titleEl.innerHTML = `<i class="fa-solid fa-circle-plus" style="color: var(--primary);"></i> <span>Thêm Loại Sân Mới</span>`;
-    }
-    if (cancelBtn) cancelBtn.style.display = 'none';
-    if (maInput) {
-        maInput.value = '';
-        maInput.style.borderColor = '#cbd5e1';
-    }
-    if (tenInput) tenInput.value = '';
-    if (feedbackEl) {
-        feedbackEl.style.display = 'none';
-        feedbackEl.innerHTML = '';
-    }
-    if (btnText) btnText.textContent = 'Thêm mới';
-    if (btnSave) {
-        btnSave.disabled = false;
-        btnSave.style.opacity = '1';
-        btnSave.style.cursor = 'pointer';
-    }
+window.resetCatalogForm = function() {
+    switchSystemCatalogTab(currentCatalogTab);
 };
 
-window.saveLoaiSanAdmin = async function() {
-    if (isLoaiSanCodeDuplicate) {
-        return showSystemModal('Trùng mã loại sân', 'Mã loại sân bạn nhập đã tồn tại trên hệ thống! Vui lòng chọn mã khác.', 'error');
+window.saveCatalogItemAdmin = async function() {
+    if (isCatalogCodeDuplicate) {
+        return showSystemModal('Trùng mã khóa chính', 'Mã bạn nhập đã tồn tại trên hệ thống! Vui lòng chọn mã khác.', 'error');
     }
 
-    const maVal = document.getElementById('ls-ma-input')?.value.trim().toUpperCase() || '';
-    const tenVal = document.getElementById('ls-ten-input')?.value.trim() || '';
-
-    if (!tenVal) {
-        return showSystemModal('Thiếu thông tin', 'Vui lòng nhập Tên loại sân (VD: Sân 5 người, Sân 7 người, Sân 11 người)!', 'error');
+    const codeVal = document.getElementById('cat-code-input')?.value.trim().toUpperCase() || '';
+    if (editingCatalogId && !codeVal) {
+        return showSystemModal('Thiếu mã', 'Khi đang chỉnh sửa không được để trống Mã khóa chính!', 'error');
     }
 
-    if (editingLoaiSanId && !maVal) {
-        return showSystemModal('Thiếu mã loại sân', 'Khi chỉnh sửa không được để trống Mã loại sân!', 'error');
+    const pkColMap = {
+        LoaiSan: 'MaLoaiSan',
+        Phuong: 'MaPhuong',
+        KhungGio: 'MaKhungGio'
+    };
+    const pkCol = pkColMap[currentCatalogTab];
+    let values = {};
+
+    if (currentCatalogTab === 'LoaiSan') {
+        const ten = document.getElementById('cat-name-input')?.value.trim() || '';
+        if (!ten) return showSystemModal('Thiếu thông tin', 'Vui lòng nhập Tên loại sân!', 'error');
+        values.TenLoaiSan = ten;
+        if (codeVal) values.MaLoaiSan = codeVal;
+    } else if (currentCatalogTab === 'Phuong') {
+        const ten = document.getElementById('cat-name-input')?.value.trim() || '';
+        if (!ten) return showSystemModal('Thiếu thông tin', 'Vui lòng nhập Tên Phường / Xã!', 'error');
+        values.TenPhuong = ten;
+        if (codeVal) values.MaPhuong = codeVal;
+    } else if (currentCatalogTab === 'KhungGio') {
+        const gioBD = document.getElementById('cat-start-input')?.value || '';
+        const gioKT = document.getElementById('cat-end-input')?.value || '';
+        if (!gioBD || !gioKT) return showSystemModal('Thiếu thông tin', 'Vui lòng chọn Giờ bắt đầu và Giờ kết thúc!', 'error');
+        if (gioBD >= gioKT) return showSystemModal('Giờ không hợp lệ', 'Giờ kết thúc phải lớn hơn Giờ bắt đầu!', 'error');
+
+        // Kiểm tra trùng cặp giờ bắt đầu - kết thúc
+        const isTimeDup = (adminCatalogCache.KhungGio || []).some(kg => {
+            const ma = String(kg.MaKhungGio || kg.ID);
+            if (editingCatalogId && ma === String(editingCatalogId)) return false;
+            return String(kg.GioBatDau).substring(0, 5) === gioBD && String(kg.GioKetThuc).substring(0, 5) === gioKT;
+        });
+        if (isTimeDup) {
+            return showSystemModal('Trùng khung giờ', `Khung giờ ${gioBD} - ${gioKT} đã tồn tại trong danh sách!`, 'error');
+        }
+
+        values.GioBatDau = gioBD;
+        values.GioKetThuc = gioKT;
+        if (codeVal) values.MaKhungGio = codeVal;
     }
 
-    const btn = document.getElementById('btn-submit-loaisan');
+    const btn = document.getElementById('btn-submit-catalog');
     if (btn) btn.disabled = true;
 
-    const url = editingLoaiSanId
-        ? `${API_BASE_URL}/loai-san/${editingLoaiSanId}`
-        : `${API_BASE_URL}/loai-san`;
-    const method = editingLoaiSanId ? 'PUT' : 'POST';
-
-    const payload = { TenLoaiSan: tenVal };
-    if (maVal !== '') {
-        payload.MaLoaiSan = maVal;
-    }
+    // Truyền trực tiếp tên bảng lên URL (/api/db-manager/{table}) và gửi kèm _pk khớp với DatabaseFormController.php
+    const url = `${API_BASE_URL}/db-manager/${encodeURIComponent(currentCatalogTab)}`;
+    const method = editingCatalogId ? 'PUT' : 'POST';
+    const payload = editingCatalogId
+        ? { _pk: { [pkCol]: editingCatalogId }, data: values }
+        : values;
 
     try {
         const res = await fetch(url, {
@@ -10636,16 +10845,18 @@ window.saveLoaiSanAdmin = async function() {
         const data = await res.json();
 
         if (res.ok && data.success) {
-            showSystemModal('Thành công', data.message, 'success');
-            resetLoaiSanForm();
-            await loadAdminLoaiSanList();
+            showSystemModal('Thành công', data.message || 'Đã lưu dữ liệu thành công!', 'success');
+            await switchSystemCatalogTab(currentCatalogTab);
 
-            // Nếu Admin đang đứng ở màn hình chi tiết 1 Cụm sân -> Tự động làm mới lại Bảng giá & Danh sách sân con
+            // Làm mới dữ liệu trang bên dưới nếu cần
+            if (typeof loadCumSanCards === 'function' && document.getElementById('cumsan-grid')) {
+                loadCumSanCards();
+            }
             if (currentCumSanId && document.getElementById('sanbong-table-body')) {
                 renderCumSanDetail(currentCumSanId);
             }
         } else {
-            showSystemModal('Không thể lưu', data.message || 'Có lỗi xảy ra khi lưu loại sân!', 'error');
+            showSystemModal('Không thể lưu', data.message || 'Có lỗi xảy ra khi lưu!', 'error');
         }
     } catch (e) {
         showSystemModal('Lỗi kết nối', 'Không thể kết nối đến máy chủ!', 'error');
@@ -10654,8 +10865,8 @@ window.saveLoaiSanAdmin = async function() {
     }
 };
 
-window.openDeleteLoaiSanConfirmModal = function(maLS, tenLS) {
-    pendingDeleteLoaiSanId = maLS;
+window.openDeleteCatalogConfirmModal = function(tabName, id, labelText) {
+    pendingDeleteCatalogItem = { table: tabName, id: id, label: labelText };
 
     let modal = document.getElementById('admin-delete-loaisan-confirm-modal');
     if (!modal) {
@@ -10674,13 +10885,13 @@ window.openDeleteLoaiSanConfirmModal = function(maLS, tenLS) {
             <div style="width: 64px; height: 64px; border-radius: 50%; background: #fef2f2; color: #ef4444; border: 2px solid #fecaca; display: inline-flex; align-items: center; justify-content: center; font-size: 1.8rem; margin-bottom: 14px;">
                 <i class="fa-solid fa-trash-can"></i>
             </div>
-            <h3 style="margin: 0 0 10px 0; font-size: 1.25rem; font-weight: 800; color: #0f172a;">Xác nhận xóa Loại Sân?</h3>
+            <h3 style="margin: 0 0 10px 0; font-size: 1.25rem; font-weight: 800; color: #0f172a;">Xác nhận xóa danh mục?</h3>
             <p style="color: #475569; font-size: 0.92rem; line-height: 1.6; margin: 0 0 22px 0;">
-                Bạn có chắc chắn muốn xóa loại sân <strong style="color: #0f172a;">${tenLS} (#${maLS})</strong> khỏi hệ thống không?
+                Bạn có chắc chắn muốn xóa <strong style="color: #0f172a;">${labelText} (#${id})</strong> khỏi hệ thống không?
             </p>
             <div style="display: flex; justify-content: center; gap: 12px;">
                 <button type="button" class="btn-outline" style="flex: 1; padding: 10px 18px; border-radius: 10px;" onclick="document.getElementById('admin-delete-loaisan-confirm-modal').style.display='none'">Hủy bỏ</button>
-                <button type="button" id="btn-confirm-delete-loaisan" class="btn-primary" style="flex: 1; padding: 10px 18px; border-radius: 10px; background: #ef4444; border-color: #ef4444;" onclick="executeDeleteLoaiSanAdmin()">
+                <button type="button" id="btn-confirm-delete-loaisan" class="btn-primary" style="flex: 1; padding: 10px 18px; border-radius: 10px; background: #ef4444; border-color: #ef4444;" onclick="executeDeleteCatalogItemAdmin()">
                     <i class="fa-solid fa-check" style="margin-right: 5px;"></i> Đồng ý xóa
                 </button>
             </div>
@@ -10690,8 +10901,8 @@ window.openDeleteLoaiSanConfirmModal = function(maLS, tenLS) {
     modal.style.display = 'flex';
 };
 
-window.executeDeleteLoaiSanAdmin = async function() {
-    if (!pendingDeleteLoaiSanId) return;
+window.executeDeleteCatalogItemAdmin = async function() {
+    if (!pendingDeleteCatalogItem) return;
 
     const btn = document.getElementById('btn-confirm-delete-loaisan');
     if (btn) {
@@ -10699,10 +10910,20 @@ window.executeDeleteLoaiSanAdmin = async function() {
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xóa...';
     }
 
+    const pkColMap = {
+        LoaiSan: 'MaLoaiSan',
+        Phuong: 'MaPhuong',
+        KhungGio: 'MaKhungGio'
+    };
+    const pkCol = pkColMap[pendingDeleteCatalogItem.table];
+
     try {
-        const res = await fetch(`${API_BASE_URL}/loai-san/${pendingDeleteLoaiSanId}`, {
+        const res = await fetch(`${API_BASE_URL}/db-manager/${encodeURIComponent(pendingDeleteCatalogItem.table)}`, {
             method: 'DELETE',
-            headers: { 'Accept': 'application/json' }
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                _pk: { [pkCol]: pendingDeleteCatalogItem.id }
+            })
         });
         const data = await res.json();
 
@@ -10710,20 +10931,20 @@ window.executeDeleteLoaiSanAdmin = async function() {
         if (confModal) confModal.style.display = 'none';
 
         if (res.ok && data.success) {
-            if (editingLoaiSanId === pendingDeleteLoaiSanId) {
-                resetLoaiSanForm();
-            }
             showSystemModal('Đã xóa thành công', data.message, 'success');
-            await loadAdminLoaiSanList();
+            await switchSystemCatalogTab(currentCatalogTab);
+            if (typeof loadCumSanCards === 'function' && document.getElementById('cumsan-grid')) {
+                loadCumSanCards();
+            }
         } else {
-            showSystemModal('Không thể xóa', data.message || 'Loại sân này đang được sử dụng!', 'error');
+            showSystemModal('Không thể xóa', data.message || 'Mục này đang có dữ liệu liên kết sử dụng nên được bảo vệ không thể xóa!', 'error');
         }
     } catch (e) {
         const confModal = document.getElementById('admin-delete-loaisan-confirm-modal');
         if (confModal) confModal.style.display = 'none';
         showSystemModal('Lỗi kết nối', 'Mất kết nối đến máy chủ!', 'error');
     } finally {
-        pendingDeleteLoaiSanId = null;
+        pendingDeleteCatalogItem = null;
     }
 };
 
