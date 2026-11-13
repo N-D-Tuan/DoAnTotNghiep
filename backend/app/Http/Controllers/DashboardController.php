@@ -295,81 +295,159 @@ class DashboardController extends Controller
             }
         }
 
-        // 8. DỮ LIỆU TIMELINE GIẢI ĐẤU CỦA CỤM SÂN (DÀNH CHO QUẢN LÝ SÂN & NHÂN VIÊN)
+        // 8. DỮ LIỆU TIMELINE GIẢI ĐẤU (MỞ CHO CẢ ADMIN TOÀN HỆ THỐNG VÀ QUẢN LÝ SÂN)
         $tournamentsTimeline = [];
-        if ($idCumSan !== 'all') {
-            $giaiDaus = GiaiDau::with([
-                    'nguoiDung:MaNguoiDung,HoTen,SoDienThoai',
-                    'cumSan:MaCumSan,TenCumSan',
-                    'datSans' => function ($q) {
-                        $q->where('TrangThai', '!=', 'DaHuy')
-                          ->with(['sanBong:MaSanBong,TenSan', 'khungGio:MaKhungGio,GioBatDau,GioKetThuc'])
-                          ->orderBy('NgayDa', 'asc')
-                          ->orderBy('MaKhungGio', 'asc');
-                    }
-                ])
-                ->where('MaCumSan', $idCumSan)
-                ->whereIn('TrangThai', ['ChoDuyet', 'DaDuyet', 'HetHan', 'HoanThanh'])
-                ->orderBy('NgayBatDau', 'asc')
-                ->get();
-
-            foreach ($giaiDaus as $gd) {
-                $activeBookings = $gd->datSans ?? collect([]);
-
-                // Nếu giải đã chuyển sang HetHan nhưng thực tế khách không đặt bất kỳ trận nào -> Bỏ qua
-                if ($gd->TrangThai === 'HetHan' && $activeBookings->isEmpty()) {
-                    continue;
+        $queryGiaiDaus = GiaiDau::with([
+                'nguoiDung:MaNguoiDung,HoTen,SoDienThoai',
+                'cumSan:MaCumSan,TenCumSan',
+                'datSans' => function ($q) {
+                    $q->where('TrangThai', '!=', 'DaHuy')
+                      ->with(['sanBong:MaSanBong,TenSan', 'khungGio:MaKhungGio,GioBatDau,GioKetThuc'])
+                      ->orderBy('NgayDa', 'asc')
+                      ->orderBy('MaKhungGio', 'asc');
                 }
+            ])
+            ->whereIn('TrangThai', ['ChoDuyet', 'DaDuyet', 'HetHan', 'HoanThanh'])
+            ->orderBy('NgayBatDau', 'asc');
 
-                $chiTietNgayDa = [];
-                $danhSachSanThamGia = [];
+        if ($idCumSan !== 'all') {
+            $queryGiaiDaus->where('MaCumSan', $idCumSan);
+        }
 
-                foreach ($activeBookings->groupBy('NgayDa') as $ngayDa => $cacTranTrongNgay) {
-                    $dsTran = [];
-                    foreach ($cacTranTrongNgay as $tran) {
-                        $tenSan = $tran->sanBong ? $tran->sanBong->TenSan : 'Sân bóng';
-                        $maSan  = $tran->MaSanBong;
-                        if ($maSan && !isset($danhSachSanThamGia[$maSan])) {
-                            $danhSachSanThamGia[$maSan] = $tenSan;
-                        }
-                        $khungGioStr = $tran->khungGio
-                            ? substr($tran->khungGio->GioBatDau, 0, 5) . ' - ' . substr($tran->khungGio->GioKetThuc, 0, 5)
-                            : '';
+        foreach ($queryGiaiDaus->get() as $gd) {
+            $activeBookings = $gd->datSans ?? collect([]);
 
-                        $dsTran[] = [
-                            'ma_dat_san'  => $tran->MaDatSan,
-                            'ma_san_bong' => $maSan,
-                            'ten_san'     => $tenSan,
-                            'khung_gio'   => $khungGioStr,
-                            'trang_thai'  => $tran->TrangThai,
-                            'tong_tien'   => (float) $tran->TongTien,
-                            'tien_coc'    => (float) $tran->TienCoc,
-                        ];
+            if ($gd->TrangThai === 'HetHan' && $activeBookings->isEmpty()) {
+                continue;
+            }
+
+            $chiTietNgayDa = [];
+            $danhSachSanThamGia = [];
+            $tenCumSanGD = $gd->cumSan ? $gd->cumSan->TenCumSan : '';
+
+            foreach ($activeBookings->groupBy('NgayDa') as $ngayDa => $cacTranTrongNgay) {
+                $dsTran = [];
+                foreach ($cacTranTrongNgay as $tran) {
+                    $tenSan = $tran->sanBong ? $tran->sanBong->TenSan : 'Sân bóng';
+                    $maSan  = $tran->MaSanBong;
+                    if ($maSan && !isset($danhSachSanThamGia[$maSan])) {
+                        $danhSachSanThamGia[$maSan] = ($idCumSan === 'all' && $tenCumSanGD)
+                            ? "{$tenSan} ({$tenCumSanGD})"
+                            : $tenSan;
                     }
+                    $khungGioStr = $tran->khungGio
+                        ? substr($tran->khungGio->GioBatDau, 0, 5) . ' - ' . substr($tran->khungGio->GioKetThuc, 0, 5)
+                        : '';
 
-                    $chiTietNgayDa[$ngayDa] = [
-                        'ngay_da' => $ngayDa,
-                        'so_tran' => count($dsTran),
-                        'cac_san' => array_values(array_unique(array_column($dsTran, 'ten_san'))),
-                        'ds_tran' => $dsTran,
+                    $dsTran[] = [
+                        'ma_dat_san'  => $tran->MaDatSan,
+                        'ma_san_bong' => $maSan,
+                        'ten_san'     => $tenSan,
+                        'khung_gio'   => $khungGioStr,
+                        'trang_thai'  => $tran->TrangThai,
+                        'tong_tien'   => (float) $tran->TongTien,
+                        'tien_coc'    => (float) $tran->TienCoc,
                     ];
                 }
 
-                $tournamentsTimeline[] = [
-                    'ma_giai_dau'        => $gd->MaGiaiDau,
-                    'ten_giai_dau'       => $gd->TenGiaiDau,
-                    'ngay_bat_dau'       => $gd->NgayBatDau,
-                    'ngay_ket_thuc'      => $gd->NgayKetThuc,
-                    'trang_thai_giai'    => $gd->TrangThai,
-                    'da_dat_san'         => $activeBookings->isNotEmpty(),
-                    'tong_so_tran'       => $activeBookings->count(),
-                    'so_tran_hoan_thanh' => $activeBookings->where('TrangThai', 'HoanThanh')->count(),
-                    'khach_hang'         => $gd->nguoiDung ? $gd->nguoiDung->HoTen : 'Khách hàng',
-                    'so_dien_thoai'      => $gd->nguoiDung ? $gd->nguoiDung->SoDienThoai : '',
-                    'cac_san_su_dung'    => $danhSachSanThamGia,
-                    'ngay_co_tran'       => $chiTietNgayDa,
+                $chiTietNgayDa[$ngayDa] = [
+                    'ngay_da' => $ngayDa,
+                    'so_tran' => count($dsTran),
+                    'cac_san' => array_values(array_unique(array_column($dsTran, 'ten_san'))),
+                    'ds_tran' => $dsTran,
                 ];
             }
+
+            $tournamentsTimeline[] = [
+                'ma_giai_dau'        => $gd->MaGiaiDau,
+                'ten_giai_dau'       => ($idCumSan === 'all' && $tenCumSanGD) ? "[{$tenCumSanGD}] {$gd->TenGiaiDau}" : $gd->TenGiaiDau,
+                'ma_cum_san'         => $gd->MaCumSan,
+                'ten_cum_san'        => $tenCumSanGD,
+                'ngay_bat_dau'       => $gd->NgayBatDau,
+                'ngay_ket_thuc'      => $gd->NgayKetThuc,
+                'trang_thai_giai'    => $gd->TrangThai,
+                'da_dat_san'         => $activeBookings->isNotEmpty(),
+                'tong_so_tran'       => $activeBookings->count(),
+                'so_tran_hoan_thanh' => $activeBookings->where('TrangThai', 'HoanThanh')->count(),
+                'khach_hang'         => $gd->nguoiDung ? $gd->nguoiDung->HoTen : 'Khách hàng',
+                'so_dien_thoai'      => $gd->nguoiDung ? $gd->nguoiDung->SoDienThoai : '',
+                'cac_san_su_dung'    => $danhSachSanThamGia,
+                'ngay_co_tran'       => $chiTietNgayDa,
+            ];
+        }
+
+        // 9. BẢNG SO SÁNH HIỆU SUẤT CÁC CỤM SÂN (DÀNH CHO ADMIN Ở CUỐI TRANG TỔNG QUAN)
+        $clusterMonthYear = $request->cluster_month ?? $staffMonthYear;
+        $cParts = explode('-', $clusterMonthYear);
+        $compMonth = isset($cParts[0]) ? (int) $cParts[0] : $today->month;
+        $compYear  = isset($cParts[1]) ? (int) $cParts[1] : $today->year;
+
+        $clusterComparison = [];
+        if (!$isQuanLy) {
+            $cumSans = \App\Models\CumSan::with(['phuong', 'sanBongs'])->get();
+            foreach ($cumSans as $cs) {
+                $maCS = $cs->MaCumSan;
+                $soSanCon = $cs->sanBongs ? $cs->sanBongs->where('TrangThai', 'HoatDong')->count() : 0;
+
+                // Lấy toàn bộ đặt sân của cụm sân này theo tháng của Bảng so sánh ($compMonth-$compYear)
+                $dsThang = DatSan::with(['hoaDonDatSan.datSans'])
+                    ->whereYear('NgayDa', $compYear)
+                    ->whereMonth('NgayDa', $compMonth)
+                    ->whereHas('sanBong', function ($q) use ($maCS) {
+                        $q->where('MaCumSan', $maCS);
+                    })
+                    ->get();
+
+                $soHoanThanh = $dsThang->where('TrangThai', 'HoanThanh')->count();
+                $soKhongDen  = $dsThang->where('TrangThai', 'KhongDen')->count();
+                $soDaHuy     = $dsThang->where('TrangThai', 'DaHuy')->count();
+                $soDaCoc     = $dsThang->where('TrangThai', 'DaCoc')->count();
+                $tongDaChot  = $soHoanThanh + $soKhongDen;
+                $tyLeBung    = $tongDaChot > 0 ? round(($soKhongDen / $tongDaChot) * 100, 1) : 0;
+
+                $doanhThuThang = 0;
+                foreach ($dsThang->whereIn('TrangThai', ['HoanThanh', 'KhongDen']) as $dItem) {
+                    $doanhThuThang += self::tinhDoanhThuThucTeDatSan($dItem);
+                }
+
+                // Điểm đánh giá trung bình của cụm sân
+                $danhGiaQuery = \App\Models\DanhGia::whereHas('datSan.sanBong', function ($q) use ($maCS) {
+                    $q->where('MaCumSan', $maCS);
+                });
+                $soDanhGia = $danhGiaQuery->count();
+                $diemTrungBinh = $soDanhGia > 0 ? round((float) $danhGiaQuery->avg('SoSao'), 1) : 0;
+
+                $clusterComparison[] = [
+                    'ma_cum_san'      => $maCS,
+                    'ten_cum_san'     => $cs->TenCumSan,
+                    'dia_chi'         => $cs->DiaChi . ($cs->phuong ? ' (' . $cs->phuong->TenPhuong . ')' : ''),
+                    'trang_thai'      => $cs->TrangThai,
+                    'so_san_con'      => $soSanCon,
+                    'so_hoan_thanh'   => $soHoanThanh,
+                    'so_da_coc'       => $soDaCoc,
+                    'so_khong_den'    => $soKhongDen,
+                    'so_da_huy'       => $soDaHuy,
+                    'ty_le_bung'      => $tyLeBung,
+                    'diem_danh_gia'   => $diemTrungBinh,
+                    'so_danh_gia'     => $soDanhGia,
+                    'doanh_thu_thang' => $doanhThuThang
+                ];
+            }
+
+            // Sắp xếp hạng Cụm sân theo 4 tiêu chí ưu tiên:
+            // 1. Doanh thu tháng -> 2. Số trận hoàn thành -> 3. Điểm đánh giá sao -> 4. Số sân con hoạt động
+            usort($clusterComparison, function ($a, $b) {
+                if ($b['doanh_thu_thang'] != $a['doanh_thu_thang']) {
+                    return $b['doanh_thu_thang'] <=> $a['doanh_thu_thang'];
+                }
+                if ($b['so_hoan_thanh'] != $a['so_hoan_thanh']) {
+                    return $b['so_hoan_thanh'] <=> $a['so_hoan_thanh'];
+                }
+                if ($b['diem_danh_gia'] != $a['diem_danh_gia']) {
+                    return $b['diem_danh_gia'] <=> $a['diem_danh_gia'];
+                }
+                return $b['so_san_con'] <=> $a['so_san_con'];
+            });
         }
 
         return response()->json([
@@ -383,6 +461,7 @@ class DashboardController extends Controller
                 'so_san_quen_chot'           => $soSanQuenChot,
                 'chart'                      => $doanhThuChart,
                 'tournaments_timeline'       => $tournamentsTimeline,
+                'cluster_comparison'         => $clusterComparison,
                 'staff_performance'          => [
                     'thang_nam'     => sprintf('%02d-%04d', $filterMonth, $filterYear),
                     'days_in_month' => $daysInMonth,

@@ -92,29 +92,44 @@ document.addEventListener(
         const menuKhachHang = document.getElementById('menu-khachhang');
 
         if (currentUser.VaiTro === 'QuanLySan') {
-            // Quản lý sân: TUYỆT ĐỐI ẨN menu của Admin
             if(document.getElementById('menu-cumsan')) document.getElementById('menu-cumsan').style.display = 'none';
+            if(document.getElementById('menu-giaodich')) document.getElementById('menu-giaodich').style.display = 'none';
 
             if(document.getElementById('menu-sancuatoi')) document.getElementById('menu-sancuatoi').style.display = 'flex';
             if(document.getElementById('menu-datsan')) document.getElementById('menu-datsan').style.display = 'flex';
             if(document.getElementById('menu-giaidau')) document.getElementById('menu-giaidau').style.display = 'flex';
             if(document.getElementById('menu-huysan')) document.getElementById('menu-huysan').style.display = 'flex';
-            if(document.getElementById('menu-lichlamviec')) document.getElementById('menu-lichlamviec').style.display = 'flex';
+            if(document.getElementById('menu-lichlamviec')) {
+                document.getElementById('menu-lichlamviec').style.display = 'flex';
+                document.getElementById('menu-lichlamviec').innerHTML = '<i class="fa-solid fa-calendar-week"></i> XẾP LỊCH LÀM VIỆC';
+            }
             if(document.getElementById('menu-khuyenmai')) document.getElementById('menu-khuyenmai').style.display = 'flex';
 
             if(menuKhachHang) menuKhachHang.innerHTML = '<i class="fa-solid fa-users"></i> QUẢN LÝ TÀI KHOẢN';
         } 
         else if (currentUser.VaiTro === 'Admin') {
-            // Admin nền tảng: TUYỆT ĐỐI ẨN menu đặc quyền của Quản lý sân
             if(document.getElementById('menu-sancuatoi')) document.getElementById('menu-sancuatoi').style.display = 'none';
-            if(document.getElementById('menu-datsan')) document.getElementById('menu-datsan').style.display = 'none';
-            if(document.getElementById('menu-giaidau')) document.getElementById('menu-giaidau').style.display = 'none';
-            if(document.getElementById('menu-huysan')) document.getElementById('menu-huysan').style.display = 'none';
-            if(document.getElementById('menu-lichlamviec')) document.getElementById('menu-lichlamviec').style.display = 'none';
 
-            // Đảm bảo hiển thị đầy đủ menu của Admin
+            // Mở toàn bộ các mục Giám sát vận hành & Giao dịch cho Admin tối cao
             if(document.getElementById('menu-cumsan')) document.getElementById('menu-cumsan').style.display = 'flex';
+            if(document.getElementById('menu-datsan')) {
+                document.getElementById('menu-datsan').style.display = 'flex';
+                document.getElementById('menu-datsan').innerHTML = '<i class="fa-solid fa-calendar-check"></i> GIÁM SÁT ĐẶT SÂN';
+            }
+            if(document.getElementById('menu-giaidau')) {
+                document.getElementById('menu-giaidau').style.display = 'flex';
+                document.getElementById('menu-giaidau').innerHTML = '<i class="fa-solid fa-flag-checkered"></i> GIÁM SÁT GIẢI ĐẤU';
+            }
+            if(document.getElementById('menu-huysan')) {
+                document.getElementById('menu-huysan').style.display = 'flex';
+                document.getElementById('menu-huysan').innerHTML = '<i class="fa-solid fa-calendar-xmark"></i> YÊU CẦU HỦY SÂN';
+            }
+            if(document.getElementById('menu-lichlamviec')) {
+                document.getElementById('menu-lichlamviec').style.display = 'flex';
+                document.getElementById('menu-lichlamviec').innerHTML = '<i class="fa-solid fa-calendar-week"></i> LỊCH TRỰC CƠ SỞ';
+            }
             if(document.getElementById('menu-khuyenmai')) document.getElementById('menu-khuyenmai').style.display = 'flex';
+            if(document.getElementById('menu-giaodich')) document.getElementById('menu-giaodich').style.display = 'flex';
             if(document.getElementById('menu-captaikhoan')) document.getElementById('menu-captaikhoan').style.display = 'flex';
 
             if(menuKhachHang) menuKhachHang.innerHTML = '<i class="fa-solid fa-users-gear"></i> QUẢN LÝ TÀI KHOẢN';
@@ -1377,17 +1392,30 @@ function renderAdminCumSanReviews() {
         `;
     }).join('');
 
-    // 6. Vẽ nút phân trang
+    // 6. Vẽ nút phân trang (Đồng bộ chuẩn rút gọn 1 ... 4 5 6 ... N)
     if (paginationContainer) {
         if (totalPages <= 1) {
             paginationContainer.innerHTML = '';
         } else {
-            let pHtml = `<button class="btn-outline-sm" ${adminReviewCurrentPage === 1 ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''} onclick="changeAdminReviewPage(${adminReviewCurrentPage - 1})" style="padding: 5px 10px;"><i class="fa-solid fa-chevron-left"></i></button>`;
-            for (let i = 1; i <= totalPages; i++) {
-                const active = i === adminReviewCurrentPage;
-                pHtml += `<button class="${active ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 5px 12px;" onclick="changeAdminReviewPage(${i})">${i}</button>`;
-            }
-            pHtml += `<button class="btn-outline-sm" ${adminReviewCurrentPage === totalPages ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''} onclick="changeAdminReviewPage(${adminReviewCurrentPage + 1})" style="padding: 5px 10px;"><i class="fa-solid fa-chevron-right"></i></button>`;
+            let pHtml = `<button class="btn-outline-sm" ${adminReviewCurrentPage === 1 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''} onclick="changeAdminReviewPage(${adminReviewCurrentPage - 1})" style="padding: 6px 12px;"><i class="fa-solid fa-chevron-left"></i></button>`;
+
+            const getPages = (current, total) => {
+                if (total <= 6) return Array.from({ length: total }, (_, i) => i + 1);
+                if (current <= 3) return [1, 2, 3, 4, '...', total];
+                if (current >= total - 2) return [1, '...', total - 3, total - 2, total - 1, total];
+                return [1, '...', current - 1, current, current + 1, '...', total];
+            };
+
+            getPages(adminReviewCurrentPage, totalPages).forEach(i => {
+                if (i === '...') {
+                    pHtml += `<span style="padding: 6px 10px; color: var(--text-muted); font-weight: bold;">...</span>`;
+                } else {
+                    const active = i === adminReviewCurrentPage;
+                    pHtml += `<button class="${active ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="changeAdminReviewPage(${i})">${i}</button>`;
+                }
+            });
+
+            pHtml += `<button class="btn-outline-sm" ${adminReviewCurrentPage === totalPages ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''} onclick="changeAdminReviewPage(${adminReviewCurrentPage + 1})" style="padding: 6px 12px;"><i class="fa-solid fa-chevron-right"></i></button>`;
             paginationContainer.innerHTML = pHtml;
         }
     }
@@ -1867,55 +1895,81 @@ function switchSanTab(tabId, element) {
 // Các biến toàn cục quản lý trạng thái của trang Giải Đấu
 let allGiaiDauData = []; 
 let currentGDPage = 1;
-const itemsPerGDPage = 5; // Số dòng trên mỗi trang
+const itemsPerGDPage = 5;
 let currentGDFilter = 'All';
 let currentGDSearch = '';
+let currentGDCumSan = 'All';
 
-// Biến lưu trữ hành động chuẩn bị duyệt/từ chối
 let pendingActionId = null;
 let pendingActionStatus = null;
 
-function renderQuanLyGiaiDau() {
+async function renderQuanLyGiaiDau() {
     currentGDPage = 1;
     currentGDFilter = 'All';
     currentGDSearch = '';
     currentGDDate = '';
+    currentGDCumSan = 'All';
     allGiaiDauData = [];
 
-    // 1. Cập nhật trạng thái Active trên Menu
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user') || '{}');
+    const isAdmin = currentUser.VaiTro === 'Admin';
+
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
-    const menuLink = Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('YÊU CẦU GIẢI ĐẤU'));
+    const menuLink = document.getElementById('menu-giaidau');
     if (menuLink) menuLink.classList.add('active');
 
-    // 2. Render khung giao diện chính (Tách khối Bộ lọc ra ngoài Panel chứa Table)
+    let cumSanFilterHtml = '';
+    if (isAdmin) {
+        try {
+            const csRes = await fetch(`${API_BASE_URL}/cum-san`);
+            const csJson = await csRes.json();
+            const opts = (csJson.data || []).map(cs => `<option value="${cs.MaCumSan || cs.ID}">${cs.TenCumSan}</option>`).join('');
+            cumSanFilterHtml = `
+                <div style="display: inline-flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 10px 0 12px; height: 40px; gap: 6px;">
+                    <i class="fa-solid fa-building-flag" style="color: var(--primary); font-size: 0.85rem;"></i>
+                    <span style="font-size: 0.82rem; font-weight: 600; color: #64748b; white-space: nowrap;">Cơ sở:</span>
+                    <select style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%;" onchange="currentGDCumSan=this.value; currentGDPage=1; applyGDFiltersAndRender();">
+                        <option value="All">Tất cả Cụm Sân</option>
+                        ${opts}
+                    </select>
+                </div>
+            `;
+        } catch (e) {}
+    }
+
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
         <div class="page-header" style="margin-bottom: 20px;">
             <div>
-                <h1 class="page-title">Quản lý Yêu cầu Giải đấu</h1>
-                <p class="text-muted">Kiểm tra ma trận lịch sân và xét duyệt các đơn đăng ký tổ chức giải đấu</p>
+                <h1 class="page-title">${isAdmin ? 'Giám sát Giải đấu Toàn hệ thống' : 'Quản lý Yêu cầu Giải đấu'}</h1>
+                <p class="text-muted">${isAdmin ? 'Theo dõi toàn bộ giải đấu, trạng thái xét duyệt của các Quản lý cụm sân và kiểm tra ma trận lịch sân.' : 'Kiểm tra ma trận lịch sân và xét duyệt các đơn đăng ký tổ chức giải đấu'}</p>
             </div>
-            <div style="background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; padding: 8px 16px; border-radius: 10px; font-size: 0.88rem; font-weight: 700; display: inline-flex; align-items: center; gap: 8px;">
-                <i class="fa-solid fa-hourglass-half" style="color: #ea580c;"></i>
-                <span>Đơn chờ duyệt: <strong id="gd-pending-count" style="color: #ea580c; font-size: 1.05rem;">0</strong></span>
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                ${isAdmin ? `<span style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; padding: 8px 14px; border-radius: 10px; font-size: 0.84rem; font-weight: 700;"><i class="fa-solid fa-eye"></i> Chế độ Giám sát (Chỉ xem)</span>` : ''}
+                <div style="background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; padding: 8px 16px; border-radius: 10px; font-size: 0.88rem; font-weight: 700; display: inline-flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-hourglass-half" style="color: #ea580c;"></i>
+                    <span>Đơn chờ duyệt: <strong id="gd-pending-count" style="color: #ea580c; font-size: 1.05rem;">0</strong></span>
+                </div>
             </div>
         </div>
         
         <div id="giaidau-alert" class="modal-alert" style="display: none; margin-bottom: 16px;"></div>
 
         <!-- KHỐI BỘ LỌC & TÌM KIẾM ĐỘC LẬP NẰM NGOÀI BẢNG -->
-        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px 20px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03); display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;">
-            <div style="position: relative; flex: 1; min-width: 260px;">
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px 20px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+            <div style="position: relative; flex: 1; min-width: 240px;">
                 <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #64748b; font-size: 0.9rem;"></i>
                 <input type="text" id="gd-search-input" class="form-control" style="padding-left: 38px; height: 40px; background: #f8fafc; border-color: #cbd5e1; border-radius: 9px; font-size: 0.9rem;" placeholder="Tìm tên khách hàng, tên sân, tên giải..." oninput="handleGDSearch(this.value)">
             </div>
 
             <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                ${cumSanFilterHtml}
+
                 <div style="display: inline-flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 6px 0 12px; height: 40px; gap: 6px;">
                     <i class="fa-regular fa-calendar" style="color: var(--primary); font-size: 0.88rem;"></i>
                     <span style="font-size: 0.82rem; font-weight: 600; color: #64748b; white-space: nowrap;">Ngày nộp:</span>
                     <input type="date" id="gd-date-filter" style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%;" onchange="handleGDDate(this.value)">
-                    <button type="button" onclick="document.getElementById('gd-date-filter').value=''; handleGDDate('');" title="Xem tất cả các ngày" style="background: #e2e8f0; border: none; color: #334155; padding: 4px 9px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: 0.15s;" onmouseover="this.style.background='#cbd5e1'" onmouseout="this.style.background='#e2e8f0'">
+                    <button type="button" onclick="document.getElementById('gd-date-filter').value=''; handleGDDate('');" title="Xem tất cả các ngày" style="background: #e2e8f0; border: none; color: #334155; padding: 4px 9px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer;">
                         Tất cả
                     </button>
                 </div>
@@ -1926,9 +1980,10 @@ function renderQuanLyGiaiDau() {
                     <select style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%; padding-right: 4px;" onchange="handleGDFilter(this.value)">
                         <option value="All">Tất cả trạng thái</option>
                         <option value="ChoDuyet">Chờ duyệt</option>
-                        <option value="DaDuyet">Đã duyệt</option>
+                        <option value="DaDuyet">Đã duyệt (Chờ khách đặt sân)</option>
+                        <option value="DaDatLich">Đã đặt lịch sân</option>
+                        <option value="QuaHanKhongDat">Hết hạn (Quá 3 ngày không đặt)</option>
                         <option value="TuChoi">Từ chối</option>
-                        <option value="HetHan">Hết hạn</option>
                         <option value="HoanThanh">Hoàn thành</option>
                         <option value="DaHuy">Đã hủy</option>
                     </select>
@@ -1942,12 +1997,12 @@ function renderQuanLyGiaiDau() {
                 <table class="admin-table" style="margin: 0;">
                     <thead style="background: #F8FAFC;">
                         <tr>
-                            <th>Khách Hàng</th>
-                            <th>Thông tin Giải đấu</th>
-                            <th>Lịch đá</th>
-                            <th>Ngày nộp</th>
-                            <th>Trạng thái</th>
-                            <th>Hành động</th>
+                            <th style="white-space: nowrap;">Khách Hàng</th>
+                            <th style="white-space: nowrap;">Thông tin Giải đấu</th>
+                            <th style="white-space: nowrap;">Lịch đá</th>
+                            <th style="white-space: nowrap;">Ngày nộp</th>
+                            <th style="text-align: center; white-space: nowrap;">Trạng thái</th>
+                            <th style="text-align: center; white-space: nowrap;">${isAdmin ? 'Tra cứu Lịch' : 'Hành động'}</th>
                         </tr>
                     </thead>
                     <tbody id="giaidau-table-body">
@@ -1985,20 +2040,15 @@ function renderQuanLyGiaiDau() {
 
 function handleGDDate(val) { currentGDDate = val; currentGDPage = 1; applyGDFiltersAndRender(); }
 
-// ----------------------------------------------------
-// HIỂN THỊ THÔNG BÁO TÙY CHỈNH
-// ----------------------------------------------------
 function showGDAlert(message, isSuccess) {
     const alertBox = document.getElementById('giaidau-alert');
+    if (!alertBox) return;
     alertBox.textContent = message;
     alertBox.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
     alertBox.style.display = 'block';
     setTimeout(() => { alertBox.style.display = 'none'; }, 3000);
 }
 
-// ----------------------------------------------------
-// GỌI API VÀ LỌC/PHÂN TRANG DỮ LIỆU
-// ----------------------------------------------------
 async function loadDanhSachGiaiDauAdmin() {
     try {
         const response = await fetch(`${API_BASE_URL}/admin/giai-dau`);
@@ -2006,40 +2056,52 @@ async function loadDanhSachGiaiDauAdmin() {
         
         if (res.success) {
             allGiaiDauData = res.data || [];
-            applyGDFiltersAndRender(); // Tiến hành lọc và vẽ bảng
+            applyGDFiltersAndRender();
         } else {
             showGDAlert(res.message || 'Lỗi tải dữ liệu', false);
         }
     } catch (error) {
-        document.getElementById('giaidau-table-body').innerHTML = `<tr><td colspan="6" class="text-center text-danger">Lỗi kết nối máy chủ!</td></tr>`;
+        const tbody = document.getElementById('giaidau-table-body');
+        if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">Lỗi kết nối máy chủ!</td></tr>`;
     }
 }
 
-// Hàm ghi nhận gõ phím tìm kiếm
 function handleGDSearch(value) {
     currentGDSearch = value.toLowerCase().trim();
-    currentGDPage = 1; // Về trang 1 khi tìm kiếm
+    currentGDPage = 1;
     applyGDFiltersAndRender();
 }
 
-// Hàm ghi nhận đổi bộ lọc trạng thái
 function handleGDFilter(value) {
     currentGDFilter = value;
-    currentGDPage = 1; // Về trang 1 khi lọc
+    currentGDPage = 1;
     applyGDFiltersAndRender();
+}
+
+// Hàm phân biệt rõ 2 nhánh của trạng thái 'HetHan':
+// - Có lịch đặt sân (so_tran_da_dat > 0) -> 'DaDatLich' (Khách đã đặt sân xong)
+// - Không có lịch đặt sân (so_tran_da_dat === 0) -> 'QuaHanKhongDat' (Quá 3 ngày không đặt sân)
+function getEffectiveGDStatus(item) {
+    if (item.TrangThai === 'HetHan') {
+        const soTran = Number(item.so_tran_da_dat ?? (Array.isArray(item.dat_sans) ? item.dat_sans.length : 0));
+        return soTran > 0 ? 'DaDatLich' : 'QuaHanKhongDat';
+    }
+    return item.TrangThai;
 }
 
 function applyGDFiltersAndRender() {
-    // 1. Tính tổng số yêu cầu "Chờ duyệt" (Tính trên tổng data gốc)
-    const totalPending = allGiaiDauData.filter(item => item.TrangThai === 'ChoDuyet').length;
-    document.getElementById('gd-pending-count').innerText = totalPending;
+    const baseByCluster = currentGDCumSan === 'All'
+        ? allGiaiDauData
+        : allGiaiDauData.filter(item => String(item.MaCumSan || item.ID_CumSan) === String(currentGDCumSan));
 
-    // 2. Lọc dữ liệu theo Trạng thái và Từ khóa
-    let filteredData = allGiaiDauData.filter(item => {
-        // Lọc trạng thái
-        const matchStatus = (currentGDFilter === 'All' || item.TrangThai === currentGDFilter);
+    const totalPending = baseByCluster.filter(item => item.TrangThai === 'ChoDuyet').length;
+    const pendingEl = document.getElementById('gd-pending-count');
+    if (pendingEl) pendingEl.innerText = totalPending;
+
+    let filteredData = baseByCluster.filter(item => {
+        const effectiveStatus = getEffectiveGDStatus(item);
+        const matchStatus = (currentGDFilter === 'All' || effectiveStatus === currentGDFilter);
         
-        // Lọc tìm kiếm
         const tenGiai = item.TenGiaiDau ? item.TenGiaiDau.toLowerCase() : '';
         const tenSan = item.cum_san ? item.cum_san.TenCumSan.toLowerCase() : '';
         const tenKhach = item.nguoi_dung ? item.nguoi_dung.HoTen.toLowerCase() : '';
@@ -2049,7 +2111,6 @@ function applyGDFiltersAndRender() {
         return matchStatus && matchSearch && matchDate;
     });
 
-    // 3. Tính toán phân trang
     const totalItems = filteredData.length;
     const totalPages = Math.ceil(totalItems / itemsPerGDPage) || 1;
     if (currentGDPage > totalPages) currentGDPage = totalPages;
@@ -2057,13 +2118,14 @@ function applyGDFiltersAndRender() {
     const startIdx = (currentGDPage - 1) * itemsPerGDPage;
     const pageData = filteredData.slice(startIdx, startIdx + itemsPerGDPage);
 
-    // 4. Render Bảng và Nút phân trang
     renderGDTable(pageData);
     renderGDPagination(totalPages);
 }
 
 function renderGDTable(data) {
     const tbody = document.getElementById('giaidau-table-body');
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user') || '{}');
+    const isAdmin = currentUser.VaiTro === 'Admin';
     
     if (data.length === 0) {
         tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="text-align: center; padding: 40px;">Không tìm thấy dữ liệu phù hợp.</td></tr>`;
@@ -2072,65 +2134,93 @@ function renderGDTable(data) {
 
     const statusTextMap = {
         'ChoDuyet': 'Chờ duyệt',
-        'DaDuyet': 'Đã duyệt',
+        'DaDuyet': 'Đã duyệt (Chờ đặt sân)',
+        'DaDatLich': 'Đã đặt lịch sân',
+        'QuaHanKhongDat': 'Hết hạn (Không đặt sân)',
         'TuChoi': 'Từ chối',
-        'HetHan': 'Hết hạn',
         'HoanThanh': 'Hoàn thành',
         'DaHuy': 'Đã hủy'
     };
 
     tbody.innerHTML = data.map(item => {
-        let badgeColor = '#6b7280', badgeBg = '#f3f4f6'; // Mặc định (Trắng xám)
-        if(item.TrangThai === 'ChoDuyet') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; } // Vàng cam
-        else if(item.TrangThai === 'DaDuyet') { badgeColor = '#047857'; badgeBg = '#d1fae5'; } // Xanh lá
-        else if(item.TrangThai === 'TuChoi') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; } // Đỏ nhạt
-        else if(item.TrangThai === 'DaHuy') { badgeColor = '#7f1d1d'; badgeBg = '#fca5a5'; } // Đỏ đậm
-        else if(item.TrangThai === 'HoanThanh') { badgeColor = '#1d4ed8'; badgeBg = '#dbeafe'; } // Xanh dương
-        else if(item.TrangThai === 'HetHan') { badgeColor = '#475569'; badgeBg = '#e2e8f0'; } // Xám đậm
+        const effectiveStatus = getEffectiveGDStatus(item);
+        const soTranDaDat = Number(item.so_tran_da_dat ?? 0);
 
-        const viStatus = statusTextMap[item.TrangThai] || item.TrangThai;
-        
-        const badgeHtml = `<span style="padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor}; display: inline-block; text-align: center; min-width: 90px; white-space: nowrap;">${viStatus}</span>`;
+        let badgeColor = '#6b7280', badgeBg = '#f3f4f6';
+        if (effectiveStatus === 'ChoDuyet') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; }
+        else if (effectiveStatus === 'DaDuyet') { badgeColor = '#047857'; badgeBg = '#d1fae5'; }
+        else if (effectiveStatus === 'DaDatLich') { badgeColor = '#0369a1'; badgeBg = '#e0f2fe'; }
+        else if (effectiveStatus === 'QuaHanKhongDat') { badgeColor = '#64748b'; badgeBg = '#f1f5f9'; }
+        else if (effectiveStatus === 'TuChoi') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; }
+        else if (effectiveStatus === 'DaHuy') { badgeColor = '#7f1d1d'; badgeBg = '#fca5a5'; }
+        else if (effectiveStatus === 'HoanThanh') { badgeColor = '#1d4ed8'; badgeBg = '#dbeafe'; }
 
-        // Hành động Mở Modal thay vì gọi thẳng hàm
+        let viStatus = statusTextMap[effectiveStatus] || item.TrangThai;
+        if (effectiveStatus === 'DaDatLich' && soTranDaDat > 0) {
+            viStatus = `Đã đặt lịch (${soTranDaDat} trận)`;
+        }
+
+        const badgeHtml = `<span style="padding: 6px 12px; border-radius: 20px; font-size: 0.82rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor}; display: inline-block; text-align: center; min-width: 90px; white-space: nowrap;">${viStatus}</span>`;
+
+        const lyDoHtml = (item.TrangThai === 'TuChoi' && item.LyDoHuy)
+            ? `<div style="font-size: 0.78rem; color: #dc2626; margin-top: 4px; font-style: italic;">Lý do từ chối: ${item.LyDoHuy}</div>`
+            : (effectiveStatus === 'QuaHanKhongDat'
+                ? `<div style="font-size: 0.76rem; color: #64748b; margin-top: 3px; font-style: italic;"><i class="fa-regular fa-clock"></i> Quá hạn 3 ngày khách không đặt lịch sân</div>`
+                : '');
+
         let actionHtml = '';
-        if (item.TrangThai === 'ChoDuyet') {
+        if (isAdmin) {
+            // ADMIN: Nút Xem Ma trận lịch luôn nằm gọn trên 1 dòng (white-space: nowrap)
+            actionHtml = `
+                <button type="button" class="btn-outline-sm" style="padding: 7px 14px; border-radius: 8px; border: 1px solid #bfdbfe; background: #eff6ff; color: #2563eb; font-weight: 600; font-size: 0.82rem; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; cursor: pointer;" onclick="openMaTranLichModal('${item.ID}')">
+                    <i class="fa-regular fa-calendar-days"></i> Xem Ma trận lịch
+                </button>
+            `;
+        } else if (item.TrangThai === 'ChoDuyet') {
             actionHtml = `
                 <div style="display: inline-flex; flex-direction: column; gap: 6px; min-width: 176px;">
-                    <button type="button" class="btn-outline-sm" style="width: 100%; padding: 6px 12px; border-radius: 8px; border: 1px solid #bfdbfe; background: #eff6ff; color: #2563eb; font-weight: 600; font-size: 0.82rem; display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; transition: all 0.18s ease;" onmouseover="this.style.background='#dbeafe'; this.style.borderColor='#93c5fd';" onmouseout="this.style.background='#eff6ff'; this.style.borderColor='#bfdbfe';" onclick="openMaTranLichModal('${item.ID}')">
+                    <button type="button" class="btn-outline-sm" style="width: 100%; padding: 6px 12px; border-radius: 8px; border: 1px solid #bfdbfe; background: #eff6ff; color: #2563eb; font-weight: 600; font-size: 0.82rem; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; cursor: pointer;" onclick="openMaTranLichModal('${item.ID}')">
                         <i class="fa-regular fa-calendar-days"></i> Kiểm tra Lịch
                     </button>
                     <div style="display: flex; gap: 6px; width: 100%;">
-                        <button type="button" class="btn-outline-sm" style="flex: 1; padding: 6px 10px; border-radius: 8px; border: 1px solid #86efac; background: #f0fdf4; color: #15803d; font-weight: 700; font-size: 0.82rem; display: inline-flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; cursor: pointer; transition: all 0.18s ease;" onmouseover="this.style.background='#16a34a'; this.style.color='#ffffff'; this.style.borderColor='#16a34a';" onmouseout="this.style.background='#f0fdf4'; this.style.color='#15803d'; this.style.borderColor='#86efac';" onclick="openGDConfirmModal('${item.ID}', 'DaDuyet')">
+                        <button type="button" class="btn-outline-sm" style="flex: 1; padding: 6px 10px; border-radius: 8px; border: 1px solid #86efac; background: #f0fdf4; color: #15803d; font-weight: 700; font-size: 0.82rem; display: inline-flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; cursor: pointer;" onclick="openGDConfirmModal('${item.ID}', 'DaDuyet')">
                             <i class="fa-solid fa-check"></i> Duyệt
                         </button>
-                        <button type="button" class="btn-outline-sm" style="flex: 1; padding: 6px 10px; border-radius: 8px; border: 1px solid #fecaca; background: #fef2f2; color: #dc2626; font-weight: 700; font-size: 0.82rem; display: inline-flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; cursor: pointer; transition: all 0.18s ease;" onmouseover="this.style.background='#ef4444'; this.style.color='#ffffff'; this.style.borderColor='#ef4444';" onmouseout="this.style.background='#fef2f2'; this.style.color='#dc2626'; this.style.borderColor='#fecaca';" onclick="openGDConfirmModal('${item.ID}', 'TuChoi')">
+                        <button type="button" class="btn-outline-sm" style="flex: 1; padding: 6px 10px; border-radius: 8px; border: 1px solid #fecaca; background: #fef2f2; color: #dc2626; font-weight: 700; font-size: 0.82rem; display: inline-flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; cursor: pointer;" onclick="openGDConfirmModal('${item.ID}', 'TuChoi')">
                             <i class="fa-solid fa-xmark"></i> Từ chối
                         </button>
                     </div>
                 </div>
             `;
         } else {
-            actionHtml = `<span style="color: var(--text-muted); font-size: 0.85rem;">Không có hành động</span>`;
+            actionHtml = `<span style="color: var(--text-muted); font-size: 0.85rem; white-space: nowrap;">Đã xử lý</span>`;
         }
 
         return `
             <tr>
-                <td>
+                <td style="white-space: nowrap;">
                     <strong style="color: var(--text-dark);">${item.nguoi_dung ? item.nguoi_dung.HoTen : 'N/A'}</strong><br>
                     <span style="font-size: 0.85rem; color: var(--text-muted);">${item.nguoi_dung ? item.nguoi_dung.SoDienThoai : ''}</span>
                 </td>
-                <td>
-                    <strong style="color: var(--primary);">${item.TenGiaiDau}</strong><br>
-                    <span style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-solid fa-location-dot"></i> ${item.cum_san ? item.cum_san.TenCumSan : 'N/A'}</span>
+                <td style="min-width: 240px;">
+                    <div style="display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; white-space: nowrap;">
+                        <strong style="color: var(--primary);">${item.TenGiaiDau}</strong>
+                        <span style="font-family: monospace; font-size: 0.78rem; color: #64748b; white-space: nowrap;">(#GD-${item.MaGiaiDau || item.ID})</span>
+                    </div>
+                    <div style="font-size: 0.85rem; color: var(--text-muted); white-space: nowrap; margin-top: 2px;">
+                        <i class="fa-solid fa-location-dot"></i> ${item.cum_san ? item.cum_san.TenCumSan : 'N/A'}
+                    </div>
+                    ${lyDoHtml}
                 </td>
-                <td>
-                    <span style="font-size: 0.9rem;">${item.NgayBatDau}</span><br>
-                    <span style="font-size: 0.9rem; color: var(--text-muted);">đến ${item.NgayKetThuc}</span>
+                <td style="white-space: nowrap;">
+                    <span style="font-size: 0.9rem; font-weight: 600; color: #0f172a;">${item.NgayBatDau}</span><br>
+                    <span style="font-size: 0.84rem; color: var(--text-muted);">đến ${item.NgayKetThuc}</span>
                 </td>
-                <td>${item.NgayTao ? item.NgayTao.substring(0,10) : 'N/A'}</td>
-                <td>${badgeHtml}</td>
-                <td>${actionHtml}</td>
+                <td style="white-space: nowrap; font-weight: 500; color: #334155;">
+                    ${item.NgayTao ? item.NgayTao.substring(0,10) : 'N/A'}
+                </td>
+                <td style="text-align: center; white-space: nowrap;">${badgeHtml}</td>
+                <td style="text-align: center; white-space: nowrap;">${actionHtml}</td>
             </tr>
         `;
     }).join('');
@@ -2564,53 +2654,82 @@ async function markAsRead(id, element) {
 // ======================================================
 let allDatSanData = [];
 let currentDSPage = 1;
-const itemsPerDSPage = 5; // Phân trang theo đơn vị 5 Hóa đơn / 1 trang (giữ trọn vẹn các trận trong cùng 1 hóa đơn)
+const itemsPerDSPage = 5;
 let currentDSFilter = 'DaCoc';
-let currentDSDate = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10); // Mặc định hiển thị ngày hôm nay
+let currentDSDate = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10);
 let currentDSSearch = '';
+let currentDSCumSan = 'All';
 
-function renderQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = null) {
-    currentDSPage = 1; currentDSFilter = defaultStatus; currentDSSearch = ''; 
+async function renderQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = null) {
+    currentDSPage = 1;
+    currentDSFilter = defaultStatus;
+    currentDSSearch = '';
+    currentDSCumSan = 'All';
+
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user') || '{}');
+    const isAdmin = currentUser.VaiTro === 'Admin';
 
     if (defaultDate !== null) {
         currentDSDate = defaultDate;
     } else {
-        currentDSDate = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10);
+        currentDSDate = isAdmin ? '' : new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10);
     }
 
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
-    const menuLink = Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('QUẢN LÝ ĐẶT SÂN'));
+    const menuLink = document.getElementById('menu-datsan');
     if (menuLink) menuLink.classList.add('active');
+
+    let cumSanFilterHtml = '';
+    if (isAdmin) {
+        try {
+            const csRes = await fetch(`${API_BASE_URL}/cum-san`);
+            const csJson = await csRes.json();
+            const opts = (csJson.data || []).map(cs => `<option value="${cs.MaCumSan || cs.ID}">${cs.TenCumSan}</option>`).join('');
+            cumSanFilterHtml = `
+                <div style="display: inline-flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 10px 0 12px; height: 40px; gap: 6px;">
+                    <i class="fa-solid fa-building-flag" style="color: var(--primary); font-size: 0.85rem;"></i>
+                    <span style="font-size: 0.82rem; font-weight: 600; color: #64748b; white-space: nowrap;">Cơ sở:</span>
+                    <select style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%;" onchange="currentDSCumSan=this.value; currentDSPage=1; applyDSFiltersAndRender();">
+                        <option value="All">Tất cả Cụm Sân</option>
+                        ${opts}
+                    </select>
+                </div>
+            `;
+        } catch (e) {}
+    }
 
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
         <div class="page-header" style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
             <div>
-                <h1 class="page-title">Quản lý Lịch Đặt Sân</h1>
-                <p class="text-muted">Chốt trạng thái khách đến sân, hỗ trợ dời lịch và quản lý theo từng Hóa đơn đặt sân.</p>
+                <h1 class="page-title">${isAdmin ? 'Giám sát Đặt Sân & Hóa Đơn Toàn hệ thống' : 'Quản lý Lịch Đặt Sân'}</h1>
+                <p class="text-muted">${isAdmin ? 'Tra cứu hóa đơn đặt sân, lịch sử xử lý vé của nhân sự và xuất in hóa đơn tại tất cả các cụm sân.' : 'Chốt trạng thái khách đến sân, hỗ trợ dời lịch và quản lý theo từng Hóa đơn đặt sân.'}</p>
             </div>
-            <button type="button" class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 10px; background: #0f172a; border-color: #0f172a; font-weight: 700; box-shadow: 0 4px 10px rgba(15, 23, 42, 0.15); white-space: nowrap;" onclick="openAdminQrScannerModal()">
-                <i class="fa-solid fa-qrcode" style="color: #4ade80;"></i> Quét mã vé QR
-            </button>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                ${isAdmin ? `<span style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; padding: 8px 14px; border-radius: 10px; font-size: 0.84rem; font-weight: 700;"><i class="fa-solid fa-eye"></i> Chế độ Giám sát (Chỉ xem & Xuất HĐ)</span>` : ''}
+                <button type="button" class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 10px; background: #0f172a; border-color: #0f172a; font-weight: 700; box-shadow: 0 4px 10px rgba(15, 23, 42, 0.15); white-space: nowrap;" onclick="openAdminQrScannerModal()">
+                    <i class="fa-solid fa-qrcode" style="color: #4ade80;"></i> Quét mã vé QR
+                </button>
+            </div>
         </div>
 
         <div id="datsan-alert" class="modal-alert" style="display: none; margin-bottom: 16px;"></div>
 
         <!-- KHỐI BỘ LỌC & TÌM KIẾM ĐỘC LẬP NẰM NGOÀI BẢNG -->
-        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px 20px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03); display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;">
-            <!-- Ô tìm kiếm từ khóa -->
-            <div style="position: relative; flex: 1; min-width: 260px;">
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px 20px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+            <div style="position: relative; flex: 1; min-width: 240px;">
                 <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #64748b; font-size: 0.9rem;"></i>
                 <input type="text" id="ds-search-input" class="form-control" style="padding-left: 38px; height: 40px; background: #f8fafc; border-color: #cbd5e1; border-radius: 9px; font-size: 0.9rem;" placeholder="Tìm Mã HĐ, Mã vé (#PT-..., #GD-...), SĐT, Tên khách..." oninput="handleDSSearch(this.value)">
             </div>
 
-            <!-- Cụm lọc Ngày đá & Trạng thái Hóa đơn -->
             <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                ${cumSanFilterHtml}
+
                 <div style="display: inline-flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 6px 0 12px; height: 40px; gap: 6px;">
                     <i class="fa-regular fa-calendar" style="color: var(--primary); font-size: 0.88rem;"></i>
                     <span style="font-size: 0.82rem; font-weight: 600; color: #64748b; white-space: nowrap;">Ngày đá:</span>
                     <input type="date" id="ds-date-input" style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%;" onchange="handleDSDate(this.value)">
-                    <button type="button" onclick="document.getElementById('ds-date-input').value=''; handleDSDate('');" title="Xem tất cả các ngày" style="background: #e2e8f0; border: none; color: #334155; padding: 4px 9px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: 0.15s;" onmouseover="this.style.background='#cbd5e1'" onmouseout="this.style.background='#e2e8f0'">
+                    <button type="button" onclick="document.getElementById('ds-date-input').value=''; handleDSDate('');" title="Xem tất cả các ngày" style="background: #e2e8f0; border: none; color: #334155; padding: 4px 9px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer;">
                         Tất cả
                     </button>
                 </div>
@@ -2618,7 +2737,7 @@ function renderQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = null) {
                 <div style="display: inline-flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 10px 0 12px; height: 40px; gap: 6px;">
                     <i class="fa-solid fa-filter" style="color: var(--primary); font-size: 0.85rem;"></i>
                     <span style="font-size: 0.82rem; font-weight: 600; color: #64748b; white-space: nowrap;">Trạng thái HĐ:</span>
-                    <select id="ds-status-select" style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%; padding-right: 4px;" onchange="handleDSFilter(this.value)" title="Lọc theo trạng thái Hóa đơn đặt sân">
+                    <select id="ds-status-select" style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%; padding-right: 4px;" onchange="handleDSFilter(this.value)">
                         <option value="All" ${defaultStatus === 'All' ? 'selected' : ''}>Tất cả trạng thái</option>
                         <option value="DaCoc" ${defaultStatus === 'DaCoc' ? 'selected' : ''}>Đã cọc</option>
                         <option value="HoanThanh" ${defaultStatus === 'HoanThanh' ? 'selected' : ''}>Hoàn thành</option>
@@ -2641,7 +2760,7 @@ function renderQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = null) {
                             <th>Khung giờ</th>
                             <th>Giá sân / Cọc</th>
                             <th>Trạng thái</th>
-                            <th style="text-align: center;">Chốt sân</th>
+                            <th style="text-align: center;">${isAdmin ? 'Chi tiết' : 'Chốt sân'}</th>
                         </tr>
                     </thead>
                     <tbody id="datsan-table-body">
@@ -2659,6 +2778,7 @@ function renderQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = null) {
 
 function showDSAlert(message, isSuccess) {
     const alertBox = document.getElementById('datsan-alert');
+    if (!alertBox) return;
     alertBox.textContent = message; 
     alertBox.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
     alertBox.style.display = 'block'; 
@@ -2677,7 +2797,6 @@ async function loadDanhSachDatSanAdmin() {
     } catch (error) { showDSAlert('Lỗi kết nối máy chủ.', false); }
 }
 
-// Hàm tạo toàn bộ các biến thể mã vé (mới & cũ) của 1 dòng Đặt sân để tìm kiếm bất chấp định dạng
 function getBookingCodeVariants(item) {
     const rawId = String(item.MaDatSan || item.ID || '').toUpperCase().trim();
     const rawGiaiId = String(item.MaGiaiDau || item.ID_GiaiDau || '').toUpperCase().trim();
@@ -2719,7 +2838,6 @@ function getBookingCodeVariants(item) {
     return variants;
 }
 
-// Hàm lấy Trạng thái của Hóa đơn đặt sân (Ưu tiên lấy từ HoaDonDatSan.TrangThai)
 function getInvoiceStatusAdmin(hoaDonObj, items = []) {
     if (hoaDonObj && hoaDonObj.TrangThai) {
         return hoaDonObj.TrangThai;
@@ -2735,11 +2853,16 @@ function getInvoiceStatusAdmin(hoaDonObj, items = []) {
 function applyDSFiltersAndRender() {
     const searchTerm = currentDSSearch.toLowerCase().trim().replace(/^#/, '');
 
-    // BƯỚC 1: Gom nhóm toàn bộ các đặt sân theo Hóa đơn (Nếu là Giải đấu thì đảm bảo gom chung toàn bộ các trận của giải đó vào 1 Hóa đơn)
     const invoiceMap = new Map();
     const tournamentKeyMap = new Map();
 
     allDatSanData.forEach(item => {
+        // Lọc theo Cụm sân nếu Admin đang chọn 1 cơ sở cụ thể
+        if (currentDSCumSan !== 'All') {
+            const itemCS = item.san_bong ? String(item.san_bong.MaCumSan || item.san_bong.ID_CumSan) : '';
+            if (itemCS !== String(currentDSCumSan)) return;
+        }
+
         const maGiai = item.MaGiaiDau || item.ID_GiaiDau || null;
         let key = item.MaHoaDonDatSan ? String(item.MaHoaDonDatSan) : ('LE_' + (item.MaDatSan || item.ID));
 
@@ -2769,7 +2892,6 @@ function applyDSFiltersAndRender() {
         group.items.push(item);
     });
 
-    // Sắp xếp các trận bên trong mỗi hóa đơn theo Ngày đá và Giờ bắt đầu tăng dần
     const allInvoiceGroups = Array.from(invoiceMap.values()).map(group => {
         group.items.sort((a, b) => {
             const dateCmp = String(a.NgayDa || '').localeCompare(String(b.NgayDa || ''));
@@ -2782,17 +2904,12 @@ function applyDSFiltersAndRender() {
         return group;
     });
 
-    // BƯỚC 2: Lọc theo cấp độ HÓA ĐƠN ĐẶT SÂN
     const filteredGroups = allInvoiceGroups.filter(group => {
-        // 2.1. Lọc theo Trạng thái của Hóa đơn đặt sân
         const matchStatus = (currentDSFilter === 'All' || group.trangThaiHoaDon === currentDSFilter);
-
-        // 2.2. Lọc theo Ngày đá (Nếu hóa đơn có ít nhất 1 trận đá trong ngày đang chọn -> Hiển thị trọn vẹn hóa đơn đó)
         const matchDate = currentDSDate
             ? group.items.some(item => item.NgayDa === currentDSDate)
             : true;
 
-        // 2.3. Lọc theo Từ khóa tìm kiếm (Khớp mã HĐ hoặc bất kỳ trận nào trong HĐ)
         const maHDLower = String(group.maHoaDon || '').toLowerCase();
         const matchInvoiceCode = searchTerm !== '' && (maHDLower.includes(searchTerm) || (`#${maHDLower}`).includes(searchTerm));
 
@@ -2806,20 +2923,13 @@ function applyDSFiltersAndRender() {
             const cumSan = (item.san_bong && item.san_bong.cum_san) ? item.san_bong.cum_san.TenCumSan.toLowerCase() : '';
             const tenGiai = (item.ID_GiaiDau !== null && item.giai_dau) ? item.giai_dau.TenGiaiDau.toLowerCase() : '';
 
-            return matchCode
-                || sdt.includes(searchTerm)
-                || tenKhach.includes(searchTerm)
-                || tenSan.includes(searchTerm)
-                || cumSan.includes(searchTerm)
-                || tenGiai.includes(searchTerm);
+            return matchCode || sdt.includes(searchTerm) || tenKhach.includes(searchTerm) || tenSan.includes(searchTerm) || cumSan.includes(searchTerm) || tenGiai.includes(searchTerm);
         });
 
         const matchSearch = searchTerm === '' || matchInvoiceCode || matchAnyItemSearch;
-
         return matchStatus && matchDate && matchSearch;
     });
 
-    // BƯỚC 3: Phân trang theo số lượng HÓA ĐƠN (Không cắt lẻ các trận trong cùng 1 hóa đơn)
     const totalPages = Math.ceil(filteredGroups.length / itemsPerDSPage) || 1;
     if (currentDSPage > totalPages) currentDSPage = totalPages;
     const startIdx = (currentDSPage - 1) * itemsPerDSPage;
@@ -2830,6 +2940,9 @@ function applyDSFiltersAndRender() {
 
 function renderDSTable(invoiceGroups) {
     const tbody = document.getElementById('datsan-table-body');
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user') || '{}');
+    const isAdmin = currentUser.VaiTro === 'Admin';
+
     if (!invoiceGroups || invoiceGroups.length === 0) {
         return tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="text-align: center; padding: 40px;">Không có dữ liệu.</td></tr>`;
     }
@@ -2851,7 +2964,6 @@ function renderDSTable(invoiceGroups) {
         const trangThaiHD = group.trangThaiHoaDon || getInvoiceStatusAdmin(hdObj, allMatchesInInvoice);
         const conPhaiThuHD = (trangThaiHD === 'DaHuy') ? 0 : Math.max(0, tongHD - cocHD);
 
-        // Badge trạng thái của Hóa đơn đặt sân
         let hdBadgeColor = '#6b7280', hdBadgeBg = '#f3f4f6', hdViStatus = trangThaiHD;
         if (trangThaiHD === 'DaCoc') { hdBadgeColor = '#b45309'; hdBadgeBg = '#fef3c7'; hdViStatus = 'Đã cọc'; }
         else if (trangThaiHD === 'DaHuy') { hdBadgeColor = '#b91c1c'; hdBadgeBg = '#fee2e2'; hdViStatus = 'Đã hủy'; }
@@ -2860,7 +2972,6 @@ function renderDSTable(invoiceGroups) {
 
         const hdStatusBadgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 700; background: ${hdBadgeBg}; color: ${hdBadgeColor}; border: 1px solid rgba(0,0,0,0.06); white-space: nowrap;">${hdViStatus}</span>`;
 
-        // Vẽ thanh Header của Hóa Đơn Đặt Sân
         if (group.maHoaDon) {
             html += `
                 <tr style="background: #f0fdf4; border-top: 2px solid #86efac; border-bottom: 1px solid #bbf7d0;">
@@ -2882,7 +2993,7 @@ function renderDSTable(invoiceGroups) {
                                 <button type="button" class="btn-outline-sm" style="background: #fff; color: #2563eb; border-color: #93c5fd; padding: 5px 11px; font-size: 0.8rem; font-weight: 700; white-space: nowrap;" onclick="printAdminBookingInvoice('${group.maHoaDon}')">
                                     <i class="fa-solid fa-print"></i> Xuất hóa đơn
                                 </button>
-                                ${activeDaCocCount > 0 ? `
+                                ${(!isAdmin && activeDaCocCount > 0) ? `
                                 <button type="button" class="btn-outline-sm" style="background: #fef2f2; color: #dc2626; border-color: #fca5a5; padding: 5px 11px; font-size: 0.8rem; font-weight: 700; white-space: nowrap;" onclick="openAdminCancelInvoiceModal('${group.maHoaDon}', ${activeDaCocCount}, ${isMember}, '${tenKhach.replace(/'/g, "\\'")}', '${emailKhach}', ${cocHD})">
                                     <i class="fa-solid fa-ban"></i> Hủy lịch / Hóa đơn (${activeDaCocCount} trận)
                                 </button>` : ''}
@@ -2893,7 +3004,6 @@ function renderDSTable(invoiceGroups) {
             `;
         }
 
-        // Vẽ toàn bộ các dòng trận đấu thuộc hóa đơn này ngay bên dưới
         group.items.forEach(item => {
             let badgeColor = '#6b7280', badgeBg = '#f3f4f6', viStatus = item.TrangThai;
             if(item.TrangThai === 'DaCoc') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; viStatus = 'Đã cọc'; }
@@ -2921,7 +3031,13 @@ function renderDSTable(invoiceGroups) {
                 : '';
 
             let actionHtml = '';
-            if (item.TrangThai === 'DaCoc') {
+            if (isAdmin) {
+                actionHtml = `
+                    <button type="button" class="btn-outline-sm" style="padding: 5px 10px; font-size: 0.8rem; white-space: nowrap;" onclick="event.stopPropagation(); openBookingDetailModalAdmin('${item.ID}')">
+                        <i class="fa-solid fa-eye"></i> Xem vé
+                    </button>
+                `;
+            } else if (item.TrangThai === 'DaCoc') {
                 actionHtml = `
                     <div style="display: inline-flex; gap: 6px; align-items: center;">
                         <button type="button" class="btn-outline-sm" style="padding: 6px 10px; font-size: 0.82rem; white-space: nowrap; color: #2563eb; border-color: #bfdbfe; background: #eff6ff; font-weight: 700;" onclick="event.stopPropagation(); openAdminRescheduleModal('${item.ID}')">
@@ -3597,45 +3713,72 @@ const itemsPerUCPage = 5;
 let currentUCFilter = 'All';
 let currentUCSearch = '';
 let currentUCDate = '';
+let currentUCCumSan = 'All';
 let pendingUCId = null;
 let pendingUCStatus = null;
 
-function renderQuanLyHuySan() {
-    currentUCPage = 1; currentUCFilter = 'All'; currentUCSearch = ''; currentUCDate = '';
+async function renderQuanLyHuySan() {
+    currentUCPage = 1; currentUCFilter = 'All'; currentUCSearch = ''; currentUCDate = ''; currentUCCumSan = 'All';
     
-    // Cập nhật thẻ Active trên Menu
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user') || '{}');
+    const isAdmin = currentUser.VaiTro === 'Admin';
+
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
-    const menuLink = Array.from(document.querySelectorAll('.sidebar-nav a')).find(a => a.textContent.includes('YÊU CẦU HỦY SÂN'));
+    const menuLink = document.getElementById('menu-huysan');
     if (menuLink) menuLink.classList.add('active');
+
+    let cumSanFilterHtml = '';
+    if (isAdmin) {
+        try {
+            const csRes = await fetch(`${API_BASE_URL}/cum-san`);
+            const csJson = await csRes.json();
+            const opts = (csJson.data || []).map(cs => `<option value="${cs.MaCumSan || cs.ID}">${cs.TenCumSan}</option>`).join('');
+            cumSanFilterHtml = `
+                <div style="display: inline-flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 10px 0 12px; height: 40px; gap: 6px;">
+                    <i class="fa-solid fa-building-flag" style="color: var(--primary); font-size: 0.85rem;"></i>
+                    <span style="font-size: 0.82rem; font-weight: 600; color: #64748b; white-space: nowrap;">Cơ sở:</span>
+                    <select style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%;" onchange="currentUCCumSan=this.value; currentUCPage=1; applyUCFiltersAndRender();">
+                        <option value="All">Tất cả Cụm Sân</option>
+                        ${opts}
+                    </select>
+                </div>
+            `;
+        } catch (e) {}
+    }
 
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
         <div class="page-header" style="margin-bottom: 20px;">
             <div>
-                <h1 class="page-title">Quản lý Yêu cầu Hủy Sân Gấp</h1>
-                <p class="text-muted">Xét duyệt các yêu cầu hủy lịch sát giờ và hoàn tiền cọc cho khách hàng</p>
+                <h1 class="page-title">${isAdmin ? 'Giám sát Yêu cầu Hủy Sân Gấp' : 'Quản lý Yêu cầu Hủy Sân Gấp'}</h1>
+                <p class="text-muted">${isAdmin ? 'Theo dõi các đơn xin hủy sân sát giờ và trạng thái phê duyệt hoàn tiền của Quản lý các cơ sở.' : 'Xét duyệt các yêu cầu hủy lịch sát giờ và hoàn tiền cọc cho khách hàng'}</p>
             </div>
-            <div style="background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; padding: 8px 16px; border-radius: 10px; font-size: 0.88rem; font-weight: 700; display: inline-flex; align-items: center; gap: 8px;">
-                <i class="fa-solid fa-clock-rotate-left" style="color: #ea580c;"></i>
-                <span>Đơn chờ duyệt: <strong id="uc-pending-count" style="color: #ea580c; font-size: 1.05rem;">0</strong></span>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                ${isAdmin ? `<span style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; padding: 8px 14px; border-radius: 10px; font-size: 0.84rem; font-weight: 700;"><i class="fa-solid fa-eye"></i> Chế độ Giám sát (Chỉ xem)</span>` : ''}
+                <div style="background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; padding: 8px 16px; border-radius: 10px; font-size: 0.88rem; font-weight: 700; display: inline-flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-clock-rotate-left" style="color: #ea580c;"></i>
+                    <span>Đơn chờ duyệt: <strong id="uc-pending-count" style="color: #ea580c; font-size: 1.05rem;">0</strong></span>
+                </div>
             </div>
         </div>
         
         <div id="huysan-alert" class="modal-alert" style="display: none; margin-bottom: 16px;"></div>
 
         <!-- KHỐI BỘ LỌC & TÌM KIẾM ĐỘC LẬP NẰM NGOÀI BẢNG -->
-        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px 20px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03); display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;">
-            <div style="position: relative; flex: 1; min-width: 260px;">
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px 20px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+            <div style="position: relative; flex: 1; min-width: 240px;">
                 <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #64748b; font-size: 0.9rem;"></i>
                 <input type="text" class="form-control" style="padding-left: 38px; height: 40px; background: #f8fafc; border-color: #cbd5e1; border-radius: 9px; font-size: 0.9rem;" placeholder="Tìm tên khách, tên sân, cụm sân..." oninput="handleUCSearch(this.value)">
             </div>
 
             <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                ${cumSanFilterHtml}
+
                 <div style="display: inline-flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 6px 0 12px; height: 40px; gap: 6px;">
                     <i class="fa-regular fa-calendar" style="color: var(--primary); font-size: 0.88rem;"></i>
                     <span style="font-size: 0.82rem; font-weight: 600; color: #64748b; white-space: nowrap;">Ngày gửi:</span>
                     <input type="date" id="uc-date-filter" style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%;" onchange="handleUCDate(this.value)">
-                    <button type="button" onclick="document.getElementById('uc-date-filter').value=''; handleUCDate('');" title="Xem tất cả các ngày" style="background: #e2e8f0; border: none; color: #334155; padding: 4px 9px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: 0.15s;" onmouseover="this.style.background='#cbd5e1'" onmouseout="this.style.background='#e2e8f0'">
+                    <button type="button" onclick="document.getElementById('uc-date-filter').value=''; handleUCDate('');" title="Xem tất cả các ngày" style="background: #e2e8f0; border: none; color: #334155; padding: 4px 9px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer;">
                         Tất cả
                     </button>
                 </div>
@@ -3659,12 +3802,12 @@ function renderQuanLyHuySan() {
                 <table class="admin-table" style="margin: 0;">
                     <thead style="background: #F8FAFC;">
                         <tr>
-                            <th>Khách Hàng</th>
-                            <th>Thông tin Sân</th>
-                            <th>Lý do hủy</th>
-                            <th>Ngày gửi</th>
-                            <th>Trạng thái</th>
-                            <th>Hành động</th>
+                            <th style="white-space: nowrap;">Khách Hàng</th>
+                            <th style="white-space: nowrap;">Thông tin Sân</th>
+                            <th style="white-space: nowrap;">Lý do hủy</th>
+                            <th style="white-space: nowrap;">Ngày gửi</th>
+                            <th style="text-align: center; white-space: nowrap;">Trạng thái</th>
+                            <th style="text-align: center; white-space: nowrap;">${isAdmin ? 'Ghi chú xử lý' : 'Hành động'}</th>
                         </tr>
                     </thead>
                     <tbody id="huysan-table-body">
@@ -3680,6 +3823,7 @@ function renderQuanLyHuySan() {
 
 function showUCAlert(message, isSuccess) {
     const alertBox = document.getElementById('huysan-alert');
+    if (!alertBox) return;
     alertBox.textContent = message; 
     alertBox.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
     alertBox.style.display = 'block'; 
@@ -3704,9 +3848,17 @@ async function loadDanhSachHuySanAdmin() {
 }
 
 function applyUCFiltersAndRender() {
-    document.getElementById('uc-pending-count').innerText = allHuySanData.filter(i => i.TrangThai === 'ChoDuyet').length;
+    const baseByCluster = currentUCCumSan === 'All'
+        ? allHuySanData
+        : allHuySanData.filter(item => {
+            const maCS = item.dat_san?.san_bong ? (item.dat_san.san_bong.MaCumSan || item.dat_san.san_bong.ID_CumSan) : '';
+            return String(maCS) === String(currentUCCumSan);
+        });
 
-    let filteredData = allHuySanData.filter(item => {
+    const pendingEl = document.getElementById('uc-pending-count');
+    if (pendingEl) pendingEl.innerText = baseByCluster.filter(i => i.TrangThai === 'ChoDuyet').length;
+
+    let filteredData = baseByCluster.filter(item => {
         const matchStatus = (currentUCFilter === 'All' || item.TrangThai === currentUCFilter);
         
         const tenKhach = item.nguoi_dung ? item.nguoi_dung.HoTen.toLowerCase() : '';
@@ -3731,6 +3883,9 @@ function applyUCFiltersAndRender() {
 
 function renderUCTable(data) {
     const tbody = document.getElementById('huysan-table-body');
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user') || '{}');
+    const isAdmin = currentUser.VaiTro === 'Admin';
+
     if (data.length === 0) return tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="text-align: center; padding: 40px;">Không có dữ liệu.</td></tr>`;
 
     tbody.innerHTML = data.map(item => {
@@ -3738,13 +3893,20 @@ function renderUCTable(data) {
         if(item.TrangThai === 'DaDuyet') { badgeClass = 'badge-success'; viStatus = 'Đã duyệt'; }
         if(item.TrangThai === 'TuChoi') { badgeClass = 'badge-danger'; viStatus = 'Từ chối'; }
 
-        if (item.TrangThai === 'ChoDuyet') {
+        if (isAdmin) {
+            if (item.TrangThai === 'ChoDuyet') {
+                actionHtml = `<span style="color: #d97706; font-size: 0.82rem; font-weight: 600;"><i class="fa-solid fa-hourglass-half"></i> Đang chờ Quản lý sân duyệt</span>`;
+            } else {
+                const lyDoTuChoi = (item.TrangThai === 'TuChoi' && item.LyDoHuy) ? `<div style="color:#dc2626; font-size:0.78rem; margin-top:3px;">Lý do: ${item.LyDoHuy}</div>` : '';
+                actionHtml = `<span style="color: var(--text-muted); font-size: 0.82rem;">Ngày xử lý: ${item.NgayDuyet ? item.NgayDuyet.substring(0,10) : 'N/A'}</span>${lyDoTuChoi}`;
+            }
+        } else if (item.TrangThai === 'ChoDuyet') {
             actionHtml = `
                 <div style="display: inline-flex; gap: 8px; align-items: center;">
-                    <button type="button" class="btn-outline-sm" style="padding: 6px 13px; border-radius: 8px; border: 1px solid #86efac; background: #f0fdf4; color: #15803d; font-weight: 700; font-size: 0.82rem; display: inline-flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; cursor: pointer; transition: all 0.18s ease;" onmouseover="this.style.background='#16a34a'; this.style.color='#ffffff'; this.style.borderColor='#16a34a';" onmouseout="this.style.background='#f0fdf4'; this.style.color='#15803d'; this.style.borderColor='#86efac';" onclick="openUCConfirmModal('${item.ID}', 'DaDuyet')">
+                    <button type="button" class="btn-outline-sm" style="padding: 6px 13px; border-radius: 8px; border: 1px solid #86efac; background: #f0fdf4; color: #15803d; font-weight: 700; font-size: 0.82rem; display: inline-flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; cursor: pointer;" onclick="openUCConfirmModal('${item.ID}', 'DaDuyet')">
                         <i class="fa-solid fa-check"></i> Duyệt
                     </button>
-                    <button type="button" class="btn-outline-sm" style="padding: 6px 13px; border-radius: 8px; border: 1px solid #fecaca; background: #fef2f2; color: #dc2626; font-weight: 700; font-size: 0.82rem; display: inline-flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; cursor: pointer; transition: all 0.18s ease;" onmouseover="this.style.background='#ef4444'; this.style.color='#ffffff'; this.style.borderColor='#ef4444';" onmouseout="this.style.background='#fef2f2'; this.style.color='#dc2626'; this.style.borderColor='#fecaca';" onclick="openUCConfirmModal('${item.ID}', 'TuChoi')">
+                    <button type="button" class="btn-outline-sm" style="padding: 6px 13px; border-radius: 8px; border: 1px solid #fecaca; background: #fef2f2; color: #dc2626; font-weight: 700; font-size: 0.82rem; display: inline-flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; cursor: pointer;" onclick="openUCConfirmModal('${item.ID}', 'TuChoi')">
                         <i class="fa-solid fa-xmark"></i> Từ chối
                     </button>
                 </div>
@@ -3779,23 +3941,23 @@ function renderUCTable(data) {
         }
 
         return `<tr>
-            <td>
-                <strong style="white-space: nowrap;">${item.nguoi_dung?.HoTen || 'N/A'}</strong><br>
+            <td style="white-space: nowrap;">
+                <strong style="color: var(--text-dark);">${item.nguoi_dung?.HoTen || 'N/A'}</strong><br>
                 <span style="font-size: 0.85rem; color: var(--text-muted);">${item.nguoi_dung?.SoDienThoai || ''}</span>
             </td>
-            <td>
+            <td style="white-space: nowrap;">
                 ${loaiTag}<br>
                 <strong style="color: var(--text-dark);">${sanBong}</strong><br>
                 <span style="font-size: 0.8rem; color: var(--text-muted);"><i class="fa-solid fa-location-dot"></i> ${cumSan}</span>
                 ${htmlTenGiai}
                 <div style="font-size: 0.85rem; margin-top: 4px;">Đá lúc: <strong style="color:var(--primary);">${gioDaStr}</strong> (${ngayDaStr})</div>
             </td>
-            <td style="max-width: 200px;">
+            <td style="min-width: 180px; max-width: 260px;">
                 <span style="font-size: 0.9rem; white-space: pre-line; color: var(--text-dark);">"${item.NoiDung}"</span>
             </td>
-            <td><span style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> ${dateStr}</span></td>
-            <td><span class="badge ${badgeClass}" style="white-space: nowrap; display: inline-block; text-align: center; min-width: 85px;">${viStatus}</span></td>
-            <td>${actionHtml}</td>
+            <td style="white-space: nowrap;"><span style="font-size: 0.85rem; color: var(--text-muted);"><i class="fa-regular fa-clock"></i> ${dateStr}</span></td>
+            <td style="text-align: center; white-space: nowrap;"><span class="badge ${badgeClass}" style="white-space: nowrap; display: inline-block; text-align: center; min-width: 85px;">${viStatus}</span></td>
+            <td style="text-align: center; white-space: nowrap;">${actionHtml}</td>
         </tr>`;
     }).join('');
 }
@@ -4816,6 +4978,7 @@ let dashboardFilterCumSan = 'all';
 let dashboardFilterTime = 'hom_nay';
 let dashboardStaffMonth = '';
 let dashboardStaffCumSan = 'all';
+let dashboardClusterMonth = '';
 
 async function renderTongQuan() {
     const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
@@ -4830,6 +4993,7 @@ async function renderTongQuan() {
     const curMonth = String(today.getMonth() + 1).padStart(2, '0');
     const curYear = today.getFullYear();
     dashboardStaffMonth = `${curMonth}-${curYear}`;
+    dashboardClusterMonth = `${curMonth}-${curYear}`;
 
     // Tạo danh sách Tháng/Năm cho bộ lọc hiệu suất nhân viên
     let staffMonthOptions = '';
@@ -4940,10 +5104,8 @@ async function renderTongQuan() {
             </div>
         </div>
 
-        ${currentUser.VaiTro === 'QuanLySan' ? `
-        <!-- TIMELINE LỊCH TRÌNH GIẢI ĐẤU SẮP TỚI & ĐANG DIỄN RA (CHỈ DÀNH CHO QUẢN LÝ SÂN) -->
+        <!-- TIMELINE LỊCH TRÌNH GIẢI ĐẤU SẮP TỚI & ĐANG DIỄN RA (MỞ CHO CẢ ADMIN VÀ QUẢN LÝ SÂN) -->
         <div id="manager-tournament-timeline-wrapper" style="margin-bottom: 24px;"></div>
-        ` : ''}
 
         <!-- BẢNG THỐNG KÊ HIỆU SUẤT CHỐT SÂN CỦA NHÂN VIÊN THEO TỪNG NGÀY TRONG THÁNG -->
         <div class="panel">
@@ -4976,6 +5138,48 @@ async function renderTongQuan() {
                 </table>
             </div>
         </div>
+
+        ${currentUser.VaiTro === 'Admin' ? `
+        <!-- BẢNG SO SÁNH HIỆU SUẤT CÁC CỤM SÂN (NẰM DƯNG CÙNG TRANG TỔNG QUAN CỦA ADMIN) -->
+        <div class="panel" style="margin-top: 24px; border-top: 4px solid #2563eb;">
+            <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                <div>
+                    <div style="font-size: 1.08rem; font-weight: 700; color: #0f172a;">
+                        <i class="fa-solid fa-ranking-star" style="color: #2563eb; margin-right: 6px;"></i>
+                        Bảng So sánh Hiệu suất Hoạt động giữa các Cụm sân
+                    </div>
+                    <div style="font-size: 0.82rem; color: #64748b; font-weight: normal; margin-top: 3px;">
+                        Tiêu chí xếp hạng: Ưu tiên <strong>Doanh thu thực thu tháng</strong> &rarr; <strong>Số trận hoàn thành</strong> &rarr; <strong>Điểm đánh giá TB</strong> &rarr; <strong>Số sân con</strong>.
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 0.84rem; font-weight: 600; color: #475569; white-space: nowrap;"><i class="fa-regular fa-calendar" style="color: #2563eb;"></i> Kỳ đối soát:</span>
+                    <select class="form-control" style="width: 165px; height: 38px; border-radius: 8px; font-weight: 700; padding-top: 0; padding-bottom: 0; color: #1d4ed8; border-color: #93c5fd; background: #eff6ff; cursor: pointer;" onchange="dashboardClusterMonth=this.value; updateDashboardStats('cluster')">
+                        ${staffMonthOptions}
+                    </select>
+                </div>
+            </div>
+            <div class="table-responsive" style="overflow-x: auto;">
+                <table class="admin-table" style="margin: 0; min-width: 980px;">
+                    <thead style="background: #f8fafc;">
+                        <tr>
+                            <th style="text-align: center; width: 65px; white-space: nowrap;">Hạng</th>
+                            <th style="white-space: nowrap;">Cụm Sân & Khu vực</th>
+                            <th style="text-align: center; white-space: nowrap;">Trạng thái</th>
+                            <th style="text-align: center; white-space: nowrap;">Số sân con</th>
+                            <th style="text-align: center; white-space: nowrap;">Trận Hoàn thành</th>
+                            <th style="text-align: center; white-space: nowrap;">Không đến / Tỷ lệ bùng</th>
+                            <th style="text-align: center; white-space: nowrap;">Đánh giá TB</th>
+                            <th style="text-align: right; white-space: nowrap;">Doanh thu tháng</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cluster-comparison-tbody">
+                        <tr><td colspan="8" style="text-align: center; padding: 30px;">Đang tải dữ liệu so sánh cụm sân...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        ` : ''}
     `;
 
     // Khởi tạo Chart mặc định rỗng
@@ -5006,7 +5210,7 @@ async function updateDashboardStats(scope = 'all') {
     }
 
     try {
-        const url = `${API_BASE_URL}/admin/thong-ke?id_cum_san=${dashboardFilterCumSan}&time_filter=${dashboardFilterTime}&staff_month=${dashboardStaffMonth}&staff_cum_san=${dashboardStaffCumSan}`;
+        const url = `${API_BASE_URL}/admin/thong-ke?id_cum_san=${dashboardFilterCumSan}&time_filter=${dashboardFilterTime}&staff_month=${dashboardStaffMonth}&staff_cum_san=${dashboardStaffCumSan}&cluster_month=${dashboardClusterMonth}`;
         const response = await fetch(url);
         const res = await response.json();
 
@@ -5090,7 +5294,7 @@ async function updateDashboardStats(scope = 'all') {
                 }
             });
 
-            if (currentUser.VaiTro === 'QuanLySan' && typeof initAndRenderTournamentTimeline === 'function') {
+            if (typeof initAndRenderTournamentTimeline === 'function') {
                 initAndRenderTournamentTimeline('manager-tournament-timeline-wrapper', data.tournaments_timeline || []);
             }
         }
@@ -5157,6 +5361,61 @@ async function updateDashboardStats(scope = 'all') {
                                     </div>
                                 </td>
                                 ${dayCells}
+                            </tr>
+                        `;
+                    }).join('');
+                }
+            }
+        }
+
+        // =========================================================
+        // VÙNG 3: CẬP NHẬT BẢNG SO SÁNH CỤM SÂN (Chạy khi scope === 'all' hoặc 'cluster')
+        // =========================================================
+        if (scope === 'all' || scope === 'cluster') {
+            const compTbody = document.getElementById('cluster-comparison-tbody');
+            if (compTbody && Array.isArray(data.cluster_comparison)) {
+                const compList = data.cluster_comparison;
+                if (compList.length === 0) {
+                    compTbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:30px; color:#64748b;">Chưa có dữ liệu cụm sân.</td></tr>`;
+                } else {
+                    compTbody.innerHTML = compList.map((cs, idx) => {
+                        const rankBadge = idx === 0
+                            ? `<span style="width:28px; height:28px; border-radius:50%; background:#fef3c7; color:#d97706; border:1px solid #fcd34d; display:inline-flex; align-items:center; justify-content:center; font-weight:800;"><i class="fa-solid fa-crown"></i></span>`
+                            : `<span style="font-weight:700; color:#64748b;">#${idx + 1}</span>`;
+                        const stBadge = cs.trang_thai === 'BaoTri'
+                            ? `<span class="badge badge-warning" style="white-space:nowrap; display:inline-block;">Bảo trì</span>`
+                            : `<span class="badge badge-success" style="white-space:nowrap; display:inline-block;">Hoạt động</span>`;
+                        const bungColor = cs.ty_le_bung >= 25 ? '#ef4444' : (cs.ty_le_bung > 0 ? '#d97706' : '#16a34a');
+
+                        return `
+                            <tr onclick="renderCumSanDetail('${cs.ma_cum_san}')" style="cursor:pointer;" title="Bấm để xem chi tiết ${cs.ten_cum_san}">
+                                <td style="text-align:center; white-space:nowrap;">${rankBadge}</td>
+                                <td style="white-space:nowrap;">
+                                    <div style="display:flex; align-items:center; gap:6px;">
+                                        <strong style="color:#0f172a; font-size:0.95rem;">${cs.ten_cum_san}</strong>
+                                        <span style="font-family:monospace; font-size:0.75rem; color:#64748b;">(#${cs.ma_cum_san})</span>
+                                        <span style="color:#cbd5e1;">&bull;</span>
+                                        <span style="font-size:0.82rem; color:#64748b;"><i class="fa-solid fa-location-dot" style="color:var(--primary);"></i> ${cs.dia_chi}</span>
+                                    </div>
+                                </td>
+                                <td style="text-align:center; white-space:nowrap;">${stBadge}</td>
+                                <td style="text-align:center; font-weight:700; color:#334155; white-space:nowrap;">${cs.so_san_con} sân</td>
+                                <td style="text-align:center; white-space:nowrap;">
+                                    <strong style="color:#047857; font-size:0.95rem;">${cs.so_hoan_thanh}</strong> trận
+                                    ${cs.so_da_coc > 0 ? `<span style="font-size:0.78rem; color:#b45309; font-weight:600; margin-left:4px;">(+${cs.so_da_coc} đang cọc)</span>` : ''}
+                                </td>
+                                <td style="text-align:center; white-space:nowrap;">
+                                    <strong style="color:${bungColor};">${cs.ty_le_bung}%</strong>
+                                    <span style="font-size:0.78rem; color:#64748b; margin-left:4px;">(${cs.so_khong_den} KĐ / ${cs.so_da_huy} hủy)</span>
+                                </td>
+                                <td style="text-align:center; white-space:nowrap;">
+                                    <span style="background:#fffbeb; border:1px solid #fde68a; color:#b45309; padding:4px 10px; border-radius:99px; font-size:0.8rem; font-weight:700; display:inline-flex; align-items:center; gap:4px; white-space:nowrap;">
+                                        <i class="fa-solid fa-star" style="color:#f59e0b; font-size:0.75rem;"></i> ${Number(cs.diem_danh_gia).toFixed(1)} (${cs.so_danh_gia})
+                                    </span>
+                                </td>
+                                <td style="text-align:right; white-space:nowrap;">
+                                    <strong style="color:#15803d; font-size:1.02rem;">${Number(cs.doanh_thu_thang).toLocaleString('vi-VN')}đ</strong>
+                                </td>
                             </tr>
                         `;
                     }).join('');
@@ -6297,19 +6556,53 @@ let isNextWeekLocked = false;
 let isForceUnlockedNextWeek = false;
 window.adminShiftCache = {};
 
-function renderLichLamViecAdmin() {
+let adminSelectedScheduleClusterId = '';
+
+async function renderLichLamViecAdmin() {
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
     const menuLink = document.getElementById('menu-lichlamviec');
     if (menuLink) menuLink.classList.add('active');
+
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user') || '{}');
+    const isAdmin = currentUser.VaiTro === 'Admin';
+
+    let clusterSelectHtml = '';
+    if (isAdmin) {
+        try {
+            const csRes = await fetch(`${API_BASE_URL}/cum-san`);
+            const csJson = await csRes.json();
+            const csList = csJson.data || [];
+            if (!adminSelectedScheduleClusterId && csList.length > 0) {
+                adminSelectedScheduleClusterId = csList[0].MaCumSan || csList[0].ID;
+            }
+            const opts = csList.map(cs => {
+                const id = cs.MaCumSan || cs.ID;
+                return `<option value="${id}" ${String(id) === String(adminSelectedScheduleClusterId) ? 'selected' : ''}>${cs.TenCumSan}</option>`;
+            }).join('');
+
+            clusterSelectHtml = `
+                <div style="display: inline-flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 0 12px; height: 40px; gap: 8px;">
+                    <i class="fa-solid fa-building-flag" style="color: var(--primary); font-size: 0.85rem;"></i>
+                    <span style="font-size: 0.84rem; font-weight: 600; color: #64748b; white-space: nowrap;">Chọn Cơ sở giám sát:</span>
+                    <select style="border: none; outline: none; background: transparent; font-family: inherit; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%; padding-right: 4px;" onchange="adminSelectedScheduleClusterId=this.value; reloadAdminScheduleByCluster();">
+                        ${opts}
+                    </select>
+                </div>
+            `;
+        } catch (e) {}
+    }
 
     const contentArea = document.querySelector('.admin-content');
     contentArea.innerHTML = `
         <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
             <div>
-                <h1 class="page-title">Xếp lịch làm việc</h1>
-                <p class="text-muted">Quản lý và điều phối nhân sự trực sân</p>
+                <h1 class="page-title">${isAdmin ? 'Giám sát Lịch trực & Điểm danh Cơ sở' : 'Xếp lịch làm việc'}</h1>
+                <p class="text-muted">${isAdmin ? 'Theo dõi lịch trực tuần hiện tại, tuần sau và tình hình điểm danh nhận ca của nhân sự từng cụm sân.' : 'Quản lý và điều phối nhân sự trực sân'}</p>
             </div>
-            <button class="btn-outline-sm" style="color: var(--primary); border-color: var(--primary);" onclick="openCauHinhCaModal()"><i class="fa-solid fa-gear"></i> Cấu hình Ca làm việc</button>
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                ${clusterSelectHtml}
+                ${!isAdmin ? `<button class="btn-outline-sm" style="color: var(--primary); border-color: var(--primary);" onclick="openCauHinhCaModal()"><i class="fa-solid fa-gear"></i> Cấu hình Ca làm việc</button>` : `<span style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; padding: 8px 14px; border-radius: 10px; font-size: 0.84rem; font-weight: 700;"><i class="fa-solid fa-eye"></i> Chế độ Giám sát (Chỉ xem)</span>`}
+            </div>
         </div>
 
         <div class="panel">
@@ -6322,15 +6615,14 @@ function renderLichLamViecAdmin() {
             <!-- LƯỚI 1: TUẦN HIỆN TẠI -->
             <div id="admin-cal-current" class="tab-pane active" style="padding: 0 20px 20px 20px;">
                 <div style="display: flex; gap: 20px; align-items: flex-start;">
-                    <!-- Lưới View (Đã thêm min-width: 0 để cho phép scroll ngang) -->
                     <div style="flex: 1; min-width: 0;">
+                        ${!isAdmin ? `
                         <div style="display: flex; justify-content: flex-end; margin-bottom: 15px;">
                             <button id="btn-edit-current-week" class="btn-outline-sm" style="color: #f59e0b; border-color: #fcd34d;" onclick="toggleEditModeCurrentWeek()"><i class="fa-solid fa-pen-to-square"></i> Chỉnh sửa ca đột xuất</button>
-                        </div>
+                        </div>` : ''}
                         <div id="grid-current-week">Đang tải...</div>
                     </div>
                     
-                    <!-- Box ca của tôi (NẾU QUẢN LÝ CÓ CA) -->
                     <div id="manager-my-shifts-container" style="display: none; width: 300px; flex-shrink: 0; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 15px;">
                         <h4 style="margin: 0 0 15px 0; color: var(--primary); font-size: 1rem;"><i class="fa-solid fa-user-clock"></i> Các ca bạn trực tuần này</h4>
                         <div id="manager-my-shifts-list">Đang tải...</div>
@@ -6341,17 +6633,14 @@ function renderLichLamViecAdmin() {
             <!-- LƯỚI 2: TUẦN SAU -->
             <div id="admin-cal-next" class="tab-pane" style="display: none; padding: 0 20px 20px 20px;">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 20px;">
-                    
-                    <!-- Lưới lịch tuần sau -->
                     <div style="flex: 1; min-width: 0;">
-                        <div style="display: flex; justify-content: flex-end; margin-bottom: 15px; gap: 10px;">
+                        <div style="display: flex; justify-content: flex-end; margin-bottom: 15px; gap: 10px; ${isAdmin ? 'display:none;' : ''}">
                             <button id="btn-cancel-edit-next-week" class="btn-outline-sm" style="display: none; color: #ef4444; border-color: #fecaca; background: #fef2f2;" onclick="cancelEditNextWeek()"><i class="fa-solid fa-xmark"></i> Đóng chỉnh sửa</button>
                             <button id="btn-lock-schedule" class="btn-primary" onclick="lockNextWeekSchedule()"><i class="fa-solid fa-lock"></i> Chốt lịch & Thông báo</button>
                         </div>
                         <div id="grid-next-week">Đang tải...</div>
                     </div>
 
-                    <!-- Danh sách nhân sự & Thống kê đăng ký -->
                     <div style="width: 300px; flex-shrink: 0; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 15px;">
                         <h4 style="margin: 0 0 15px 0; color: var(--text-dark); font-size: 1rem;"><i class="fa-solid fa-users"></i> Thống kê đăng ký tuần sau</h4>
                         <div id="admin-staff-status-list">Đang tải...</div>
@@ -6359,7 +6648,7 @@ function renderLichLamViecAdmin() {
                 </div>
             </div>
 
-            <!-- LƯỚI 3: CHẤM CÔNG -->
+            <!-- LƯỚI 3: CHẤM CÔNG / BẢNG CÔNG (GIỮ NGUYÊN CỘT PHẠT / THƯỞNG) -->
             <div id="admin-cal-chamcong" class="tab-pane" style="display: none; padding: 0 20px 20px 20px;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
                     <div style="display: flex; gap: 15px;">
@@ -6375,7 +6664,7 @@ function renderLichLamViecAdmin() {
                                 <th>Ca Làm Việc</th>
                                 <th>Trạng Thái</th>
                                 <th style="text-align: right;">Phạt / Thưởng</th>
-                                <th style="text-align: center;">Hành động</th>
+                                <th style="text-align: center;">${isAdmin ? 'Quyền hạn' : 'Hành động'}</th>
                             </tr>
                         </thead>
                         <tbody id="admin-cc-tbody">
@@ -6387,9 +6676,23 @@ function renderLichLamViecAdmin() {
         </div>
     `;
 
-    // Khởi chạy load dữ liệu cho tab mặc định
     loadAdminCalendarData(0, 'grid-current-week');
 }
+
+window.reloadAdminScheduleByCluster = function() {
+    const currentTab = document.getElementById('admin-cal-current');
+    const nextTab = document.getElementById('admin-cal-next');
+    const ccTab = document.getElementById('admin-cal-chamcong');
+
+    if (currentTab && currentTab.style.display !== 'none') {
+        loadAdminCalendarData(0, 'grid-current-week');
+    } else if (nextTab && nextTab.style.display !== 'none') {
+        loadAdminCalendarData(1, 'grid-next-week');
+        loadStaffRegistrationStatus();
+    } else if (ccTab && ccTab.style.display !== 'none') {
+        loadAdminChamCongData();
+    }
+};
 
 function switchAdminCalTab(tabId, element) {
     const tabs = element.parentElement.children;
@@ -6448,9 +6751,11 @@ async function loadAdminCalendarData(weekOffset, containerId) {
     const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
 
     try {
+        const isAdminRole = currentUser.VaiTro === 'Admin';
+        const clusterParam = isAdminRole && adminSelectedScheduleClusterId ? `&id_cum_san=${adminSelectedScheduleClusterId}` : '';
         const [caRes, lichRes] = await Promise.all([
-            fetch(`${API_BASE_URL}/ca-lam-viec?tu_ngay=${tuNgay}&den_ngay=${denNgay}`),
-            fetch(`${API_BASE_URL}/lich-lam-viec?tu_ngay=${tuNgay}&den_ngay=${denNgay}`)
+            fetch(`${API_BASE_URL}/ca-lam-viec?tu_ngay=${tuNgay}&den_ngay=${denNgay}${clusterParam}`),
+            fetch(`${API_BASE_URL}/lich-lam-viec?tu_ngay=${tuNgay}&den_ngay=${denNgay}${clusterParam}`)
         ]);
 
         const caData = (await caRes.json()).data || [];
@@ -6625,7 +6930,7 @@ async function loadAdminCalendarData(weekOffset, containerId) {
                 let pointerStyle = '';
                 let clickEvent = '';
 
-                if (weekOffset === 1 && (!isNextWeekLocked || pendingManagerAssignments.length > 0)) {
+                if (!isAdminRole && weekOffset === 1 && (!isNextWeekLocked || pendingManagerAssignments.length > 0)) {
                     pointerStyle = 'cursor: pointer; transition: 0.2s;';
                     clickEvent = `onmouseover="this.style.filter='brightness(0.95)'" onmouseout="this.style.filter='brightness(1)'" onclick="openManagerShiftModal('${ca.ID}', '${ca.TenCa}', '${date.dbDate}', '${date.display}', '${cacheKey}', 1)"`;
                 } else if (weekOffset === 0 && isEditModeCurrentWeek) {
@@ -6737,10 +7042,15 @@ async function loadStaffRegistrationStatus() {
         const tuNgay = dates[0].dbDate;
         const denNgay = dates[6].dbDate;
 
+        const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
+        const isAdminRole = currentUser.VaiTro === 'Admin';
+        const targetCS = isAdminRole ? adminSelectedScheduleClusterId : currentUser.ID_CumSan;
+        const clusterParam = isAdminRole && targetCS ? `&id_cum_san=${targetCS}` : '';
+
         const [usersRes, lichRes, emergencyRes] = await Promise.all([
             fetch(`${API_BASE_URL}/admin/khach-hang`), 
-            fetch(`${API_BASE_URL}/lich-lam-viec?tu_ngay=${tuNgay}&den_ngay=${denNgay}`),
-            fetch(`${API_BASE_URL}/lich-lam-viec/trang-thai-khan-cap`)
+            fetch(`${API_BASE_URL}/lich-lam-viec?tu_ngay=${tuNgay}&den_ngay=${denNgay}${clusterParam}`),
+            fetch(`${API_BASE_URL}/lich-lam-viec/trang-thai-khan-cap?id_cum_san=${targetCS || ''}`)
         ]);
 
         const usersData = await usersRes.json();
@@ -6748,13 +7058,12 @@ async function loadStaffRegistrationStatus() {
         const emergencyData = await emergencyRes.json();
         const unlockedIds = emergencyData.unlocked_ids || [];
 
-        const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
         const isSunday = new Date().getDay() === 0; // 0 = Chủ Nhật
 
         const activeStaff = usersData.data.filter(u => 
             (u.VaiTro === 'NhanVien' || u.VaiTro === 'QuanLySan') && 
             (u.TrangThaiKhoa == 0 || u.TrangThaiKhoa === false) && 
-            String(u.ID_CumSan) === String(currentUser.ID_CumSan)
+            String(u.ID_CumSan) === String(targetCS)
         );
 
         let html = '';
@@ -6771,7 +7080,7 @@ async function loadStaffRegistrationStatus() {
 
             // Nút mở đăng ký khẩn cấp (chỉ dành cho Nhân viên, không hiện cho chính Quản lý)
             let emergencyBtnHtml = '';
-            if (staff.VaiTro === 'NhanVien') {
+            if (!isAdminRole && staff.VaiTro === 'NhanVien') {
                 const isUnlocked = unlockedIds.some(id => String(id) === String(staff.ID));
 
                 if (!isSunday) {
@@ -7574,8 +7883,15 @@ async function loadAdminChamCongData() {
     
     tbody.innerHTML = `<tr><td colspan="5" class="text-center" style="padding:30px; text-align: center;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải dữ liệu chấm công...</td></tr>`;
     
+    // Nếu là Admin đang giám sát lịch trực -> Truyền thêm id_cum_san của cơ sở đang chọn
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user') || '{}');
+    const isAdmin = currentUser.VaiTro === 'Admin';
+    const clusterParam = (isAdmin && typeof adminSelectedScheduleClusterId !== 'undefined' && adminSelectedScheduleClusterId)
+        ? `&id_cum_san=${adminSelectedScheduleClusterId}`
+        : '';
+
     try {
-        const response = await fetch(`${API_BASE_URL}/lich-lam-viec?tu_ngay=${dateInput}&den_ngay=${dateInput}`);
+        const response = await fetch(`${API_BASE_URL}/lich-lam-viec?tu_ngay=${dateInput}&den_ngay=${dateInput}${clusterParam}`);
         const res = await response.json();
         
         if (res.success) {
@@ -7592,6 +7908,8 @@ function renderAdminChamCongTable() {
     const tbody = document.getElementById('admin-cc-tbody');
     const now = new Date();
     const selectedDate = document.getElementById('admin-cc-date').value;
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user') || '{}');
+    const isAdmin = currentUser.VaiTro === 'Admin';
     
     if (currentChamCongData.length === 0) {
         tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted" style="padding: 40px; text-align: center;">Ngày này không có ca làm việc nào.</td></tr>`;
@@ -7620,7 +7938,7 @@ function renderAdminChamCongTable() {
         const [startH, startM] = ca.GioBatDau.split(':');
         const [y, m, d] = selectedDate.split('-');
         const startTime = new Date(y, m - 1, d, startH, startM);
-        const isPastStart = now > startTime; // True nếu bây giờ đã lố giờ bắt đầu ca
+        const isPastStart = now > startTime;
 
         let statusHtml = '';
         let trStyle = '';
@@ -7630,40 +7948,42 @@ function renderAdminChamCongTable() {
             statusHtml = `<span style="background: #d1fae5; color: #047857; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: bold;"><i class="fa-solid fa-check"></i> Có mặt</span>${treStr}`;
         } else if (item.TrangThaiDiemDanh === 'VangMat') {
             statusHtml = `<span style="background: #fee2e2; color: #b91c1c; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: bold;"><i class="fa-solid fa-xmark"></i> Vắng mặt</span>`;
-            trStyle = 'background: #fef2f2;'; // Đỏ nhạt
+            trStyle = 'background: #fef2f2;';
         } else { // ChuaLam
             if (isPastStart) {
-                // Đã quá giờ bắt đầu ca mà vẫn chưa bấm Nhận Ca -> Cảnh báo
                 statusHtml = `<span style="background: #fef3c7; color: #b45309; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: bold;"><i class="fa-solid fa-triangle-exclamation"></i> Trễ giờ / Chưa check-in</span>`;
-                trStyle = 'background: #fffbeb;'; // Vàng nhạt
+                trStyle = 'background: #fffbeb;';
             } else {
                 statusHtml = `<span style="background: #f1f5f9; color: #64748b; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: bold;">Chưa tới giờ</span>`;
             }
         }
 
+        // GIỮ NGUYÊN 100% HIỂN THỊ TIỀN PHẠT, TIỀN THƯỞNG VÀ LÝ DO ĐIỀU CHỈNH
         let thuongPhatHtml = '';
         if (item.TienPhat > 0) thuongPhatHtml += `<div style="color: #ef4444; font-size: 0.85rem; font-weight: bold; margin-bottom: 2px;">- ${Number(item.TienPhat).toLocaleString('vi-VN')}đ</div>`;
         if (item.TienThuong > 0) thuongPhatHtml += `<div style="color: #10b981; font-size: 0.85rem; font-weight: bold; margin-bottom: 2px;">+ ${Number(item.TienThuong).toLocaleString('vi-VN')}đ</div>`;
         if (item.LyDoDieuChinh) thuongPhatHtml += `<div style="font-size: 0.75rem; color: var(--text-muted); max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; text-align: right;" title="${item.LyDoDieuChinh}">Lý do: ${item.LyDoDieuChinh}</div>`;
         if (!thuongPhatHtml) thuongPhatHtml = '<span style="color: #cbd5e1;">-</span>';
 
-        // Nút chức năng
+        // Phân quyền nút chức năng: Admin chỉ xem, Quản lý sân được Chốt vắng & Chốt/Sửa công (Phạt/Thưởng)
         let actionBtn = '';
-        const itemJsonStr = JSON.stringify(item).replace(/'/g, "\\'");
-        const tenNV = (nv.HoTen || 'Nhân viên').replace(/'/g, "\\'");
-        const tenCa = (ca.TenCa || 'Ca làm việc').replace(/'/g, "\\'");
+        if (isAdmin) {
+            actionBtn = `<span style="font-size: 0.8rem; color: #64748b; font-weight: 600;"><i class="fa-solid fa-lock"></i> Chỉ xem</span>`;
+        } else {
+            const itemJsonStr = JSON.stringify(item).replace(/'/g, "\\'");
+            const tenNV = (nv.HoTen || 'Nhân viên').replace(/'/g, "\\'");
+            const tenCa = (ca.TenCa || 'Ca làm việc').replace(/'/g, "\\'");
 
-        // Nút Chốt vắng nhanh (chỉ hiện khi ChuaLam và đã quá giờ bắt đầu ca) -> Mở Modal Xác Nhận
-        if (item.TrangThaiDiemDanh === 'ChuaLam') {
-            actionBtn += `
-                <button type="button" class="btn-outline-sm" style="color: #ef4444; border-color: #fecaca; background: #fef2f2; padding: 6px 12px; font-weight: 600; margin-right: 6px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fef2f2'" onclick="openChotVangConfirmModal('${item.ID}', '${tenNV}', '${tenCa}', '${timeStr}')">
-                    <i class="fa-solid fa-user-xmark"></i> Chốt vắng
-                </button>
-            `;
+            if (item.TrangThaiDiemDanh === 'ChuaLam') {
+                actionBtn += `
+                    <button type="button" class="btn-outline-sm" style="color: #ef4444; border-color: #fecaca; background: #fef2f2; padding: 6px 12px; font-weight: 600; margin-right: 6px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fef2f2'" onclick="openChotVangConfirmModal('${item.ID}', '${tenNV}', '${tenCa}', '${timeStr}')">
+                        <i class="fa-solid fa-user-xmark"></i> Chốt vắng
+                    </button>
+                `;
+            }
+            
+            actionBtn += `<button type="button" class="btn-outline-sm" style="padding: 6px 12px; font-weight: 600; cursor: pointer;" onclick='openModalChotCong(${itemJsonStr})'><i class="fa-solid fa-pen"></i> Chốt / Sửa công</button>`;
         }
-        
-        // Nút mở Modal để tuỳ chỉnh Đi/Nghỉ, Phạt, Thưởng
-        actionBtn += `<button type="button" class="btn-outline-sm" style="padding: 6px 12px; font-weight: 600; cursor: pointer;" onclick='openModalChotCong(${itemJsonStr})'><i class="fa-solid fa-pen"></i> Chốt / Sửa công</button>`;
 
         html += `
             <tr style="${trStyle}">
@@ -8853,10 +9173,21 @@ function renderAdminPromosPagination(totalPages) {
 
     let html = `<button class="btn-outline-sm" ${currentPromoPage === 1 ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''} onclick="currentPromoPage--; applyPromoFiltersAndRender()"><i class="fa-solid fa-chevron-left"></i></button>`;
 
-    for (let i = 1; i <= totalPages; i++) {
-        const isActive = i === currentPromoPage;
-        html += `<button class="${isActive ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="currentPromoPage=${i}; applyPromoFiltersAndRender()">${i}</button>`;
-    }
+    const getPages = (current, total) => {
+        if (total <= 6) return Array.from({ length: total }, (_, i) => i + 1);
+        if (current <= 3) return [1, 2, 3, 4, '...', total];
+        if (current >= total - 2) return [1, '...', total - 3, total - 2, total - 1, total];
+        return [1, '...', current - 1, current, current + 1, '...', total];
+    };
+
+    getPages(currentPromoPage, totalPages).forEach(i => {
+        if (i === '...') {
+            html += `<span style="padding: 6px 10px; color: var(--text-muted); font-weight: bold;">...</span>`;
+        } else {
+            const isActive = i === currentPromoPage;
+            html += `<button class="${isActive ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="currentPromoPage=${i}; applyPromoFiltersAndRender()">${i}</button>`;
+        }
+    });
 
     html += `<button class="btn-outline-sm" ${currentPromoPage === totalPages ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''} onclick="currentPromoPage++; applyPromoFiltersAndRender()"><i class="fa-solid fa-chevron-right"></i></button>`;
     div.innerHTML = html;
@@ -10402,10 +10733,12 @@ window.executeDeleteLoaiSanAdmin = async function() {
 let clusterTournamentTimelineState = {
     containerId: '',
     rawList: [],
+    allClustersList: [],    // Lưu danh sách toàn bộ Cụm sân cho Admin lọc
     startDateYmd: '',
     rangeDays: 14,          // 14 ngày hoặc 30 ngày
     statusFilter: 'ACTIVE', // 'ALL' | 'ACTIVE' (Đang & Sắp diễn ra) | 'ONGOING' | 'UPCOMING' | 'BOOKED' | 'WAITING'
-    pitchFilter: 'ALL',     // 'ALL' hoặc MaSanBong
+    pitchFilter: 'ALL',     // 'ALL' hoặc MaSanBong (Dành cho Quản lý sân)
+    clusterFilter: 'ALL',   // 'ALL' hoặc MaCumSan (Dành cho Admin)
     dayModeFilter: 'ALL',   // 'ALL' (Tất cả các ngày) | 'WEEKEND' (Chỉ hiện giải có lịch cuối tuần T7-CN)
     searchKeyword: ''
 };
@@ -10424,7 +10757,7 @@ function getLocalTodayYmdTimeline() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
-window.initAndRenderTournamentTimeline = function(containerId, tournamentsData) {
+window.initAndRenderTournamentTimeline = async function(containerId, tournamentsData) {
     const wrap = document.getElementById(containerId);
     if (!wrap) return;
 
@@ -10432,11 +10765,22 @@ window.initAndRenderTournamentTimeline = function(containerId, tournamentsData) 
     clusterTournamentTimelineState.rawList = Array.isArray(tournamentsData) ? tournamentsData : [];
 
     if (!clusterTournamentTimelineState.startDateYmd) {
-        // Mặc định lùi 1 ngày so với hôm nay để dễ nhìn bối cảnh giải đang diễn ra
         const d = new Date();
         d.setDate(d.getDate() - 1);
         const pad = n => n < 10 ? '0' + n : n;
         clusterTournamentTimelineState.startDateYmd = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    }
+
+    // Nếu là Admin và chưa tải danh sách Cụm sân thì gọi API lấy đầy đủ các Cụm sân
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user') || '{}');
+    if (currentUser.VaiTro === 'Admin' && clusterTournamentTimelineState.allClustersList.length === 0) {
+        try {
+            const csRes = await fetch(`${API_BASE_URL}/cum-san`);
+            const csJson = await csRes.json();
+            if (csJson.success && Array.isArray(csJson.data)) {
+                clusterTournamentTimelineState.allClustersList = csJson.data;
+            }
+        } catch (e) {}
     }
 
     renderTournamentTimelinePanel();
@@ -10466,22 +10810,63 @@ function renderTournamentTimelinePanel() {
     const wrap = document.getElementById(clusterTournamentTimelineState.containerId);
     if (!wrap) return;
 
-    // Tổng hợp danh sách tất cả các Sân con có xuất hiện trong các giải đấu để đưa vào Bộ lọc Sân
-    const pitchMap = {};
-    clusterTournamentTimelineState.rawList.forEach(gd => {
-        if (gd.cac_san_su_dung) {
-            Object.entries(gd.cac_san_su_dung).forEach(([maSan, tenSan]) => {
-                pitchMap[maSan] = tenSan;
-            });
-        }
-    });
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user') || '{}');
+    const isAdminUser = currentUser.VaiTro === 'Admin';
 
-    const pitchOptionsHtml = Object.entries(pitchMap).map(([ma, ten]) =>
-        `<option value="${ma}" ${clusterTournamentTimelineState.pitchFilter === ma ? 'selected' : ''}>${ten}</option>`
-    ).join('');
-
-    // Style chuẩn cho các thẻ <select> và <input> trên thanh bộ lọc để không bị cắt chân chữ (g, y, p) và không bị che chữ bên phải
     const filterSelectStyle = `height: 38px; padding: 0 32px 0 12px; line-height: 1.4; font-size: 0.85rem; font-weight: 600; color: #1e293b; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; cursor: pointer; width: auto;`;
+
+    // PHÂN QUYỀN BỘ LỌC SỐ 3:
+    // - Admin: Hiển thị bộ lọc theo Cụm sân (Tất cả Cụm sân)
+    // - Quản lý sân / Nhân viên: Hiển thị bộ lọc theo Sân con (Tất cả sân con)
+    let thirdFilterSelectHtml = '';
+    if (isAdminUser) {
+        clusterTournamentTimelineState.pitchFilter = 'ALL';
+
+        // Gộp danh sách Cụm sân từ API và từ dữ liệu giải đấu để đảm bảo không sót cơ sở nào
+        const clusterMap = {};
+        (clusterTournamentTimelineState.allClustersList || []).forEach(cs => {
+            const id = cs.MaCumSan || cs.ID;
+            if (id) clusterMap[id] = cs.TenCumSan;
+        });
+        clusterTournamentTimelineState.rawList.forEach(gd => {
+            if (gd.ma_cum_san && gd.ten_cum_san) {
+                clusterMap[gd.ma_cum_san] = gd.ten_cum_san;
+            }
+        });
+
+        const clusterOptionsHtml = Object.entries(clusterMap).map(([maCS, tenCS]) =>
+            `<option value="${maCS}" ${String(clusterTournamentTimelineState.clusterFilter) === String(maCS) ? 'selected' : ''}>${tenCS}</option>`
+        ).join('');
+
+        thirdFilterSelectHtml = `
+            <select class="form-control" style="${filterSelectStyle} min-width: 185px;" onchange="handleTournamentTimelineFilterChange('clusterFilter', this.value)">
+                <option value="ALL">Tất cả Cụm sân</option>
+                ${clusterOptionsHtml}
+            </select>
+        `;
+    } else {
+        clusterTournamentTimelineState.clusterFilter = 'ALL';
+
+        const pitchMap = {};
+        clusterTournamentTimelineState.rawList.forEach(gd => {
+            if (gd.cac_san_su_dung) {
+                Object.entries(gd.cac_san_su_dung).forEach(([maSan, tenSan]) => {
+                    pitchMap[maSan] = tenSan;
+                });
+            }
+        });
+
+        const pitchOptionsHtml = Object.entries(pitchMap).map(([ma, ten]) =>
+            `<option value="${ma}" ${clusterTournamentTimelineState.pitchFilter === ma ? 'selected' : ''}>${ten}</option>`
+        ).join('');
+
+        thirdFilterSelectHtml = `
+            <select class="form-control" style="${filterSelectStyle} min-width: 165px;" onchange="handleTournamentTimelineFilterChange('pitchFilter', this.value)">
+                <option value="ALL">Tất cả sân con</option>
+                ${pitchOptionsHtml}
+            </select>
+        `;
+    }
 
     wrap.innerHTML = `
         <div class="panel" style="border-top: 4px solid #0d8a5e; overflow: hidden;">
@@ -10493,7 +10878,7 @@ function renderTournamentTimelinePanel() {
                             <i class="fa-solid fa-trophy"></i>
                         </span>
                         <div>
-                            <h3 style="margin: 0; font-size: 1.08rem; font-weight: 700; color: #0f172a;">Lịch trình Giải đấu tại Cơ sở (Gantt Timeline)</h3>
+                            <h3 style="margin: 0; font-size: 1.08rem; font-weight: 700; color: #0f172a;">${isAdminUser ? 'Lịch trình Giải đấu Toàn hệ thống (Gantt Timeline)' : 'Lịch trình Giải đấu tại Cơ sở (Gantt Timeline)'}</h3>
                             <p style="margin: 2px 0 0 0; font-size: 0.82rem; color: #64748b; font-weight: 400;">
                                 Theo dõi trực quan các giải đấu diễn ra liên tục, cách ngày hoặc đá cuối tuần. Nhấp vào từng thanh giải đấu để xem chi tiết ca đá.
                             </p>
@@ -10521,7 +10906,7 @@ function renderTournamentTimelinePanel() {
                 </div>
             </div>
 
-            <!-- Thanh Bộ lọc đa năng (Đã bỏ icon ở các lựa chọn và bỏ mục Sắp khai mạc) -->
+            <!-- Thanh Bộ lọc đa năng -->
             <div style="padding: 14px 22px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
                 <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: 1;">
                     <!-- 1. Tìm kiếm tên giải / khách / SĐT -->
@@ -10539,11 +10924,8 @@ function renderTournamentTimelinePanel() {
                         <option value="WAITING" ${clusterTournamentTimelineState.statusFilter === 'WAITING' ? 'selected' : ''}>Chờ duyệt / Chờ đặt lịch</option>
                     </select>
 
-                    <!-- 3. Lọc theo Sân con tham gia -->
-                    <select class="form-control" style="${filterSelectStyle} min-width: 165px;" onchange="handleTournamentTimelineFilterChange('pitchFilter', this.value)">
-                        <option value="ALL">Tất cả sân con</option>
-                        ${pitchOptionsHtml}
-                    </select>
+                    <!-- 3. Lọc theo Cụm sân (Admin) HOẶC Lọc theo Sân con (Quản lý sân) -->
+                    ${thirdFilterSelectHtml}
 
                     <!-- 4. Lọc theo kiểu lịch đá -->
                     <select class="form-control" style="${filterSelectStyle} min-width: 235px;" onchange="handleTournamentTimelineFilterChange('dayModeFilter', this.value)">
@@ -10647,7 +11029,13 @@ function renderTournamentTimelineGridOnly() {
         if (stFilter === 'BOOKED' && !gd.da_dat_san) return false;
         if (stFilter === 'WAITING' && gd.da_dat_san) return false;
 
-        // Lọc theo sân con
+        // Lọc theo Cụm sân (Dành cho Admin)
+        const cFilter = clusterTournamentTimelineState.clusterFilter || 'ALL';
+        if (cFilter !== 'ALL') {
+            if (String(gd.ma_cum_san) !== String(cFilter)) return false;
+        }
+
+        // Lọc theo Sân con (Dành cho Quản lý sân)
         if (pFilter !== 'ALL') {
             if (!gd.cac_san_su_dung || !gd.cac_san_su_dung[pFilter]) return false;
         }
@@ -11001,3 +11389,278 @@ window.openTournamentTimelineDetailModal = function(maGiaiDau) {
 
     modal.style.display = 'flex';
 };
+
+// ======================================================
+// MODULE 6: TRA CỨU LỊCH SỬ GIAO DỊCH TOÀN HỆ THỐNG (DÀNH RIÊNG CHO ADMIN)
+// ======================================================
+let allAdminTransactions = [];
+let adminTxSearch = '';
+let adminTxTypeFilter = 'All';
+let adminTxFlowFilter = 'All';
+let adminTxDateFilter = '';
+let adminTxPage = 1;
+const ITEMS_PER_ADMIN_TX_PAGE = 8;
+
+window.renderQuanLyGiaoDichAdmin = async function() {
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user') || '{}');
+    if (currentUser.VaiTro !== 'Admin') {
+        return showSystemModal('Không có quyền truy cập', 'Chức năng Tra cứu Giao dịch toàn hệ thống chỉ dành cho Admin!', 'error');
+    }
+
+    adminTxSearch = '';
+    adminTxTypeFilter = 'All';
+    adminTxFlowFilter = 'All';
+    adminTxDateFilter = '';
+    adminTxPage = 1;
+
+    document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+    const menuLink = document.getElementById('menu-giaodich');
+    if (menuLink) menuLink.classList.add('active');
+
+    const contentArea = document.querySelector('.admin-content');
+    contentArea.innerHTML = `
+        <div class="page-header" style="margin-bottom: 20px;">
+            <div>
+                <h1 class="page-title">Lịch sử Giao dịch Toàn hệ thống</h1>
+                <p class="text-muted">Đối soát toàn bộ dòng tiền nạp ví VNPay, trừ tiền đặt cọc sân, hoàn tiền hủy sân và rút tiền của khách hàng.</p>
+            </div>
+            <button type="button" class="btn-outline-sm" style="padding: 9px 16px; font-weight: 700;" onclick="loadAdminTransactionsData()">
+                <i class="fa-solid fa-rotate-right"></i> Làm mới dữ liệu
+            </button>
+        </div>
+
+        <!-- 3 THẺ TỔNG HỢP DÒNG TIỀN -->
+        <div class="stat-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 20px;">
+            <div class="stat-card" style="border-left: 4px solid #10b981;">
+                <div class="stat-title">Tổng dòng tiền Cộng vào Ví (+)</div>
+                <div id="tx-stat-total-in" class="stat-value" style="color: #047857;">0đ</div>
+                <div style="font-size: 0.8rem; color: #64748b; margin-top: 4px;">Nạp tiền VNPay & Hoàn tiền cọc</div>
+            </div>
+            <div class="stat-card" style="border-left: 4px solid #ef4444;">
+                <div class="stat-title">Tổng dòng tiền Trừ từ Ví (-)</div>
+                <div id="tx-stat-total-out" class="stat-value" style="color: #b91c1c;">0đ</div>
+                <div style="font-size: 0.8rem; color: #64748b; margin-top: 4px;">Thanh toán cọc đặt sân & Rút tiền</div>
+            </div>
+            <div class="stat-card" style="border-left: 4px solid #3b82f6;">
+                <div class="stat-title">Tổng số giao dịch khớp lọc</div>
+                <div id="tx-stat-count" class="stat-value" style="color: #1d4ed8;">0</div>
+                <div style="font-size: 0.8rem; color: #64748b; margin-top: 4px;">Giao dịch ghi nhận trên hệ thống</div>
+            </div>
+        </div>
+
+        <!-- KHỐI BỘ LỌC & TÌM KIẾM ĐỘC LẬP NẰM NGOÀI BẢNG -->
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px 20px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+            <div style="position: relative; flex: 1; min-width: 240px;">
+                <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #64748b; font-size: 0.9rem;"></i>
+                <input type="text" class="form-control" style="padding-left: 38px; height: 40px; background: #f8fafc; border-color: #cbd5e1; border-radius: 9px; font-size: 0.9rem;" placeholder="Tìm Mã GD, Tên khách hàng, SĐT, Nội dung..." oninput="adminTxSearch=this.value.toLowerCase().trim(); adminTxPage=1; applyAdminTxFilters();">
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <div style="display: inline-flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 6px 0 12px; height: 40px; gap: 6px;">
+                    <i class="fa-regular fa-calendar" style="color: var(--primary); font-size: 0.88rem;"></i>
+                    <span style="font-size: 0.82rem; font-weight: 600; color: #64748b; white-space: nowrap;">Ngày GD:</span>
+                    <input type="date" id="admin-tx-date" style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%;" onchange="adminTxDateFilter=this.value; adminTxPage=1; applyAdminTxFilters();">
+                    <button type="button" onclick="document.getElementById('admin-tx-date').value=''; adminTxDateFilter=''; adminTxPage=1; applyAdminTxFilters();" style="background: #e2e8f0; border: none; color: #334155; padding: 4px 9px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer;">
+                        Tất cả
+                    </button>
+                </div>
+
+                <div style="display: inline-flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 10px 0 12px; height: 40px; gap: 6px;">
+                    <i class="fa-solid fa-arrows-up-down" style="color: var(--primary); font-size: 0.85rem;"></i>
+                    <span style="font-size: 0.82rem; font-weight: 600; color: #64748b; white-space: nowrap;">Dòng tiền:</span>
+                    <select style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%;" onchange="adminTxFlowFilter=this.value; adminTxPage=1; applyAdminTxFilters();">
+                        <option value="All">Tất cả (+/-)</option>
+                        <option value="Cong">Cộng tiền (+)</option>
+                        <option value="Tru">Trừ tiền (-)</option>
+                    </select>
+                </div>
+
+                <div style="display: inline-flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 9px; padding: 0 10px 0 12px; height: 40px; gap: 6px;">
+                    <i class="fa-solid fa-filter" style="color: var(--primary); font-size: 0.85rem;"></i>
+                    <span style="font-size: 0.82rem; font-weight: 600; color: #64748b; white-space: nowrap;">Loại GD:</span>
+                    <select style="border: none; outline: none; background: transparent; font-weight: 700; color: #0f172a; font-size: 0.88rem; cursor: pointer; height: 100%;" onchange="adminTxTypeFilter=this.value; adminTxPage=1; applyAdminTxFilters();">
+                        <option value="All">Tất cả loại</option>
+                        <option value="NapTien">Nạp tiền</option>
+                        <option value="DatSan">Đặt cọc sân</option>
+                        <option value="HoanTienHuySan">Hoàn tiền hủy sân</option>
+                        <option value="HoanTienHuyGap">Hoàn tiền hủy gấp</option>
+                        <option value="RutTien">Rút tiền</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- KHỐI BẢNG DỮ LIỆU -->
+        <div class="panel" style="padding: 0; overflow: hidden;">
+            <div class="table-responsive" style="min-height: 360px;">
+                <table class="admin-table" style="margin: 0;">
+                    <thead style="background: #F8FAFC;">
+                        <tr>
+                            <th style="width: 110px;">Mã GD</th>
+                            <th>Khách hàng</th>
+                            <th>Loại giao dịch</th>
+                            <th>Nội dung chi tiết</th>
+                            <th style="text-align: right;">Biến động</th>
+                            <th style="text-align: right;">Số dư sau GD</th>
+                            <th style="text-align: center;">Thời gian</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-tx-tbody">
+                        <tr><td colspan="7" style="text-align: center; padding: 40px;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải lịch sử giao dịch...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div id="admin-tx-pagination" style="display: flex; justify-content: center; align-items: center; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--border); background: #ffffff;"></div>
+        </div>
+    `;
+
+    await loadAdminTransactionsData();
+};
+
+window.loadAdminTransactionsData = async function() {
+    const tbody = document.getElementById('admin-tx-tbody');
+    if (!tbody) return;
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/admin/giao-dich`);
+        const json = await res.json();
+        if (json.success) {
+            allAdminTransactions = json.data || [];
+            applyAdminTxFilters();
+        } else {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:30px; color:red;">${json.message || 'Lỗi tải dữ liệu'}</td></tr>`;
+        }
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:30px; color:red;">Lỗi kết nối máy chủ!</td></tr>`;
+    }
+};
+
+window.applyAdminTxFilters = function() {
+    const filtered = allAdminTransactions.filter(tx => {
+        const matchFlow = (adminTxFlowFilter === 'All' || tx.DongTien === adminTxFlowFilter);
+        const matchType = (adminTxTypeFilter === 'All' || tx.LoaiGiaoDich === adminTxTypeFilter);
+        const txDate = tx.NgayTao ? String(tx.NgayTao).substring(0, 10) : '';
+        const matchDate = adminTxDateFilter ? (txDate === adminTxDateFilter) : true;
+
+        const maGD = String(tx.MaGiaoDich || tx.ID || '').toLowerCase();
+        const tenKH = String(tx.nguoi_dung?.HoTen || '').toLowerCase();
+        const sdtKH = String(tx.nguoi_dung?.SoDienThoai || '').toLowerCase();
+        const noiDung = String(tx.NoiDung || '').toLowerCase();
+
+        const matchSearch = adminTxSearch === '' ||
+            maGD.includes(adminTxSearch) ||
+            tenKH.includes(adminTxSearch) ||
+            sdtKH.includes(adminTxSearch) ||
+            noiDung.includes(adminTxSearch);
+
+        return matchFlow && matchType && matchDate && matchSearch;
+    });
+
+    const totalIn = filtered.filter(t => t.DongTien === 'Cong').reduce((s, t) => s + Number(t.SoTien || 0), 0);
+    const totalOut = filtered.filter(t => t.DongTien === 'Tru').reduce((s, t) => s + Number(t.SoTien || 0), 0);
+
+    const elIn = document.getElementById('tx-stat-total-in');
+    const elOut = document.getElementById('tx-stat-total-out');
+    const elCount = document.getElementById('tx-stat-count');
+    if (elIn) elIn.textContent = `+${totalIn.toLocaleString('vi-VN')}đ`;
+    if (elOut) elOut.textContent = `-${totalOut.toLocaleString('vi-VN')}đ`;
+    if (elCount) elCount.textContent = `${filtered.length} GD`;
+
+    const totalPages = Math.ceil(filtered.length / ITEMS_PER_ADMIN_TX_PAGE) || 1;
+    if (adminTxPage > totalPages) adminTxPage = totalPages;
+    const startIdx = (adminTxPage - 1) * ITEMS_PER_ADMIN_TX_PAGE;
+
+    renderAdminTxTable(filtered.slice(startIdx, startIdx + ITEMS_PER_ADMIN_TX_PAGE));
+    renderAdminTxPagination(totalPages);
+};
+
+function renderAdminTxTable(list) {
+    const tbody = document.getElementById('admin-tx-tbody');
+    if (!tbody) return;
+
+    if (list.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:45px; color:#64748b;">Không tìm thấy giao dịch nào phù hợp với bộ lọc.</td></tr>`;
+        return;
+    }
+
+    const typeMap = {
+        'NapTien': { label: 'Nạp tiền Ví', bg: '#ecfdf5', color: '#047857' },
+        'DatSan': { label: 'Đặt cọc sân', bg: '#eff6ff', color: '#1d4ed8' },
+        'HoanTienHuySan': { label: 'Hoàn cọc hủy sân', bg: '#fef3c7', color: '#b45309' },
+        'HoanTienHuyGap': { label: 'Hoàn cọc hủy gấp', bg: '#f5f3ff', color: '#6d28d9' },
+        'RutTien': { label: 'Rút tiền', bg: '#fef2f2', color: '#b91c1c' }
+    };
+
+    tbody.innerHTML = list.map(tx => {
+        const maGD = tx.MaGiaoDich || tx.ID;
+        const isCong = tx.DongTien === 'Cong';
+        const sign = isCong ? '+' : '-';
+        const amountColor = isCong ? '#047857' : '#dc2626';
+        const tInfo = typeMap[tx.LoaiGiaoDich] || { label: tx.LoaiGiaoDich, bg: '#f1f5f9', color: '#475569' };
+
+        const d = tx.NgayTao ? new Date(tx.NgayTao) : null;
+        const pad = n => n < 10 ? '0' + n : n;
+        const timeStr = d ? `${pad(d.getHours())}:${pad(d.getMinutes())} - ${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}` : 'N/A';
+
+        const nvXuLy = tx.nhan_vien_xu_ly || tx.nhanVienXuLy;
+        const nvNote = nvXuLy ? `<div style="font-size:0.75rem; color:#64748b; margin-top:2px;">Xử lý bởi: <strong>${nvXuLy.HoTen}</strong> (#${nvXuLy.MaNguoiDung || nvXuLy.ID})</div>` : '';
+
+        return `
+            <tr>
+                <td>
+                    <span style="font-family:monospace; font-weight:700; background:#f1f5f9; border:1px solid #cbd5e1; color:#0f172a; padding:4px 8px; border-radius:6px; font-size:0.85rem;">#${maGD}</span>
+                </td>
+                <td style="white-space:nowrap;">
+                    <strong style="color:#0f172a;">${tx.nguoi_dung?.HoTen || 'Khách hàng'}</strong>
+                    <div style="font-size:0.8rem; color:#64748b;">${tx.nguoi_dung?.SoDienThoai || ''}</div>
+                </td>
+                <td>
+                    <span style="background:${tInfo.bg}; color:${tInfo.color}; padding:4px 10px; border-radius:99px; font-size:0.78rem; font-weight:700; white-space:nowrap;">${tInfo.label}</span>
+                </td>
+                <td style="max-width:300px;">
+                    <div style="font-size:0.88rem; color:#1e293b; line-height:1.4;">${tx.NoiDung || ''}</div>
+                    ${nvNote}
+                </td>
+                <td style="text-align:right; white-space:nowrap;">
+                    <strong style="color:${amountColor}; font-size:1rem;">${sign}${Number(tx.SoTien || 0).toLocaleString('vi-VN')}đ</strong>
+                </td>
+                <td style="text-align:right; white-space:nowrap; font-weight:600; color:#334155;">
+                    ${Number(tx.SoDuSau || 0).toLocaleString('vi-VN')}đ
+                </td>
+                <td style="text-align:center; white-space:nowrap; font-size:0.84rem; color:#64748b;">
+                    <i class="fa-regular fa-clock"></i> ${timeStr}
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function renderAdminTxPagination(totalPages) {
+    const div = document.getElementById('admin-tx-pagination');
+    if (!div) return;
+    if (totalPages <= 1) {
+        div.innerHTML = '';
+        return;
+    }
+
+    let html = `<button class="btn-outline-sm" ${adminTxPage === 1 ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''} onclick="adminTxPage--; applyAdminTxFilters()"><i class="fa-solid fa-chevron-left"></i></button>`;
+
+    const getPages = (current, total) => {
+        if (total <= 6) return Array.from({ length: total }, (_, i) => i + 1);
+        if (current <= 3) return [1, 2, 3, 4, '...', total];
+        if (current >= total - 2) return [1, '...', total - 3, total - 2, total - 1, total];
+        return [1, '...', current - 1, current, current + 1, '...', total];
+    };
+
+    getPages(adminTxPage, totalPages).forEach(i => {
+        if (i === '...') {
+            html += `<span style="padding: 6px 10px; color: var(--text-muted); font-weight: bold;">...</span>`;
+        } else {
+            const isActive = i === adminTxPage;
+            html += `<button class="${isActive ? 'btn-primary' : 'btn-outline-sm'}" style="padding: 6px 14px;" onclick="adminTxPage=${i}; applyAdminTxFilters()">${i}</button>`;
+        }
+    });
+
+    html += `<button class="btn-outline-sm" ${adminTxPage === totalPages ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''} onclick="adminTxPage++; applyAdminTxFilters()"><i class="fa-solid fa-chevron-right"></i></button>`;
+    div.innerHTML = html;
+}

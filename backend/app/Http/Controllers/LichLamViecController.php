@@ -14,7 +14,7 @@ class LichLamViecController extends Controller
 {
     public function layLichLamViec(Request $request)
     {
-        $maCumSan = $request->user()->MaCumSan;
+        $maCumSan = $request->user()->MaCumSan ?: $request->query('id_cum_san', $request->query('ma_cum_san'));
 
         $tuNgay = $request->query('tu_ngay', Carbon::now()->startOfWeek()->toDateString());
         $denNgay = $request->query('den_ngay', Carbon::now()->endOfWeek()->toDateString());
@@ -385,7 +385,7 @@ class LichLamViecController extends Controller
 
     public function trangThaiKhanCapTuanSau(Request $request)
     {
-        $maCumSan = $request->user()->MaCumSan;
+        $maCumSan = $request->user()->MaCumSan ?: $request->query('id_cum_san', $request->query('ma_cum_san'));
         $todayStr = Carbon::now()->toDateString();
 
         $staffIds = NguoiDung::where('MaCumSan', $maCumSan)
