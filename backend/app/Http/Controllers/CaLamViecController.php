@@ -13,7 +13,7 @@ class CaLamViecController extends Controller
 {
     public function layDanhSach(Request $request)
     {
-        $maCumSan = $request->user()->MaCumSan;
+        $maCumSan = $request->user()->MaCumSan ?: $request->query('id_cum_san', $request->query('ma_cum_san'));
         $cumSan = CumSan::find($maCumSan);
 
         $allCa = CaLamViec::where('MaCumSan', $maCumSan)

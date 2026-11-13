@@ -120,4 +120,25 @@ class GiaoDichController extends Controller
             ], 500);
         }
     }
+
+    public function layDanhSachAdmin(Request $request)
+    {
+        $userDangNhap = auth()->user();
+        if (!in_array($userDangNhap->VaiTro, ['Admin', 'QuanLySan'])) {
+            return response()->json(['success' => false, 'message' => 'Không có quyền truy cập!'], 403);
+        }
+
+        $danhSach = GiaoDich::with([
+                'nguoiDung:MaNguoiDung,HoTen,SoDienThoai,Email',
+                'nhanVienXuLy:MaNguoiDung,HoTen,VaiTro'
+            ])
+            ->orderBy('NgayTao', 'desc')
+            ->orderBy('MaGiaoDich', 'desc')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data'    => $danhSach
+        ]);
+    }
 }

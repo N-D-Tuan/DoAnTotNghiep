@@ -20,6 +20,11 @@ class GiaiDauController extends Controller
         $userId = Auth::id();
 
         $danhSach = GiaiDau::with('cumSan')
+            ->withCount([
+                'datSans as so_tran_da_dat' => function ($q) {
+                    $q->where('TrangThai', '!=', 'DaHuy');
+                }
+            ])
             ->where('MaNguoiDung', $userId)
             ->orderBy('NgayTao', 'desc')
             ->get();
@@ -92,7 +97,12 @@ class GiaiDauController extends Controller
     {
         $userDangNhap = auth()->user();
 
-        $query = GiaiDau::with(['cumSan', 'nguoiDung']);
+        $query = GiaiDau::with(['cumSan', 'nguoiDung'])
+            ->withCount([
+                'datSans as so_tran_da_dat' => function ($q) {
+                    $q->where('TrangThai', '!=', 'DaHuy');
+                }
+            ]);
 
         if ($userDangNhap->VaiTro === 'QuanLySan') {
             $query->where('MaCumSan', $userDangNhap->MaCumSan);

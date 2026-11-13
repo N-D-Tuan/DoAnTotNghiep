@@ -168,101 +168,20 @@ async function syncUserBookings() {
 // ĐỒNG BỘ YÊU CẦU GIẢI ĐẤU NGẦM (REAL-TIME KHÔNG CHỚP TRANG)
 // ======================================================
 async function syncUserTournaments() {
-    // 1. Chỉ chạy ngầm nếu đang mở giao diện Các yêu cầu
     const container = document.getElementById('requests-content-body');
     if (!container) return;
 
-    // 2. Dò xem khách có đang đứng ở đúng Tab "Giải đấu" hay không
     let isGiaiDauTab = false;
     document.querySelectorAll('button[onclick^="renderRequests"]').forEach(btn => {
-        if (btn.style.borderBottom && btn.style.borderBottom.includes('solid') && btn.getAttribute('onclick').includes('giai_dau')) {
+        if (btn.getAttribute('onclick').includes('giai_dau') && btn.style.background && btn.style.background.includes('var(--primary)')) {
             isGiaiDauTab = true;
         }
     });
 
     if (!isGiaiDauTab) return;
 
-    try {
-        const response = await fetch(`${API_BASE_URL}/giai-dau/cua-toi`);
-        if (!response.ok) return;
-        
-        const res = await response.json();
-        const list = res.data || [];
-
-        // Cập nhật lại mảng global ngay lập tức để Giỏ hàng nhận diện giải đấu đã duyệt
-        userActiveTournaments = list.filter(t => t.TrangThai === 'DaDuyet');
-
-        // Bắt đầu vẽ HTML ngầm (Chỉ vẽ cái ruột bên trong)
-        if (list.length === 0) {
-            container.innerHTML = `
-                <div style="padding: 40px;">
-                    <i class="fa-regular fa-folder-open" style="font-size: 3rem; color: var(--border); margin-bottom: 16px;"></i>
-                    <p style="color: var(--text-muted); font-size: 1.05rem;">Bạn chưa có yêu cầu tổ chức giải đấu nào.</p>
-                </div>`;
-        } else {
-            let html = `<div style="display: flex; flex-direction: column; gap: 12px; max-height: 480px; overflow-y: auto; padding-right: 8px; text-align: left;">`;
-            
-            list.forEach(item => {
-                const statusTextMap = {
-                    'ChoDuyet': 'Chờ duyệt', 'DaDuyet': 'Đã duyệt', 'TuChoi': 'Từ chối',
-                    'HetHan': 'Hết hạn', 'HoanThanh': 'Hoàn thành', 'DaHuy': 'Đã hủy'
-                };
-                const viStatus = statusTextMap[item.TrangThai] || item.TrangThai;
-
-                let badgeColor = '#6b7280', badgeBg = '#f3f4f6'; 
-                if(item.TrangThai === 'DaDuyet') { badgeColor = '#047857'; badgeBg = '#d1fae5'; }
-                else if(item.TrangThai === 'TuChoi' || item.TrangThai === 'DaHuy') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; }
-                else if(item.TrangThai === 'ChoDuyet') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; }
-                else if(item.TrangThai === 'HetHan') { badgeColor = '#9ca3af'; badgeBg = '#f3f4f6'; }
-
-                let approvalInfoHtml = '';
-                if (item.TrangThai === 'DaDuyet' && item.NgayDuyet) {
-                    const d = new Date(item.NgayDuyet);
-                    const dExp = new Date(d);
-                    dExp.setDate(d.getDate() + 3);
-                    const pad = n => n < 10 ? '0' + n : n;
-                    
-                    approvalInfoHtml = `
-                        <p style="margin: 6px 0 0 0; font-size: 0.9rem; color: #047857;">
-                            <i class="fa-solid fa-calendar-check"></i> Ngày duyệt: <strong>${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}</strong> 
-                            <span style="margin-left: 15px; color: #b91c1c;">
-                                <i class="fa-solid fa-hourglass-half"></i> Ngày hết hạn: <strong>${dExp.getFullYear()}-${pad(dExp.getMonth() + 1)}-${pad(dExp.getDate())}</strong>
-                            </span>
-                        </p>
-                    `;
-                } else if (item.TrangThai === 'TuChoi' && item.LyDoHuy) {
-                    approvalInfoHtml = `
-                        <div style="margin-top: 8px; padding: 8px 12px; font-size: 0.85rem; color: #b91c1c; background: #fef2f2; border-radius: 6px; border: 1px dashed #fca5a5;">
-                            <i class="fa-solid fa-circle-exclamation"></i> Lý do từ chối: <strong>${item.LyDoHuy}</strong>
-                        </div>
-                    `;
-                }
-
-                html += `
-                    <div style="border: 1px solid var(--border); border-radius: 8px; padding: 16px; background: #fff; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                        <div>
-                            <h4 style="margin: 0 0 8px 0; color: var(--text-dark); font-size: 1.1rem;">${item.TenGiaiDau}</h4>
-                            <p style="margin: 0 0 6px 0; font-size: 0.9rem; color: var(--text-muted);">
-                                <i class="fa-regular fa-calendar"></i> Lịch đá: ${item.NgayBatDau} đến ${item.NgayKetThuc}
-                            </p>
-                            <p style="margin: 0; font-size: 0.9rem; color: var(--text-muted);">
-                                <i class="fa-solid fa-location-dot"></i> Cụm sân: <strong style="color:var(--text-dark);">${item.cum_san ? item.cum_san.TenCumSan : 'Không xác định'}</strong>
-                                <span style="margin-left: 10px; font-size: 0.8rem;">(Ngày nộp: ${item.NgayTao ? item.NgayTao.substring(0,10) : 'N/A'})</span>
-                            </p>
-                            ${approvalInfoHtml}
-                        </div>
-                        <div>
-                            <span style="padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${viStatus}</span>
-                        </div>
-                    </div>
-                `;
-            });
-            html += `</div>`;
-            container.innerHTML = html; // Cập nhật ruột HTML nhẹ nhàng
-        }
-    } catch (error) {
-        console.error("Lỗi đồng bộ giải đấu ngầm:", error);
-    }
+    // Gọi lại renderRequests('giai_dau') để đồng bộ 100% giao diện card và trạng thái mới
+    await renderRequests('giai_dau');
 }
 
 // ======================================================
@@ -3882,25 +3801,32 @@ async function renderRequests(activeTab = 'giai_dau') {
                 let html = `<div style="display: flex; flex-direction: column; gap: 14px; max-height: 520px; overflow-y: auto; padding-right: 6px; text-align: left;">`;
                 
                 list.forEach(item => {
+                    const soTranDaDat = Number(item.so_tran_da_dat ?? 0);
+                    const effectiveStatus = (item.TrangThai === 'HetHan')
+                        ? (soTranDaDat > 0 ? 'DaDatLich' : 'QuaHanKhongDat')
+                        : item.TrangThai;
+
                     const statusTextMap = {
                         'ChoDuyet': 'Chờ duyệt',
-                        'DaDuyet': 'Đã duyệt',
+                        'DaDuyet': 'Đã duyệt (Chờ đặt sân)',
+                        'DaDatLich': soTranDaDat > 0 ? `Đã chốt lịch (${soTranDaDat} trận)` : 'Đã chốt lịch sân',
+                        'QuaHanKhongDat': 'Hết hạn (Không đặt sân)',
                         'TuChoi': 'Từ chối',
-                        'HetHan': 'Đã chốt lịch / Hết hạn',
                         'HoanThanh': 'Hoàn thành',
                         'DaHuy': 'Đã hủy'
                     };
-                    const viStatus = statusTextMap[item.TrangThai] || item.TrangThai;
+                    const viStatus = statusTextMap[effectiveStatus] || item.TrangThai;
 
                     let badgeColor = '#475569', badgeBg = '#f1f5f9', borderLeftColor = '#cbd5e1'; 
-                    if(item.TrangThai === 'DaDuyet') { badgeColor = '#047857'; badgeBg = '#d1fae5'; borderLeftColor = '#10b981'; }
-                    else if(item.TrangThai === 'TuChoi' || item.TrangThai === 'DaHuy') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; borderLeftColor = '#ef4444'; }
-                    else if(item.TrangThai === 'ChoDuyet') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; borderLeftColor = '#f59e0b'; }
-                    else if(item.TrangThai === 'HetHan') { badgeColor = '#475569'; badgeBg = '#f1f5f9'; borderLeftColor = '#94a3b8'; }
-                    else if(item.TrangThai === 'HoanThanh') { badgeColor = '#1d4ed8'; badgeBg = '#dbeafe'; borderLeftColor = '#3b82f6'; }
+                    if (effectiveStatus === 'DaDuyet') { badgeColor = '#047857'; badgeBg = '#d1fae5'; borderLeftColor = '#10b981'; }
+                    else if (effectiveStatus === 'DaDatLich') { badgeColor = '#0369a1'; badgeBg = '#e0f2fe'; borderLeftColor = '#0284c7'; }
+                    else if (effectiveStatus === 'QuaHanKhongDat') { badgeColor = '#64748b'; badgeBg = '#f1f5f9'; borderLeftColor = '#94a3b8'; }
+                    else if (effectiveStatus === 'TuChoi' || effectiveStatus === 'DaHuy') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; borderLeftColor = '#ef4444'; }
+                    else if (effectiveStatus === 'ChoDuyet') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; borderLeftColor = '#f59e0b'; }
+                    else if (effectiveStatus === 'HoanThanh') { badgeColor = '#1d4ed8'; badgeBg = '#dbeafe'; borderLeftColor = '#3b82f6'; }
 
                     let approvalInfoHtml = '';
-                    if (item.TrangThai === 'DaDuyet' && item.NgayDuyet) {
+                    if (effectiveStatus === 'DaDuyet' && item.NgayDuyet) {
                         const d = new Date(item.NgayDuyet);
                         const dExp = new Date(d);
                         dExp.setDate(d.getDate() + 3);
@@ -3914,7 +3840,13 @@ async function renderRequests(activeTab = 'giai_dau') {
                                 <span style="color: #b91c1c;"><i class="fa-solid fa-hourglass-half"></i> Hạn đặt sân: <strong>${fExp}</strong></span>
                             </div>
                         `;
-                    } else if (item.TrangThai === 'TuChoi' && item.LyDoHuy) {
+                    } else if (effectiveStatus === 'QuaHanKhongDat') {
+                        approvalInfoHtml = `
+                            <div style="margin-top: 8px; font-size: 0.82rem; color: #64748b; font-style: italic;">
+                                <i class="fa-regular fa-clock"></i> Đã quá thời hạn 3 ngày giữ quyền đặt sân kể từ khi được duyệt.
+                            </div>
+                        `;
+                    } else if (effectiveStatus === 'TuChoi' && item.LyDoHuy) {
                         approvalInfoHtml = `
                             <div style="margin-top: 10px; padding: 9px 14px; font-size: 0.86rem; color: #b91c1c; background: #fef2f2; border-radius: 8px; border: 1px dashed #fca5a5;">
                                 <i class="fa-solid fa-circle-exclamation"></i> Lý do từ chối: <strong>${item.LyDoHuy}</strong>
