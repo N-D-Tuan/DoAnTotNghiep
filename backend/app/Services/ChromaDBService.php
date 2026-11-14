@@ -25,37 +25,80 @@ class ChromaDBService
         }
     }
 
-    // 1. Hàm gọi Gemini API để biến văn bản thành Vector
-    public function taoVectorTuVanBan($vanBan)
+    // Lấy toàn bộ danh sách Gemini API Keys từ config và .env (Hỗ trợ tới 20 keys)
+    private function getAllGeminiKeys(): array
     {
         $keys = config('services.gemini.keys', []);
-        $key = !empty($keys) ? array_values(array_filter($keys))[0] : env('GEMINI_API_KEY');
+        if (!is_array($keys)) {
+            $keys = [];
+        }
 
-        if (empty($key)) {
-            \Log::error("Thiếu API Key Gemini.");
+        // Quét thêm trực tiếp từ env phòng trường hợp config/services.php chỉ khai báo 2 key
+        $envSingle = env('GEMINI_API_KEY');
+        if (!empty($envSingle)) {
+            $keys[] = trim($envSingle);
+        }
+        for ($i = 1; $i <= 20; $i++) {
+            $k = env("GEMINI_API_KEY_{$i}");
+            if (!empty($k)) {
+                $keys[] = trim($k);
+            }
+        }
+
+        return array_values(array_unique(array_filter($keys)));
+    }
+
+    // 1. Hàm gọi Gemini API để biến văn bản thành Vector (Có tự động xoay Key & nhớ Key sống)
+    public function taoVectorTuVanBan($vanBan)
+    {
+        $keys = $this->getAllGeminiKeys();
+
+        if (empty($keys)) {
+            Log::error("Thiếu API Key Gemini trong ChromaDBService.");
             return null;
         }
 
+        $totalKeys = count($keys);
+        $startIndex = (int) \Illuminate\Support\Facades\Cache::get('gemini_working_key_index', 0);
+        if ($startIndex >= $totalKeys) {
+            $startIndex = 0;
+        }
+
         $modelName = 'gemini-embedding-2';
-        $url = "https://generativelanguage.googleapis.com/v1beta/models/{$modelName}:embedContent?key={$key}";
 
-        try {
-            $response = \Illuminate\Support\Facades\Http::withHeaders([
-                'Content-Type' => 'application/json'
-            ])->withoutVerifying()->timeout(15)->post($url, [
-                'model' => "models/{$modelName}",
-                'content' => [
-                    'parts' => [['text' => $vanBan]]
-                ]
-            ]);
+        for ($attempt = 0; $attempt < $totalKeys; $attempt++) {
+            $currentIndex = ($startIndex + $attempt) % $totalKeys;
+            $key = $keys[$currentIndex];
+            $url = "https://generativelanguage.googleapis.com/v1beta/models/{$modelName}:embedContent?key={$key}";
 
-            if ($response->successful()) {
-                return $response->json()['embedding']['values'];
+            try {
+                $response = Http::withHeaders([
+                    'Content-Type' => 'application/json'
+                ])->withoutVerifying()->timeout(15)->post($url, [
+                    'model' => "models/{$modelName}",
+                    'content' => [
+                        'parts' => [['text' => $vanBan]]
+                    ]
+                ]);
+
+                if ($response->successful()) {
+                    if ($currentIndex !== $startIndex) {
+                        \Illuminate\Support\Facades\Cache::put('gemini_working_key_index', $currentIndex, now()->addHours(2));
+                    }
+                    return $response->json()['embedding']['values'];
+                }
+
+                if (in_array($response->status(), [429, 403]) || $response->status() >= 500) {
+                    Log::warning("Gemini Vector Key " . ($currentIndex + 1) . "/{$totalKeys} bị lỗi " . $response->status() . ". Chuyển sang key tiếp theo.");
+                    continue;
+                }
+
+                Log::error("Lỗi Gemini Vector: " . $response->body());
+                break;
+            } catch (\Exception $e) {
+                Log::warning("Lỗi kết nối API Vector ở Key " . ($currentIndex + 1) . ": " . $e->getMessage());
+                continue;
             }
-            
-            \Log::error("Lỗi Gemini Vector: " . $response->body());
-        } catch (\Exception $e) {
-            \Log::error("Lỗi kết nối API Vector: " . $e->getMessage());
         }
 
         return null;
@@ -68,76 +111,85 @@ class ChromaDBService
         $collection = $this->client->getOrCreateCollection('quy_dinh_he_thong');
 
         $duLieu = [
-        // TẠO CÁC YÊU CẦU
-        [
-            'id' => 'rut_tien',
-            'noi_dung' => 'Hướng dẫn rút tiền: Để rút tiền từ số dư ví DN FOOTBALL, khách hàng bấm vào mục Ví tiền trên thanh menu (Quản lý Tài chính), chọn nút "Rút tiền". Sau đó nhập số tiền cần rút (tối thiểu 50.000 VNĐ), điền đầy đủ Tên ngân hàng thụ hưởng, Số tài khoản, Tên chủ tài khoản và bấm "Xác nhận rút tiền". Hệ thống sẽ xử lý chuyển khoản tự động, trừ trực tiếp số dư ví và ghi nhận vào lịch sử giao dịch ngay lập tức mà không cần chờ phê duyệt.'
-        ],
-        [
-            'id' => 'huy_san_gap',
-            'noi_dung' => 'Quy định hủy sân gấp: Khách hàng có thể hủy sân thoải mái trước 10 giờ so với giờ đá, nếu là giải đấu thì thời hạn là 1 tuần trước khai mạc của giải đấu. Nếu bạn muốn hủy trong vòng 10 giờ (hoặc 1 tuần đối với giải đấu) thì bạn phải tạo yêu cầu hủy gấp. Để thực hiện, khách hàng vào mục "Các yêu cầu", chuyển sang tab "Hủy sân gấp" và bấm nút "Tạo yêu cầu hủy gấp" và chọn mục mình muốn hủy.'
-        ],
-        [
-            'id' => 'tao_giai_dau',
-            'noi_dung' => 'Hướng dẫn tạo giải đấu: Khách hàng muốn tạo giải đấu cá nhân vui lòng vào mục "Các yêu càu", ở tab "Giải đấu" chọn nút "Tạo yêu cầu giải đấu". Điền đầy đủ các thông tin: Tên giải, ngày bắt đầu, ngày kết thúc và mô tả chi tiết. Sau khi hoàn tất, giải đấu sẽ chuyển sang trạng thái "Chờ duyệt". Ban quản lý DN FOOTBALL sẽ xem xét và phê duyệt hệ thống giải cho bạn.'
-        ],
+            // NHÓM 1: TÀI CHÍNH, VÍ ĐIỆN TỬ & HOÀN TIỀN
+            [
+                'id' => 'nap_tien',
+                'noi_dung' => 'Hướng dẫn nạp tiền vào ví: Hệ thống DN FOOTBALL hỗ trợ nạp tiền tự động qua cổng thanh toán VNPay. Khách hàng bấm vào biểu tượng "Ví tiền" (hoặc nút dấu + cạnh số dư trên thanh menu đầu trang), chọn nút "Nạp tiền", nhập số tiền cần nạp (tối thiểu 10.000 VNĐ) và bấm "Xác nhận thanh toán". Sau khi thanh toán VNPay thành công, số dư ví sẽ được cộng tự động ngay lập tức và lưu vào lịch sử biến động số dư.'
+            ],
+            [
+                'id' => 'rut_tien',
+                'noi_dung' => 'Hướng dẫn rút tiền từ ví: Khách hàng bấm vào mục "Ví tiền" trên thanh menu (Quản lý Tài chính), chọn nút "Rút tiền". Nhập số tiền cần rút (tối thiểu 50.000 VNĐ và không vượt quá số dư khả dụng), điền đầy đủ Tên ngân hàng thụ hưởng, Số tài khoản, Tên chủ tài khoản rồi bấm "Xác nhận rút tiền". Hệ thống xử lý tự động, trừ trực tiếp số dư ví và ghi nhận vào lịch sử giao dịch ngay lập tức mà không cần chờ duyệt.'
+            ],
+            [
+                'id' => 'chinh_sach_hoan_tien',
+                'noi_dung' => 'Chính sách hoàn tiền cọc: Khi khách hàng tự hủy sân hợp lệ (trước giờ bóng lăn tối thiểu 10 tiếng đối với đá phong trào, hoặc trước ngày khai mạc tối thiểu 7 ngày đối với giải đấu), hệ thống sẽ tự động hoàn lại 100% số tiền đã đặt cọc vào "Số dư ví" của khách hàng trên DN FOOTBALL. Đối với trường hợp gửi "Yêu cầu hủy sân gấp" khi sát giờ, nếu Quản lý cụm sân phê duyệt thì khách hàng cũng được hoàn lại 100% tiền cọc vào ví; nếu bị từ chối thì lịch đặt giữ nguyên và không được hoàn cọc. Tiền trong ví có thể dùng để đặt sân tiếp hoặc rút về ngân hàng bất kỳ lúc nào.'
+            ],
 
-        // GIAO DỊCH & NẠP TIỀN
-        [
-            'id' => 'nap_tien',
-            'noi_dung' => 'Hướng dẫn nạp tiền: Hệ thống DN FOOTBALL hỗ trợ nạp tiền tự động qua cổng thanh toán VNPay. Để thực hiện, khách hàng vào mục "Ví của tôi", chọn "Nạp tiền", nhập số tiền cần nạp và xác nhận thanh toán. Sau khi nhập thẻ ATM nội địa thành công, số dư ví sẽ được cộng tự động trong vòng 1-2 phút.'
-        ],
-        [
-            'id' => 'chinh_sach_hoan_tien',
-            'noi_dung' => 'Chính sách hoàn tiền cọc: Khi khách hàng thao tác hủy sân hợp lệ (trước 10 tiếng so với giờ bóng lăn, trước 1 tuần đối với ngày bắt đầu của giải đấu), hệ thống sẽ tự động hoàn lại 100% số tiền đã cọc vào "Số dư ví" của khách hàng trên hệ thống DN FOOTBALL chứ không hoàn trực tiếp về thẻ ngân hàng. Đối với trường hợp tạo yêu cầu hủy gấp, nếu Quản lý sân duyệt thì hệ thống cũng sẽ hoàn lại 100%, ngược lại thì bạn sẽ mất tiền cọc đó (sân bạn đặt chưa được hủy). Khách hàng có thể dùng số dư này để đặt sân lần sau hoặc rút tiền trực tiếp về tài khoản ngân hàng bất kỳ lúc nào.'
-        ],
+            // NHÓM 2: ĐẶT SÂN, HÓA ĐƠN VAT, KHUYẾN MÃI & VÉ QR
+            [
+                'id' => 'huong_dan_dat_san',
+                'noi_dung' => 'Hướng dẫn đặt sân phong trào: Khách hàng truy cập mục "Sân bóng", chọn Cụm sân -> chọn Sân con (Sân 5, Sân 7, Sân 11) -> bấm vào các ô khung giờ "CÒN TRỐNG" trong phạm vi 7 ngày tới (hoặc nhờ Chatbot AI thêm trực tiếp vào giỏ hàng). Sau đó bấm nút "Tiến hành đặt sân" ở thanh giỏ hàng phía dưới, chọn Mã khuyến mãi (nếu có) và bấm "Thanh toán ngay". Hệ thống sẽ trừ tiền cọc 30% từ Ví điện tử, xuất Hóa đơn đặt sân và cấp Vé điện tử có mã QR (#PT-...) để check-in tại sân.'
+            ],
+            [
+                'id' => 'quy_dinh_dat_san_va_hoa_don',
+                'noi_dung' => 'Quy định đặt cọc, Thuế VAT và Hóa đơn đặt sân: Hệ thống chỉ hỗ trợ đặt các khung giờ chẵn theo từng tiếng (không hỗ trợ giờ lẻ 30 phút hay đặt 1.5 tiếng). Để giữ lịch thành công, khách hàng thanh toán tiền cọc trước 30% giá sân gốc đối với đá phong trào (hoặc 50% đối với đá giải đấu). Tổng tiền Hóa đơn đặt sân được tính theo công thức: (Tổng tiền sân gốc - Tiền giảm giá Khuyến mãi) + Thuế VAT 8%. Nếu giỏ hàng có nhiều cụm sân khác nhau, hệ thống sẽ tự động tách thành các Hóa đơn riêng cho từng cụm sân. Số tiền còn lại của hóa đơn sẽ được thanh toán trực tiếp tại sân khi đến nhận sân.'
+            ],
+            [
+                'id' => 'khuyen_mai_voucher',
+                'noi_dung' => 'Hướng dẫn sử dụng Mã khuyến mãi (Voucher giảm giá): Khi mở Giỏ hàng đặt sân ("Tiến hành đặt sân"), khách hàng bấm vào khung "Chọn mã ưu đãi". Hệ thống có 3 phạm vi mã khuyến mãi: (1) Mã Toàn hệ thống: xét điều kiện đơn tối thiểu trên tổng tiền toàn bộ giỏ hàng; (2) Mã Dành riêng cho bạn (tặng cá nhân): xét trên tổng giỏ hàng; (3) Mã Riêng của từng Cụm sân: chỉ xét điều kiện trên tổng tiền sân của đúng cụm sân đó. Khách hàng bấm "Áp dụng" ở mã đủ điều kiện, hệ thống sẽ trừ trực tiếp tiền giảm giá trước khi tính thuế VAT 8%.'
+            ],
+            [
+                'id' => 'doi_lich_dat_san',
+                'noi_dung' => 'Hướng dẫn dời lịch đặt sân: Khách hàng có thể tự dời lịch sang sân bóng khác hoặc khung giờ/ngày đá khác trong CÙNG MỘT CỤM SÂN nếu thực hiện trước giờ bóng lăn tối thiểu 10 tiếng. Cách làm: Vào mục "Lịch sử đặt sân", tìm trận đấu đang ở trạng thái "Đã cọc", bấm nút "Dời lịch", chọn Sân bóng mới -> Ngày đá mới -> Khung giờ trống mới và bấm "Tiếp tục xác nhận" -> "Đồng ý dời lịch". Tiền đã đặt cọc được giữ nguyên, hệ thống sẽ tự động tính lại tổng hóa đơn và phần tiền còn thu tại sân (lưu ý: tổng hóa đơn mới sau khi đổi không được nhỏ hơn số tiền đã đặt cọc).'
+            ],
 
-        // NHÓM BỔ SUNG 2: ĐẶT SÂN & TÀI KHOẢN
-        [ 
-            'id' => 'huong_dan_dat_san', 
-            'noi_dung' => 'Hướng dẫn đặt sân: Khách hàng truy cập trang chủ, chọn cụm sân, sân bóng, khung giờ ở ngày muốn đá. Sau khi hệ thống hiển thị sân trống, bạn nhấn "Tiến hành đặt sân" và tiến hành thanh toán cọc (30% cho đá phong trào, 50% cho giải đấu) bằng tiền trong thẻ ví của bạn để giữ chỗ thành công.' 
-        ],
-        [ 
-            'id' => 'huong_dan_dat_giai_dau', 
-            'noi_dung' => 'Hướng dẫn đặt sân cho giải đấu: Khách hàng truy cập trang chủ, chọn vào cụm sân mình được phép đá giải. Sau khi vào trong, bạn nhấn "Tiến hành đặt sân", thay đổi mục đích đặt sân của mình sang giải đấu mình muốn, chọn các khung giờ và tiến hành thanh toán cọc (30% cho đá phong trào, 50% cho giải đấu) bằng tiền trong thẻ ví của bạn để giữ chỗ thành công.' 
-        ],
-        [
-            'id' => 'quy_dinh_dat_san',
-            'noi_dung' => 'Quy định đặt sân và cọc tiền: Để giữ lịch thành công, khách hàng bắt buộc phải thanh toán cọc trước 30% tổng giá trị ca đặt (50% đối với giải đấu).'
-        ],
-        [
-            'id' => 'doi_mat_khau',
-            'noi_dung' => 'Hướng dẫn đổi mật khẩu: Nếu muốn đổi mật khẩu, khách hàng chọn cụm Tên ở góc trên phải màn hình, chọn nút "Đổi mật khẩu" và xác nhận để hệ thống gửi mã OTP về email mà bạn đã đăng ký. Sau khi nhập đúng mã OTP, khách hàng có thể tạo lại mật khẩu mới.'
-        ],
-        [   'id' => 'quen_mat_khau', 
-            'noi_dung' => 'Hướng dẫn khôi phục mật khẩu: Nếu bạn chưa đăng nhập và quên mật khẩu, hãy nhấn vào nút "Đăng nhập", chọn "Quên mật khẩu". Hệ thống sẽ yêu cầu bạn nhập địa chỉ email đã đăng ký để gửi mã xác thực OTP. Nhập đúng mã OTP để thiết lập lại mật khẩu mới.' 
-        ],
+            // NHÓM 3: GIẢI ĐẤU, HỦY SÂN & ĐÁNH GIÁ
+            [
+                'id' => 'tao_giai_dau',
+                'noi_dung' => 'Hướng dẫn tạo yêu cầu tổ chức giải đấu: Khách hàng vào mục "Các yêu cầu" trên thanh menu, ở tab "Yêu cầu Giải đấu" bấm nút "+ Tạo Yêu cầu Giải đấu". Chọn Cụm sân muốn tổ chức, nhập Tên giải đấu, Ngày bắt đầu, Ngày kết thúc và Nội dung mô tả rồi bấm "Gửi yêu cầu". Đơn sẽ ở trạng thái "Chờ duyệt" để Quản lý cụm sân kiểm tra ma trận lịch và phê duyệt.'
+            ],
+            [
+                'id' => 'huong_dan_dat_giai_dau',
+                'noi_dung' => 'Hướng dẫn đặt lịch sân cho giải đấu đã duyệt: Sau khi yêu cầu giải đấu được Quản lý cụm sân duyệt (chuyển sang trạng thái "Đã duyệt"), khách hàng có thời hạn 3 ngày kể từ ngày duyệt để hoàn tất việc chọn khung giờ đặt sân (nếu quá 3 ngày không đặt sân, giải đấu sẽ tự động chuyển sang Hết hạn). Cách đặt: Mở giỏ hàng bằng nút "Tiến hành đặt sân", đổi mục "Mục đích đặt sân" từ Đá phong trào sang tên Giải đấu của bạn, sau đó vào đúng Cụm sân của giải để chọn các khung giờ thi đấu trong dải ngày giải và thanh toán cọc 50% từ ví.'
+            ],
+            [
+                'id' => 'huy_san_gap',
+                'noi_dung' => 'Quy định hủy sân và tạo yêu cầu hủy sân gấp: Khách hàng được tự hủy miễn phí (hoàn cọc 100% tự động về ví) tại mục "Các yêu cầu", ở tab "Yêu cầu Hủy sân gấp" bấm nút "+ Tạo Yêu cầu Hủy Gấp". Chọn lịch đặt sân mà mình muốn hủy và nhập thông tin chi tiết ở lý do để Quản lý sân xem xét phê duyệt.'
+            ],
+            [
+                'id' => 'danh_gia_san',
+                'noi_dung' => 'Hướng dẫn đánh giá cụm sân sau khi đá: Sau khi trận đấu hoặc giải đấu kết thúc và được nhân sự tại sân chốt trạng thái "Hoàn thành", khách hàng vào mục "Lịch sử đặt sân", bấm nút "Đánh giá cụm sân" trên thẻ trận đấu/giải đấu đó, chọn số sao (từ 1 đến 5 sao) kèm nhận xét và bấm "Gửi đánh giá". Khách hàng cũng có thể xem tất cả đánh giá của các cụm sân ngay trên thẻ Cụm sân ở trang chủ.'
+            ],
 
-        // NHÓM BỔ SUNG 3: NỘI QUY TẠI SÂN & NGOẠI LỆ
-        [
-            'id' => 'nhan_san_check_in',
-            'noi_dung' => 'Quy định nhận sân: Khách hàng vui lòng có mặt tại cụm sân trước giờ đá 10 phút. Tới quầy lễ tân, hãy trình vé của khung giờ mình đặt để nhân viên xác nhận và chỉ định sân cụ thể. Vui lòng thanh toán số tiền còn lại trước khi vào sân thi đấu.'
-        ],
-        [
-            'id' => 'thoi_tiet_mua_bao',
-            'noi_dung' => 'Chính sách thời tiết (Mưa bão): Trong trường hợp trời mưa lớn, ngập sân hoặc có cảnh báo thiên tai bất khả kháng khiến không thể thi đấu, khách hàng vui lòng tạo yêu cầu hủy sân gấp và ban quản lý sân sẽ duyệt hoàn toàn và hoàn lại 100% tiền cọc vào ví cho khách hàng. Nếu gấp xin vui lòng liên hệ Hotline trước giờ đá ít nhất 1 tiếng nếu thấy thời tiết xấu bằng cách click vào nút Zalo ở góc dưới trái màn hình hoặc liên hệ số điện thoại 0899244124.'
-        ],
-        [
-            'id' => 'noi_quy_san_bong',
-            'noi_dung' => 'Nội quy sân bóng: Để đảm bảo chất lượng mặt cỏ nhân tạo, nghiêm cấm khách hàng sử dụng giày đinh sắt (loại 6 móng). Chỉ được phép sử dụng giày đinh dăm (TF) hoặc giày đế bằng (IC). Không mang theo vũ khí, chất gây cháy nổ, đồ uống có cồn (bia, rượu) vào khu vực sân cỏ. Nếu khách hàng có ăn uống trong quá trình trận đấu diễn ra thì vui lòng dọn dẹp về sinh trước khi ra về giúp mình nhé!'
-        ],
-        [ 
-            'id' => 'dich_vu_tai_san', 
-            'noi_dung' => 'Dịch vụ tại sân: Hệ thống DN FOOTBALL có cung cấp miễn phí nước trà đá và áo bib (áo pitch hay áo tập) chia đội cho khách hàng đặt sân. Ngoài ra, quầy căng-tin tại cụm sân có bán đa dạng các loại nước giải khát.' 
-        ]
-    ];
+            // NHÓM 4: TÀI KHOẢN, MẬT KHẨU & NỘI QUY TẠI SÂN
+            [
+                'id' => 'doi_mat_khau',
+                'noi_dung' => 'Hướng dẫn đổi mật khẩu và cập nhật thông tin cá nhân: Khi đang đăng nhập, khách hàng bấm vào tên tài khoản ở góc trên bên phải màn hình, chọn "Đổi mật khẩu", sau đó nhập Mật khẩu hiện tại, Mật khẩu mới (tối thiểu 6 ký tự) và Xác nhận mật khẩu mới rồi bấm "Xác nhận đổi mật khẩu" để cập nhật ngay lập tức. Nếu muốn cập nhật Họ tên, SĐT, Email, số định danh VNeID hoặc Tài khoản ngân hàng mặc định, hãy chọn mục "Thông tin cá nhân".'
+            ],
+            [
+                'id' => 'quen_mat_khau',
+                'noi_dung' => 'Hướng dẫn khôi phục mật khẩu khi quên: Nếu chưa đăng nhập và quên mật khẩu, tại màn hình "Đăng nhập", khách hàng nhấn vào liên kết "Quên mật khẩu?", nhập địa chỉ Email đã đăng ký để hệ thống gửi mã xác thực OTP gồm 6 chữ số về Email. Nhập đúng mã OTP và thiết lập lại mật khẩu mới.'
+            ],
+            [
+                'id' => 'nhan_san_check_in',
+                'noi_dung' => 'Quy định nhận sân (Check-in) và Vé điện tử QR: Khách hàng có thể xem và tải ảnh Vé điện tử (mã #PT-... cho đá phong trào hoặc #GD-... cho giải đấu) kèm mã QR tại mục "Lịch sử đặt sân", hoặc bấm "Xuất hóa đơn" để in Hóa đơn đặt sân. Vui lòng có mặt tại cụm sân trước giờ bóng lăn 10-15 phút, xuất trình mã QR trên vé điện tử tại quầy thu ngân để nhân viên quét mã check-in và thanh toán phần tiền còn lại trên hóa đơn.'
+            ],
+            [
+                'id' => 'thoi_tiet_mua_bao',
+                'noi_dung' => 'Chính sách thời tiết (Mưa bão, thiên tai): Trong trường hợp trời mưa lớn, ngập sân hoặc có cảnh báo thời tiết xấu không thể thi đấu, khách hàng vui lòng vào mục "Các yêu cầu" -> "Yêu cầu Hủy sân gấp" để gửi yêu cầu hủy do thời tiết; Ban quản lý sân sẽ phê duyệt và hoàn lại 100% tiền cọc vào ví. Trường hợp khẩn cấp sát giờ đá, vui lòng bấm vào nút Zalo nổi ở góc dưới bên trái màn hình hoặc gọi trực tiếp Hotline 0899244124 để được hỗ trợ dời lịch hoặc hoàn cọc.'
+            ],
+            [
+                'id' => 'noi_quy_san_bong',
+                'noi_dung' => 'Nội quy sân bóng và dịch vụ tiện ích tại sân: Để bảo vệ mặt cỏ nhân tạo, nghiêm cấm sử dụng giày đinh sắt (chỉ sử dụng giày đinh dăm TF hoặc đế bằng IC). Không mang chất cháy nổ, vũ khí vào khu vực sân và giữ gìn vệ sinh chung. Hệ thống DN FOOTBALL cung cấp miễn phí trà đá và áo bib (áo lưới chia đội) tại quầy lễ tân cho các đội đặt sân.'
+            ]
+        ];
 
         $ids = [];
         $documents = [];
         $embeddings = [];
 
         foreach ($duLieu as $index => $item) {
-            echo "2. Đang tạo Vector dữ liệu thứ " . ($index + 1) . " (Đang gọi Gemini)...\n";
+            echo "2. Đang tạo Vector dữ liệu thứ " . ($index + 1) . "/" . count($duLieu) . " (ID: {$item['id']})...\n";
             $vector = $this->taoVectorTuVanBan($item['noi_dung']);
             
             if ($vector) {
@@ -151,13 +203,13 @@ class ChromaDBService
         }
 
         if (!empty($ids)) {
-            echo "3. Đang lưu " . count($ids) . " dòng vào Database Chroma...\n";
+            echo "3. Đang lưu " . count($ids) . " quy định vào Database Chroma...\n";
             $collection->upsert(
                 ids: $ids,
                 embeddings: $embeddings,
                 documents: $documents
             );
-            return "Tuyệt vời! Đã nạp thành công " . count($ids) . " quy định vào ChromaDB.";
+            return "Tuyệt vời! Đã nạp thành công " . count($ids) . " quy định chuẩn theo 20 bảng mới vào ChromaDB.";
         }
 
         return "Có lỗi xảy ra, không nạp được dữ liệu!";
@@ -165,35 +217,32 @@ class ChromaDBService
 
     public function timKiemQuyDinh($cauHoi)
     {
-        \Log::info("Bot đang tra cứu luật cho từ khóa: " . $cauHoi);
+        Log::info("Bot đang tra cứu luật cho từ khóa: " . $cauHoi);
 
-        // 1. Biến câu hỏi của khách thành Vector
         $vectorCauHoi = $this->taoVectorTuVanBan($cauHoi);
         if (!$vectorCauHoi) {
-            return "Xin lỗi, hiện tại hệ thống tra cứu luật đang bận, vui lòng thử lại sau.";
+            return "Xin lỗi, hiện tại hệ thống tra cứu quy định đang bận, vui lòng thử lại sau.";
         }
 
-        // 2. Tìm kiếm trong ChromaDB
         try {
             $collection = $this->client->getCollection('quy_dinh_he_thong');
             $ketQua = $collection->query(
                 queryEmbeddings: [$vectorCauHoi],
-                nResults: 2,
-                include: ['documents'] // Lấy 2 quy định sát nghĩa nhất để AI tổng hợp
+                nResults: 3,
+                include: ['documents']
             );
 
-            // 3. Trả về nội dung luật nếu độ tương đồng đủ tốt
             if (!empty($ketQua->documents[0])) {
-                $noiDungLuat = "Đây là các quy định của hệ thống DN FOOTBALL có liên quan đến câu hỏi:\n" 
+                $noiDungLuat = "Đây là các quy định chính thức của hệ thống DN FOOTBALL có liên quan đến câu hỏi:\n- " 
                        . implode("\n- ", $ketQua->documents[0]);
 
-                \Log::info("Đã tìm ra luật: " . $noiDungLuat);
+                Log::info("Đã tìm ra luật: " . $noiDungLuat);
                 return $noiDungLuat;
             }
 
-            \Log::warning("ChromaDB không tìm thấy luật phù hợp cho: " . $cauHoi);
+            Log::warning("ChromaDB không tìm thấy luật phù hợp cho: " . $cauHoi);
         } catch (\Exception $e) {
-            \Log::error("Lỗi truy vấn ChromaDB: " . $e->getMessage());
+            Log::error("Lỗi truy vấn ChromaDB: " . $e->getMessage());
         }
 
         return "Hiện tại hệ thống không có quy định cụ thể nào về vấn đề này.";
