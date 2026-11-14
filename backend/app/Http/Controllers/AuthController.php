@@ -297,12 +297,13 @@ class AuthController extends Controller
 
         $request->validate([
             'mat_khau_cu'       => 'required|string',
-            'mat_khau_moi'      => 'required|string|min:6',
+            'mat_khau_moi'      => 'required|string|min:6|different:mat_khau_cu',
             'xac_nhan_mat_khau' => 'required|string|same:mat_khau_moi'
         ], [
             'mat_khau_cu.required'       => 'Vui lòng nhập mật khẩu hiện tại.',
             'mat_khau_moi.required'      => 'Vui lòng nhập mật khẩu mới.',
             'mat_khau_moi.min'           => 'Mật khẩu mới phải có ít nhất 6 ký tự.',
+            'mat_khau_moi.different'     => 'Mật khẩu mới không được trùng với mật khẩu hiện tại!',
             'xac_nhan_mat_khau.required' => 'Vui lòng nhập lại mật khẩu mới.',
             'xac_nhan_mat_khau.same'     => 'Xác nhận mật khẩu không khớp.'
         ]);
@@ -311,6 +312,14 @@ class AuthController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Mật khẩu hiện tại không chính xác!'
+            ], 400);
+        }
+
+        // Kiểm tra thêm bằng Hash::check phòng trường hợp ký tự trắng
+        if (Hash::check($request->mat_khau_moi, $user->MatKhau)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Mật khẩu mới không được trùng với mật khẩu hiện tại!'
             ], 400);
         }
 

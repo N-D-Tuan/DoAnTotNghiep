@@ -680,6 +680,9 @@ async function executeChangePassword() {
     if (newPassword.length < 6) {
         return showPasswordAlert('Mật khẩu mới tối thiểu 6 ký tự', false);
     }
+    if (newPassword === oldPassword) {
+        return showPasswordAlert('Mật khẩu mới không được trùng với mật khẩu hiện tại!', false);
+    }
     if (newPassword !== confirmPassword) {
         return showPasswordAlert('Xác nhận mật khẩu không khớp', false);
     }
