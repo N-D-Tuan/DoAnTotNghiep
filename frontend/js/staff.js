@@ -672,6 +672,9 @@ async function executeChangePassword() {
     if (newPassword.length < 6) {
         return showPasswordAlert('Mật khẩu mới tối thiểu 6 ký tự', false);
     }
+    if (newPassword === oldPassword) {
+        return showPasswordAlert('Mật khẩu mới không được trùng với mật khẩu hiện tại!', false);
+    }
     if (newPassword !== confirmPassword) {
         return showPasswordAlert('Xác nhận mật khẩu không khớp', false);
     }
@@ -1623,13 +1626,21 @@ async function renderStaffQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = nu
     // =========================================================================
     if (shiftState.status !== 'ACTIVE') {
         let iconClass = 'fa-user-lock';
-        let iconBg = '#fef3c7';
-        let iconColor = '#d97706';
-        let titleText = 'Bạn hiện không trong ca làm việc';
+        let iconGradient = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
+        let iconShadow = 'rgba(245, 158, 11, 0.3)';
+        let cardBorderColor = '#fcd34d';
+        let cardBgGradient = 'linear-gradient(135deg, #fffbeb 0%, #ffffff 50%, #f0fdf4 100%)';
+        let badgeBg = '#fef3c7';
+        let badgeColor = '#b45309';
+        let badgeBorder = '#fde68a';
+        let badgeLabel = 'Ngoài giờ trực ca';
+        let titleText = 'Bạn hiện không trong ca làm việc!';
         let subText = 'Theo quy định phân quyền của hệ thống, nhân viên chỉ được phép xem và xử lý danh sách đặt sân khi đang trong ca trực và đã điểm danh nhận ca.';
-        let shiftBadgesHtml = '';
-        let actionBtnHtml = `
-            <button type="button" class="btn-primary" style="padding: 12px 24px; border-radius: 10px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px;" onclick="renderDiemDanhNhanCa()">
+        let shiftStatusSummary = 'Không có ca trực hiện tại';
+        let shiftStatusSub = 'Mở tự động khi vào ca';
+
+        let primaryBtnHtml = `
+            <button type="button" class="btn-primary" style="padding: 12px 24px; border-radius: 12px; font-weight: 700; font-size: 0.94rem; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 6px 16px rgba(16, 185, 129, 0.25);" onclick="renderDiemDanhNhanCa()">
                 <i class="fa-solid fa-fingerprint"></i> Đi tới trang Điểm danh nhận ca
             </button>
         `;
@@ -1638,42 +1649,59 @@ async function renderStaffQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = nu
             const ca = shiftState.pendingShift.ca_lam_viec || shiftState.pendingShift.caLamViec || {};
             const timeRange = ca.GioBatDau ? `${ca.GioBatDau.substring(0,5)} - ${ca.GioKetThuc.substring(0,5)}` : '';
             iconClass = 'fa-fingerprint';
-            iconBg = '#fffbeb';
-            iconColor = '#f59e0b';
+            iconGradient = 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)';
+            iconShadow = 'rgba(234, 88, 12, 0.3)';
+            cardBorderColor = '#fdba74';
+            cardBgGradient = 'linear-gradient(135deg, #fff7ed 0%, #ffffff 50%, #ecfdf5 100%)';
+            badgeBg = '#ffedd5';
+            badgeColor = '#c2410c';
+            badgeBorder = '#fed7aa';
+            badgeLabel = 'Chờ điểm danh vào ca';
             titleText = `Bạn chưa điểm danh nhận ca (${ca.TenCa || 'Ca hiện tại'})!`;
-            subText = `Ca trực <strong>${ca.TenCa || ''} (${timeRange})</strong> của bạn đã đến giờ mở ca. Vui lòng bấm điểm danh nhận ca trước khi vào xem và chốt lịch đặt sân của khách.`;
+            subText = `Ca trực <strong style="color:#0f172a;">${ca.TenCa || ''} (${timeRange})</strong> của bạn đã đến giờ mở ca. Vui lòng bấm điểm danh nhận ca trước khi vào xem và chốt lịch đặt sân của khách.`;
+            shiftStatusSummary = `${ca.TenCa || 'Ca trực'} (${timeRange})`;
+            shiftStatusSub = 'Đang chờ bạn bấm điểm danh';
         } else if (shiftState.status === 'ENDED') {
             const lastShift = shiftState.endedShifts[shiftState.endedShifts.length - 1];
             const ca = lastShift?.ca_lam_viec || lastShift?.caLamViec || {};
             const timeRange = ca.GioBatDau ? `${ca.GioBatDau.substring(0,5)} - ${ca.GioKetThuc.substring(0,5)}` : '';
             iconClass = 'fa-lock';
-            iconBg = '#f1f5f9';
-            iconColor = '#475569';
+            iconGradient = 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)';
+            iconShadow = 'rgba(59, 130, 246, 0.28)';
+            cardBorderColor = '#93c5fd';
+            cardBgGradient = 'linear-gradient(135deg, #eff6ff 0%, #ffffff 50%, #f0fdf4 100%)';
+            badgeBg = '#dbeafe';
+            badgeColor = '#1d4ed8';
+            badgeBorder = '#bfdbfe';
+            badgeLabel = 'Đã hoàn thành ca trực';
             titleText = `Ca làm việc (${ca.TenCa || ''}) đã kết thúc & chốt sổ!`;
-            subText = `Thời gian trực ca <strong>${ca.TenCa || ''} (${timeRange})</strong> của bạn đã kết thúc. Hệ thống đã tự động đóng quyền xem và thao tác đặt sân của ca này để bàn giao cho ca tiếp theo.`;
-            actionBtnHtml = `
-                <button type="button" class="btn-outline" style="padding: 11px 22px; border-radius: 10px; font-weight: 700;" onclick="renderLichLamViecStaff()">
-                    <i class="fa-solid fa-calendar-week" style="margin-right: 6px;"></i> Xem lịch làm việc của bạn
+            subText = `Thời gian trực ca <strong style="color:#0f172a;">${ca.TenCa || ''} (${timeRange})</strong> của bạn đã kết thúc. Hệ thống đã tự động đóng quyền thao tác đặt sân của ca này để bàn giao cho ca tiếp theo.`;
+            shiftStatusSummary = `Đã chốt ${ca.TenCa || 'ca'}`;
+            shiftStatusSub = `Khung giờ: ${timeRange}`;
+            primaryBtnHtml = `
+                <button type="button" class="btn-primary" style="padding: 12px 24px; border-radius: 12px; font-weight: 700; font-size: 0.94rem; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 6px 16px rgba(16, 185, 129, 0.25);" onclick="renderLichLamViecStaff()">
+                    <i class="fa-solid fa-calendar-week"></i> Xem lịch làm việc của bạn
                 </button>
             `;
         }
 
+        let shiftBadgesHtml = '';
         if (shiftState.allTodayShifts.length > 0) {
             shiftBadgesHtml = `
-                <div style="margin: 18px auto 24px; max-width: 520px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 18px; text-align: left;">
-                    <div style="font-size: 0.8rem; font-weight: 700; color: #475569; text-transform: uppercase; margin-bottom: 8px;">
-                        <i class="fa-regular fa-clock"></i> Ca làm việc của bạn trong hôm nay:
+                <div style="width: 100%; max-width: 780px; margin-bottom: 24px; background: rgba(255, 255, 255, 0.92); border: 1px solid #cbd5e1; border-radius: 14px; padding: 14px 18px; text-align: left; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);">
+                    <div style="font-size: 0.78rem; font-weight: 800; color: #334155; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 8px;">
+                        <i class="fa-regular fa-clock" style="color: var(--primary); margin-right: 5px;"></i> Danh sách ca làm việc của bạn trong hôm nay:
                     </div>
                     ${shiftState.allTodayShifts.map(s => {
                         const ca = s.ca_lam_viec || s.caLamViec || {};
                         const tStr = ca.GioBatDau ? `${ca.GioBatDau.substring(0,5)} - ${ca.GioKetThuc.substring(0,5)}` : '';
                         const stMap = {
-                            'ChuaLam': '<span style="background:#fef3c7; color:#b45309; padding:3px 9px; border-radius:99px; font-size:0.76rem; font-weight:700;">Chưa điểm danh</span>',
-                            'DaLam': '<span style="background:#d1fae5; color:#047857; padding:3px 9px; border-radius:99px; font-size:0.76rem; font-weight:700;">Đã điểm danh</span>',
-                            'VangMat': '<span style="background:#fee2e2; color:#b91c1c; padding:3px 9px; border-radius:99px; font-size:0.76rem; font-weight:700;">Vắng mặt</span>'
+                            'ChuaLam': '<span style="background:#fef3c7; color:#b45309; border:1px solid #fde68a; padding:3px 10px; border-radius:99px; font-size:0.76rem; font-weight:700;">Chưa điểm danh</span>',
+                            'DaLam': '<span style="background:#d1fae5; color:#047857; border:1px solid #a7f3d0; padding:3px 10px; border-radius:99px; font-size:0.76rem; font-weight:700;">Đã điểm danh</span>',
+                            'VangMat': '<span style="background:#fee2e2; color:#b91c1c; border:1px solid #fecaca; padding:3px 10px; border-radius:99px; font-size:0.76rem; font-weight:700;">Vắng mặt</span>'
                         };
                         return `
-                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px dashed #e2e8f0; font-size: 0.9rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px dashed #e2e8f0; font-size: 0.9rem;">
                                 <span><strong style="color: #0f172a;">${ca.TenCa || 'Ca trực'}</strong> <span style="color: #64748b;">(${tStr})</span></span>
                                 ${stMap[s.TrangThaiDiemDanh] || ''}
                             </div>
@@ -1683,6 +1711,8 @@ async function renderStaffQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = nu
             `;
         }
 
+        const todayFmt = new Date().toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+
         contentArea.innerHTML = `
             <div class="page-header staff-hero-header">
                 <div>
@@ -1690,21 +1720,70 @@ async function renderStaffQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = nu
                     <h1 class="page-title">Quản lý Lịch Đặt Sân</h1>
                     <p class="text-muted">Chức năng chỉ mở khi nhân viên đang trong ca làm việc và đã điểm danh nhận ca.</p>
                 </div>
+                <div style="background: #ffffff; border: 1px solid #cbd5e1; color: #334155; padding: 8px 16px; border-radius: 10px; font-size: 0.86rem; font-weight: 700; display: inline-flex; align-items: center; gap: 8px;">
+                    <i class="fa-regular fa-calendar-check" style="color: var(--primary);"></i> ${todayFmt}
+                </div>
             </div>
 
-            <div class="panel" style="padding: 50px 24px; text-align: center; border-top: 4px solid ${iconColor};">
-                <div style="width: 76px; height: 76px; border-radius: 50%; background: ${iconBg}; color: ${iconColor}; display: inline-flex; align-items: center; justify-content: center; font-size: 2.2rem; margin-bottom: 16px;">
+            <div style="min-height: calc(100vh - 250px); background: ${cardBgGradient}; border: 1.5px solid ${cardBorderColor}; border-radius: 20px; padding: 44px 32px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06); position: relative; overflow: hidden;">
+                
+                <!-- Vòng tròn trang trí nền -->
+                <div style="position: absolute; top: -60px; right: -60px; width: 220px; height: 220px; border-radius: 50%; background: radial-gradient(circle, rgba(245, 158, 11, 0.12) 0%, rgba(245, 158, 11, 0) 70%); pointer-events: none;"></div>
+                <div style="position: absolute; bottom: -70px; left: -50px; width: 250px; height: 250px; border-radius: 50%; background: radial-gradient(circle, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0) 70%); pointer-events: none;"></div>
+
+                <!-- Icon chính nổi bật -->
+                <div style="width: 92px; height: 92px; border-radius: 26px; background: ${iconGradient}; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; margin-bottom: 18px; box-shadow: 0 10px 25px ${iconShadow}; border: 4px solid #ffffff;">
                     <i class="fa-solid ${iconClass}"></i>
                 </div>
-                <h2 style="font-size: 1.4rem; font-weight: 800; color: #0f172a; margin-bottom: 10px;">${titleText}</h2>
-                <p style="max-width: 560px; margin: 0 auto 20px; color: #475569; font-size: 0.95rem; line-height: 1.6;">
+
+                <!-- Badge trạng thái -->
+                <span style="display: inline-flex; align-items: center; gap: 6px; background: ${badgeBg}; color: ${badgeColor}; border: 1px solid ${badgeBorder}; padding: 5px 14px; border-radius: 999px; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;">
+                    <i class="fa-solid fa-shield-halved"></i> ${badgeLabel}
+                </span>
+
+                <!-- Tiêu đề & Mô tả -->
+                <h2 style="font-size: 1.55rem; font-weight: 800; color: #0f172a; margin: 0 0 8px 0;">${titleText}</h2>
+                <p style="max-width: 580px; margin: 0 auto 26px; color: #475569; font-size: 0.96rem; line-height: 1.6;">
                     ${subText}
                 </p>
+
                 ${shiftBadgesHtml}
+
+                <!-- 3 Thẻ thông tin quy định trực quan -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; width: 100%; max-width: 780px; margin-bottom: 28px; text-align: left;">
+                    <div style="background: rgba(255, 255, 255, 0.92); border: 1px solid #fde68a; border-left: 4px solid #f59e0b; border-radius: 14px; padding: 14px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+                        <div style="font-size: 0.78rem; font-weight: 700; color: #d97706; text-transform: uppercase; margin-bottom: 4px;">
+                            <i class="fa-solid fa-user-clock"></i> Trạng thái ca hôm nay
+                        </div>
+                        <div style="font-size: 1.02rem; font-weight: 800; color: #0f172a;">${shiftStatusSummary}</div>
+                        <div style="font-size: 0.8rem; color: #64748b; margin-top: 2px;">${shiftStatusSub}</div>
+                    </div>
+
+                    <div style="background: rgba(255, 255, 255, 0.92); border: 1px solid #bbf7d0; border-left: 4px solid #10b981; border-radius: 14px; padding: 14px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+                        <div style="font-size: 0.78rem; font-weight: 700; color: #059669; text-transform: uppercase; margin-bottom: 4px;">
+                            <i class="fa-solid fa-fingerprint"></i> Điều kiện mở khóa
+                        </div>
+                        <div style="font-size: 1.02rem; font-weight: 800; color: #0f172a;">Điểm danh nhận ca</div>
+                        <div style="font-size: 0.8rem; color: #64748b; margin-top: 2px;">Mở trước giờ bắt đầu 30 phút</div>
+                    </div>
+
+                    <div style="background: rgba(255, 255, 255, 0.92); border: 1px solid #bae6fd; border-left: 4px solid #0284c7; border-radius: 14px; padding: 14px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+                        <div style="font-size: 0.78rem; font-weight: 700; color: #0284c7; text-transform: uppercase; margin-bottom: 4px;">
+                            <i class="fa-solid fa-cash-register"></i> Đặt sân trực tiếp
+                        </div>
+                        <div style="font-size: 1.02rem; font-weight: 800; color: #0f172a;">Màn hình Thu ngân</div>
+                        <div style="font-size: 0.8rem; color: #64748b; margin-top: 2px;">Luôn mở để xem lịch trống</div>
+                    </div>
+                </div>
+
+                <!-- Cụm nút hành động -->
                 <div style="display: flex; justify-content: center; gap: 12px; flex-wrap: wrap;">
-                    ${actionBtnHtml}
-                    <button type="button" class="btn-outline" style="padding: 12px 20px; border-radius: 10px; font-weight: 600;" onclick="renderStaffQuanLyDatSan()">
-                        <i class="fa-solid fa-rotate-right" style="margin-right: 6px;"></i> Kiểm tra lại
+                    ${primaryBtnHtml}
+                    <button type="button" class="btn-outline" style="padding: 12px 22px; border-radius: 12px; font-weight: 700; font-size: 0.94rem; background: #ffffff; border: 1.5px solid #cbd5e1; color: #334155; display: inline-flex; align-items: center; gap: 8px;" onclick="renderManHinhThuNgan()">
+                        <i class="fa-solid fa-cash-register" style="color: var(--primary);"></i> Về Màn hình Thu ngân
+                    </button>
+                    <button type="button" class="btn-outline" style="padding: 12px 20px; border-radius: 12px; font-weight: 600; font-size: 0.94rem; background: #ffffff; border: 1.5px solid #cbd5e1; color: #475569; display: inline-flex; align-items: center; gap: 8px;" onclick="renderStaffQuanLyDatSan()">
+                        <i class="fa-solid fa-rotate-right"></i> Kiểm tra lại
                     </button>
                 </div>
             </div>
@@ -3553,10 +3632,66 @@ async function loadDanhSachCaHomNay() {
 
             if (myShifts.length === 0) {
                 container.innerHTML = `
-                    <div style="grid-column: 1/-1; text-align: center; padding: 50px; background: white; border-radius: 12px; border: 1px dashed var(--border);">
-                        <div style="font-size: 3rem; color: #cbd5e1; margin-bottom: 15px;"><i class="fa-solid fa-mug-hot"></i></div>
-                        <h3 style="color: var(--text-dark); font-size: 1.1rem; margin-bottom: 5px;">Hôm nay bạn không có ca làm việc nào!</h3>
-                        <p style="color: var(--text-muted); font-size: 0.9rem;">Hãy nghỉ ngơi thật tốt nhé.</p>
+                    <div style="grid-column: 1 / -1; min-height: calc(100vh - 250px); background: linear-gradient(135deg, #ecfdf5 0%, #ffffff 50%, #eff6ff 100%); border: 1.5px solid #86efac; border-radius: 20px; padding: 48px 32px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; box-shadow: 0 12px 32px rgba(16, 185, 129, 0.08); position: relative; overflow: hidden;">
+                        
+                        <!-- Vòng tròn trang trí nền -->
+                        <div style="position: absolute; top: -60px; right: -60px; width: 220px; height: 220px; border-radius: 50%; background: radial-gradient(circle, rgba(16, 185, 129, 0.12) 0%, rgba(16, 185, 129, 0) 70%); pointer-events: none;"></div>
+                        <div style="position: absolute; bottom: -70px; left: -50px; width: 250px; height: 250px; border-radius: 50%; background: radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0) 70%); pointer-events: none;"></div>
+
+                        <!-- Icon chính nổi bật -->
+                        <div style="width: 92px; height: 92px; border-radius: 26px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 2.6rem; margin-bottom: 20px; box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3); border: 4px solid #ffffff;">
+                            <i class="fa-solid fa-mug-hot"></i>
+                        </div>
+
+                        <!-- Badge trạng thái -->
+                        <span style="display: inline-flex; align-items: center; gap: 6px; background: #dcfce7; color: #15803d; border: 1px solid #86efac; padding: 5px 14px; border-radius: 999px; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;">
+                            <i class="fa-solid fa-sparkles"></i> Ngày nghỉ ca trực
+                        </span>
+
+                        <!-- Tiêu đề & Lời nhắn -->
+                        <h2 style="color: #0f172a; font-size: 1.55rem; font-weight: 800; margin: 0 0 8px 0;">
+                            Hôm nay bạn không có ca làm việc nào!
+                        </h2>
+                        <p style="color: #475569; font-size: 0.98rem; max-width: 540px; line-height: 1.6; margin: 0 0 28px 0;">
+                            Hệ thống ghi nhận bạn không có lịch phân công trực đã duyệt trong ngày hôm nay. Hãy dành thời gian nghỉ ngơi, nạp lại năng lượng cho các ca làm việc tiếp theo nhé!
+                        </p>
+
+                        <!-- 3 Thẻ thông tin tóm tắt trực quan -->
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; width: 100%; max-width: 780px; margin-bottom: 30px; text-align: left;">
+                            <div style="background: rgba(255, 255, 255, 0.9); border: 1px solid #bbf7d0; border-left: 4px solid #10b981; border-radius: 14px; padding: 14px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+                                <div style="font-size: 0.78rem; font-weight: 700; color: #059669; text-transform: uppercase; margin-bottom: 4px;">
+                                    <i class="fa-solid fa-calendar-day"></i> Ca trực hôm nay
+                                </div>
+                                <div style="font-size: 1.05rem; font-weight: 800; color: #0f172a;">0 ca phân công</div>
+                                <div style="font-size: 0.8rem; color: #64748b; margin-top: 2px;">Không cần chấm công hôm nay</div>
+                            </div>
+
+                            <div style="background: rgba(255, 255, 255, 0.9); border: 1px solid #bae6fd; border-left: 4px solid #0284c7; border-radius: 14px; padding: 14px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+                                <div style="font-size: 0.78rem; font-weight: 700; color: #0284c7; text-transform: uppercase; margin-bottom: 4px;">
+                                    <i class="fa-regular fa-clock"></i> Quy định chấm công
+                                </div>
+                                <div style="font-size: 1.05rem; font-weight: 800; color: #0f172a;">Mở trước 30 phút</div>
+                                <div style="font-size: 0.8rem; color: #64748b; margin-top: 2px;">Điểm danh đúng giờ khi có ca</div>
+                            </div>
+
+                            <div style="background: rgba(255, 255, 255, 0.9); border: 1px solid #fde68a; border-left: 4px solid #f59e0b; border-radius: 14px; padding: 14px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+                                <div style="font-size: 0.78rem; font-weight: 700; color: #d97706; text-transform: uppercase; margin-bottom: 4px;">
+                                    <i class="fa-solid fa-calendar-plus"></i> Đăng ký tuần tới
+                                </div>
+                                <div style="font-size: 1.05rem; font-weight: 800; color: #0f172a;">Thứ 2 &rarr; Thứ 7</div>
+                                <div style="font-size: 0.8rem; color: #64748b; margin-top: 2px;">Khóa sổ vào 00:00 Chủ Nhật</div>
+                            </div>
+                        </div>
+
+                        <!-- Cụm nút lối tắt điều hướng nhanh -->
+                        <div style="display: flex; gap: 14px; flex-wrap: wrap; justify-content: center;">
+                            <button type="button" class="btn-primary" style="padding: 12px 24px; border-radius: 12px; font-weight: 700; font-size: 0.94rem; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 6px 16px rgba(16, 185, 129, 0.25);" onclick="renderLichLamViecStaff()">
+                                <i class="fa-solid fa-calendar-week"></i> Xem & Đăng ký lịch làm việc
+                            </button>
+                            <button type="button" class="btn-outline" style="padding: 12px 22px; border-radius: 12px; font-weight: 700; font-size: 0.94rem; background: #ffffff; border: 1.5px solid #cbd5e1; color: #334155; display: inline-flex; align-items: center; gap: 8px;" onclick="renderManHinhThuNgan()">
+                                <i class="fa-solid fa-cash-register" style="color: var(--primary);"></i> Về Màn hình Thu ngân
+                            </button>
+                        </div>
                     </div>`;
                 return;
             }
