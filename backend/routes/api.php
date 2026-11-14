@@ -104,7 +104,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/chatbot/phien-chat/{id}/doi-ten', [ChatbotController::class, 'doiTenPhienChat']);
     Route::delete('/chatbot/phien-chat/{id}', [ChatbotController::class, 'xoaPhienChat']);
     Route::get('/chatbot/phien-chat/{id}', [ChatbotController::class, 'layChiTietPhienChat']);
-    Route::post('/chatbot/admin-chat', [ChatbotController::class, 'nhanTinNhanAdmin']);
 
     // 5. Admin: Dashboard & Quản lý khách hàng
     Route::get('/admin/thong-ke', [DashboardController::class, 'layThongKe']);

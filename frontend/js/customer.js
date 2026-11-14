@@ -322,7 +322,7 @@ async function revalidateCartPrices() {
             const prices = (await gtRes.json()).data || [];
             const clusterData = await csRes.json();
 
-            if (!clusterData.success || clusterData.data.deleted_at !== null) {
+            if (!clusterData.success || clusterData.data.TrangThai === 'BaoTri') {
                 isChanged = true;
                 continue; 
             }
@@ -722,7 +722,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         ]);
                         const res = await response.json();
                         const ratingMap = (await ratingRes.json()).data || {};
-                        allActiveClusters = (res.data || []).filter(c => c.deleted_at === null).map(c => {
+                        allActiveClusters = (res.data || []).filter(c => c.TrangThai !== 'BaoTri').map(c => {
                             const r = ratingMap[c.ID];
                             return {
                                 ...c,
@@ -1789,7 +1789,7 @@ async function checkoutBooking() {
             const clusterRes = await fetch(`${API_BASE_URL}/cum-san/${cId}`);
             const clusterData = await clusterRes.json();
             
-            if (!clusterData.success || clusterData.data.deleted_at !== null) {
+            if (!clusterData.success || clusterData.data.TrangThai === 'BaoTri') {
                 const clusterName = selectedSlots.find(s => s.clusterId === cId).clusterName;
                 selectedSlots = selectedSlots.filter(s => s.clusterId !== cId);
                 saveToSession();
@@ -2008,7 +2008,7 @@ async function renderClusters() {
         const ratingMap = (await ratingRes.json()).data || {};
 
         // 1. Lọc sân hoạt động và gắn thông tin sao trung bình + tổng đánh giá (KHÔNG ghi đè lại ở dưới)
-        allActiveClusters = (res.data || []).filter(c => c.deleted_at === null).map(c => {
+        allActiveClusters = (res.data || []).filter(c => c.TrangThai !== 'BaoTri').map(c => {
             const r = ratingMap[c.ID];
             const avg = r ? Number(r.trung_binh_sao) : (c.danh_gias_avg_so_sao ? Number(c.danh_gias_avg_so_sao) : 0);
             const total = r ? Number(r.tong_danh_gia) : Number(c.danh_gias_count || 0);
@@ -3977,7 +3977,7 @@ async function openCreateTournamentModal() {
         const res = await response.json();
         
         // Lọc các cụm sân chưa bị xóa
-        const activeClusters = res.data.filter(c => c.deleted_at === null);
+        const activeClusters = (res.data || []).filter(c => c.TrangThai !== 'BaoTri');
         
         if (activeClusters.length === 0) {
             clusterSelect.innerHTML = '<option value="">Không có cụm sân nào hoạt động</option>';
