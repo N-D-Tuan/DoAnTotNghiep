@@ -12,10 +12,10 @@ DB_URI = os.getenv("DB_URI")
 def get_clusters_from_db():
     try:
         engine = create_engine(DB_URI)
-        # Chỉ lấy những sân có tọa độ
+        # Lấy TẤT CẢ cụm sân có tọa độ (Bỏ điều kiện lọc TrangThai = 'HoatDong')
         query = """
             SELECT 
-                ID as cum_san_id, 
+                MaCumSan as cum_san_id, 
                 TenCumSan as ten_cum_san, 
                 ViDo as latitude, 
                 KinhDo as longitude 
@@ -23,9 +23,10 @@ def get_clusters_from_db():
             WHERE ViDo IS NOT NULL AND KinhDo IS NOT NULL
         """
         df_clusters = pd.read_sql(query, engine)
+        df_clusters["cum_san_id"] = df_clusters["cum_san_id"].astype(str)
         return df_clusters.to_dict('records')
     except Exception as e:
-        print(f" Lỗi kết nối Database: {e}")
+        print(f"🚨 Lỗi kết nối Database: {e}")
         return []
 
 CLUSTERS = get_clusters_from_db()
