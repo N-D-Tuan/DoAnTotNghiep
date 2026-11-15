@@ -1,3 +1,6 @@
 *.pkl
+*.pyc
 *.csv
+*.log
+*.txt
 .env
