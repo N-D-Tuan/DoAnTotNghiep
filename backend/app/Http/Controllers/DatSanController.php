@@ -2714,10 +2714,69 @@ class DatSanController extends Controller
         }
     }
 
+    /**
+     * Đọc dữ liệu dự báo thời tiết 7 ngày từ file CSV do AI Python xuất ra
+     * Trả về mảng tra cứu nhanh theo key: "MaCumSan_YYYY-MM-DD HH:00:00"
+     */
+    private static function docDuBaoThoiTietTuCSV(): array
+    {
+        $candidates = [
+            env('WEATHER_CSV_PATH'),
+            base_path('../weather_ai/du_bao_thoi_tiet_7_ngay.csv'),
+            storage_path('app/du_bao_thoi_tiet_7_ngay.csv'),
+        ];
+
+        $csvPath = null;
+        foreach ($candidates as $path) {
+            if ($path && file_exists($path) && is_readable($path)) {
+                $csvPath = $path;
+                break;
+            }
+        }
+
+        if (!$csvPath) {
+            return [];
+        }
+
+        $weatherMap = [];
+        if (($handle = fopen($csvPath, 'r')) !== false) {
+            $headers = fgetcsv($handle);
+            if ($headers) {
+                // Xóa ký tự BOM (utf-8-sig) do pandas.to_csv tạo ra ở cột đầu tiên
+                $headers[0] = preg_replace('/^\xEF\xBB\xBF/', '', (string) $headers[0]);
+                $headers = array_map('trim', $headers);
+
+                while (($row = fgetcsv($handle)) !== false) {
+                    if (count($row) !== count($headers)) {
+                        continue;
+                    }
+                    $item = array_combine($headers, $row);
+                    $cid = trim((string) ($item['cum_san_id'] ?? ''));
+                    $time = trim((string) ($item['thoi_gian'] ?? ''));
+
+                    if ($cid !== '' && $time !== '') {
+                        $weatherMap["{$cid}_{$time}"] = [
+                            'xac_suat_mua'   => (float) ($item['xac_suat_mua_mo_hinh'] ?? 0),
+                            'co_mua'         => trim((string) ($item['co_mua'] ?? 'Không')),
+                            'luong_mua_mm'   => (float) ($item['luong_mua_mm'] ?? 0),
+                            'kieu_thoi_tiet' => trim((string) ($item['kieu_thoi_tiet'] ?? '')),
+                            'nhiet_do'       => (float) ($item['nhiet_do'] ?? 0),
+                            'do_am'          => (float) ($item['do_am'] ?? 0),
+                            'toc_do_gio'     => (float) ($item['toc_do_gio'] ?? 0),
+                        ];
+                    }
+                }
+            }
+            fclose($handle);
+        }
+
+        return $weatherMap;
+    }
+
     // =========================================================================
-    // TỰ ĐỘNG KIỂM TRA & PHÁT THÔNG BÁO NHẮC LỊCH ĐẶT SÂN TRONG NGÀY (PHƯƠNG ÁN A)
-    // - Hoạt động tự động khi gọi API Xem Cụm Sân hoặc Đăng Nhập
-    // - Áp dụng cho cả Khách thành viên (Web + Mail) và Khách vãng lai (Mail)
+    // TỰ ĐỘNG KIỂM TRA & PHÁT THÔNG BÁO NHẮC LỊCH + CẢNH BÁO THỜI TIẾT TRONG NGÀY
+    // - Web (Khách thành viên): 1 thông báo DatSan + 1 thông báo ThoiTiet (nếu có mưa >= 50% hoặc Mưa lớn)
+    // - Email (Thành viên & Vãng lai): Gộp chung 1 Email duy nhất (Lịch đá + Khối cảnh báo thời tiết)
     // =========================================================================
     public static function kiemTraVaPhatThongBaoNhacLichHomNay($forceScan = false)
     {
@@ -2725,7 +2784,7 @@ class DatSanController extends Controller
         $todayYmd = $now->toDateString(); // YYYY-MM-DD
         $todayDisplay = $now->format('d/m/Y');
 
-        // Phương án A: Bắt đầu phát thông báo nhắc lịch trong ngày từ 06:00 sáng trở đi
+        // Bắt đầu phát thông báo nhắc lịch trong ngày từ 06:00 sáng trở đi
         if (!$forceScan && $now->hour < 6) {
             return;
         }
@@ -2754,7 +2813,6 @@ class DatSanController extends Controller
                 return false;
             }
 
-            // Kiểm tra thêm trong bảng ThongBao (đối với khách có tài khoản) để phòng trường hợp xóa Cache vẫn không gửi trùng
             if ($ds->MaNguoiDung) {
                 $maVeCheck = $ds->MaGiaiDau ? "#GD-{$ds->MaGiaiDau}" : "#PT-{$ds->MaDatSan}";
                 $daCoThongBaoDB = ThongBao::where('MaNguoiDung', $ds->MaNguoiDung)
@@ -2769,7 +2827,6 @@ class DatSanController extends Controller
                 }
             }
 
-            // Bỏ qua nếu ca đá hôm nay đã kết thúc
             if ($ds->khungGio && $ds->khungGio->GioKetThuc) {
                 $endTime = \Carbon\Carbon::parse($todayYmd . ' ' . $ds->khungGio->GioKetThuc, 'Asia/Ho_Chi_Minh');
                 if ($now->greaterThanOrEqualTo($endTime)) {
@@ -2777,7 +2834,6 @@ class DatSanController extends Controller
                 }
             }
 
-            // Nếu khách vừa mới đặt sân ngay trong hôm nay cách đây < 15 phút (vừa nhận mail đặt sân xong) -> Tạm hoãn lại lần quét sau
             if ($ds->NgayTao) {
                 $createdTime = \Carbon\Carbon::parse($ds->NgayTao, 'Asia/Ho_Chi_Minh');
                 if ($createdTime->isSameDay($now) && $createdTime->diffInMinutes($now) < 15) {
@@ -2792,8 +2848,10 @@ class DatSanController extends Controller
             return;
         }
 
+        // Đọc bảng dự báo thời tiết 1 lần duy nhất cho cả đợt quét
+        $weatherMap = self::docDuBaoThoiTietTuCSV();
+
         // 3. Gom nhóm các trận trong ngày hôm nay theo từng Hóa đơn / Khách hàng
-        // (Ví dụ: Hóa đơn có 3 trận ngày 12 và 2 trận ngày 13 -> Ngày 12 gom 3 trận thành 1 thông báo, Ngày 13 gom 2 trận thành 1 thông báo)
         $groups = $cacTranCanNhac->groupBy(function ($ds) {
             $maHD = $ds->chiTietHoaDon ? $ds->chiTietHoaDon->MaHoaDonDatSan : null;
             if ($ds->MaNguoiDung) {
@@ -2822,18 +2880,20 @@ class DatSanController extends Controller
                 ? ($first->nguoiDung ? $first->nguoiDung->Email : null)
                 : $first->EmailNguoiDat;
 
-            // Đánh dấu ngay vào Cache (hiệu lực đến hết ngày) để chỉ gửi đúng 1 lần duy nhất trong ngày
+            // Đánh dấu ngay vào Cache để chỉ gửi 1 lần duy nhất trong ngày
             foreach ($sortedMatches as $m) {
                 \Illuminate\Support\Facades\Cache::put("reminded_match_{$todayYmd}_{$m->MaDatSan}", true, $now->copy()->endOfDay());
             }
 
             $danhSachTranMailHtml = '';
             $tomTatWebArr = [];
+            $canhBaoThoiTietList = [];
             $tongTienSanHomNay = 0;
             $tongDaCocHomNay = 0;
 
             foreach ($sortedMatches as $idx => $dsItem) {
                 $tenSan = $dsItem->sanBong ? $dsItem->sanBong->TenSan : 'Sân bóng';
+                $maCumSanItem = $dsItem->sanBong ? $dsItem->sanBong->MaCumSan : null;
                 $tenCumSan = ($dsItem->sanBong && $dsItem->sanBong->cumSan) ? $dsItem->sanBong->cumSan->TenCumSan : 'Cơ sở DN Football';
                 $diaChiCum = ($dsItem->sanBong && $dsItem->sanBong->cumSan) ? $dsItem->sanBong->cumSan->DiaChi : 'Đà Nẵng';
                 $gioStr = $dsItem->khungGio
@@ -2847,6 +2907,29 @@ class DatSanController extends Controller
                 $tongDaCocHomNay += $tienCoc;
 
                 $tomTatWebArr[] = "{$tenSan} ({$gioStr} - #{$maVe})";
+
+                // Tra cứu dự báo thời tiết cho đúng Cụm sân + Khung giờ đá (Nếu cụm sân không có tọa độ/không có trong CSV -> bỏ qua an toàn)
+                if ($maCumSanItem && $dsItem->khungGio && $dsItem->khungGio->GioBatDau) {
+                    $hourPrefix = substr($dsItem->khungGio->GioBatDau, 0, 2);
+                    $weatherKey = "{$maCumSanItem}_{$todayYmd} {$hourPrefix}:00:00";
+
+                    if (isset($weatherMap[$weatherKey])) {
+                        $w = $weatherMap[$weatherKey];
+                        // Chỉ cảnh báo khi xác suất mưa >= 50% hoặc kiểu thời tiết là Mưa lớn
+                        if ($w['xac_suat_mua'] >= 50.0 || $w['kieu_thoi_tiet'] === 'Mưa lớn') {
+                            $canhBaoThoiTietList[] = [
+                                'ten_san'        => $tenSan,
+                                'gio_str'        => $gioStr,
+                                'ma_ve'          => $maVe,
+                                'kieu_thoi_tiet' => $w['kieu_thoi_tiet'] ?: 'Có mưa',
+                                'xac_suat_mua'   => round($w['xac_suat_mua'], 0),
+                                'luong_mua_mm'   => $w['luong_mua_mm'],
+                                'nhiet_do'       => round($w['nhiet_do'], 1),
+                                'do_am'          => round($w['do_am'], 0),
+                            ];
+                        }
+                    }
+                }
 
                 $danhSachTranMailHtml .= "
                     <tr>
@@ -2868,8 +2951,6 @@ class DatSanController extends Controller
             $diaChiChinh = ($first->sanBong && $first->sanBong->cumSan) ? $first->sanBong->cumSan->DiaChi : 'Đà Nẵng';
             $chuoiTomTatCa = implode(', ', $tomTatWebArr);
 
-            // Lấy đúng Số điện thoại của Quản lý cụm sân (VaiTro = 'QuanLySan') mà khách đã đặt
-            // (Nếu cụm sân chưa gán quản lý thì fallback về số điện thoại của Admin hệ thống)
             $quanLyCum = $maCumSanChinh
                 ? NguoiDung::where('VaiTro', 'QuanLySan')
                     ->where('MaCumSan', $maCumSanChinh)
@@ -2892,10 +2973,13 @@ class DatSanController extends Controller
                 : "Quản lý {$tenCumSanChinh}";
 
             // =================================================================
-            // A. NẾU LÀ KHÁCH CÓ TÀI KHOẢN -> TẠO THÔNG BÁO WEB + PHÁT REALTIME
+            // A. KHÁCH THÀNH VIÊN -> TẠO 2 THÔNG BÁO WEB:
+            //    (1) Thông báo nhắc lịch (LoaiThongBao = 'DatSan')
+            //    (2) Thông báo cảnh báo thời tiết (LoaiThongBao = 'ThoiTiet') nếu có mưa
             // =================================================================
             if ($isMember) {
                 try {
+                    // 1. Thông báo nhắc lịch đặt sân
                     $tieuDeWeb = "Nhắc lịch đá bóng hôm nay ({$todayDisplay})";
                     $noiDungWeb = "Hôm nay bạn có {$soTranHomNay} lịch đặt sân tại {$tenCumSanChinh}: {$chuoiTomTatCa}"
                         . ($maHoaDon ? " (Hóa đơn #{$maHoaDon})" : "")
@@ -2908,14 +2992,30 @@ class DatSanController extends Controller
                         'LoaiThongBao' => 'DatSan'
                     ]);
 
+                    // 2. Thông báo cảnh báo thời tiết riêng (LoaiThongBao = 'ThoiTiet')
+                    if (!empty($canhBaoThoiTietList)) {
+                        $chiTietMuaWebArr = array_map(function ($w) {
+                            return "{$w['ten_san']} ({$w['gio_str']}: {$w['kieu_thoi_tiet']}, xác suất {$w['xac_suat_mua']}%, {$w['nhiet_do']}°C)";
+                        }, $canhBaoThoiTietList);
+
+                        ThongBao::create([
+                            'MaNguoiDung'  => $first->MaNguoiDung,
+                            'TieuDe'       => "Cảnh báo thời tiết hôm nay ({$todayDisplay})",
+                            'NoiDung'      => "Dự báo AI tại {$tenCumSanChinh} có khả năng mưa vào khung giờ thi đấu của bạn: "
+                                . implode('; ', $chiTietMuaWebArr)
+                                . ". Bạn nên chuẩn bị giày đinh dăm (TF) chống trơn trượt. Nếu trời mưa lớn không thể thi đấu, hãy vào 'Các yêu cầu -> Yêu cầu hủy sân gấp' hoặc gọi Hotline {$sdtQuanLySan} để được hỗ trợ dời lịch/hoàn cọc 100%.",
+                            'LoaiThongBao' => 'ThoiTiet'
+                        ]);
+                    }
+
                     broadcast(new \App\Events\UserDataUpdated($first->MaNguoiDung))->toOthers();
                 } catch (\Exception $e) {
-                    \Illuminate\Support\Facades\Log::error('Lỗi tạo thông báo web nhắc lịch: ' . $e->getMessage());
+                    \Illuminate\Support\Facades\Log::error('Lỗi tạo thông báo web nhắc lịch/thời tiết: ' . $e->getMessage());
                 }
             }
 
             // =================================================================
-            // B. GỬI EMAIL NHẮC LỊCH CHI TIẾT (CHO CẢ KHÁCH THÀNH VIÊN & VÃNG LAI)
+            // B. GỬI 1 EMAIL DUY NHẤT (GỘP NHẮC LỊCH + CẢNH BÁO THỜI TIẾT)
             // =================================================================
             if ($emailNhan) {
                 try {
@@ -2924,12 +3024,39 @@ class DatSanController extends Controller
                         ? "Giải đấu: <strong>{$first->giaiDau->TenGiaiDau} (#GD-{$first->MaGiaiDau})</strong>"
                         : "Đá phong trào";
 
-                    // Tính số tiền còn thu tại sân của Hóa đơn (nếu có Hóa đơn)
                     $hdObj = $first->chiTietHoaDon ? $first->chiTietHoaDon->hoaDonDatSan : null;
                     $dongConThuHtml = '';
                     if ($hdObj) {
                         $conThuHD = max(0, (float) $hdObj->TongTien - (float) $hdObj->TienDaCoc);
                         $dongConThuHtml = "<div>&bull; Tổng số tiền còn cần thanh toán tại sân (Hóa đơn #{$maHoaDon}, đã gồm VAT/Khuyến mãi): <strong style='color: #e11d48;'>" . number_format($conThuHD, 0, ',', '.') . "đ</strong></div>";
+                    }
+
+                    // Khối Cảnh báo thời tiết gộp chung vào Email nhắc lịch (nếu có ca bị ảnh hưởng)
+                    $canhBaoThoiTietMailHtml = '';
+                    if (!empty($canhBaoThoiTietList)) {
+                        $dsCanhBaoItemsHtml = '';
+                        foreach ($canhBaoThoiTietList as $w) {
+                            $dsCanhBaoItemsHtml .= "
+                                <li style='margin-bottom: 5px;'>
+                                    <strong>{$w['ten_san']} ({$w['gio_str']} - #{$w['ma_ve']}):</strong>
+                                    <span style='color: #0369a1; font-weight: bold;'>{$w['kieu_thoi_tiet']}</span>
+                                    — Xác suất mưa: <strong>{$w['xac_suat_mua']}%</strong> | Lượng mưa dự kiến: <strong>{$w['luong_mua_mm']} mm</strong> | Nhiệt độ: <strong>{$w['nhiet_do']}°C</strong>
+                                </li>
+                            ";
+                        }
+
+                        $canhBaoThoiTietMailHtml = "
+                            <div style='background: #f0f9ff; border: 1px solid #bae6fd; border-left: 4px solid #0284c7; border-radius: 8px; padding: 14px 18px; margin-top: 18px;'>
+                                <h4 style='margin: 0 0 8px 0; color: #0369a1; font-size: 15px;'>🌧️ Cảnh báo Thời tiết từ Hệ thống AI (Tại {$tenCumSanChinh}):</h4>
+                                <p style='margin: 0 0 8px 0; font-size: 13.5px; color: #334155;'>Hệ thống dự báo có khả năng xảy ra mưa vào khung giờ thi đấu hôm nay của bạn:</p>
+                                <ul style='margin: 0 0 8px 0; padding-left: 20px; color: #334155; font-size: 13.5px; line-height: 1.6;'>
+                                    {$dsCanhBaoItemsHtml}
+                                </ul>
+                                <div style='font-size: 13px; color: #0c4a6e;'>
+                                    <em>* Khuyến nghị: Quý khách nên mang theo giày đinh dăm (TF) chống trơn trượt. Trường hợp mưa lớn không thể thi đấu, vui lòng thực hiện theo hướng dẫn dời lịch/hủy sân gấp bên dưới hoặc liên hệ Hotline <strong>{$sdtQuanLySan}</strong> để được hỗ trợ hoàn cọc 100%.</em>
+                                </div>
+                            </div>
+                        ";
                     }
 
                     if ($isMember) {
@@ -2938,7 +3065,7 @@ class DatSanController extends Controller
                                 <h4 style='margin: 0 0 8px 0; color: #92400e; font-size: 15px;'>📌 Hướng dẫn Dời lịch, Hủy sân & Yêu cầu hủy sân gấp:</h4>
                                 <ul style='margin: 0; padding-left: 20px; color: #334155; font-size: 13.5px; line-height: 1.65;'>
                                     <li><strong>Tự hủy hoặc Dời lịch trực tiếp trên Web:</strong> Bạn có thể đăng nhập vào hệ thống &rarr; mục <strong>Lịch sử đặt sân</strong> để tự dời lịch hoặc hủy miễn phí (hoàn 100% tiền cọc vào Ví điện tử) nếu còn trước giờ bóng lăn tối thiểu <strong>10 tiếng</strong> (đối với đá phong trào) hoặc trước <strong>7 ngày</strong> (đối với giải đấu).</li>
-                                    <li style='margin-top: 6px;'><strong>Trường hợp đã quá thời hạn tự hủy (Sát giờ thi đấu):</strong> Nếu có việc đột xuất hoặc lý do bất khả kháng không thể ra sân khi thời gian còn dưới 10 tiếng, bạn hãy vào mục <strong>Các yêu cầu &rarr; Yêu cầu hủy sân gấp &rarr; Tạo yêu cầu hủy gấp</strong>, chọn lịch đặt và ghi rõ lý do để Ban quản lý cụm sân xem xét hỗ trợ duyệt hủy và hoàn trả 100% tiền cọc về Ví.</li>
+                                    <li style='margin-top: 6px;'><strong>Trường hợp đã quá thời hạn tự hủy (Sát giờ thi đấu):</strong> Nếu có việc đột xuất hoặc lý do thời tiết xấu không thể ra sân khi thời gian còn dưới 10 tiếng, bạn hãy vào mục <strong>Các yêu cầu &rarr; Yêu cầu hủy sân gấp &rarr; Tạo yêu cầu hủy gấp</strong>, chọn lịch đặt và ghi rõ lý do để Ban quản lý cụm sân xem xét hỗ trợ duyệt hủy và hoàn trả 100% tiền cọc về Ví.</li>
                                     <li style='margin-top: 6px;'><strong>Hotline Quản lý sân hỗ trợ trực tiếp:</strong> <strong>{$sdtQuanLySan}</strong> — {$tenQuanLyHienThi}.</li>
                                 </ul>
                             </div>
@@ -2948,7 +3075,7 @@ class DatSanController extends Controller
                             <div style='background: #fffbeb; border: 1px solid #fde68a; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 14px 18px; margin-top: 18px;'>
                                 <h4 style='margin: 0 0 8px 0; color: #92400e; font-size: 15px;'>📌 Hướng dẫn Hỗ trợ Dời lịch, Hủy sân & Hoàn tiền cọc:</h4>
                                 <ul style='margin: 0; padding-left: 20px; color: #334155; font-size: 13.5px; line-height: 1.65;'>
-                                    <li><strong>Cách thức yêu cầu hủy hoặc dời lịch:</strong> Đối với khách đặt sân không qua tài khoản thành viên, khi có việc đột xuất cần dời khung giờ hoặc hủy lịch đặt sân, quý khách vui lòng liên hệ trực tiếp với Nhân viên / Quản lý sân qua số <strong>Hotline: {$sdtQuanLySan}</strong> ({$tenQuanLyHienThi}).</li>
+                                    <li><strong>Cách thức yêu cầu hủy hoặc dời lịch:</strong> Đối với khách đặt sân không qua tài khoản thành viên, khi có việc đột xuất hoặc mưa lớn cần dời khung giờ/hủy lịch, quý khách vui lòng liên hệ trực tiếp với Nhân viên / Quản lý sân qua số <strong>Hotline: {$sdtQuanLySan}</strong> ({$tenQuanLyHienThi}).</li>
                                     <li style='margin-top: 6px;'><strong>Xác thực OTP bảo mật & Hoàn cọc:</strong> Nhân viên tại cơ sở sẽ gửi <strong>1 mã xác thực OTP (6 chữ số)</strong> về chính địa chỉ Email này của bạn. Quý khách chỉ cần đọc mã OTP để hoàn tất hủy lịch và nhận lại 100% tiền đặt cọc.</li>
                                 </ul>
                             </div>
@@ -2990,6 +3117,7 @@ class DatSanController extends Controller
                                     <div style='margin-top: 6px; font-size: 13px; color: #15803d;'><em>* Lưu ý: Quý khách vui lòng có mặt tại sân trước giờ bóng lăn 10 - 15 phút và xuất trình Mã vé / Mã QR cho nhân viên trực sân để Check-in nhận sân.</em></div>
                                 </div>
 
+                                {$canhBaoThoiTietMailHtml}
                                 {$huongDanHuyHtml}
 
                                 <p style='margin-top: 22px; margin-bottom: 0; font-size: 13.5px; color: #475569;'>Chúc bạn và đội bóng có những trận cầu thật sôi nổi tại <strong>DN Football</strong>!</p>
@@ -2997,9 +3125,12 @@ class DatSanController extends Controller
                         </div>
                     ";
 
-                    Mail::html($noiDungEmail, function ($message) use ($emailNhan, $todayDisplay, $soTranHomNay, $tenCumSanChinh) {
-                        $message->to($emailNhan)
-                                ->subject("Nhắc lịch đá bóng hôm nay ({$todayDisplay}) - {$soTranHomNay} trận tại {$tenCumSanChinh}");
+                    $tieuDeEmail = !empty($canhBaoThoiTietList)
+                        ? "Nhắc lịch đá bóng & Cảnh báo thời tiết hôm nay ({$todayDisplay}) - {$tenCumSanChinh}"
+                        : "Nhắc lịch đá bóng hôm nay ({$todayDisplay}) - {$soTranHomNay} trận tại {$tenCumSanChinh}";
+
+                    Mail::html($noiDungEmail, function ($message) use ($emailNhan, $tieuDeEmail) {
+                        $message->to($emailNhan)->subject($tieuDeEmail);
                     });
                 } catch (\Exception $mailEx) {
                     \Illuminate\Support\Facades\Log::error('Lỗi gửi email nhắc lịch hôm nay: ' . $mailEx->getMessage());
