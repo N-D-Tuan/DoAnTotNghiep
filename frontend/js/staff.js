@@ -1876,16 +1876,16 @@ async function renderStaffQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = nu
         <!-- KHỐI BẢNG DỮ LIỆU ĐẶT SÂN -->
         <div class="panel" style="padding: 0; overflow: hidden;">
             <div class="table-responsive" style="min-height: 350px;">
-                <table class="admin-table" style="margin: 0;">
+                <table class="admin-table" style="margin: 0; width: 100%;">
                     <thead style="background: #F8FAFC;">
                         <tr>
-                            <th style="text-align: center; width: 100px; white-space: nowrap;">Mã vé</th>
-                            <th>Khách hàng</th>
-                            <th>Thông tin Sân</th>
-                            <th>Khung giờ</th>
-                            <th>Giá sân / Cọc</th>
-                            <th>Trạng thái</th>
-                            <th style="text-align: center;">Thao tác</th>
+                            <th style="text-align: center; padding: 10px 8px; white-space: nowrap;">Mã vé</th>
+                            <th style="padding: 10px 8px; white-space: nowrap;">Khách hàng</th>
+                            <th style="padding: 10px 8px; white-space: nowrap;">Thông tin Sân</th>
+                            <th style="padding: 10px 8px; white-space: nowrap;">Khung giờ</th>
+                            <th style="padding: 10px 8px; white-space: nowrap;">Giá sân / Cọc</th>
+                            <th style="padding: 10px 8px; white-space: nowrap;">Trạng thái</th>
+                            <th style="text-align: center; padding: 10px 8px; white-space: nowrap;">Thao tác</th>
                         </tr>
                     </thead>
                     <tbody id="staff-datsan-table-body">
@@ -2047,17 +2047,19 @@ function getStaffInvoiceStatus(hoaDonObj, items = []) {
 function applyStaffDSFiltersAndRender() {
     const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user'));
     let clusterBookings = staffDatSanData;
-    
+
     if (currentUser && (currentUser.MaCumSan || currentUser.ID_CumSan)) {
         const myCS = String(currentUser.MaCumSan || currentUser.ID_CumSan);
-        clusterBookings = clusterBookings.filter(item => 
+        clusterBookings = clusterBookings.filter(item =>
             item.san_bong && String(item.san_bong.MaCumSan || item.san_bong.ID_CumSan) === myCS
         );
     }
 
     const searchTerm = staffDSSearch.toLowerCase().trim().replace(/^#/, '');
+    const isCurrentShiftScope = (staffShiftContext.viewScope === 'CURRENT_SHIFT');
+    const activeShift = staffShiftContext.activeShift;
+    const hasActiveFilter = isCurrentShiftScope || (staffDSDate !== '') || (staffDSFilter !== 'All') || (searchTerm !== '');
 
-    // Gom nhóm theo Hóa đơn đặt sân
     const invoiceMap = new Map();
     const tournamentKeyMap = new Map();
 
@@ -2082,9 +2084,7 @@ function applyStaffDSFiltersAndRender() {
             });
         }
         const group = invoiceMap.get(key);
-        if (!group.maHoaDon && item.MaHoaDonDatSan) {
-            group.maHoaDon = item.MaHoaDonDatSan;
-        }
+        if (!group.maHoaDon && item.MaHoaDonDatSan) group.maHoaDon = item.MaHoaDonDatSan;
         if (!group.hoaDonObj && (item.hoa_don_dat_san || item.hoaDonDatSan)) {
             group.hoaDonObj = item.hoa_don_dat_san || item.hoaDonDatSan;
         }
@@ -2095,68 +2095,91 @@ function applyStaffDSFiltersAndRender() {
         group.items.sort((a, b) => {
             const dateCmp = String(a.NgayDa || '').localeCompare(String(b.NgayDa || ''));
             if (dateCmp !== 0) return dateCmp;
-            const timeA = a.khung_gio?.GioBatDau || '';
-            const timeB = b.khung_gio?.GioBatDau || '';
-            return timeA.localeCompare(timeB);
+            return (a.khung_gio?.GioBatDau || '').localeCompare(b.khung_gio?.GioBatDau || '');
         });
         group.trangThaiHoaDon = getStaffInvoiceStatus(group.hoaDonObj, group.items);
         return group;
     });
 
-    // Lọc theo phạm vi Ca trực (CURRENT_SHIFT) hoặc Tra cứu (OTHER_SHIFTS)
-    const isCurrentShiftScope = (staffShiftContext.viewScope === 'CURRENT_SHIFT');
-    const activeShift = staffShiftContext.activeShift;
+    const filteredGroups = [];
 
-    const filteredGroups = allInvoiceGroups.filter(group => {
-        // 1. Nếu đang ở Tab "Đặt sân trong Ca hiện tại": Hóa đơn phải có ít nhất 1 trận diễn ra trong khung giờ của Ca đang trực hôm nay
-        if (isCurrentShiftScope && activeShift) {
-            const hasMatchInCurrentShift = group.items.some(item => isBookingInStaffActiveShift(item, activeShift));
-            if (!hasMatchInCurrentShift) return false;
-
-            // Lọc theo trạng thái của các trận trong ca (hoặc trạng thái hóa đơn)
-            const matchShiftStatus = (staffDSFilter === 'All')
-                || group.trangThaiHoaDon === staffDSFilter
-                || group.items.some(item => isBookingInStaffActiveShift(item, activeShift) && item.TrangThai === staffDSFilter);
-            if (!matchShiftStatus) return false;
-        } else {
-            // 2. Nếu đang ở Tab "Tra cứu các ca / ngày khác":
-            const matchStatus = (staffDSFilter === 'All' || group.trangThaiHoaDon === staffDSFilter);
-            const matchDate = staffDSDate
-                ? group.items.some(item => item.NgayDa === staffDSDate)
-                : true;
-            if (!matchStatus || !matchDate) return false;
+    allInvoiceGroups.forEach(group => {
+        if (!hasActiveFilter) {
+            group.matchedItems = [...group.items];
+            group.hiddenItems = [];
+            filteredGroups.push(group);
+            return;
         }
 
-        // 3. Lọc theo Từ khóa tìm kiếm
         const maHDLower = String(group.maHoaDon || '').toLowerCase();
         const matchInvoiceCode = searchTerm !== '' && (maHDLower.includes(searchTerm) || (`#${maHDLower}`).includes(searchTerm));
 
-        const matchAnyItemSearch = group.items.some(item => {
-            const codeVariants = getStaffBookingCodeVariants(item);
-            const matchCode = searchTerm !== '' && codeVariants.some(v => v.includes(searchTerm));
+        const matchedItems = [];
+        const hiddenItems = [];
 
-            const sdt = item.ID_NguoiDung ? (item.nguoi_dung?.SoDienThoai?.toLowerCase() || '') : ((item.SDTNguoiDat || item.SDTKhachVangLai || '').toLowerCase());
-            const tenKhach = item.ID_NguoiDung ? (item.nguoi_dung?.HoTen?.toLowerCase() || '') : ((item.TenNguoiDat || item.TenKhachVangLai || '').toLowerCase());
-            const tenSan = item.san_bong ? item.san_bong.TenSan.toLowerCase() : '';
-            const tenGiai = (item.ID_GiaiDau !== null && item.giai_dau) ? item.giai_dau.TenGiaiDau.toLowerCase() : '';
+        group.items.forEach(item => {
+            const matchShift = isCurrentShiftScope && activeShift
+                ? isBookingInStaffActiveShift(item, activeShift)
+                : true;
+            const matchDate = isCurrentShiftScope
+                ? true
+                : (!staffDSDate || item.NgayDa === staffDSDate);
+            const matchStatus = (staffDSFilter === 'All') || (item.TrangThai === staffDSFilter);
 
-            return matchCode
-                || sdt.includes(searchTerm)
-                || tenKhach.includes(searchTerm)
-                || tenSan.includes(searchTerm)
-                || tenGiai.includes(searchTerm);
+            let matchSearch = true;
+            if (searchTerm !== '' && !matchInvoiceCode) {
+                const codeVariants = getStaffBookingCodeVariants(item);
+                const matchCode = codeVariants.some(v => v.includes(searchTerm));
+                const sdt = item.ID_NguoiDung ? (item.nguoi_dung?.SoDienThoai?.toLowerCase() || '') : ((item.SDTNguoiDat || item.SDTKhachVangLai || '').toLowerCase());
+                const tenKhach = item.ID_NguoiDung ? (item.nguoi_dung?.HoTen?.toLowerCase() || '') : ((item.TenNguoiDat || item.TenKhachVangLai || '').toLowerCase());
+                const tenSan = item.san_bong ? item.san_bong.TenSan.toLowerCase() : '';
+                const tenGiai = (item.ID_GiaiDau !== null && item.giai_dau) ? item.giai_dau.TenGiaiDau.toLowerCase() : '';
+
+                matchSearch = matchCode || sdt.includes(searchTerm) || tenKhach.includes(searchTerm) || tenSan.includes(searchTerm) || tenGiai.includes(searchTerm);
+            }
+
+            if (matchShift && matchDate && matchStatus && matchSearch) {
+                matchedItems.push(item);
+            } else {
+                hiddenItems.push(item);
+            }
         });
 
-        return (searchTerm === '' || matchInvoiceCode || matchAnyItemSearch);
+        if (matchedItems.length > 0) {
+            group.matchedItems = matchedItems;
+            group.hiddenItems = hiddenItems;
+            filteredGroups.push(group);
+        }
     });
 
     const totalPages = Math.ceil(filteredGroups.length / staffDSItemsPerPage) || 1;
     if (staffDSPage > totalPages) staffDSPage = totalPages;
     const startIdx = (staffDSPage - 1) * staffDSItemsPerPage;
-    
+
     renderStaffDSTable(filteredGroups.slice(startIdx, startIdx + staffDSItemsPerPage));
     renderStaffDSPagination(totalPages);
 }
+
+window.toggleStaffInvoiceExtraRows = function(safeKey, hiddenCount) {
+    const rows = document.querySelectorAll(`.staff-extra-row-${safeKey}`);
+    const btn = document.getElementById(`btn-toggle-staff-inv-${safeKey}`);
+    if (!rows.length || !btn) return;
+
+    const isCurrentlyHidden = rows[0].style.display === 'none';
+    rows.forEach(r => {
+        r.style.display = isCurrentlyHidden ? 'table-row' : 'none';
+    });
+
+    if (isCurrentlyHidden) {
+        btn.innerHTML = `<i class="fa-solid fa-chevron-up"></i> Thu gọn`;
+        btn.style.background = '#e2e8f0';
+        btn.style.color = '#334155';
+    } else {
+        btn.innerHTML = `<i class="fa-solid fa-chevron-down"></i> Mở rộng (+${hiddenCount})`;
+        btn.style.background = '#f8fafc';
+        btn.style.color = '#475569';
+    }
+};
 
 function renderStaffDSTable(invoiceGroups) {
     const tbody = document.getElementById('staff-datsan-table-body');
@@ -2172,6 +2195,107 @@ function renderStaffDSTable(invoiceGroups) {
     const todayStr = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10);
     const activeShift = staffShiftContext.activeShift;
     const isCurrentShiftScope = (staffShiftContext.viewScope === 'CURRENT_SHIFT');
+
+    const renderStaffRowHtml = (item, isExtraHidden = false, safeKey = '') => {
+        const isInActiveShift = activeShift ? isBookingInStaffActiveShift(item, activeShift) : false;
+        const isPastDate = item.NgayDa < todayStr;
+
+        let badgeColor = '#6b7280', badgeBg = '#f3f4f6', viStatus = item.TrangThai;
+        if (item.TrangThai === 'DaCoc') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; viStatus = 'Đã cọc'; }
+        else if (item.TrangThai === 'DaHuy') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; viStatus = 'Đã hủy'; }
+        else if (item.TrangThai === 'HoanThanh') { badgeColor = '#047857'; badgeBg = '#d1fae5'; viStatus = 'Hoàn thành'; }
+        else if (item.TrangThai === 'KhongDen') { badgeColor = '#6b7280'; badgeBg = '#f3f4f6'; viStatus = 'Không đến'; }
+
+        const badgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor}; white-space: nowrap;">${viStatus}</span>`;
+        const maVeDisplay = item.ID_GiaiDau ? `GD-${item.ID_GiaiDau}` : `PT-${item.ID}`;
+        const badgeClassVe = item.ID_GiaiDau
+            ? 'background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe;'
+            : 'background: #f8fafc; color: #475569; border: 1px solid #e2e8f0;';
+
+        const isGiaiDau = item.ID_GiaiDau !== null;
+        const tenGiaiDau = isGiaiDau && item.giai_dau ? item.giai_dau.TenGiaiDau : '';
+        const tagLoai = isGiaiDau
+            ? `<span style="font-size: 0.75rem; background: #e0e7ff; color: #4338ca; padding: 2px 8px; border-radius: 4px; white-space: nowrap; display: inline-block;"><i class="fa-solid fa-trophy"></i> Giải đấu</span>`
+            : `<span style="font-size: 0.75rem; background: #f1f5f9; color: #475569; padding: 2px 8px; border-radius: 4px; white-space: nowrap; display: inline-block;">Phong trào</span>`;
+        const htmlTenGiai = isGiaiDau
+            ? `<div style="font-size: 0.8rem; color: #4338ca; margin-top: 3px; font-weight: 600; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${tenGiaiDau}"><i class="fa-solid fa-medal"></i> ${tenGiaiDau}</div>`
+            : '';
+
+        const d = new Date(item.NgayDa);
+        const dateStr = `<span style="white-space: nowrap; display: inline-block;">${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}</span>`;
+        const timeStr = item.khung_gio
+            ? `<span style="white-space: nowrap; display: inline-block;">${item.khung_gio.GioBatDau.substring(0, 5)} - ${item.khung_gio.GioKetThuc.substring(0, 5)}</span>`
+            : '';
+
+        let actionHtml = '';
+        if (item.TrangThai === 'DaCoc') {
+            if (isInActiveShift) {
+                actionHtml = `
+                    <div style="display: inline-flex; gap: 6px; align-items: center;">
+                        <button type="button" class="btn-outline-sm" style="padding: 6px 10px; font-size: 0.82rem; white-space: nowrap; color: #2563eb; border-color: #bfdbfe; background: #eff6ff; font-weight: 700;" onclick="event.stopPropagation(); openAdminRescheduleModal('${item.ID}')">
+                            <i class="fa-solid fa-calendar-day"></i> Dời lịch
+                        </button>
+                        <button type="button" class="btn-primary" style="padding: 6px 12px; font-size: 0.85rem; white-space: nowrap;" onclick="event.stopPropagation(); openStaffDSConfirmModal('${item.ID}')">Chốt sân</button>
+                    </div>
+                `;
+            } else if (isPastDate || (!isInActiveShift && item.NgayDa === todayStr && timeStrToMinutesStaff(item.khung_gio?.GioKetThuc) <= timeStrToMinutesStaff((activeShift?.ca_lam_viec || activeShift?.caLamViec)?.GioBatDau))) {
+                actionHtml = `<span style="color: #64748b; font-size: 0.78rem; background: #f1f5f9; padding: 4px 8px; border-radius: 6px; border: 1px dashed #cbd5e1; white-space: nowrap; display: inline-block;" title="Ca cũ đã đóng sổ, vui lòng báo Quản lý sân nếu cần chốt bù"><i class="fa-solid fa-lock"></i> Ca cũ (Chỉ xem)</span>`;
+            } else {
+                actionHtml = `
+                    <div style="display: inline-flex; gap: 6px; align-items: center;">
+                        <button type="button" class="btn-outline-sm" style="padding: 6px 10px; font-size: 0.8rem; white-space: nowrap; color: #2563eb; border-color: #bfdbfe; background: #eff6ff; font-weight: 700;" onclick="event.stopPropagation(); openAdminRescheduleModal('${item.ID}')">
+                            <i class="fa-solid fa-calendar-day"></i> Dời lịch
+                        </button>
+                        <span style="color: #0284c7; font-size: 0.76rem; background: #e0f2fe; padding: 4px 8px; border-radius: 6px; font-weight: 600; white-space: nowrap;">Chưa tới ca</span>
+                    </div>
+                `;
+            }
+        } else {
+            actionHtml = `<span style="color: var(--text-muted); font-size: 0.85rem; white-space: nowrap;">Đã xử lý</span>`;
+        }
+
+        const tenKhachHienThi = item.ID_NguoiDung ? (item.nguoi_dung?.HoTen || 'N/A') : (item.TenNguoiDat || item.TenKhachVangLai || 'N/A');
+        const sdtKhachHienThi = item.ID_NguoiDung ? (item.nguoi_dung?.SoDienThoai || '') : (item.SDTNguoiDat || item.SDTKhachVangLai || '');
+
+        const shiftTag = isInActiveShift
+            ? `<span style="font-size: 0.7rem; background: #dcfce7; color: #15803d; border: 1px solid #86efac; padding: 1px 6px; border-radius: 4px; font-weight: 700; margin-left: 6px;">Trong ca trực</span>`
+            : (isExtraHidden ? `<span style="font-size: 0.7rem; background: #e2e8f0; color: #475569; padding: 1px 6px; border-radius: 4px; margin-left: 6px;">${isCurrentShiftScope ? 'Khác ca (Cùng HĐ)' : 'Ngoài bộ lọc'}</span>` : '');
+
+        const extraClassAttr = isExtraHidden ? `class="staff-extra-row-${safeKey}"` : '';
+        const extraStyleAttr = isExtraHidden ? 'display: none; background-color: #f8fafc; opacity: 0.85;' : '';
+        const mouseOutBg = isExtraHidden ? '#f8fafc' : '';
+
+        return `<tr ${extraClassAttr} onclick="openBookingDetailModalStaff('${item.ID}')" style="cursor: pointer; transition: background-color 0.15s; ${extraStyleAttr}" onmouseover="this.style.backgroundColor='#f1f5f9'" onmouseout="this.style.backgroundColor='${mouseOutBg}'">
+            <td style="text-align: center; padding: 10px 8px;">
+                <span style="padding: 4px 8px; border-radius: 7px; font-weight: 700; font-family: monospace; font-size: 0.82rem; display: inline-block; white-space: nowrap; ${badgeClassVe}">
+                    ${maVeDisplay}
+                </span>
+            </td>
+            <td style="padding: 10px 8px; white-space: nowrap;">
+                <strong style="font-size: 0.88rem;">${tenKhachHienThi}</strong><br>
+                <span style="font-size: 0.8rem; color: var(--text-muted);">${sdtKhachHienThi}</span>
+            </td>
+            <td style="padding: 10px 8px;">
+                <div style="display: flex; align-items: center; gap: 5px; white-space: nowrap; margin-bottom: 2px;">
+                    <strong style="color: var(--text-dark); font-size: 0.88rem;">${item.san_bong ? item.san_bong.TenSan : 'N/A'}</strong>
+                    ${tagLoai}
+                </div>
+                <div style="font-size: 0.8rem; color: var(--text-muted); white-space: nowrap;"><i class="fa-solid fa-location-dot"></i> ${item.san_bong?.cum_san?.TenCumSan || (window.currentClusterNameStaff || '')}</div>
+                ${htmlTenGiai}
+            </td>
+            <td style="padding: 10px 8px; white-space: nowrap;">
+                <span style="font-size: 0.84rem;">Ngày: ${dateStr}</span>${shiftTag}<br>
+                <strong style="color: var(--primary); font-size: 0.84rem;">Giờ: ${timeStr}</strong>
+            </td>
+            <td style="padding: 10px 8px; white-space: nowrap;">
+                <strong style="color: #0f172a; font-size: 0.88rem;">${Number(item.TongTien).toLocaleString('vi-VN')}đ</strong><br>
+                <span style="font-size: 0.78rem; color: #047857; font-weight: 600;">Cọc: ${Number(item.TienCoc).toLocaleString('vi-VN')}đ</span>
+            </td>
+            <td style="padding: 10px 8px; white-space: nowrap;">${badgeHtml}</td>
+            <td style="text-align: center; padding: 10px 8px; white-space: nowrap;">${actionHtml}</td>
+        </tr>`;
+    };
+
     let html = '';
 
     invoiceGroups.forEach(group => {
@@ -2182,7 +2306,10 @@ function renderStaffDSTable(invoiceGroups) {
         const isMember = Boolean(first.ID_NguoiDung);
 
         const allMatchesInInvoice = group.items;
-        // Chỉ cho phép hủy theo hóa đơn đối với các trận chưa qua ngày đá cũ
+        const matchedItems = group.matchedItems || allMatchesInInvoice;
+        const hiddenItems = group.hiddenItems || [];
+        const safeKey = String(group.key).replace(/[^a-zA-Z0-9_-]/g, '_');
+
         const cancellableDaCocCount = allMatchesInInvoice.filter(d => d.TrangThai === 'DaCoc' && d.NgayDa >= todayStr).length;
         const hdObj = group.hoaDonObj;
         const tongHD = hdObj ? Number(hdObj.TongTien ?? hdObj.TongTienSan) : allMatchesInInvoice.reduce((s, d) => s + Number(d.TongTien), 0);
@@ -2198,30 +2325,39 @@ function renderStaffDSTable(invoiceGroups) {
 
         const hdStatusBadgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 700; background: ${hdBadgeBg}; color: ${hdBadgeColor}; border: 1px solid rgba(0,0,0,0.06); white-space: nowrap;">${hdViStatus}</span>`;
 
+        const toggleBtnHtml = hiddenItems.length > 0 ? `
+            <button type="button" id="btn-toggle-staff-inv-${safeKey}" class="btn-outline-sm"
+                style="background: #f8fafc; color: #475569; border-color: #cbd5e1; padding: 5px 10px; font-size: 0.78rem; font-weight: 700; white-space: nowrap;"
+                onclick="toggleStaffInvoiceExtraRows('${safeKey}', ${hiddenItems.length})">
+                <i class="fa-solid fa-chevron-down"></i> Mở rộng (+${hiddenItems.length})
+            </button>
+        ` : '';
+
         if (group.maHoaDon) {
             html += `
                 <tr style="background: #f0fdf4; border-top: 2px solid #86efac; border-bottom: 1px solid #bbf7d0;">
-                    <td colspan="7" style="padding: 10px 16px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: nowrap;">
+                    <td colspan="7" style="padding: 9px 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
                             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0;">
-                                <span style="background: #0b5d3b; color: #fff; font-family: monospace; font-weight: 700; padding: 4px 10px; border-radius: 6px; font-size: 0.86rem; white-space: nowrap;">
+                                <span style="background: #0b5d3b; color: #fff; font-family: monospace; font-weight: 700; padding: 3px 9px; border-radius: 6px; font-size: 0.82rem; white-space: nowrap;">
                                     <i class="fa-solid fa-file-invoice-dollar"></i> Hóa đơn #${group.maHoaDon}
                                 </span>
                                 ${hdStatusBadgeHtml}
-                                <span style="font-size: 0.86rem; color: #0f172a; white-space: nowrap;">Khách: <strong>${tenKhach}</strong> (${sdtKhach})</span>
-                                <span style="font-size: 0.83rem; color: #475569; white-space: nowrap;">
-                                    &bull; Tổng HĐ (${allMatchesInInvoice.length} trận): <strong style="color:#0f172a;">${tongHD.toLocaleString('vi-VN')}đ</strong> 
-                                    | Đã cọc: <strong style="color:#047857;">${cocHD.toLocaleString('vi-VN')}đ</strong>
-                                    | Còn phải thu: <strong style="color:#ea580c; font-size:0.88rem; background:#fff7ed; padding:2px 8px; border-radius:6px; border:1px solid #fed7aa;">${conPhaiThuHD.toLocaleString('vi-VN')}đ</strong>
+                                <span style="font-size: 0.84rem; color: #0f172a; white-space: nowrap;">Khách: <strong>${tenKhach}</strong> (${sdtKhach})</span>
+                                <span style="font-size: 0.81rem; color: #475569;">
+                                    &bull; Tổng HĐ (${allMatchesInInvoice.length} trận${hiddenItems.length > 0 ? `, hiện ${matchedItems.length}` : ''}): <strong style="color:#0f172a;">${tongHD.toLocaleString('vi-VN')}đ</strong>
+                                    | Cọc: <strong style="color:#047857;">${cocHD.toLocaleString('vi-VN')}đ</strong>
+                                    | Còn thu: <strong style="color:#ea580c; font-size:0.84rem; background:#fff7ed; padding:2px 7px; border-radius:6px; border:1px solid #fed7aa; white-space: nowrap;">${conPhaiThuHD.toLocaleString('vi-VN')}đ</strong>
                                 </span>
                             </div>
-                            <div style="display: flex; gap: 8px; align-items: center; flex-shrink: 0; white-space: nowrap;">
-                                <button type="button" class="btn-outline-sm" style="background: #fff; color: #2563eb; border-color: #93c5fd; padding: 5px 11px; font-size: 0.8rem; font-weight: 700; white-space: nowrap;" onclick="printAdminBookingInvoice('${group.maHoaDon}')">
-                                    <i class="fa-solid fa-print"></i> Xuất hóa đơn
+                            <div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0; white-space: nowrap; margin-left: auto;">
+                                ${toggleBtnHtml}
+                                <button type="button" class="btn-outline-sm" style="background: #fff; color: #2563eb; border-color: #93c5fd; padding: 4px 10px; font-size: 0.78rem; font-weight: 700; white-space: nowrap;" onclick="printAdminBookingInvoice('${group.maHoaDon}')">
+                                    <i class="fa-solid fa-print"></i> Xuất HĐ
                                 </button>
                                 ${cancellableDaCocCount > 0 ? `
-                                <button type="button" class="btn-outline-sm" style="background: #fef2f2; color: #dc2626; border-color: #fca5a5; padding: 5px 11px; font-size: 0.8rem; font-weight: 700; white-space: nowrap;" onclick="openAdminCancelInvoiceModal('${group.maHoaDon}', ${cancellableDaCocCount}, ${isMember}, '${tenKhach.replace(/'/g, "\\'")}', '${emailKhach}', ${cocHD})">
-                                    <i class="fa-solid fa-ban"></i> Hủy lịch / Hóa đơn (${cancellableDaCocCount} trận)
+                                <button type="button" class="btn-outline-sm" style="background: #fef2f2; color: #dc2626; border-color: #fca5a5; padding: 4px 10px; font-size: 0.78rem; font-weight: 700; white-space: nowrap;" onclick="openAdminCancelInvoiceModal('${group.maHoaDon}', ${cancellableDaCocCount}, ${isMember}, '${tenKhach.replace(/'/g, "\\'")}', '${emailKhach}', ${cocHD})">
+                                    <i class="fa-solid fa-ban"></i> Hủy lịch (${cancellableDaCocCount} trận)
                                 </button>` : ''}
                             </div>
                         </div>
@@ -2230,106 +2366,12 @@ function renderStaffDSTable(invoiceGroups) {
             `;
         }
 
-        // Nếu đang ở Tab "Đặt sân trong Ca hiện tại": Chỉ hiển thị các trận thuộc ca hiện tại (hoặc làm mờ các trận khác ngày trong cùng hóa đơn để nhân viên không chốt nhầm)
-        group.items.forEach(item => {
-            const isInActiveShift = activeShift ? isBookingInStaffActiveShift(item, activeShift) : false;
+        matchedItems.forEach(item => {
+            html += renderStaffRowHtml(item, false, safeKey);
+        });
 
-            // Ở tab Ca hiện tại: nếu hóa đơn chỉ có 1 số trận thuộc ca hiện tại thì ưu tiên hiển thị rõ trận trong ca
-            const isPastDate = item.NgayDa < todayStr;
-            const isFutureDate = item.NgayDa > todayStr;
-
-            let badgeColor = '#6b7280', badgeBg = '#f3f4f6', viStatus = item.TrangThai;
-            if(item.TrangThai === 'DaCoc') { badgeColor = '#b45309'; badgeBg = '#fef3c7'; viStatus = 'Đã cọc'; }
-            else if(item.TrangThai === 'DaHuy') { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; viStatus = 'Đã hủy'; }
-            else if(item.TrangThai === 'HoanThanh') { badgeColor = '#047857'; badgeBg = '#d1fae5'; viStatus = 'Hoàn thành'; }
-            else if(item.TrangThai === 'KhongDen') { badgeColor = '#6b7280'; badgeBg = '#f3f4f6'; viStatus = 'Không đến'; }
-
-            const badgeHtml = `<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: ${badgeBg}; color: ${badgeColor}; white-space: nowrap;">${viStatus}</span>`;
-            
-            const maVeDisplay = item.ID_GiaiDau ? `GD-${item.ID_GiaiDau}` : `PT-${item.ID}`;
-            const badgeClassVe = item.ID_GiaiDau 
-                ? 'background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe;' 
-                : 'background: #f8fafc; color: #475569; border: 1px solid #e2e8f0;';        
-            
-            const isGiaiDau = item.ID_GiaiDau !== null;
-            const tenGiaiDau = isGiaiDau && item.giai_dau ? item.giai_dau.TenGiaiDau : '';
-            const tagLoai = isGiaiDau 
-                ? `<span style="font-size: 0.75rem; background: #e0e7ff; color: #4338ca; padding: 2px 8px; border-radius: 4px; white-space: nowrap; display: inline-block;"><i class="fa-solid fa-trophy"></i> Giải đấu</span>` 
-                : `<span style="font-size: 0.75rem; background: #f1f5f9; color: #475569; padding: 2px 8px; border-radius: 4px; white-space: nowrap; display: inline-block;">Phong trào</span>`;
-            const htmlTenGiai = isGiaiDau ? `<div style="font-size: 0.85rem; color: #4338ca; margin-top: 4px; font-weight: 600; white-space: nowrap;"><i class="fa-solid fa-medal"></i> ${tenGiaiDau}</div>` : '';
-
-            const d = new Date(item.NgayDa);
-            const dateStr = `<span style="white-space: nowrap; display: inline-block;">${d.getDate().toString().padStart(2, '0')}/${(d.getMonth()+1).toString().padStart(2, '0')}/${d.getFullYear()}</span>`;
-
-            const timeStr = item.khung_gio
-                ? `<span style="white-space: nowrap; display: inline-block;">${item.khung_gio.GioBatDau.substring(0,5)} - ${item.khung_gio.GioKetThuc.substring(0,5)}</span>`
-                : '';
-
-            // Phân quyền nút thao tác rõ ràng theo Ca trực:
-            // - Trận thuộc Ca hiện tại: Mở đầy đủ [Dời lịch] + [Chốt sân]
-            // - Trận thuộc Ngày tương lai / Ca sau (khách gọi hỗ trợ): Mở [Dời lịch], nhưng chưa cho bấm [Hoàn thành/Không đến] trước ca
-            // - Trận thuộc Ca cũ / Ngày trước: Khóa thao tác chốt (Chỉ xem chi tiết / Liên hệ Quản lý sân)
-            let actionHtml = '';
-            if (item.TrangThai === 'DaCoc') {
-                if (isInActiveShift) {
-                    actionHtml = `
-                        <div style="display: inline-flex; gap: 6px; align-items: center;">
-                            <button type="button" class="btn-outline-sm" style="padding: 6px 10px; font-size: 0.82rem; white-space: nowrap; color: #2563eb; border-color: #bfdbfe; background: #eff6ff; font-weight: 700;" onclick="event.stopPropagation(); openAdminRescheduleModal('${item.ID}')">
-                                <i class="fa-solid fa-calendar-day"></i> Dời lịch
-                            </button>
-                            <button type="button" class="btn-primary" style="padding: 6px 12px; font-size: 0.85rem; white-space: nowrap;" onclick="event.stopPropagation(); openStaffDSConfirmModal('${item.ID}')">Chốt sân</button>
-                        </div>
-                    `;
-                } else if (isPastDate || (!isInActiveShift && item.NgayDa === todayStr && timeStrToMinutesStaff(item.khung_gio?.GioKetThuc) <= timeStrToMinutesStaff((activeShift?.ca_lam_viec || activeShift?.caLamViec)?.GioBatDau))) {
-                    // Trận của ngày trước hoặc ca sáng đã qua
-                    actionHtml = `<span style="color: #64748b; font-size: 0.78rem; background: #f1f5f9; padding: 4px 8px; border-radius: 6px; border: 1px dashed #cbd5e1; white-space: nowrap; display: inline-block;" title="Ca cũ đã đóng sổ, vui lòng báo Quản lý sân nếu cần chốt bù"><i class="fa-solid fa-lock"></i> Ca cũ (Chỉ xem)</span>`;
-                } else {
-                    // Trận của ca sau hoặc ngày mai (Hỗ trợ khách Dời lịch / Hủy trước giờ đá, chưa mở chốt Hoàn thành)
-                    actionHtml = `
-                        <div style="display: inline-flex; gap: 6px; align-items: center;">
-                            <button type="button" class="btn-outline-sm" style="padding: 6px 10px; font-size: 0.8rem; white-space: nowrap; color: #2563eb; border-color: #bfdbfe; background: #eff6ff; font-weight: 700;" onclick="event.stopPropagation(); openAdminRescheduleModal('${item.ID}')">
-                                <i class="fa-solid fa-calendar-day"></i> Dời lịch
-                            </button>
-                            <span style="color: #0284c7; font-size: 0.76rem; background: #e0f2fe; padding: 4px 8px; border-radius: 6px; font-weight: 600; white-space: nowrap;">Chưa tới ca</span>
-                        </div>
-                    `;
-                }
-            } else {
-                actionHtml = `<span style="color: var(--text-muted); font-size: 0.85rem; white-space: nowrap;">Đã xử lý</span>`;
-            }
-
-            const tenKhachHienThi = item.ID_NguoiDung ? (item.nguoi_dung?.HoTen || 'N/A') : (item.TenNguoiDat || item.TenKhachVangLai || 'N/A');
-            const sdtKhachHienThi = item.ID_NguoiDung ? (item.nguoi_dung?.SoDienThoai || '') : (item.SDTNguoiDat || item.SDTKhachVangLai || '');
-
-            const shiftTag = isInActiveShift
-                ? `<span style="font-size: 0.7rem; background: #dcfce7; color: #15803d; border: 1px solid #86efac; padding: 1px 6px; border-radius: 4px; font-weight: 700; margin-left: 6px;">Trong ca trực</span>`
-                : (isCurrentShiftScope ? `<span style="font-size: 0.7rem; background: #f1f5f9; color: #64748b; padding: 1px 6px; border-radius: 4px; margin-left: 6px;">Khác ca (Cùng HĐ)</span>` : '');
-
-            const rowOpacity = (isCurrentShiftScope && !isInActiveShift) ? 'opacity: 0.68; background: #fafafa;' : '';
-
-            html += `<tr onclick="openBookingDetailModalStaff('${item.ID}')" style="cursor: pointer; transition: background-color 0.15s; ${rowOpacity}" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor=''">
-                <td style="text-align: center; padding-left: 20px;">
-                    <span style="padding: 5px 10px; border-radius: 8px; font-weight: 700; font-family: monospace; font-size: 0.9rem; display: inline-block; white-space: nowrap; ${badgeClassVe}">
-                        ${maVeDisplay}
-                    </span>
-                </td>
-                <td><strong>${tenKhachHienThi}</strong><br><span style="font-size: 0.85rem; color: var(--text-muted);">${sdtKhachHienThi}</span></td>
-                <td style="white-space: nowrap;">
-                    <div style="display: flex; align-items: center; gap: 6px; white-space: nowrap; margin-bottom: 3px;">
-                        <strong style="color: var(--text-dark);">${item.san_bong ? item.san_bong.TenSan : 'N/A'}</strong>
-                        ${tagLoai}
-                    </div>
-                    <div style="font-size: 0.85rem; color: var(--text-muted); white-space: nowrap;"><i class="fa-solid fa-location-dot"></i> ${item.san_bong?.cum_san?.TenCumSan || (window.currentClusterNameStaff || '')}</div>
-                    ${htmlTenGiai}
-                </td>
-                <td><span style="font-size: 0.9rem;">Ngày: ${dateStr}</span>${shiftTag}<br><strong style="color: var(--primary);">Giờ: ${timeStr}</strong></td>
-                <td style="white-space: nowrap;">
-                    <strong style="color: #0f172a;">${Number(item.TongTien).toLocaleString('vi-VN')}đ</strong><br>
-                    <span style="font-size: 0.8rem; color: #047857; font-weight: 600;">Cọc: ${Number(item.TienCoc).toLocaleString('vi-VN')}đ</span>
-                </td>
-                <td>${badgeHtml}</td>
-                <td style="text-align: center;">${actionHtml}</td>
-            </tr>`;
+        hiddenItems.forEach(item => {
+            html += renderStaffRowHtml(item, true, safeKey);
         });
     });
 

@@ -1489,7 +1489,7 @@ window.openGrabPromoModal = function(targetClusterId = null) {
     }
 
     modal.innerHTML = `
-        <div class="modal-content" style="max-width: 570px; width: 94%; padding: 0; border-radius: 18px; overflow: hidden; background: #f8fafc; max-height: 86vh; display: flex; flex-direction: column;">
+        <div class="modal-content" style="max-width: 630px; width: 94%; padding: 0; border-radius: 18px; overflow: hidden; background: #f8fafc; max-height: 86vh; display: flex; flex-direction: column;">
             <div style="padding: 16px 20px; background: linear-gradient(135deg, #0b5d3b 0%, #16a34a 100%); color: #fff; display: flex; justify-content: space-between; align-items: center;">
                 <div>
                     <h3 style="margin: 0; font-size: 1.1rem; font-weight: 800;"><i class="fa-solid fa-ticket" style="color: #fde047; margin-right: 8px;"></i>Chọn ưu đãi (${targetGroup.clusterName})</h3>
@@ -1504,9 +1504,17 @@ window.openGrabPromoModal = function(targetClusterId = null) {
                 ${listHtml}
             </div>
 
-            <div style="padding: 12px 18px; background: #fff; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 0.78rem; color: #64748b;">* Mã Toàn hệ thống / Cá nhân sẽ tự động phân bổ giảm giá cho toàn bộ giỏ hàng.</span>
-                <button type="button" class="btn-outline" style="width: auto; padding: 8px 22px; border-radius: 10px;" onclick="document.getElementById('grab-promo-modal').style.display='none'">Đóng</button>
+            <div style="padding: 12px 18px; background: #ffffff; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; gap: 14px;">
+                <span style="font-size: 0.77rem; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="Mã Toàn hệ thống / Cá nhân sẽ tự động phân bổ giảm giá cho toàn bộ giỏ hàng.">
+                    <i class="fa-solid fa-circle-info" style="color: #16a34a; margin-right: 4px;"></i>Mã Toàn hệ thống / Cá nhân tự động phân bổ giảm giá cho cả giỏ hàng.
+                </span>
+                <button type="button"
+                    style="flex-shrink: 0; padding: 8px 22px; border-radius: 10px; border: 1px solid #cbd5e1; background: #f1f5f9; color: #1e293b; font-size: 0.86rem; font-weight: 700; cursor: pointer; transition: all 0.2s ease; white-space: nowrap;"
+                    onmouseover="this.style.background='#16a34a'; this.style.color='#ffffff'; this.style.borderColor='#16a34a'; this.style.boxShadow='0 4px 10px rgba(22, 163, 74, 0.25)';"
+                    onmouseout="this.style.background='#f1f5f9'; this.style.color='#1e293b'; this.style.borderColor='#cbd5e1'; this.style.boxShadow='none';"
+                    onclick="document.getElementById('grab-promo-modal').style.display='none'">
+                    Đóng
+                </button>
             </div>
         </div>
     `;
