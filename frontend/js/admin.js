@@ -2760,16 +2760,16 @@ async function renderQuanLyDatSan(defaultStatus = 'DaCoc', defaultDate = null) {
         <!-- KHỐI BẢNG DỮ LIỆU -->
         <div class="panel" style="padding: 0; overflow: hidden;">
             <div class="table-responsive" style="min-height: 350px;">
-                <table class="admin-table" style="margin: 0;">
+                <table class="admin-table" style="margin: 0; width: 100%;">
                     <thead style="background: #F8FAFC;">
                         <tr>
-                            <th style="text-align: center; width: 100px; white-space: nowrap;">Mã vé</th>
-                            <th>Khách hàng</th>
-                            <th>Thông tin Sân</th>
-                            <th>Khung giờ</th>
-                            <th>Giá sân / Cọc</th>
-                            <th>Trạng thái</th>
-                            <th style="text-align: center;">${isAdmin ? 'Chi tiết' : 'Chốt sân'}</th>
+                            <th style="text-align: center; padding: 10px 8px; white-space: nowrap;">Mã vé</th>
+                            <th style="padding: 10px 8px; white-space: nowrap;">Khách hàng</th>
+                            <th style="padding: 10px 8px; white-space: nowrap;">Thông tin Sân</th>
+                            <th style="padding: 10px 8px; white-space: nowrap;">Khung giờ</th>
+                            <th style="padding: 10px 8px; white-space: nowrap;">Giá sân / Cọc</th>
+                            <th style="padding: 10px 8px; white-space: nowrap;">Trạng thái</th>
+                            <th style="text-align: center; padding: 10px 8px; white-space: nowrap;">${isAdmin ? 'Chi tiết' : 'Chốt sân'}</th>
                         </tr>
                     </thead>
                     <tbody id="datsan-table-body">
@@ -3877,16 +3877,15 @@ async function renderQuanLyHuySan() {
         <!-- KHỐI BẢNG DỮ LIỆU -->
         <div class="panel" style="padding: 0; overflow: hidden;">
             <div class="table-responsive" style="min-height: 350px;">
-                <table class="admin-table" style="margin: 0; width: 100%;">
+                <table class="admin-table" style="margin: 0;">
                     <thead style="background: #F8FAFC;">
                         <tr>
-                            <th style="text-align: center; padding: 10px 8px; white-space: nowrap;">Mã vé</th>
-                            <th style="padding: 10px 8px; white-space: nowrap;">Khách hàng</th>
-                            <th style="padding: 10px 8px; white-space: nowrap;">Thông tin Sân</th>
-                            <th style="padding: 10px 8px; white-space: nowrap;">Khung giờ</th>
-                            <th style="padding: 10px 8px; white-space: nowrap;">Giá sân / Cọc</th>
-                            <th style="padding: 10px 8px; white-space: nowrap;">Trạng thái</th>
-                            <th style="text-align: center; padding: 10px 8px; white-space: nowrap;">${isAdmin ? 'Chi tiết' : 'Chốt sân'}</th>
+                            <th style="white-space: nowrap;">Khách Hàng</th>
+                            <th style="white-space: nowrap;">Thông tin Sân</th>
+                            <th style="white-space: nowrap;">Lý do hủy</th>
+                            <th style="white-space: nowrap;">Ngày gửi</th>
+                            <th style="text-align: center; white-space: nowrap;">Trạng thái</th>
+                            <th style="text-align: center; white-space: nowrap;">${isAdmin ? 'Ghi chú xử lý' : 'Hành động'}</th>
                         </tr>
                     </thead>
                     <tbody id="huysan-table-body">
