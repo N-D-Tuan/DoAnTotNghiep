@@ -14,10 +14,10 @@ class DashboardController extends Controller
 {
     /**
      * Tính số tiền doanh thu thực tế thu vào của 1 lịch đặt sân ($ds) đã chốt ('HoanThanh' hoặc 'KhongDen')
-     * 1. Nếu 'KhongDen' (Cả Phong trào & Giải đấu):
-     *    -> Chỉ tính đúng tiền cọc ($ds->TienCoc), KHÔNG có Thuế VAT.
-     * 2. Nếu 'HoanThanh' (Cả Phong trào & Giải đấu):
-     *    -> Tính số tiền thực thu của trận đó sau khi đã trừ Khuyến mãi (nếu có) và cộng Thuế VAT 8% trên Hóa đơn.
+     * - Trận 'KhongDen': Chỉ tính đúng tiền cọc ($ds->TienCoc), KHÔNG có Thuế VAT.
+     * - Trận 'HoanThanh':
+     *   + Các trận thông thường trong Hóa đơn / Giải đấu: Tính đúng Đơn giá gốc của trận đó ($ds->TongTien) -> Luôn chẵn hàng nghìn.
+     *   + Trận cuối cùng của Hóa đơn / Giải đấu (theo NgayDa và MaKhungGio): Cộng toàn bộ Thuế VAT 8% (và trừ Khuyến mãi nếu có) của Hóa đơn vào trận cuối cùng này.
      */
     public static function tinhDoanhThuThucTeDatSan($ds)
     {
@@ -41,19 +41,36 @@ class DashboardController extends Controller
 
         $cacTranTrongHD = $hoaDon->datSans ?? collect([]);
 
-        // Tổng tiền gốc của các trận chịu thuế (DaCoc + HoanThanh) và tổng tiền cọc của các trận KhongDen trong cùng Hóa đơn
-        $tongGocChiuThue = (float) $cacTranTrongHD->whereIn('TrangThai', ['DaCoc', 'HoanThanh'])->sum('TongTien');
-        $tongCocKhongDen = (float) $cacTranTrongHD->where('TrangThai', 'KhongDen')->sum('TienCoc');
-
-        if ($tongGocChiuThue <= 0) {
+        // Lấy danh sách các trận hợp lệ chịu thuế (DaCoc + HoanThanh) trong hóa đơn
+        $cacTranChiuThue = $cacTranTrongHD->whereIn('TrangThai', ['DaCoc', 'HoanThanh']);
+        if ($cacTranChiuThue->isEmpty()) {
             return $tienGocTranNay;
         }
 
-        // Phần tổng tiền Hóa đơn thực tế thuộc về các trận (DaCoc + HoanThanh) = TongTien Hóa đơn - Tổng cọc các trận KhongDen
+        // Tìm trận cuối cùng của Hóa đơn / Giải đấu (Sắp xếp theo Ngày đá tăng dần -> Khung giờ tăng dần -> Mã đặt sân tăng dần)
+        $tranCuoiCung = $cacTranChiuThue->sortBy(function ($item) {
+            $ngay = $item->NgayDa ?? '';
+            $maKG = str_pad((string) ($item->MaKhungGio ?? ''), 5, '0', STR_PAD_LEFT);
+            $maDS = str_pad((string) ($item->MaDatSan ?? ''), 10, '0', STR_PAD_LEFT);
+            return "{$ngay}_{$maKG}_{$maDS}";
+        })->last();
+
+        // Nếu trận đang xét KHÔNG PHẢI trận cuối cùng -> Chỉ ghi nhận đúng tiền sân gốc của trận đó (chẵn 100%, không chia lẻ VAT)
+        if ($tranCuoiCung && (string) $ds->MaDatSan !== (string) $tranCuoiCung->MaDatSan) {
+            return $tienGocTranNay;
+        }
+
+        // Nếu trận đang xét LÀ TRẬN CUỐI CÙNG của Hóa đơn / Giải đấu -> Ghi nhận tiền sân gốc + toàn bộ Thuế VAT (trừ Khuyến mãi nếu có)
+        $tongGocChiuThue = (float) $cacTranChiuThue->sum('TongTien');
+        $tongCocKhongDen = (float) $cacTranTrongHD->where('TrangThai', 'KhongDen')->sum('TienCoc');
+
+        // Tổng thực thu của toàn bộ các trận chịu thuế trong HĐ = TongTien HĐ - Tổng cọc các trận KhongDen
         $tongThucThuCacTranChiuThue = max(0, (float) $hoaDon->TongTien - $tongCocKhongDen);
 
-        // Phân bổ cho trận Hoàn thành này theo đúng tỷ lệ giá sân gốc
-        return round($tongThucThuCacTranChiuThue * ($tienGocTranNay / $tongGocChiuThue));
+        // Phần chênh lệch (Thuế VAT 8% - Khuyến mãi) của cả Hóa đơn sẽ được cộng dồn vào trận cuối cùng này
+        $chenhLechThueVaKM = $tongThucThuCacTranChiuThue - $tongGocChiuThue;
+
+        return max(0, $tienGocTranNay + $chenhLechThueVaKM);
     }
 
     public function layThongKe(Request $request)

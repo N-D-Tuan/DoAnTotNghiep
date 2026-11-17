@@ -1111,7 +1111,7 @@
                     return `<td title="${String(row[c] ?? '').replace(/"/g, '&quot;')}">${val}</td>`;
                 }).join('');
 
-                const rowJson = encodeURIComponent(JSON.stringify(row));
+                const rowJson = encodeURIComponent(JSON.stringify(row)).replace(/'/g, '%27');
                 return `
                     <tr>
                         ${cellsHtml}
