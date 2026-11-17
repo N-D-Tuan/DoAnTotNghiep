@@ -2797,7 +2797,7 @@ class DatSanController extends Controller
         \Illuminate\Support\Facades\Cache::put($scanLockKey, true, now()->addMinutes(5));
 
         // 1. Lấy tất cả các lịch đặt có NgayDa = Hôm nay và đang ở trạng thái Đã cọc (DaCoc)
-        $danhSachHomNay = DatSan::with(['sanBong.cumSan', 'khungGio', 'nguoiDung', 'giaiDau', 'chiTietHoaDon.hoaDonDatSan'])
+        $danhSachHomNay = DatSan::with(['sanBong.cumSan', 'khungGio', 'nguoiDung', 'giaiDau', 'chiTietHoaDon.hoaDonDatSan.datSans.khungGio', 'chiTietHoaDon.hoaDonDatSan.khuyenMai'])
             ->whereDate('NgayDa', $todayYmd)
             ->where('TrangThai', 'DaCoc')
             ->get();
@@ -3025,10 +3025,66 @@ class DatSanController extends Controller
                         : "Đá phong trào";
 
                     $hdObj = $first->chiTietHoaDon ? $first->chiTietHoaDon->hoaDonDatSan : null;
-                    $dongConThuHtml = '';
+                    $chiTietTaiChinhHtml = '';
+
                     if ($hdObj) {
-                        $conThuHD = max(0, (float) $hdObj->TongTien - (float) $hdObj->TienDaCoc);
-                        $dongConThuHtml = "<div>&bull; Tổng số tiền còn cần thanh toán tại sân (Hóa đơn #{$maHoaDon}, đã gồm VAT/Khuyến mãi): <strong style='color: #e11d48;'>" . number_format($conThuHD, 0, ',', '.') . "đ</strong></div>";
+                        $allActiveInHD = ($hdObj->datSans ?? collect([]))->whereIn('TrangThai', ['DaCoc', 'HoanThanh']);
+                        $tongGocHD = (float) $allActiveInHD->sum('TongTien');
+                        $thueVATHD = (float) ($hdObj->ThueVAT ?? 0);
+                        $tongTienHD = (float) $hdObj->TongTien;
+                        $tienDaCocHD = (float) $hdObj->TienDaCoc;
+                        $conThuToanHD = max(0, $tongTienHD - $tienDaCocHD);
+
+                        // Tính số tiền khuyến mãi của hóa đơn (nếu có)
+                        $tienCocKhongDenHD = (float) ($hdObj->datSans ?? collect([]))->where('TrangThai', 'KhongDen')->sum('TienCoc');
+                        $tienSauGiamHD = max(0, $tongTienHD - $thueVATHD - $tienCocKhongDenHD);
+                        $soTienGiamHD = max(0, $tongGocHD - $tienSauGiamHD);
+
+                        // Kiểm tra hôm nay có phải là ngày thi đấu cuối cùng của Hóa đơn / Giải đấu không
+                        $ngayCuoiCungHD = $allActiveInHD->max('NgayDa');
+                        $laNgayCuoiCung = ($ngayCuoiCungHD === $todayYmd);
+
+                        // Tiền sân còn lại của riêng các ca đá hôm nay (chưa tính thuế)
+                        $tienSanConLaiHomNay = max(0, $tongTienSanHomNay - $tongDaCocHomNay);
+
+                        $dongKhuyenMaiHtml = ($soTienGiamHD > 0)
+                            ? "<div>&bull; Khuyến mãi giảm (Hóa đơn #{$maHoaDon}): <strong style='color: #2563eb;'>-" . number_format($soTienGiamHD, 0, ',', '.') . "đ</strong></div>"
+                            : "";
+
+                        if ($isGiaiDau || $allActiveInHD->pluck('NgayDa')->unique()->count() > 1) {
+                            // TRƯỜNG HỢP GIẢI ĐẤU (HOẶC HÓA ĐƠN NHIỀU NGÀY):
+                            // - Các ngày trước ngày cuối: Chỉ thu phần tiền sân còn lại hôm nay (chẵn 100%), thuế VAT dồn vào ngày cuối
+                            // - Ngày cuối cùng của giải: Thu phần tiền sân còn lại hôm nay + toàn bộ Thuế VAT (trừ Khuyến mãi nếu có)
+                            $phaiThuHomNay = $laNgayCuoiCung
+                                ? max(0, $tienSanConLaiHomNay + $thueVATHD - $soTienGiamHD)
+                                : $tienSanConLaiHomNay;
+
+                            $ghiChuThueHomNay = $laNgayCuoiCung
+                                ? "(Ngày cuối của giải — đã cộng Thuế VAT 8%: <strong>" . number_format($thueVATHD, 0, ',', '.') . "đ</strong>)"
+                                : "(Chưa tính Thuế VAT — Thuế VAT <strong>" . number_format($thueVATHD, 0, ',', '.') . "đ</strong> sẽ được tất toán vào ngày cuối của giải: <strong>" . date('d/m/Y', strtotime($ngayCuoiCungHD)) . "</strong>)";
+
+                            $chiTietTaiChinhHtml = "
+                                {$dongKhuyenMaiHtml}
+                                <div>&bull; Thuế VAT (8% toàn Hóa đơn #{$maHoaDon}): <strong>" . number_format($thueVATHD, 0, ',', '.') . "đ</strong></div>
+                                <div>&bull; Số tiền cần thanh toán tại sân cho <strong>{$soTranHomNay} ca hôm nay ({$todayDisplay})</strong>: <strong style='color: #e11d48; font-size: 15px;'>" . number_format($phaiThuHomNay, 0, ',', '.') . "đ</strong> <span style='font-size: 12.5px; color: #475569;'>{$ghiChuThueHomNay}</span></div>
+                                <div style='margin-top: 4px; padding-top: 4px; border-top: 1px dashed #86efac; color: #475569; font-size: 13px;'>&bull; Tổng số tiền còn phải thu của cả giải (Hóa đơn #{$maHoaDon}, gồm " . $allActiveInHD->count() . " trận & VAT): <strong>" . number_format($conThuToanHD, 0, ',', '.') . "đ</strong></div>
+                            ";
+                        } else {
+                            // TRƯỜNG HỢP ĐÁ PHONG TRÀO TRONG NGÀY:
+                            $phaiThuHomNay = max(0, $tienSanConLaiHomNay + $thueVATHD - $soTienGiamHD);
+                            $chiTietTaiChinhHtml = "
+                                {$dongKhuyenMaiHtml}
+                                <div>&bull; Thuế VAT (8%): <strong>" . number_format($thueVATHD, 0, ',', '.') . "đ</strong></div>
+                                <div>&bull; Số tiền còn cần thanh toán tại sân hôm nay (Hóa đơn #{$maHoaDon}, đã gồm VAT): <strong style='color: #e11d48; font-size: 15px;'>" . number_format($phaiThuHomNay, 0, ',', '.') . "đ</strong></div>
+                            ";
+                        }
+                    } else {
+                        $vatTamTinh = self::tinhThueVATLamTronDuoi($tongTienSanHomNay);
+                        $phaiThuHomNay = max(0, $tongTienSanHomNay + $vatTamTinh - $tongDaCocHomNay);
+                        $chiTietTaiChinhHtml = "
+                            <div>&bull; Thuế VAT (8%): <strong>" . number_format($vatTamTinh, 0, ',', '.') . "đ</strong></div>
+                            <div>&bull; Số tiền còn cần thanh toán tại sân hôm nay (đã gồm VAT): <strong style='color: #e11d48; font-size: 15px;'>" . number_format($phaiThuHomNay, 0, ',', '.') . "đ</strong></div>
+                        ";
                     }
 
                     // Khối Cảnh báo thời tiết gộp chung vào Email nhắc lịch (nếu có ca bị ảnh hưởng)
@@ -3113,7 +3169,7 @@ class DatSanController extends Controller
                                 <div style='background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 16px; font-size: 14px;'>
                                     <div>&bull; Tổng đơn giá các ca đá hôm nay ({$soTranHomNay} trận): <strong>" . number_format($tongTienSanHomNay, 0, ',', '.') . "đ</strong></div>
                                     <div>&bull; Tiền cọc đã thanh toán cho các ca hôm nay: <strong style='color: #047857;'>" . number_format($tongDaCocHomNay, 0, ',', '.') . "đ</strong></div>
-                                    {$dongConThuHtml}
+                                    {$chiTietTaiChinhHtml}
                                     <div style='margin-top: 6px; font-size: 13px; color: #15803d;'><em>* Lưu ý: Quý khách vui lòng có mặt tại sân trước giờ bóng lăn 10 - 15 phút và xuất trình Mã vé / Mã QR cho nhân viên trực sân để Check-in nhận sân.</em></div>
                                 </div>
 
