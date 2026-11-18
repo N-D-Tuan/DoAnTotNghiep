@@ -132,21 +132,22 @@ class ChatbotController extends Controller
                     ],
                     [
                         'name' => 'kiemTraLichTrong',
-                        'description' => 'Kiểm tra xem một sân bóng cụ thể tại một ngày cụ thể còn những khung giờ nào trống. Hỗ trợ kiểm tra 1 giờ, nhiều giờ cùng lúc, hoặc toàn bộ các giờ trong ngày.',
+                        'description' => 'Kiểm tra lịch trống tại một cụm sân vào một ngày cụ thể. Có thể kiểm tra tất cả các sân con trong cụm sân, hoặc lọc theo loại sân (Sân 5, Sân 7, Sân 11), hoặc kiểm tra riêng 1 sân con cụ thể (Sân 1, Sân 2...). QUAN TRỌNG: Nếu khách chỉ nói cụm sân (hoặc cụm sân + loại sân) mà KHÔNG nói rõ sân con số mấy (hoặc nói "sân nào cũng được"), hãy gọi NGAY hàm này và ĐỂ TRỐNG tham số ten_san_bong để hệ thống tự động liệt kê tất cả các sân con phù hợp, TUYỆT ĐỐI KHÔNG hỏi vặn lại khách là muốn xem sân số mấy.',
                         'parameters' => [
                             'type' => 'OBJECT',
                             'properties' => [
-                                'ten_cum_san' => ['type' => 'STRING', 'description' => 'Tên cụm sân (VD: Đa Phước, An Phúc)'],
-                                'ten_san_bong' => ['type' => 'STRING', 'description' => 'Tên sân con cụ thể (VD: Sân 1, Sân 2)'],
-                                'ngay_da' => ['type' => 'STRING', 'description' => 'Ngày khách muốn đá, bắt buộc định dạng YYYY-MM-DD. Hãy tự suy luận năm dựa vào thời gian hiện tại nếu khách chỉ nói ngày/tháng.'],
-                                'gio_da' => ['type' => 'STRING', 'description' => 'Giờ bắt đầu đá nếu chỉ hỏi 1 giờ (VD: "15:00", "17:30").'],
+                                'ten_cum_san'  => ['type' => 'STRING', 'description' => 'Tên cụm sân (VD: Đa Phước, An Phúc)'],
+                                'ten_loai_san' => ['type' => 'STRING', 'description' => 'Tùy chọn: Loại sân khách muốn tìm (VD: "Sân 5", "Sân 7", "Sân 11"). Bỏ trống nếu khách không chỉ định loại sân.'],
+                                'ten_san_bong' => ['type' => 'STRING', 'description' => 'Tùy chọn: Tên sân con cụ thể (VD: "Sân 1", "Sân 2"). Bỏ trống nếu khách không nêu đích danh sân số mấy hoặc nói "sân nào cũng được".'],
+                                'ngay_da'      => ['type' => 'STRING', 'description' => 'Ngày khách muốn đá, bắt buộc định dạng YYYY-MM-DD. Hãy tự suy luận dựa vào ngày hiện tại.'],
+                                'gio_da'       => ['type' => 'STRING', 'description' => 'Giờ bắt đầu đá nếu chỉ hỏi 1 giờ (VD: "15:00", "19:00").'],
                                 'danh_sach_gio' => [
                                     'type' => 'ARRAY',
                                     'items' => ['type' => 'STRING'],
                                     'description' => 'Danh sách giờ khách muốn kiểm tra. Nếu khách hỏi 1 KHOẢNG thời gian (VD: "từ 17h đến 20h"), liệt kê các giờ bắt đầu ca (VD: ["17:00", "18:00", "19:00"]). Nếu khách hỏi giờ lẻ như "17h30", truyền ["17:30"] để hệ thống báo lỗi giờ lẻ.'
                                 ]
                             ],
-                            'required' => ['ten_cum_san', 'ten_san_bong', 'ngay_da']
+                            'required' => ['ten_cum_san', 'ngay_da']
                         ]
                     ],
                     [
@@ -222,7 +223,7 @@ class ChatbotController extends Controller
                            - Khách hỏi hệ thống có những cụm sân nào, hoặc hỏi sân ở một phường/khu vực -> Gọi `traCuuDanhSachCumSan`.
                            - Khách hỏi giờ mở cửa, địa chỉ, diện tích/kích thước hoặc danh sách các sân con ở 1 cụm sân -> Gọi `traCuuChiTietCumSan`.
                            - Khách hỏi giá tiền thuê sân -> Gọi `traCuuGiaTien` (Lưu ý giữ nguyên ngữ cảnh `ten_cum_san` và `ten_loai_san` ở câu trước nếu khách hỏi nối tiếp).
-                           - Khách hỏi lịch trống -> Gọi `kiemTraLichTrong`.
+                           - Khách hỏi lịch trống -> Gọi NGAY `kiemTraLichTrong`. Nếu khách chỉ nói cụm sân (VD: Đa Phước tối mai 19h còn sân không?) hoặc chỉ nói cụm sân + loại sân (VD: Sân 5 tối mai 19h ở Đa Phước có trống không?) mà chưa nói rõ sân số mấy, bạn KHÔNG ĐƯỢC hỏi lại khách muốn sân số mấy, mà phải gọi luôn `kiemTraLichTrong` (để trống `ten_san_bong`) và liệt kê tình trạng + giá tiền của TẤT CẢ các sân con phù hợp trong cụm sân đó cho khách chọn.
                            - Khách hỏi có mã giảm giá / khuyến mãi / voucher nào không -> Gọi `traCuuKhuyenMaiKhaDung`.
                            - Khách hỏi đánh giá / review của 1 cụm sân -> Gọi `traCuuDanhGiaCumSan`.
                            - Khách hỏi lịch đặt sân sắp tới của mình -> Gọi `traCuuLichSuDatSan`.
@@ -257,7 +258,9 @@ class ChatbotController extends Controller
                 }
             }
 
-            if ($functionCall) {
+            $loopCount = 0;
+            while ($functionCall && $loopCount < 3) {
+                $loopCount++;
                 $functionName = $functionCall['name'];
                 $arguments = json_decode(json_encode($functionCall['args'] ?? []), true) ?: [];
 
@@ -279,10 +282,11 @@ class ChatbotController extends Controller
                 } elseif ($functionName === 'kiemTraLichTrong') {
                     $functionResult = $this->thucHienKiemTraLichTrong(
                         $arguments['ten_cum_san'] ?? '',
-                        $arguments['ten_san_bong'] ?? '',
+                        $arguments['ten_san_bong'] ?? null,
                         $arguments['ngay_da'] ?? '',
                         $arguments['danh_sach_gio'] ?? [],
-                        $arguments['gio_da'] ?? null
+                        $arguments['gio_da'] ?? null,
+                        $arguments['ten_loai_san'] ?? null
                     );
                 } elseif ($functionName === 'traCuuKhuyenMaiKhaDung') {
                     $functionResult = $this->thucHienTraCuuKhuyenMaiKhaDung($user->MaNguoiDung);
@@ -329,20 +333,26 @@ class ChatbotController extends Controller
                 ];
 
                 $payload['contents'] = $contents;
-                $secondResponse = $this->callGeminiWithKeyRotation($payload);
+                $nextResponse = $this->callGeminiWithKeyRotation($payload);
 
-                $secondParts = $secondResponse['candidates'][0]['content']['parts'] ?? [];
-                foreach ($secondParts as $p) {
-                    if (isset($p['text'])) {
+                $parts = $nextResponse['candidates'][0]['content']['parts'] ?? [];
+                $functionCall = null;
+                $botReply = '';
+
+                foreach ($parts as $k => $p) {
+                    if (isset($p['functionCall'])) {
+                        $functionCall = $p['functionCall'];
+                        if (empty($parts[$k]['functionCall']['args'])) {
+                            $parts[$k]['functionCall']['args'] = new \stdClass();
+                        }
+                    } elseif (isset($p['text'])) {
                         $botReply .= $p['text'];
                     }
                 }
+            }
 
-                if (empty($botReply)) {
-                    $botReply = 'Dạ hiện mình đã lấy được thông tin nhưng chưa phản hồi được, bạn vui lòng thử lại nhé!';
-                }
-            } else {
-                $botReply = $modelText ?: 'Xin lỗi, mình chưa hiểu ý bạn.';
+            if (empty($botReply)) {
+                $botReply = $modelText ?: 'Dạ hiện mình đã lấy được thông tin nhưng chưa phản hồi được, bạn vui lòng thử lại nhé!';
             }
 
             $tinNhanBot = TinNhan::create([
@@ -819,10 +829,13 @@ class ChatbotController extends Controller
         ];
     }
 
-    private function thucHienKiemTraLichTrong($tenCumSan, $tenSanBong, $ngayDa, $danhSachGio = [], $gioDa = null)
+    private function thucHienKiemTraLichTrong($tenCumSan, $tenSanBong = null, $ngayDa = '', $danhSachGio = [], $gioDa = null, $tenLoaiSan = null)
     {
-        if (!$tenCumSan || !$tenSanBong || !$ngayDa) {
-            return ['trang_thai' => 'loi', 'thong_bao' => 'Cần cung cấp đủ tên cụm sân, tên sân và ngày đá để kiểm tra.'];
+        if (empty($tenCumSan) || empty($ngayDa)) {
+            return [
+                'trang_thai' => 'loi',
+                'thong_bao'  => 'Cần cung cấp tên cụm sân và ngày đá để kiểm tra lịch trống.'
+            ];
         }
 
         $parsed = $this->parseRequestedHoursInput($gioDa, $danhSachGio, false);
@@ -833,89 +846,164 @@ class ChatbotController extends Controller
             ];
         }
 
-        $cleanCum = trim(str_ireplace(['cụm sân', 'sân bóng'], '', $tenCumSan));
+        $cleanCum = $this->cleanClusterKeyword($tenCumSan);
 
-        $sanBong = SanBong::join('CumSan', 'SanBong.MaCumSan', '=', 'CumSan.MaCumSan')
+        // Nếu AI vô tình truyền "Sân 5", "Sân 7", "Sân 11" hoặc "sân nào cũng được" vào ô $tenSanBong
+        if (!empty($tenSanBong)) {
+            $trimSan = trim((string) $tenSanBong);
+            if (preg_match('/^(?:loại\s*)?sân\s*(5|7|11)(?:\s*người)?$/iu', $trimSan, $mLoaiFromSan)) {
+                if (empty($tenLoaiSan)) {
+                    $tenLoaiSan = $mLoaiFromSan[1];
+                }
+                $tenSanBong = null;
+            } elseif (preg_match('/(nào\s*cũng\s*được|tất\s*cả|bất\s*kỳ|sân\s*nào)/iu', $trimSan)) {
+                $tenSanBong = null;
+            }
+        }
+
+        $query = SanBong::join('CumSan', 'SanBong.MaCumSan', '=', 'CumSan.MaCumSan')
+            ->join('LoaiSan', 'SanBong.MaLoaiSan', '=', 'LoaiSan.MaLoaiSan')
             ->where('CumSan.TenCumSan', 'LIKE', '%' . ($cleanCum ?: trim($tenCumSan)) . '%')
-            ->where('SanBong.TenSan', 'LIKE', '%' . trim($tenSanBong) . '%')
             ->where('CumSan.TrangThai', 'HoatDong')
             ->select(
                 'SanBong.MaSanBong',
                 'SanBong.MaLoaiSan',
                 'SanBong.TenSan',
                 'SanBong.TrangThai as TrangThaiSan',
+                'LoaiSan.TenLoaiSan',
                 'CumSan.MaCumSan',
                 'CumSan.TenCumSan',
                 'CumSan.GioMoCua',
                 'CumSan.GioDongCua'
             )
-            ->first();
+            ->orderBy('LoaiSan.TenLoaiSan', 'asc')
+            ->orderBy('SanBong.TenSan', 'asc');
 
-        if (!$sanBong) {
-            return ['trang_thai' => 'khong_tim_thay_san', 'thong_bao' => "Không tìm thấy sân '{$tenSanBong}' tại cụm '{$tenCumSan}'."];
+        // Lọc theo Loại sân (nếu khách có yêu cầu Sân 5, Sân 7, Sân 11)
+        if (!empty($tenLoaiSan)) {
+            if (preg_match('/(\d+)/', (string) $tenLoaiSan, $mLoai)) {
+                $query->where('LoaiSan.TenLoaiSan', 'LIKE', '%' . $mLoai[1] . '%');
+            } else {
+                $query->where('LoaiSan.TenLoaiSan', 'LIKE', '%' . trim((string) $tenLoaiSan) . '%');
+            }
         }
 
-        if ($sanBong->TrangThaiSan === 'BaoTri') {
-            return ['trang_thai' => 'san_bao_tri', 'thong_bao' => "Sân '{$sanBong->TenSan}' thuộc '{$sanBong->TenCumSan}' hiện đang tạm đóng để bảo trì."];
+        // Lọc theo Sân con cụ thể (nếu khách chỉ định rõ Sân 1, Sân 2...)
+        if (!empty($tenSanBong)) {
+            $query->where('SanBong.TenSan', 'LIKE', '%' . trim((string) $tenSanBong) . '%');
         }
 
+        $danhSachSan = $query->get();
+
+        if ($danhSachSan->isEmpty()) {
+            $moTaTim = !empty($tenSanBong)
+                ? "sân '{$tenSanBong}'"
+                : (!empty($tenLoaiSan) ? "loại '{$tenLoaiSan}'" : "sân bóng");
+            return [
+                'trang_thai' => 'khong_tim_thay_san',
+                'thong_bao'  => "Không tìm thấy {$moTaTim} nào tại cụm sân '{$tenCumSan}'."
+            ];
+        }
+
+        $firstSan = $danhSachSan->first();
         $ngayDaFormat = date('Y-m-d', strtotime($ngayDa));
+        $ngayHienThi = date('d/m/Y', strtotime($ngayDaFormat));
         $requestedHours = $parsed['hours'];
 
-        $bangGiaMap = GiaTien::where('MaCumSan', $sanBong->MaCumSan)
-            ->where('MaLoaiSan', $sanBong->MaLoaiSan)
+        // Lấy toàn bộ bảng giá của cụm sân này
+        $bangGiaRows = GiaTien::where('MaCumSan', $firstSan->MaCumSan)
             ->where('SoTien', '>', 0)
-            ->pluck('SoTien', 'MaKhungGio')
-            ->toArray();
+            ->get(['MaLoaiSan', 'MaKhungGio', 'SoTien']);
+
+        $bangGiaTheoLoai = [];
+        foreach ($bangGiaRows as $row) {
+            $bangGiaTheoLoai[$row->MaLoaiSan][$row->MaKhungGio] = $row->SoTien;
+        }
 
         $danhSachKhungGio = KhungGio::orderBy('GioBatDau', 'asc')->get();
 
-        $daDatKhungGioIds = DatSan::where('MaSanBong', $sanBong->MaSanBong)
+        // Lấy danh sách các ca đã đặt của tất cả các sân con đang xét trong ngày đó
+        $maSanIds = $danhSachSan->pluck('MaSanBong')->toArray();
+        $daDatRows = DatSan::whereIn('MaSanBong', $maSanIds)
             ->where('NgayDa', $ngayDaFormat)
             ->where('TrangThai', '!=', 'DaHuy')
-            ->pluck('MaKhungGio')
-            ->toArray();
+            ->get(['MaSanBong', 'MaKhungGio']);
 
-        $ketQuaLich = [];
-        foreach ($danhSachKhungGio as $kg) {
-            if ($kg->GioBatDau < $sanBong->GioMoCua || $kg->GioKetThuc > $sanBong->GioDongCua) {
-                continue;
-            }
-            if (!isset($bangGiaMap[$kg->MaKhungGio])) {
-                continue;
-            }
-
-            if (!empty($requestedHours)) {
-                $hourKg = (int) date('H', strtotime($kg->GioBatDau));
-                if (!in_array($hourKg, $requestedHours)) {
-                    continue;
-                }
-            }
-
-            $gioStr = substr($kg->GioBatDau, 0, 5) . ' - ' . substr($kg->GioKetThuc, 0, 5);
-            $giaStr = number_format($bangGiaMap[$kg->MaKhungGio], 0, ',', '.') . 'đ';
-            $isBooked = in_array($kg->MaKhungGio, $daDatKhungGioIds);
-            $isPast = strtotime($ngayDaFormat . ' ' . $kg->GioBatDau) <= time();
-
-            if ($isPast) {
-                $trangThai = "Đã qua giờ (KHÔNG ĐẶT ĐƯỢC)";
-            } elseif ($isBooked) {
-                $trangThai = "Đã có người đặt (KHÔNG TRỐNG)";
-            } else {
-                $trangThai = "CÒN TRỐNG (Giá: {$giaStr} - CÓ THỂ ĐẶT)";
-            }
-
-            $ketQuaLich[$gioStr] = $trangThai;
+        $daDatTheoSan = [];
+        foreach ($daDatRows as $r) {
+            $daDatTheoSan[$r->MaSanBong][] = $r->MaKhungGio;
         }
 
-        if (empty($ketQuaLich)) {
-            return ['trang_thai' => 'loi_khung_gio', 'thong_bao' => "Khung giờ yêu cầu nằm ngoài giờ hoạt động (" . substr($sanBong->GioMoCua, 0, 5) . " - " . substr($sanBong->GioDongCua, 0, 5) . ") hoặc chưa mở kinh doanh."];
+        $ketQuaTheoTungSan = [];
+
+        foreach ($danhSachSan as $sanBong) {
+            if ($sanBong->TrangThaiSan === 'BaoTri') {
+                $ketQuaTheoTungSan[] = [
+                    'ten_san'       => $sanBong->TenSan,
+                    'loai_san'      => $sanBong->TenLoaiSan,
+                    'trang_thai'    => 'Đang bảo trì (Tạm ngưng nhận lịch)',
+                    'chi_tiet_lich' => []
+                ];
+                continue;
+            }
+
+            $bangGiaMap = $bangGiaTheoLoai[$sanBong->MaLoaiSan] ?? [];
+            $daDatKhungGioIds = $daDatTheoSan[$sanBong->MaSanBong] ?? [];
+            $ketQuaLich = [];
+
+            foreach ($danhSachKhungGio as $kg) {
+                if ($kg->GioBatDau < $sanBong->GioMoCua || $kg->GioKetThuc > $sanBong->GioDongCua) {
+                    continue;
+                }
+                if (!isset($bangGiaMap[$kg->MaKhungGio])) {
+                    continue;
+                }
+
+                if (!empty($requestedHours)) {
+                    $hourKg = (int) date('H', strtotime($kg->GioBatDau));
+                    if (!in_array($hourKg, $requestedHours)) {
+                        continue;
+                    }
+                }
+
+                $gioStr = substr($kg->GioBatDau, 0, 5) . ' - ' . substr($kg->GioKetThuc, 0, 5);
+                $giaStr = number_format($bangGiaMap[$kg->MaKhungGio], 0, ',', '.') . 'đ';
+                $isBooked = in_array($kg->MaKhungGio, $daDatKhungGioIds);
+                $isPast = strtotime($ngayDaFormat . ' ' . $kg->GioBatDau) <= time();
+
+                if ($isPast) {
+                    $trangThai = "Đã qua giờ (KHÔNG ĐẶT ĐƯỢC)";
+                } elseif ($isBooked) {
+                    $trangThai = "Đã có người đặt (KHÔNG TRỐNG)";
+                } else {
+                    $trangThai = "CÒN TRỐNG (Giá: {$giaStr} - CÓ THỂ ĐẶT)";
+                }
+
+                $ketQuaLich[$gioStr] = $trangThai;
+            }
+
+            $ketQuaTheoTungSan[] = [
+                'ten_san'       => $sanBong->TenSan,
+                'loai_san'      => $sanBong->TenLoaiSan,
+                'chi_tiet_lich' => $ketQuaLich
+            ];
+        }
+
+        $coKhungGioHopLe = collect($ketQuaTheoTungSan)->some(fn($s) => !empty($s['chi_tiet_lich']));
+        if (!$coKhungGioHopLe) {
+            return [
+                'trang_thai' => 'loi_khung_gio',
+                'thong_bao'  => "Khung giờ yêu cầu nằm ngoài giờ hoạt động (" . substr($firstSan->GioMoCua, 0, 5) . " - " . substr($firstSan->GioDongCua, 0, 5) . ") hoặc chưa mở kinh doanh."
+            ];
         }
 
         return [
-            'trang_thai'    => 'thanh_cong',
-            'thong_bao'     => "Tình trạng các khung giờ ngày " . date('d/m/Y', strtotime($ngayDaFormat)) . " tại {$sanBong->TenSan} ({$sanBong->TenCumSan}):",
-            'chi_tiet_lich' => $ketQuaLich
+            'trang_thai'              => 'thanh_cong',
+            'cum_san'                 => $firstSan->TenCumSan,
+            'ngay_kiem_tra'           => $ngayHienThi,
+            'tong_so_san_kiem_tra'    => count($ketQuaTheoTungSan),
+            'danh_sach_san_va_lich'   => $ketQuaTheoTungSan,
+            'goi_y_phan_hoi_cho_bot'  => 'Hãy liệt kê rõ từng sân (Tên sân + Loại sân + Tình trạng Còn trống hay Đã đặt + Giá tiền) và hỏi khách muốn chọn đặt sân nào để thêm vào giỏ hàng.'
         ];
     }
 
