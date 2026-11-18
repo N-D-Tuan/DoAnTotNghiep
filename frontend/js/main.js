@@ -1205,39 +1205,122 @@ window.exportGuestBookingInvoice = async function(maHoaDon) {
             return;
         }
         const hd = json.data;
-        const listDatSan = hd.dat_sans || hd.datSans || [];
+        const listDatSan = [...(hd.dat_sans || hd.datSans || [])].sort((a, b) => {
+            const dateCmp = String(a.NgayDa || '').localeCompare(String(b.NgayDa || ''));
+            if (dateCmp !== 0) return dateCmp;
+            const timeA = a.khung_gio?.GioBatDau || '';
+            const timeB = b.khung_gio?.GioBatDau || '';
+            return timeA.localeCompare(timeB);
+        });
+
         const first = listDatSan[0] || {};
         const tenKhach = hd.nguoi_dung?.HoTen || first.TenNguoiDat || first.TenKhachVangLai || 'Khách vãng lai';
         const sdtKhach = hd.nguoi_dung?.SoDienThoai || first.SDTNguoiDat || first.SDTKhachVangLai || 'N/A';
+        const emailKhach = hd.nguoi_dung?.Email || first.EmailNguoiDat || first.EmailKhachVangLai || '';
+
+        const cumSanObj = first.san_bong?.cum_san || first.san_bong?.cumSan || {};
+        const tenCumSan = cumSanObj.TenCumSan || 'Hệ thống sân bóng DN Football';
+        const diaChiCum = cumSanObj.DiaChi || 'TP. Đà Nẵng, Việt Nam';
         const ngayLap = hd.NgayTao ? new Date(hd.NgayTao).toLocaleString('vi-VN') : new Date().toLocaleString('vi-VN');
+        const tenGiaiDau = first.giai_dau?.TenGiaiDau || first.giaiDau?.TenGiaiDau || null;
+        const loaiHinhDichVu = tenGiaiDau ? `Tổ chức Giải đấu (${tenGiaiDau})` : 'Thuê sân bóng đá phong trào';
+
+        const ptMap = {
+            'ViDienTu': 'Ví điện tử DN Football',
+            'ChuyenKhoan': 'Chuyển khoản ngân hàng (VNPay)',
+            'TienMat': 'Tiền mặt tại quầy'
+        };
+        const ptText = ptMap[hd.PhuongThucThanhToan] || hd.PhuongThucThanhToan || 'Chuyển khoản ngân hàng (VNPay)';
+
+        const statusItemMap = {
+            'DaCoc':     { label: 'Đã đặt cọc', color: '#b45309', bg: '#fef3c7' },
+            'HoanThanh': { label: 'Hoàn thành', color: '#047857', bg: '#d1fae5' },
+            'DaHuy':     { label: 'Đã hủy',     color: '#b91c1c', bg: '#fee2e2' },
+            'KhongDen':  { label: 'Không đến',  color: '#475569', bg: '#e2e8f0' }
+        };
 
         let tongTienSanGoc = 0;
+        let tongCocKhongDen = 0;
+        let soTranTinhTienGoc = 0;
+        let soTranKhongDen = 0;
+
         const rowsHtml = listDatSan.map((ds, i) => {
             const tenSan = ds.san_bong?.TenSan || 'Sân bóng';
-            const cumSan = ds.san_bong?.cum_san?.TenCumSan || '';
+            const loaiSan = ds.san_bong?.loai_san?.TenLoaiSan || ds.san_bong?.loaiSan?.TenLoaiSan || '';
+            const cumSan = ds.san_bong?.cum_san?.TenCumSan || tenCumSan;
             const kg = ds.khung_gio ? `${ds.khung_gio.GioBatDau.substring(0,5)} - ${ds.khung_gio.GioKetThuc.substring(0,5)}` : '';
             const ngayDa = ds.NgayDa ? ds.NgayDa.split('-').reverse().join('/') : '';
+            const maVe = (ds.MaGiaiDau || ds.ID_GiaiDau) ? `GD-${ds.MaGiaiDau || ds.ID_GiaiDau}` : `PT-${ds.MaDatSan || ds.ID}`;
             const donGia = Number(ds.pivot?.DonGia ?? ds.TongTien ?? 0);
-            if (ds.TrangThai !== 'DaHuy') tongTienSanGoc += donGia;
+            const tienCocTran = Number(ds.TienCoc || 0);
+
+            if (ds.TrangThai === 'DaCoc' || ds.TrangThai === 'HoanThanh') {
+                tongTienSanGoc += donGia;
+                soTranTinhTienGoc++;
+            } else if (ds.TrangThai === 'KhongDen') {
+                tongCocKhongDen += tienCocTran;
+                soTranKhongDen++;
+            }
+
+            const stInfo = statusItemMap[ds.TrangThai] || { label: ds.TrangThai, color: '#334155', bg: '#f1f5f9' };
 
             return `
                 <tr>
                     <td style="text-align:center;">${i + 1}</td>
-                    <td style="text-align:center; font-family:monospace; font-weight:bold;">#PT-${ds.MaDatSan || ds.ID}</td>
-                    <td><strong>${tenSan}</strong><br><small>${cumSan}</small></td>
-                    <td style="text-align:center;">${kg}<br><small>${ngayDa}</small></td>
-                    <td style="text-align:right;">${donGia.toLocaleString('vi-VN')}đ</td>
-                    <td style="text-align:right; color:#047857; font-weight:bold;">${Number(ds.TienCoc).toLocaleString('vi-VN')}đ</td>
+                    <td style="text-align:center; font-family:monospace; font-weight:700;">#${maVe}</td>
+                    <td>
+                        <strong>${tenSan}</strong>${loaiSan ? ` <span style="font-size:12px; color:#64748b;">(${loaiSan})</span>` : ''}<br>
+                        <span style="font-size:12px; color:#64748b;">${cumSan}</span>
+                    </td>
+                    <td style="text-align:center;">
+                        <strong style="color:#0b5d3b;">${kg}</strong><br>
+                        <span style="font-size:12px; color:#475569;">Ngày: ${ngayDa}</span>
+                    </td>
+                    <td style="text-align:center;">
+                        <span style="display:inline-block; padding:3px 8px; border-radius:4px; font-size:11.5px; font-weight:700; color:${stInfo.color}; background:${stInfo.bg};">${stInfo.label}</span>
+                    </td>
+                    <td style="text-align:right; font-weight:600;">${donGia.toLocaleString('vi-VN')}đ</td>
+                    <td style="text-align:right; color:#047857; font-weight:700;">${tienCocTran.toLocaleString('vi-VN')}đ</td>
                 </tr>
             `;
         }).join('');
 
-        const tongTien = Number(hd.TongTien ?? hd.TongTienSan ?? 0);
-        const thueVAT = Number(hd.ThueVAT || 0);
-        const tienCoc = Number(hd.TienDaCoc || 0);
-        const conLai = Math.max(0, tongTien - tienCoc);
+        const kmObj = hd.khuyen_mai || hd.khuyenMai || null;
+        let soTienGiam = 0;
+        if (hd.MaKhuyenMai && kmObj && tongTienSanGoc >= Number(kmObj.GiaTriHoaDonToiThieu || 0)) {
+            if (kmObj.LoaiKhuyenMai === 'PhanTram') {
+                soTienGiam = Math.round(tongTienSanGoc * (Number(kmObj.GiaTri || 0) / 100));
+                if (Number(kmObj.GiaTriToiDa || 0) > 0 && soTienGiam > Number(kmObj.GiaTriToiDa)) {
+                    soTienGiam = Number(kmObj.GiaTriToiDa);
+                }
+            } else {
+                soTienGiam = Number(kmObj.GiaTri || 0);
+            }
+            soTienGiam = Math.min(tongTienSanGoc, soTienGiam);
+        }
 
-        const printWin = window.open('', '_blank', 'width=850,height=720');
+        const tienSauGiam = Math.max(0, tongTienSanGoc - soTienGiam);
+        const thueVAT = Math.floor((tienSauGiam * 0.08) / 1000) * 1000;
+        const tongTien = (hd.TrangThai === 'DaHuy')
+            ? Number(hd.TongTien ?? 0)
+            : (tienSauGiam + thueVAT + tongCocKhongDen);
+
+        const tienCoc = listDatSan
+            .filter(d => d.TrangThai !== 'DaHuy')
+            .reduce((s, d) => s + Number(d.TienCoc || 0), 0);
+
+        const daTatToanXong = (hd.TrangThai === 'HoanThanh') ||
+            (listDatSan.length > 0 && !listDatSan.some(d => d.TrangThai === 'DaCoc') && listDatSan.some(d => d.TrangThai === 'HoanThanh'));
+        const tienThanhToanTaiSan = Math.max(0, tongTien - tienCoc);
+        const conPhaiThu = (hd.TrangThai === 'DaHuy' || daTatToanXong) ? 0 : tienThanhToanTaiSan;
+
+        const badgeTrangThaiHD = daTatToanXong
+            ? `<span style="background:#d1fae5; color:#065f46; border:1px solid #6ee7b7; padding:4px 10px; border-radius:4px; font-size:12px; font-weight:800; display:inline-block; margin-top:4px;">ĐÃ THANH TOÁN ĐỦ 100%</span>`
+            : (hd.TrangThai === 'DaHuy'
+                ? `<span style="background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; padding:4px 10px; border-radius:4px; font-size:12px; font-weight:800; display:inline-block; margin-top:4px;">ĐÃ HỦY HÓA ĐƠN</span>`
+                : `<span style="background:#fef3c7; color:#92400e; border:1px solid #fde68a; padding:4px 10px; border-radius:4px; font-size:12px; font-weight:800; display:inline-block; margin-top:4px;">ĐÃ ĐẶT CỌC GIỮ SÂN</span>`);
+
+        const printWin = window.open('', '_blank', 'width=900,height=780');
         if (!printWin) return alert('Vui lòng cho phép mở cửa sổ Pop-up để in hóa đơn!');
 
         printWin.document.write(`
@@ -1245,51 +1328,83 @@ window.exportGuestBookingInvoice = async function(maHoaDon) {
             <html lang="vi">
             <head>
                 <meta charset="UTF-8">
-                <title>Hóa đơn đặt sân #${hd.MaHoaDonDatSan} - DN Football</title>
+                <title>Hóa đơn dịch vụ đặt sân #${hd.MaHoaDonDatSan} - DN Football</title>
                 <style>
-                    body { font-family: Arial, sans-serif; color: #0f172a; margin: 30px; line-height: 1.5; }
-                    .header { display: flex; justify-content: space-between; border-bottom: 2px solid #0b5d3b; padding-bottom: 14px; margin-bottom: 20px; }
-                    .brand { font-size: 20px; font-weight: 800; color: #0b5d3b; }
-                    h2 { text-align: center; color: #0b5d3b; margin: 15px 0; }
-                    table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 13px; }
-                    th, td { border: 1px solid #cbd5e1; padding: 10px; }
-                    th { background: #f1f5f9; }
-                    .summary { width: 340px; margin-left: auto; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px; font-size: 13.5px; }
+                    body { font-family: Arial, sans-serif; color: #0f172a; margin: 28px; line-height: 1.5; font-size: 13px; }
+                    .invoice-box { border: 1.5px solid #cbd5e1; border-radius: 8px; overflow: hidden; background: #ffffff; }
+                    .header { padding: 18px 22px; border-bottom: 2px solid #0b5d3b; background: #f8fafc; display: flex; justify-content: space-between; align-items: flex-start; }
+                    .brand { font-size: 17px; font-weight: 800; color: #0b5d3b; text-transform: uppercase; }
+                    .doc-title { font-size: 18px; font-weight: 800; color: #0f172a; letter-spacing: 0.3px; }
+                    .cust-info { padding: 14px 22px; background: #ffffff; border-bottom: 1px solid #e2e8f0; display: grid; grid-template-columns: 1.2fr 1fr; gap: 6px 16px; }
+                    .body-wrap { padding: 16px 22px; }
+                    table.items { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 13px; }
+                    table.items th, table.items td { border: 1px solid #cbd5e1; padding: 9px 10px; }
+                    table.items th { background: #f1f5f9; color: #0f172a; font-weight: 700; }
+                    .summary { width: 380px; margin-left: auto; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px 16px; font-size: 13.5px; }
+                    .sum-row { display: flex; justify-content: space-between; padding: 5px 0; }
+                    .footer-note { padding: 10px 22px; background: #f1f5f9; border-top: 1px solid #cbd5e1; font-size: 12px; color: #64748b; text-align: center; }
                 </style>
             </head>
             <body>
-                <div class="header">
-                    <div>
-                        <div class="brand">HỆ THỐNG SÂN BÓNG ĐÁ DN FOOTBALL</div>
-                        <div style="font-size:13px; color:#475569;">Đà Nẵng, Việt Nam | Hotline: 0899244124</div>
+                <div class="invoice-box">
+                    <div class="header">
+                        <div>
+                            <div class="brand">HỆ THỐNG SÂN BÓNG ĐÁ DN FOOTBALL</div>
+                            <div style="margin-top:4px; color:#334155;"><strong>Đơn vị quản lý:</strong> ${tenCumSan}</div>
+                            <div style="margin-top:2px; color:#475569; font-size:12.5px;"><strong>Địa chỉ:</strong> ${diaChiCum}</div>
+                            <div style="margin-top:2px; color:#475569; font-size:12.5px;"><strong>Hotline CSKH:</strong> 0899244124</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div class="doc-title">HÓA ĐƠN DỊCH VỤ ĐẶT SÂN</div>
+                            <div style="margin-top:4px; color:#334155;">Số HĐ: <strong style="font-family:monospace; font-size:14px; color:#0b5d3b;">#${hd.MaHoaDonDatSan}</strong></div>
+                            <div style="margin-top:2px; color:#475569; font-size:12.5px;">Ngày lập: ${ngayLap}</div>
+                            ${badgeTrangThaiHD}
+                        </div>
                     </div>
-                    <div style="text-align:right; font-size:13px;">
-                        <strong>Mã hóa đơn: #${hd.MaHoaDonDatSan}</strong><br>
-                        Ngày lập: ${ngayLap}
+
+                    <div class="cust-info">
+                        <div><strong>Khách hàng / Đơn vị:</strong> ${tenKhach}</div>
+                        <div><strong>Số điện thoại:</strong> ${sdtKhach}</div>
+                        <div><strong>Hình thức dịch vụ:</strong> ${loaiHinhDichVu}</div>
+                        <div><strong>Phương thức đặt cọc:</strong> ${ptText}</div>
+                        ${emailKhach ? `<div style="grid-column: 1 / -1;"><strong>Email nhận chứng từ:</strong> ${emailKhach}</div>` : ''}
                     </div>
-                </div>
-                <h2>HÓA ĐƠN ĐẶT SÂN</h2>
-                <p><strong>Khách hàng:</strong> ${tenKhach} &bull; <strong>Số điện thoại:</strong> ${sdtKhach}</p>
-                <p><strong>Phương thức thanh toán cọc:</strong> Chuyển khoản VNPay</p>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>STT</th>
-                            <th>Mã Vé</th>
-                            <th>Sân Bóng & Cơ Sở</th>
-                            <th>Khung Giờ & Ngày Đá</th>
-                            <th>Đơn Giá Khung Giờ</th>
-                            <th>Tiền Đã Cọc</th>
-                        </tr>
-                    </thead>
-                    <tbody>${rowsHtml}</tbody>
-                </table>
-                <div class="summary">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>Tổng tiền sân gốc:</span><strong>${tongTienSanGoc.toLocaleString('vi-VN')}đ</strong></div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#475569;"><span>Thuế VAT (8%):</span><strong>+${thueVAT.toLocaleString('vi-VN')}đ</strong></div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:6px; border-top:1px solid #e2e8f0; padding-top:6px;"><span>Tổng tiền hóa đơn:</span><strong>${tongTien.toLocaleString('vi-VN')}đ</strong></div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#047857;"><span>Đã đặt cọc:</span><strong>${tienCoc.toLocaleString('vi-VN')}đ</strong></div>
-                    <div style="display:flex; justify-content:space-between; border-top:1px dashed #cbd5e1; padding-top:8px; color:#e11d48; font-size:15px;"><strong>Còn thu tại sân:</strong><strong>${conLai.toLocaleString('vi-VN')}đ</strong></div>
+
+                    <div class="body-wrap">
+                        <table class="items">
+                            <thead>
+                                <tr>
+                                    <th style="width:40px; text-align:center;">STT</th>
+                                    <th style="width:95px; text-align:center;">Mã Vé</th>
+                                    <th style="text-align:left;">Chi Tiết Sân Bóng & Cơ Sở</th>
+                                    <th style="width:135px; text-align:center;">Thời Gian Sử Dụng</th>
+                                    <th style="width:100px; text-align:center;">Trạng Thái</th>
+                                    <th style="width:110px; text-align:right;">Đơn Giá</th>
+                                    <th style="width:110px; text-align:right;">Đã Đặt Cọc</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rowsHtml}</tbody>
+                        </table>
+
+                        <div class="summary">
+                            ${tongTienSanGoc > 0 ? `<div class="sum-row"><span>Tổng tiền sân gốc (${soTranTinhTienGoc} ca):</span><strong>${tongTienSanGoc.toLocaleString('vi-VN')}đ</strong></div>` : ''}
+                            ${tongCocKhongDen > 0 ? `<div class="sum-row" style="color:#64748b;"><span>Tiền cọc giữ lại (${soTranKhongDen} ca không đến):</span><strong>${tongCocKhongDen.toLocaleString('vi-VN')}đ</strong></div>` : ''}
+                            ${soTienGiam > 0 ? `<div class="sum-row" style="color:#2563eb;"><span>Chiết khấu khuyến mãi (${kmObj ? kmObj.TenKhuyenMai : 'Voucher'}):</span><strong>-${soTienGiam.toLocaleString('vi-VN')}đ</strong></div>` : ''}
+                            <div class="sum-row" style="color:#475569;"><span>Thuế GTGT (VAT 8%):</span><strong>+${thueVAT.toLocaleString('vi-VN')}đ</strong></div>
+                            <div class="sum-row" style="border-top:1px solid #cbd5e1; padding-top:7px;"><span><strong>Tổng cộng giá trị Hóa đơn:</strong></span><strong>${tongTien.toLocaleString('vi-VN')}đ</strong></div>
+                            <div class="sum-row" style="color:#047857;"><span>Tiền cọc đã thanh toán:</span><strong>${tienCoc.toLocaleString('vi-VN')}đ</strong></div>
+                            ${daTatToanXong ? `
+                                <div class="sum-row" style="color:#047857;"><span>Đã thanh toán tại sân:</span><strong>${tienThanhToanTaiSan.toLocaleString('vi-VN')}đ</strong></div>
+                                <div class="sum-row" style="border-top:2px solid #0f172a; padding-top:10px; color:#0b5d3b; font-size:15px;"><strong>CÒN PHẢI THU:</strong><strong>0đ (Đã tất toán)</strong></div>
+                            ` : `
+                                <div class="sum-row" style="border-top:2px solid #0f172a; padding-top:10px; color:#e11d48; font-size:15px;"><strong>CÒN THU TẠI SÂN:</strong><strong>${conPhaiThu.toLocaleString('vi-VN')}đ</strong></div>
+                            `}
+                        </div>
+                    </div>
+
+                    <div class="footer-note">
+                        Chứng từ điện tử được khởi tạo tự động từ Hệ thống Quản lý Sân bóng <strong>DN Football</strong> — Đà Nẵng.
+                    </div>
                 </div>
                 <script>window.onload = function(){ setTimeout(() => window.print(), 350); };<\/script>
             </body>

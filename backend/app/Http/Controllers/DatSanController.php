@@ -831,6 +831,59 @@ class DatSanController extends Controller
 
             DB::commit();
 
+            // GỬI EMAIL HÓA ĐƠN ĐIỆN TỬ (ĐÃ TẤT TOÁN) KÈM LỜI CẢM ƠN & LỜI CHÚC KHI CẢ HÓA ĐƠN ĐÃ HOÀN TẤT
+            if (in_array($request->trang_thai, ['HoanThanh', 'KhongDen']) && $maHoaDon) {
+                $hdCheck = HoaDonDatSan::with(['nguoiDung', 'khuyenMai', 'datSans.sanBong.cumSan', 'datSans.sanBong.loaiSan', 'datSans.khungGio', 'datSans.giaiDau'])
+                    ->where('MaHoaDonDatSan', $maHoaDon)
+                    ->first();
+
+                // Chỉ gửi khi CẢ HÓA ĐƠN đã xong hết (không còn trận nào DaCoc) và có ít nhất 1 trận HoanThanh
+                if ($hdCheck && !$hdCheck->datSans->contains('TrangThai', 'DaCoc') && $hdCheck->datSans->contains('TrangThai', 'HoanThanh')) {
+                    $emailNhanHD = $hdCheck->nguoiDung ? $hdCheck->nguoiDung->Email : $datSan->EmailNguoiDat;
+                    $tenKhachHD  = $hdCheck->nguoiDung ? $hdCheck->nguoiDung->HoTen : ($datSan->TenNguoiDat ?: 'Quý khách');
+
+                    if ($emailNhanHD) {
+                        try {
+                            $hoaDonHtml = self::buildEmailHoaDonTuModel($hdCheck);
+                            $laGiaiDau  = ($datSan->MaGiaiDau !== null && $datSan->giaiDau);
+                            $loiChuc    = $laGiaiDau
+                                ? "Chúc mừng Quý khách và Ban tổ chức đã hoàn thành trọn vẹn mùa giải <strong>{$datSan->giaiDau->TenGiaiDau}</strong> tại <strong>{$cumSan}</strong>! Chúc các cầu thủ luôn giữ vững ngọn lửa đam mê, sức khỏe dồi dào và gặt hái thêm nhiều thành công mới."
+                                : "Cảm ơn bạn và đội bóng đã lựa chọn thi đấu tại <strong>{$tenSan} ({$cumSan})</strong>! Chúc bạn cùng anh em đội bóng luôn tràn đầy năng lượng, giữ vững phong độ và có thật nhiều trận cầu mãn nhãn.";
+
+                            $goiYDanhGia = ($datSan->MaNguoiDung !== null)
+                                ? "<p style='margin: 12px 0 0 0; font-size: 13.5px; color: #334155;'>⭐ <em>Nếu hài lòng với chất lượng mặt cỏ và dịch vụ tại cơ sở, bạn đừng quên truy cập mục <strong>Lịch sử đặt sân</strong> trên website để gửi đánh giá cho <strong>{$cumSan}</strong> nhé!</em></p>"
+                                : "";
+
+                            $noiDungMailHoanThanh = "
+                                <div style='font-family: Arial, sans-serif; max-width: 720px; margin: 0 auto; color: #0f172a; line-height: 1.6;'>
+                                    <div style='background: linear-gradient(135deg, #0b5d3b 0%, #15803d 100%); color: #ffffff; padding: 20px 24px; border-radius: 10px 10px 0 0;'>
+                                        <h2 style='margin: 0; font-size: 19px; text-transform: uppercase;'>HÓA ĐƠN TẤT TOÁN DỊCH VỤ ĐẶT SÂN (#{$maHoaDon})</h2>
+                                        <div style='font-size: 13px; opacity: 0.92; margin-top: 4px;'>Hệ thống sân bóng đá trực tuyến DN Football — Đà Nẵng</div>
+                                    </div>
+                                    <div style='padding: 20px 24px; border: 1px solid #cbd5e1; border-top: none; border-radius: 0 0 10px 10px; background: #ffffff;'>
+                                        <p style='margin-top: 0;'>Xin chào <strong>{$tenKhachHD}</strong>,</p>
+                                        <p>Hệ thống <strong>DN Football</strong> xác nhận lịch đặt sân thuộc Hóa đơn <strong>#{$maHoaDon}</strong> của bạn đã <strong>hoàn thành và tất toán đầy đủ 100%</strong>. Dưới đây là Hóa đơn điện tử chính thức để bạn lưu trữ và đối chiếu:</p>
+                                        {$hoaDonHtml}
+                                        <div style='background: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid #16a34a; border-radius: 8px; padding: 14px 18px; margin-top: 16px;'>
+                                            <div style='color: #065f46; font-size: 14px;'>⚽ {$loiChuc}</div>
+                                            {$goiYDanhGia}
+                                        </div>
+                                        <p style='margin-top: 18px; margin-bottom: 0; font-size: 13.5px; color: #475569;'>Hẹn gặp lại bạn và đội bóng ở những trận cầu tiếp theo tại <strong>DN Football</strong>!</p>
+                                    </div>
+                                </div>
+                            ";
+
+                            Mail::html($noiDungMailHoanThanh, function ($message) use ($emailNhanHD, $maHoaDon, $cumSan) {
+                                $message->to($emailNhanHD)
+                                        ->subject("Hóa đơn điện tử #{$maHoaDon} (Đã tất toán) & Lời cảm ơn từ {$cumSan} - DN Football");
+                            });
+                        } catch (\Exception $mailEx) {
+                            \Illuminate\Support\Facades\Log::error('Lỗi gửi mail hoàn thành hóa đơn: ' . $mailEx->getMessage());
+                        }
+                    }
+                }
+            }
+
             if ($datSan->MaNguoiDung !== null) {
                 broadcast(new \App\Events\UserDataUpdated($datSan->MaNguoiDung))->toOthers();
             }
@@ -1613,75 +1666,246 @@ class DatSanController extends Controller
         ]);
     }
 
-    public static function buildEmailHoaDonHtml($hoaDon, $tenKhach, $sdtKhach, $cacVe, $soTienGiam = 0)
+    /**
+     * Hàm chuẩn hóa giao diện Hóa đơn Đặt sân thực tế (Dùng chung cho mọi Email: Lúc mới đặt & Lúc hoàn tất trận đấu)
+     */
+    public static function buildEmailHoaDonTuModel($hoaDon)
     {
-        $tongThanhToan = number_format($hoaDon->TongTien, 0, ',', '.') . 'đ';
-        $thueVAT       = number_format($hoaDon->ThueVAT ?? 0, 0, ',', '.') . 'đ';
-        $tienCoc       = number_format($hoaDon->TienDaCoc, 0, ',', '.') . 'đ';
-        $conLai        = number_format(max(0, $hoaDon->TongTien - $hoaDon->TienDaCoc), 0, ',', '.') . 'đ';
-        $ngayTao       = date('H:i - d/m/Y', strtotime($hoaDon->NgayTao ?? now()));
-        $tenCumSanHD   = $cacVe[0]['cumSan'] ?? 'DN Football';
+        if (!$hoaDon) return '';
+        $hoaDon->loadMissing(['nguoiDung', 'khuyenMai', 'datSans.sanBong.cumSan', 'datSans.khungGio', 'datSans.giaiDau']);
+
+        $listDatSan = $hoaDon->datSans->sortBy(function ($ds) {
+            return ($ds->NgayDa ?? '') . ' ' . ($ds->khungGio ? $ds->khungGio->GioBatDau : '');
+        })->values();
+
+        $first = $listDatSan->first();
+        $tenKhach = $hoaDon->nguoiDung ? $hoaDon->nguoiDung->HoTen : ($first ? $first->TenNguoiDat : 'Quý khách');
+        $sdtKhach = $hoaDon->nguoiDung ? $hoaDon->nguoiDung->SoDienThoai : ($first ? $first->SDTNguoiDat : 'N/A');
+        $emailKhach = $hoaDon->nguoiDung ? $hoaDon->nguoiDung->Email : ($first ? $first->EmailNguoiDat : '');
+
+        $cumSanObj = ($first && $first->sanBong && $first->sanBong->cumSan) ? $first->sanBong->cumSan : null;
+        $tenCumSan = $cumSanObj ? $cumSanObj->TenCumSan : 'Hệ thống sân bóng DN Football';
+        $diaChiCum = $cumSanObj ? $cumSanObj->DiaChi : 'TP. Đà Nẵng, Việt Nam';
+
+        $quanLy = ($cumSanObj && $cumSanObj->MaCumSan)
+            ? NguoiDung::where('VaiTro', 'QuanLySan')->where('MaCumSan', $cumSanObj->MaCumSan)->first()
+            : null;
+        $hotlineCoSo = ($quanLy && $quanLy->SoDienThoai) ? $quanLy->SoDienThoai : '0899244124';
+
+        $ngayLap = $hoaDon->NgayTao ? date('H:i - d/m/Y', strtotime($hoaDon->NgayTao)) : date('H:i - d/m/Y');
+        $tenGiaiDau = ($first && $first->giaiDau) ? $first->giaiDau->TenGiaiDau : null;
+        $loaiHinhDichVu = $tenGiaiDau ? "Tổ chức Giải đấu ({$tenGiaiDau})" : "Thuê sân bóng đá phong trào";
 
         $ptMap = [
             'ViDienTu'    => 'Ví điện tử DN Football',
-            'ChuyenKhoan' => 'Chuyển khoản VNPay',
+            'ChuyenKhoan' => 'Chuyển khoản ngân hàng (VNPay)',
             'TienMat'     => 'Tiền mặt tại quầy'
         ];
         $ptText = $ptMap[$hoaDon->PhuongThucThanhToan] ?? $hoaDon->PhuongThucThanhToan;
 
+        $statusItemMap = [
+            'DaCoc'     => ['label' => 'Đã đặt cọc',  'color' => '#b45309', 'bg' => '#fef3c7'],
+            'HoanThanh' => ['label' => 'Hoàn thành',  'color' => '#047857', 'bg' => '#d1fae5'],
+            'DaHuy'     => ['label' => 'Đã hủy',      'color' => '#b91c1c', 'bg' => '#fee2e2'],
+            'KhongDen'  => ['label' => 'Không đến',   'color' => '#475569', 'bg' => '#e2e8f0'],
+        ];
+
+        $tongTienSanGoc = 0;
+        $tongCocKhongDen = 0;
+        $soTranTinhTienGoc = 0;
+        $soTranKhongDen = 0;
         $rowsHtml = '';
-        foreach ($cacVe as $idx => $ve) {
+
+        foreach ($listDatSan as $idx => $ds) {
             $stt = $idx + 1;
+            $maVe = $ds->MaGiaiDau ? "GD-{$ds->MaGiaiDau}" : "PT-{$ds->MaDatSan}";
+            $tenSan = $ds->sanBong ? $ds->sanBong->TenSan : 'Sân bóng';
+            $loaiSan = ($ds->sanBong && $ds->sanBong->loaiSan) ? $ds->sanBong->loaiSan->TenLoaiSan : '';
+            $gioDa = $ds->khungGio ? substr($ds->khungGio->GioBatDau, 0, 5) . ' - ' . substr($ds->khungGio->GioKetThuc, 0, 5) : '';
+            $ngayDa = $ds->NgayDa ? date('d/m/Y', strtotime($ds->NgayDa)) : '';
+            $donGia = (float) $ds->TongTien;
+            $tienCocTran = (float) $ds->TienCoc;
+
+            if ($ds->TrangThai === 'DaCoc' || $ds->TrangThai === 'HoanThanh') {
+                $tongTienSanGoc += $donGia;
+                $soTranTinhTienGoc++;
+            } elseif ($ds->TrangThai === 'KhongDen') {
+                $tongCocKhongDen += $tienCocTran;
+                $soTranKhongDen++;
+            }
+
+            $stInfo = $statusItemMap[$ds->TrangThai] ?? ['label' => $ds->TrangThai, 'color' => '#334155', 'bg' => '#f1f5f9'];
+
             $rowsHtml .= "
                 <tr>
-                    <td style='border:1px solid #cbd5e1; padding:8px; text-align:center;'>{$stt}</td>
-                    <td style='border:1px solid #cbd5e1; padding:8px; font-weight:bold;'>#{$ve['maVe']}</td>
-                    <td style='border:1px solid #cbd5e1; padding:8px;'>{$ve['tenSan']} ({$ve['cumSan']})</td>
-                    <td style='border:1px solid #cbd5e1; padding:8px; text-align:center;'>{$ve['gio']} | {$ve['ngay']}</td>
-                    <td style='border:1px solid #cbd5e1; padding:8px; text-align:right; color:#047857; font-weight:bold;'>{$ve['tienCoc']}</td>
-                    <td style='border:1px solid #cbd5e1; padding:8px; text-align:right; color:#e11d48; font-weight:bold;'>{$ve['conLai']}</td>
+                    <td style='border:1px solid #cbd5e1; padding:9px 8px; text-align:center; color:#334155;'>{$stt}</td>
+                    <td style='border:1px solid #cbd5e1; padding:9px 8px; text-align:center; font-family:monospace; font-weight:700; color:#0f172a;'>#{$maVe}</td>
+                    <td style='border:1px solid #cbd5e1; padding:9px 10px;'>
+                        <strong style='color:#0f172a;'>{$tenSan}</strong>" . ($loaiSan ? " <span style='font-size:12px; color:#64748b;'>({$loaiSan})</span>" : "") . "<br>
+                        <span style='font-size:12px; color:#64748b;'>{$tenCumSan}</span>
+                    </td>
+                    <td style='border:1px solid #cbd5e1; padding:9px 8px; text-align:center;'>
+                        <strong style='color:#0b5d3b;'>{$gioDa}</strong><br>
+                        <span style='font-size:12px; color:#475569;'>Ngày: {$ngayDa}</span>
+                    </td>
+                    <td style='border:1px solid #cbd5e1; padding:9px 8px; text-align:center;'>
+                        <span style='display:inline-block; padding:3px 8px; border-radius:4px; font-size:11.5px; font-weight:700; color:{$stInfo['color']}; background:{$stInfo['bg']};'>{$stInfo['label']}</span>
+                    </td>
+                    <td style='border:1px solid #cbd5e1; padding:9px 10px; text-align:right; font-weight:600; color:#0f172a;'>" . number_format($donGia, 0, ',', '.') . "đ</td>
+                    <td style='border:1px solid #cbd5e1; padding:9px 10px; text-align:right; font-weight:700; color:#047857;'>" . number_format($tienCocTran, 0, ',', '.') . "đ</td>
                 </tr>
             ";
         }
 
-        $giamGiaHtml = ($soTienGiam > 0)
-            ? "<div style='margin-bottom:4px; color:#2563eb;'>Khuyến mãi giảm: <strong>-" . number_format($soTienGiam, 0, ',', '.') . "đ</strong></div>"
+        $kmObj = $hoaDon->khuyenMai;
+        $soTienGiam = 0;
+        if ($hoaDon->MaKhuyenMai && $kmObj && $tongTienSanGoc >= (float) ($kmObj->GiaTriHoaDonToiThieu ?? 0)) {
+            if ($kmObj->LoaiKhuyenMai === 'PhanTram') {
+                $soTienGiam = round($tongTienSanGoc * ((float) $kmObj->GiaTri / 100));
+                if ((float) $kmObj->GiaTriToiDa > 0 && $soTienGiam > (float) $kmObj->GiaTriToiDa) {
+                    $soTienGiam = (float) $kmObj->GiaTriToiDa;
+                }
+            } else {
+                $soTienGiam = (float) $kmObj->GiaTri;
+            }
+            $soTienGiam = min($tongTienSanGoc, $soTienGiam);
+        }
+
+        $tienSauGiam = max(0, $tongTienSanGoc - $soTienGiam);
+        $thueVAT = (float) ($hoaDon->ThueVAT ?? self::tinhThueVATLamTronDuoi($tienSauGiam));
+        $tongTienHD = ($hoaDon->TrangThai === 'DaHuy')
+            ? (float) $hoaDon->TongTien
+            : ($tienSauGiam + $thueVAT + $tongCocKhongDen);
+
+        $tongDaCoc = (float) $listDatSan->where('TrangThai', '!=', 'DaHuy')->sum('TienCoc');
+
+        // Kiểm tra xem hóa đơn đã kết thúc (không còn trận nào DaCoc) hay chưa
+        $daTatToanXong = ($hoaDon->TrangThai === 'HoanThanh') || (!$listDatSan->contains('TrangThai', 'DaCoc') && $listDatSan->contains('TrangThai', 'HoanThanh'));
+        $tienThanhToanTaiSan = max(0, $tongTienHD - $tongDaCoc);
+        $conPhaiThu = ($hoaDon->TrangThai === 'DaHuy' || $daTatToanXong) ? 0 : $tienThanhToanTaiSan;
+
+        if ($daTatToanXong) {
+            $badgeTrangThaiHD = "<span style='background:#d1fae5; color:#065f46; border:1px solid #6ee7b7; padding:4px 10px; border-radius:4px; font-size:12px; font-weight:800;'>ĐÃ THANH TOÁN ĐỦ 100%</span>";
+            $dongCuoiThanhToanHtml = "
+                <tr>
+                    <td style='padding:6px 0; color:#047857;'>Đã thanh toán tại sân:</td>
+                    <td style='padding:6px 0; text-align:right; font-weight:700; color:#047857;'>" . number_format($tienThanhToanTaiSan, 0, ',', '.') . "đ</td>
+                </tr>
+                <tr style='border-top:2px solid #0f172a;'>
+                    <td style='padding:10px 0 2px 0; font-size:14.5px; font-weight:800; color:#0b5d3b;'>CÒN PHẢI THU:</td>
+                    <td style='padding:10px 0 2px 0; text-align:right; font-size:15.5px; font-weight:800; color:#0b5d3b;'>0đ (Đã tất toán)</td>
+                </tr>
+            ";
+        } else {
+            $badgeTrangThaiHD = "<span style='background:#fef3c7; color:#92400e; border:1px solid #fde68a; padding:4px 10px; border-radius:4px; font-size:12px; font-weight:800;'>ĐÃ ĐẶT CỌC GIỮ SÂN</span>";
+            $dongCuoiThanhToanHtml = "
+                <tr style='border-top:2px solid #0f172a;'>
+                    <td style='padding:10px 0 2px 0; font-size:14.5px; font-weight:800; color:#e11d48;'>CÒN THU TẠI SÂN:</td>
+                    <td style='padding:10px 0 2px 0; text-align:right; font-size:15.5px; font-weight:800; color:#e11d48;'>" . number_format($conPhaiThu, 0, ',', '.') . "đ</td>
+                </tr>
+            ";
+        }
+
+        $dongKhuyenMaiHtml = ($soTienGiam > 0)
+            ? "<tr><td style='padding:5px 0; color:#2563eb;'>Chiết khấu khuyến mãi (" . ($kmObj ? $kmObj->TenKhuyenMai : 'Voucher') . "):</td><td style='padding:5px 0; text-align:right; font-weight:700; color:#2563eb;'>-" . number_format($soTienGiam, 0, ',', '.') . "đ</td></tr>"
+            : "";
+
+        $dongKhongDenHtml = ($tongCocKhongDen > 0)
+            ? "<tr><td style='padding:5px 0; color:#64748b;'>Tiền cọc giữ lại ({$soTranKhongDen} ca không đến):</td><td style='padding:5px 0; text-align:right; font-weight:600; color:#64748b;'>" . number_format($tongCocKhongDen, 0, ',', '.') . "đ</td></tr>"
             : "";
 
         return "
-            <div style='border:2px solid #0b5d3b; border-radius:12px; overflow:hidden; margin:16px 0; background:#ffffff; font-family:Arial,sans-serif;'>
-                <div style='background:#0b5d3b; color:#ffffff; padding:14px 18px; display:flex; justify-content:space-between; align-items:center;'>
-                    <div>
-                        <h3 style='margin:0; font-size:17px; text-transform:uppercase;'>HÓA ĐƠN ĐẶT SÂN ĐIỆN TỬ - {$tenCumSanHD}</h3>
-                        <div style='font-size:12px; opacity:0.9; margin-top:3px;'>Mã hóa đơn: <strong>#{$hoaDon->MaHoaDonDatSan}</strong> | Ngày lập: {$ngayTao}</div>
-                    </div>
+            <div style='border:1.5px solid #cbd5e1; border-radius:8px; overflow:hidden; margin:18px 0; background:#ffffff; font-family:Arial,sans-serif; color:#0f172a;'>
+                <!-- Header thông tin đơn vị & số hóa đơn -->
+                <div style='padding:18px 22px; border-bottom:2px solid #0b5d3b; background:#f8fafc;'>
+                    <table style='width:100%; border-collapse:collapse;'>
+                        <tr>
+                            <td style='vertical-align:top;'>
+                                <div style='font-size:17px; font-weight:800; color:#0b5d3b; text-transform:uppercase;'>HỆ THỐNG SÂN BÓNG ĐÁ DN FOOTBALL</div>
+                                <div style='font-size:13px; color:#334155; margin-top:4px;'><strong>Đơn vị quản lý:</strong> {$tenCumSan}</div>
+                                <div style='font-size:12.5px; color:#475569; margin-top:2px;'><strong>Địa chỉ:</strong> {$diaChiCum}</div>
+                                <div style='font-size:12.5px; color:#475569; margin-top:2px;'><strong>Hotline CSKH:</strong> {$hotlineCoSo}</div>
+                            </td>
+                            <td style='vertical-align:top; text-align:right;'>
+                                <div style='font-size:18px; font-weight:800; color:#0f172a; letter-spacing:0.3px;'>HÓA ĐƠN DỊCH VỤ ĐẶT SÂN</div>
+                                <div style='font-size:13px; color:#334155; margin-top:4px;'>Số HĐ: <strong style='font-family:monospace; font-size:14px; color:#0b5d3b;'>#{$hoaDon->MaHoaDonDatSan}</strong></div>
+                                <div style='font-size:12.5px; color:#475569; margin-top:2px;'>Ngày lập: {$ngayLap}</div>
+                                <div style='margin-top:6px;'>{$badgeTrangThaiHD}</div>
+                            </td>
+                        </tr>
+                    </table>
                 </div>
-                <div style='padding:16px 18px;'>
-                    <p style='margin:0 0 8px 0;'><strong>Khách hàng:</strong> {$tenKhach} - <strong>SĐT:</strong> {$sdtKhach}</p>
-                    <p style='margin:0 0 14px 0;'><strong>Phương thức thanh toán cọc:</strong> {$ptText}</p>
-                    <table style='width:100%; border-collapse:collapse; font-size:13px; margin-bottom:14px;'>
+
+                <!-- Thông tin khách hàng -->
+                <div style='padding:14px 22px; background:#ffffff; border-bottom:1px solid #e2e8f0; font-size:13px;'>
+                    <table style='width:100%; border-collapse:collapse;'>
+                        <tr>
+                            <td style='padding:3px 0; width:55%;'><strong>Khách hàng / Đơn vị:</strong> {$tenKhach}</td>
+                            <td style='padding:3px 0;'><strong>Số điện thoại:</strong> {$sdtKhach}</td>
+                        </tr>
+                        <tr>
+                            <td style='padding:3px 0;'><strong>Hình thức dịch vụ:</strong> {$loaiHinhDichVu}</td>
+                            <td style='padding:3px 0;'><strong>Phương thức đặt cọc:</strong> {$ptText}</td>
+                        </tr>
+                        " . ($emailKhach ? "<tr><td colspan='2' style='padding:3px 0;'><strong>Email nhận chứng từ:</strong> {$emailKhach}</td></tr>" : "") . "
+                    </table>
+                </div>
+
+                <!-- Bảng kê chi tiết các ca đặt sân -->
+                <div style='padding:16px 22px;'>
+                    <table style='width:100%; border-collapse:collapse; font-size:13px; margin-bottom:16px;'>
                         <thead>
                             <tr style='background:#f1f5f9; color:#0f172a;'>
-                                <th style='border:1px solid #cbd5e1; padding:8px;'>STT</th>
-                                <th style='border:1px solid #cbd5e1; padding:8px;'>Mã Vé</th>
-                                <th style='border:1px solid #cbd5e1; padding:8px; text-align:left;'>Sân Bóng</th>
-                                <th style='border:1px solid #cbd5e1; padding:8px;'>Khung Giờ & Ngày Đá</th>
-                                <th style='border:1px solid #cbd5e1; padding:8px; text-align:right;'>Tiền Đã Cọc</th>
-                                <th style='border:1px solid #cbd5e1; padding:8px; text-align:right;'>Còn Thu Tại Sân</th>
+                                <th style='border:1px solid #cbd5e1; padding:9px 6px; width:40px; text-align:center;'>STT</th>
+                                <th style='border:1px solid #cbd5e1; padding:9px 8px; width:95px; text-align:center;'>Mã Vé</th>
+                                <th style='border:1px solid #cbd5e1; padding:9px 10px; text-align:left;'>Chi Tiết Sân Bóng & Cơ Sở</th>
+                                <th style='border:1px solid #cbd5e1; padding:9px 8px; width:135px; text-align:center;'>Thời Gian Sử Dụng</th>
+                                <th style='border:1px solid #cbd5e1; padding:9px 8px; width:100px; text-align:center;'>Trạng Thái</th>
+                                <th style='border:1px solid #cbd5e1; padding:9px 10px; width:110px; text-align:right;'>Đơn Giá</th>
+                                <th style='border:1px solid #cbd5e1; padding:9px 10px; width:110px; text-align:right;'>Đã Đặt Cọc</th>
                             </tr>
                         </thead>
                         <tbody>{$rowsHtml}</tbody>
                     </table>
-                    <div style='background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px 15px; text-align:right;'>
-                        {$giamGiaHtml}
-                        <div style='margin-bottom:4px; color:#475569;'>Thuế VAT (8%): <strong>{$thueVAT}</strong></div>
-                        <div style='margin-bottom:4px;'>Tổng tiền hóa đơn (" . count($cacVe) . " trận): <strong>{$tongThanhToan}</strong></div>
-                        <div style='margin-bottom:4px; color:#047857;'>Tổng tiền đã cọc: <strong>{$tienCoc}</strong></div>
-                        <div style='font-size:15px; color:#e11d48;'><strong>TỔNG CẦN THANH TOÁN THÊM: {$conLai}</strong></div>
-                    </div>
+
+                    <!-- Bảng tổng hợp tài chính -->
+                    <table style='width:380px; margin-left:auto; border-collapse:collapse; font-size:13.5px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px;'>
+                        <tr>
+                            <td style='padding:12px 16px;'>
+                                <table style='width:100%; border-collapse:collapse;'>
+                                    " . ($tongTienSanGoc > 0 ? "<tr><td style='padding:5px 0; color:#334155;'>Tổng tiền sân gốc ({$soTranTinhTienGoc} ca):</td><td style='padding:5px 0; text-align:right; font-weight:700; color:#0f172a;'>" . number_format($tongTienSanGoc, 0, ',', '.') . "đ</td></tr>" : "") . "
+                                    {$dongKhongDenHtml}
+                                    {$dongKhuyenMaiHtml}
+                                    <tr>
+                                        <td style='padding:5px 0; color:#475569;'>Thuế GTGT (VAT 8%):</td>
+                                        <td style='padding:5px 0; text-align:right; font-weight:700; color:#475569;'>+" . number_format($thueVAT, 0, ',', '.') . "đ</td>
+                                    </tr>
+                                    <tr style='border-top:1px solid #cbd5e1;'>
+                                        <td style='padding:7px 0 5px 0; font-weight:700; color:#0f172a;'>Tổng cộng giá trị Hóa đơn:</td>
+                                        <td style='padding:7px 0 5px 0; text-align:right; font-weight:800; color:#0f172a;'>" . number_format($tongTienHD, 0, ',', '.') . "đ</td>
+                                    </tr>
+                                    <tr>
+                                        <td style='padding:5px 0; color:#047857;'>Tiền cọc đã thanh toán:</td>
+                                        <td style='padding:5px 0; text-align:right; font-weight:700; color:#047857;'>" . number_format($tongDaCoc, 0, ',', '.') . "đ</td>
+                                    </tr>
+                                    {$dongCuoiThanhToanHtml}
+                                </table>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+
+                <!-- Footer chứng từ -->
+                <div style='padding:10px 22px; background:#f1f5f9; border-top:1px solid #cbd5e1; font-size:12px; color:#64748b; text-align:center;'>
+                    Chứng từ điện tử được khởi tạo tự động từ Hệ thống Quản lý Sân bóng <strong>DN Football</strong> — Đà Nẵng.
                 </div>
             </div>
         ";
+    }
+
+    public static function buildEmailHoaDonHtml($hoaDon, $tenKhach, $sdtKhach, $cacVe, $soTienGiam = 0)
+    {
+        return self::buildEmailHoaDonTuModel($hoaDon);
     }
 
     /**
@@ -1789,13 +2013,13 @@ class DatSanController extends Controller
         // Tự động gộp các hóa đơn giải đấu bị tách lẻ
         self::gopHoaDonGiaiDauBiTach();
 
-        $hoaDon = HoaDonDatSan::with(['nguoiDung', 'khuyenMai', 'chiTietHoaDons', 'datSans.sanBong.cumSan', 'datSans.khungGio', 'datSans.giaiDau'])
+        $hoaDon = HoaDonDatSan::with(['nguoiDung', 'khuyenMai', 'chiTietHoaDons', 'datSans.sanBong.cumSan', 'datSans.sanBong.loaiSan', 'datSans.khungGio', 'datSans.giaiDau'])
             ->where('MaHoaDonDatSan', $maHoaDon)
             ->first();
 
         // Nếu người dùng bấm vào mã hóa đơn lẻ cũ đã được gộp sang hóa đơn chính của giải đấu
         if (!$hoaDon && $maGiaiDauLienQuan) {
-            $hoaDon = HoaDonDatSan::with(['nguoiDung', 'khuyenMai', 'chiTietHoaDons', 'datSans.sanBong.cumSan', 'datSans.khungGio', 'datSans.giaiDau'])
+            $hoaDon = HoaDonDatSan::with(['nguoiDung', 'khuyenMai', 'chiTietHoaDons', 'datSans.sanBong.cumSan', 'datSans.sanBong.loaiSan', 'datSans.khungGio', 'datSans.giaiDau'])
                 ->whereHas('datSans', function ($q) use ($maGiaiDauLienQuan) {
                     $q->where('MaGiaiDau', $maGiaiDauLienQuan);
                 })
