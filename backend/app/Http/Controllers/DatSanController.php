@@ -3058,9 +3058,10 @@ class DatSanController extends Controller
                 }
             }
 
-            if ($ds->NgayTao) {
-                $createdTime = \Carbon\Carbon::parse($ds->NgayTao, 'Asia/Ho_Chi_Minh');
-                if ($createdTime->isSameDay($now) && $createdTime->diffInMinutes($now) < 15) {
+            $ngayTaoHoaDon = $ds->chiTietHoaDon?->hoaDonDatSan?->NgayTao;
+            if ($ngayTaoHoaDon) {
+                $createdTime = \Carbon\Carbon::parse($ngayTaoHoaDon, 'Asia/Ho_Chi_Minh');
+                if ($createdTime->isSameDay($now) && $createdTime->diffInMinutes($now, false) < 15) {
                     return false;
                 }
             }
