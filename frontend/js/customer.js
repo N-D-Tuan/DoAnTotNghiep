@@ -734,72 +734,75 @@ document.addEventListener('DOMContentLoaded', async () => {
                     } catch(err) { console.error(err); }
                 }
                 // 6. TRẠNG THÁI C: Khách đang xem trang chi tiết Sân con bên trong 1 Cụm
-                else if (currentClusterId !== null && currentPitchId === null && document.querySelector('.cluster-detail-header')) {
-                    try {
-                        const headerInfo = document.querySelector('.cluster-detail-info');
-                        if (headerInfo) {
-                            headerInfo.innerHTML = `
-                                <span><i class="fa-solid fa-location-dot"></i> ${currentClusterAddress}</span>
-                                <span><i class="fa-solid fa-clock"></i> ${currentClusterGioMo.substring(0,5)} - ${currentClusterGioDong.substring(0,5)}</span>
-                            `;
-                        }
-
-                        const response = await fetch(`${API_BASE_URL}/san-bong?cum_san_id=${currentClusterId}&_t=${cacheBuster}`);
-                        const res = await response.json();
-                        
-                        if (res.success) {
-                            const activePitches = res.data.filter(sb => sb.TrangThai === 'HoatDong');
-                            const grouped = {};
-                            
-                            activePitches.forEach(sb => {
-                                const loaiSanName = sb.loaiSan?.TenLoaiSan || sb.loai_san?.TenLoaiSan || 'Loại sân khác';
-                                const loaiSanId = sb.ID_LoaiSan;
-                                if(!grouped[loaiSanName]) grouped[loaiSanName] = { id: loaiSanId, pitches: [] };
-                                grouped[loaiSanName].pitches.push(sb);
-                            });
-
-                            let newHtml = '';
-                            if (activePitches.length === 0) {
-                                newHtml = `<p style="text-align:center; color: var(--text-muted); margin-top: 40px;">Cụm sân này hiện chưa có sân con nào hoạt động.</p>`;
-                            } else {
-                                for (const [loaiSanName, data] of Object.entries(grouped)) {
-                                    newHtml += `
-                                        <div class="pitch-section">
-                                            <div class="pitch-section-title">
-                                                <span>${loaiSanName.toUpperCase()}</span>
-                                                <span style="font-size: 0.82rem; font-weight: 500; color: var(--text-muted);">${data.pitches.length} sân</span>
-                                            </div>
-                                            <div class="pitch-grid">`;
-                                    data.pitches.forEach(sb => {
-                                        newHtml += `
-                                            <div class="pitch-card" onclick="renderSchedule('${currentClusterId}', '${currentClusterName}', '${sb.ID}', '${sb.TenSan}', '${data.id}', '${loaiSanName}')">
-                                                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                                                    <div>
-                                                        <div class="pitch-name">${sb.TenSan}</div>
-                                                        <div class="pitch-type"><i class="fa-solid fa-layer-group"></i> ${loaiSanName}</div>
-                                                    </div>
-                                                    <span style="font-size: 0.75rem; color: var(--primary); background: var(--primary-light); padding: 2px 8px; border-radius: 4px; font-weight: 600;">Hoạt động</span>
-                                                </div>
-                                                <button class="btn-outline" style="width: 100%; padding: 8px;">Xem lịch trống &rarr;</button>
-                                            </div>`;
-                                    });
-                                    newHtml += `</div></div>`;
-                                }
-                            }
-
-                            const headerNode = document.querySelector('.cluster-detail-header');
-                            if (headerNode) {
-                                let nextNode = headerNode.nextElementSibling;
-                                while (nextNode) {
-                                    const toRemove = nextNode;
-                                    nextNode = nextNode.nextElementSibling;
-                                    toRemove.remove();
-                                }
-                                headerNode.insertAdjacentHTML('afterend', newHtml);
-                            }
-                        }
-                    } catch(err) { console.error("Lỗi cập nhật ngầm danh sách sân con:", err); }
+                else if (currentClusterId !== null && currentPitchId === null && document.getElementById('customer-pitches-list-container')) {
+                    await refreshCustomerPitchesRealtime();
                 }
+                // else if (currentClusterId !== null && currentPitchId === null && document.querySelector('.cluster-detail-header')) {
+                //     try {
+                //         const headerInfo = document.querySelector('.cluster-detail-info');
+                //         if (headerInfo) {
+                //             headerInfo.innerHTML = `
+                //                 <span><i class="fa-solid fa-location-dot"></i> ${currentClusterAddress}</span>
+                //                 <span><i class="fa-solid fa-clock"></i> ${currentClusterGioMo.substring(0,5)} - ${currentClusterGioDong.substring(0,5)}</span>
+                //             `;
+                //         }
+
+                //         const response = await fetch(`${API_BASE_URL}/san-bong?cum_san_id=${currentClusterId}&_t=${cacheBuster}`);
+                //         const res = await response.json();
+                        
+                //         if (res.success) {
+                //             const activePitches = res.data.filter(sb => sb.TrangThai === 'HoatDong');
+                //             const grouped = {};
+                            
+                //             activePitches.forEach(sb => {
+                //                 const loaiSanName = sb.loaiSan?.TenLoaiSan || sb.loai_san?.TenLoaiSan || 'Loại sân khác';
+                //                 const loaiSanId = sb.ID_LoaiSan;
+                //                 if(!grouped[loaiSanName]) grouped[loaiSanName] = { id: loaiSanId, pitches: [] };
+                //                 grouped[loaiSanName].pitches.push(sb);
+                //             });
+
+                //             let newHtml = '';
+                //             if (activePitches.length === 0) {
+                //                 newHtml = `<p style="text-align:center; color: var(--text-muted); margin-top: 40px;">Cụm sân này hiện chưa có sân con nào hoạt động.</p>`;
+                //             } else {
+                //                 for (const [loaiSanName, data] of Object.entries(grouped)) {
+                //                     newHtml += `
+                //                         <div class="pitch-section">
+                //                             <div class="pitch-section-title">
+                //                                 <span>${loaiSanName.toUpperCase()}</span>
+                //                                 <span style="font-size: 0.82rem; font-weight: 500; color: var(--text-muted);">${data.pitches.length} sân</span>
+                //                             </div>
+                //                             <div class="pitch-grid">`;
+                //                     data.pitches.forEach(sb => {
+                //                         newHtml += `
+                //                             <div class="pitch-card" onclick="renderSchedule('${currentClusterId}', '${currentClusterName}', '${sb.ID}', '${sb.TenSan}', '${data.id}', '${loaiSanName}')">
+                //                                 <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                //                                     <div>
+                //                                         <div class="pitch-name">${sb.TenSan}</div>
+                //                                         <div class="pitch-type"><i class="fa-solid fa-layer-group"></i> ${loaiSanName}</div>
+                //                                     </div>
+                //                                     <span style="font-size: 0.75rem; color: var(--primary); background: var(--primary-light); padding: 2px 8px; border-radius: 4px; font-weight: 600;">Hoạt động</span>
+                //                                 </div>
+                //                                 <button class="btn-outline" style="width: 100%; padding: 8px;">Xem lịch trống &rarr;</button>
+                //                             </div>`;
+                //                     });
+                //                     newHtml += `</div></div>`;
+                //                 }
+                //             }
+
+                //             const headerNode = document.querySelector('.cluster-detail-header');
+                //             if (headerNode) {
+                //                 let nextNode = headerNode.nextElementSibling;
+                //                 while (nextNode) {
+                //                     const toRemove = nextNode;
+                //                     nextNode = nextNode.nextElementSibling;
+                //                     toRemove.remove();
+                //                 }
+                //                 headerNode.insertAdjacentHTML('afterend', newHtml);
+                //             }
+                //         }
+                //     } catch(err) { console.error("Lỗi cập nhật ngầm danh sách sân con:", err); }
+                // }
             });
     }
 );
@@ -2004,6 +2007,7 @@ async function renderClusters() {
     updateActiveNav('renderClusters');
 
     currentClusterId = null; currentPitchName = null; currentPitchId = null;
+    resetCustomerPitchFilterStateHard();
     appContent.innerHTML = `<div style="text-align:center; padding: 60px;"><i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem; color: var(--primary);"></i><p style="margin-top: 12px; color: var(--text-muted); font-weight: 500;">Đang tải danh sách cụm sân...</p></div>`;
 
     try {
@@ -2151,11 +2155,97 @@ function filterClusters() {
     gridContainer.innerHTML = gridHtml;
 }
 
+// ======================================================
+// BỘ LỌC SÂN CON THEO LOẠI SÂN, NHIỀU NGÀY & KHUNG GIỜ (KHÁCH HÀNG)
+// ======================================================
+let customerPitchFilterState = {
+    clusterId: null,
+    clusterName: '',
+    clusterAddress: '',
+    gioMo: '06:00',
+    gioDong: '22:00',
+    pitches: [],
+    khungGios: [],
+    giaTiens: [],
+    bookedMap: {},
+    dateOptions: [],
+    selectedLoaiSanId: 'All',
+    selectedDates: [],        // Mảng nhiều ngày (rỗng = kiểm tra trên tất cả các ngày)
+    selectedKhungGioIds: [],
+    timeSearch: ''
+};
+
+function resetCustomerPitchFilterStateHard() {
+    customerPitchFilterState.clusterId = null;
+    customerPitchFilterState.selectedLoaiSanId = 'All';
+    customerPitchFilterState.selectedDates = [];
+    customerPitchFilterState.selectedKhungGioIds = [];
+    customerPitchFilterState.timeSearch = '';
+}
+
+function buildCustomerPitchDateOptions() {
+    const options = [];
+    const pad = n => (n < 10 ? '0' + n : n);
+    const dayNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+    const today = new Date();
+    const todayYmd = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+
+    if (currentBookingPurpose !== 'normal') {
+        const tour = userActiveTournaments.find(t => String(t.MaGiaiDau || t.ID) === String(currentBookingPurpose));
+        if (tour && tour.NgayBatDau && tour.NgayKetThuc) {
+            const dStart = new Date(tour.NgayBatDau);
+            const dEnd = new Date(tour.NgayKetThuc);
+            for (let d = new Date(dStart); d <= dEnd; d.setDate(d.getDate() + 1)) {
+                const ymd = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+                if (ymd < todayYmd) continue;
+                options.push({
+                    ymd,
+                    short: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`,
+                    full: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`,
+                    label: ymd === todayYmd ? 'Hôm nay' : dayNames[d.getDay()]
+                });
+            }
+        }
+    }
+
+    if (options.length === 0) {
+        for (let i = 0; i < 7; i++) {
+            const d = new Date(today);
+            d.setDate(today.getDate() + i);
+            const ymd = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+            options.push({
+                ymd,
+                short: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`,
+                full: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`,
+                label: i === 0 ? 'Hôm nay' : (i === 1 ? 'Ngày mai' : dayNames[d.getDay()])
+            });
+        }
+    }
+    return options;
+}
+
+async function fetchCustomerClusterBookedMap(pitches) {
+    const cacheBuster = Date.now();
+    const entries = await Promise.all(
+        pitches.map(async (sb) => {
+            const pId = String(sb.MaSanBong || sb.ID);
+            try {
+                const r = await fetch(`${API_BASE_URL}/dat-san/da-dat?id_san_bong=${pId}&_t=${cacheBuster}`);
+                const j = await r.json();
+                return [pId, j.data || []];
+            } catch (err) {
+                return [pId, []];
+            }
+        })
+    );
+    return Object.fromEntries(entries);
+}
+
 async function renderPitches(clusterId, clusterName, clusterAddress, gioMo, gioDong) {
     await loadUserTournaments();
     if (currentBookingPurpose !== 'normal') {
-        const tour = userActiveTournaments.find(t => t.ID == currentBookingPurpose);
-        if (!tour || (tour.ID_CumSan != clusterId && tour.id_cum_san != clusterId)) {
+        const tour = userActiveTournaments.find(t => (t.MaGiaiDau || t.ID) == currentBookingPurpose);
+        if (!tour || (tour.ID_CumSan != clusterId && tour.id_cum_san != clusterId && tour.MaCumSan != clusterId)) {
             currentBookingPurpose = 'normal';
             sessionStorage.setItem('dn_football_booking_purpose', 'normal');
             selectedSlots = [];
@@ -2163,7 +2253,7 @@ async function renderPitches(clusterId, clusterName, clusterAddress, gioMo, gioD
         }
     }
 
-    if (clusterId) currentClusterId = clusterId; 
+    if (clusterId) currentClusterId = clusterId;
     if (clusterName) currentClusterName = clusterName;
     if (clusterAddress !== undefined && clusterAddress !== '') currentClusterAddress = clusterAddress;
     if (gioMo !== undefined) currentClusterGioMo = gioMo;
@@ -2174,93 +2264,635 @@ async function renderPitches(clusterId, clusterName, clusterAddress, gioMo, gioD
     currentLoaiSanId = null;
     currentPitchType = null;
 
-    appContent.innerHTML = `<div style="text-align:center; padding: 60px;"><i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem; color: var(--primary);"></i><p style="margin-top: 12px; color: var(--text-muted);">Đang tải danh sách sân con...</p></div>`;
+    // Kiểm tra xem có đang quay lại đúng Cụm sân vừa xem hay không -> nếu đúng thì GIỮ NGUYÊN bộ lọc
+    const isSameCluster = customerPitchFilterState.clusterId !== null && String(customerPitchFilterState.clusterId) === String(clusterId);
+
+    appContent.innerHTML = `<div style="text-align:center; padding: 60px;"><i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem; color: var(--primary);"></i><p style="margin-top: 12px; color: var(--text-muted);">Đang tải danh sách sân con và lịch trống...</p></div>`;
 
     try {
-        const response = await fetch(`${API_BASE_URL}/san-bong?cum_san_id=${clusterId}`);
-        const res = await response.json();
+        const [sbRes, gtRes, kgRes] = await Promise.all([
+            fetch(`${API_BASE_URL}/san-bong?cum_san_id=${clusterId}`),
+            fetch(`${API_BASE_URL}/gia-tien?cum_san_id=${clusterId}`),
+            fetch(`${API_BASE_URL}/khung-gio`)
+        ]);
 
-        const activePitches = res.data.filter(sb => sb.TrangThai === 'HoatDong');
+        const activePitches = ((await sbRes.json()).data || []).filter(sb => sb.TrangThai === 'HoatDong');
+        const giaTiens = (await gtRes.json()).data || [];
+        const khungGios = (await kgRes.json()).data || [];
+        const bookedMap = activePitches.length > 0 ? await fetchCustomerClusterBookedMap(activePitches) : {};
+        const dateOptions = buildCustomerPitchDateOptions();
+        const validYmds = new Set(dateOptions.map(d => d.ymd));
 
-        const grouped = {};
-        activePitches.forEach(sb => {
-            const loaiSanName = sb.loaiSan?.TenLoaiSan || sb.loai_san?.TenLoaiSan || 'Loại sân khác';
-            const loaiSanId = sb.ID_LoaiSan;
-            if(!grouped[loaiSanName]) grouped[loaiSanName] = { id: loaiSanId, pitches: [] };
-            grouped[loaiSanName].pitches.push(sb);
+        customerPitchFilterState = {
+            clusterId: String(clusterId),
+            clusterName: clusterName || currentClusterName || '',
+            clusterAddress: clusterAddress || currentClusterAddress || '',
+            gioMo: (gioMo || currentClusterGioMo || '06:00').substring(0, 5),
+            gioDong: (gioDong || currentClusterGioDong || '22:00').substring(0, 5),
+            pitches: activePitches,
+            khungGios,
+            giaTiens,
+            bookedMap,
+            dateOptions,
+            selectedLoaiSanId: isSameCluster ? customerPitchFilterState.selectedLoaiSanId : 'All',
+            selectedDates: isSameCluster ? customerPitchFilterState.selectedDates.filter(d => validYmds.has(d)) : [],
+            selectedKhungGioIds: isSameCluster ? [...customerPitchFilterState.selectedKhungGioIds] : [],
+            timeSearch: isSameCluster ? customerPitchFilterState.timeSearch : ''
+        };
+
+        renderCustomerPitchesLayout();
+    } catch (e) {
+        console.error(e);
+        appContent.innerHTML = `<div style="text-align:center; color:red; padding: 40px;">Lỗi tải danh sách sân con!</div>`;
+    }
+}
+
+function renderCustomerPitchesLayout() {
+    const st = customerPitchFilterState;
+    const html = `
+        <div class="customer-breadcrumb">
+            <div class="back-btn" onclick="renderClusters()">
+                <i class="fa-solid fa-arrow-left"></i> Danh sách cụm sân
+            </div>
+            <div class="breadcrumb-path">
+                <span class="bc-link" onclick="renderClusters()">Cụm sân</span>
+                <span>/</span>
+                <span class="bc-current">${st.clusterName}</span>
+            </div>
+        </div>
+
+        <div class="cluster-detail-header" style="margin-bottom: 22px;">
+            <div>
+                <div class="cluster-detail-label"><i class="fa-solid fa-circle-check"></i> Cơ sở đang chọn</div>
+                <h1 class="cluster-detail-title">${st.clusterName}</h1>
+                <div class="cluster-detail-info">
+                    <span><i class="fa-solid fa-location-dot"></i> Địa chỉ: <strong style="color: var(--text-dark);">${st.clusterAddress}</strong></span>
+                    <span><i class="fa-regular fa-clock"></i> Giờ mở cửa: <strong style="color: var(--text-dark);">${st.gioMo} - ${st.gioDong}</strong></span>
+                </div>
+            </div>
+            <div class="context-summary-box">
+                <div style="font-size: 0.76rem; font-weight: 600; color: #15803d; text-transform: uppercase;">Sân sẵn sàng</div>
+                <div style="font-size: 1.35rem; font-weight: 800; color: var(--primary);">${st.pitches.length} sân</div>
+            </div>
+        </div>
+
+        ${st.pitches.length === 0 ? `
+            <div style="text-align:center; color: var(--text-muted); margin-top: 20px; padding: 45px; background: #fff; border-radius: 14px; border: 1px dashed #cbd5e1;">
+                Cụm sân này hiện chưa có sân con nào hoạt động.
+            </div>
+        ` : `
+            <div style="display: flex; gap: 22px; align-items: flex-start; flex-wrap: wrap;">
+                <aside id="customer-pitch-filter-sidebar" style="width: 300px; flex: 0 0 300px; max-width: 100%; position: sticky; top: 88px; background: #ffffff; border: 1px solid var(--border); border-radius: 16px; padding: 18px; box-shadow: var(--shadow-sm);"></aside>
+                <div id="customer-pitches-list-container" style="flex: 1; min-width: 300px;"></div>
+            </div>
+        `}
+    `;
+
+    appContent.innerHTML = html;
+
+    if (st.pitches.length > 0) {
+        renderCustomerPitchSidebar();
+        renderCustomerPitchResults();
+    }
+}
+
+function getCustomerOperatingTimeSlots() {
+    const st = customerPitchFilterState;
+    return st.khungGios.filter(kg => {
+        const maKG = String(kg.MaKhungGio || kg.ID);
+        const start = kg.GioBatDau.substring(0, 5);
+        const end = kg.GioKetThuc.substring(0, 5);
+        if (start < st.gioMo || end > st.gioDong) return false;
+        return st.giaTiens.some(gt => String(gt.MaKhungGio || gt.ID_KhungGio) === maKG && Number(gt.SoTien) > 0);
+    });
+}
+
+function renderCustomerPitchSidebar() {
+    const sidebar = document.getElementById('customer-pitch-filter-sidebar');
+    if (!sidebar) return;
+    const st = customerPitchFilterState;
+
+    const loaiMap = new Map();
+    st.pitches.forEach(sb => {
+        const lId = String(sb.MaLoaiSan || sb.ID_LoaiSan);
+        const lName = sb.loaiSan?.TenLoaiSan || sb.loai_san?.TenLoaiSan || 'Khác';
+        if (!loaiMap.has(lId)) loaiMap.set(lId, { id: lId, name: lName, count: 0 });
+        loaiMap.get(lId).count++;
+    });
+    const loaiList = Array.from(loaiMap.values());
+
+    const validSlots = getCustomerOperatingTimeSlots();
+    const searchKw = st.timeSearch.toLowerCase().trim();
+    const filteredSlots = validSlots.filter(kg => {
+        if (!searchKw) return true;
+        const start = kg.GioBatDau.substring(0, 5);
+        const end = kg.GioKetThuc.substring(0, 5);
+        const label = `${start} - ${end} ${start.replace(':', 'h')} ${Number(start.split(':')[0])}h`;
+        return label.toLowerCase().includes(searchKw);
+    });
+
+    // Chỉ khóa các giờ đã qua nếu khách chỉ chọn duy nhất ngày Hôm nay
+    const now = new Date();
+    const todayYmd = st.dateOptions[0]?.ymd || '';
+    const isOnlyTodaySelected = st.selectedDates.length === 1 && st.selectedDates[0] === todayYmd;
+    const [selY, selM, selD] = isOnlyTodaySelected ? todayYmd.split('-').map(Number) : [0, 0, 0];
+
+    const hasActiveFilter = st.selectedLoaiSanId !== 'All' || st.selectedDates.length > 0 || st.selectedKhungGioIds.length > 0 || st.timeSearch !== '';
+
+    sidebar.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid #f1f5f9;">
+            <div style="font-size: 0.98rem; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-sliders" style="color: var(--primary);"></i> Bộ lọc tìm sân
+            </div>
+            ${hasActiveFilter ? `
+                <button type="button" onclick="resetCustomerPitchFilters()" style="background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; padding: 4px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 700; cursor: pointer;">
+                    <i class="fa-solid fa-rotate-left"></i> Đặt lại
+                </button>
+            ` : ''}
+        </div>
+
+        <!-- 1. LỌC THEO LOẠI SÂN -->
+        <div style="margin-bottom: 18px;">
+            <div style="font-size: 0.78rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 8px;">
+                1. Loại sân bóng
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 7px;">
+                <button type="button" onclick="setCustomerPitchTypeFilter('All')" style="padding: 6px 12px; border-radius: 999px; font-size: 0.82rem; font-weight: 700; cursor: pointer; transition: 0.15s; ${st.selectedLoaiSanId === 'All' ? 'background: var(--primary); color: #fff; border: 1px solid var(--primary);' : 'background: #f8fafc; color: #334155; border: 1px solid #cbd5e1;'}">
+                    Tất cả (${st.pitches.length})
+                </button>
+                ${loaiList.map(l => {
+                    const active = st.selectedLoaiSanId === l.id;
+                    return `
+                        <button type="button" onclick="setCustomerPitchTypeFilter('${l.id}')" style="padding: 6px 12px; border-radius: 999px; font-size: 0.82rem; font-weight: 700; cursor: pointer; transition: 0.15s; ${active ? 'background: var(--primary); color: #fff; border: 1px solid var(--primary);' : 'background: #f8fafc; color: #334155; border: 1px solid #cbd5e1;'}">
+                            ${l.name} (${l.count})
+                        </button>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+
+        <!-- 2. CHỌN NGÀY ĐÁ (NHIỀU NGÀY HOẶC BỎ TRỐNG) -->
+        <div style="margin-bottom: 16px; padding-top: 14px; border-top: 1px dashed #e2e8f0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-size: 0.78rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.4px;">
+                    2. Ngày đá <span style="font-weight: 500; text-transform: none;">(Tùy chọn)</span>
+                </span>
+                ${st.selectedDates.length > 0 ? `
+                    <button type="button" onclick="clearCustomerPitchDates()" style="background: none; border: none; color: #dc2626; font-size: 0.75rem; font-weight: 700; cursor: pointer; padding: 0;">
+                        Tất cả ngày (${st.selectedDates.length})
+                    </button>
+                ` : `<span style="font-size: 0.72rem; color: #16a34a; font-weight: 700;">Tất cả ${st.dateOptions.length} ngày</span>`}
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; max-height: 150px; overflow-y: auto; padding-right: 2px;">
+                ${st.dateOptions.map(d => {
+                    const active = st.selectedDates.includes(d.ymd);
+                    return `
+                        <button type="button" onclick="toggleCustomerPitchDateFilter('${d.ymd}')" style="padding: 7px 8px; border-radius: 9px; text-align: left; cursor: pointer; transition: 0.15s; display: flex; justify-content: space-between; align-items: center; ${active ? 'background: #f0fdf4; border: 1.5px solid var(--primary); color: #065f46;' : 'background: #f8fafc; border: 1px solid #e2e8f0; color: #475569;'}">
+                            <span style="font-size: 0.76rem; font-weight: 700;">${active ? '✓ ' : ''}${d.label}</span>
+                            <span style="font-size: 0.78rem; font-weight: 800;">${d.short}</span>
+                        </button>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+
+        <!-- 3. TÌM & CHỌN KHUNG GIỜ -->
+        <div style="padding-top: 14px; border-top: 1px dashed #e2e8f0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-size: 0.78rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.4px;">
+                    3. Khung giờ mong muốn
+                </span>
+                ${st.selectedKhungGioIds.length > 0 ? `
+                    <button type="button" onclick="clearCustomerPitchTimeSlots()" style="background: none; border: none; color: #dc2626; font-size: 0.75rem; font-weight: 700; cursor: pointer; padding: 0;">
+                        Bỏ chọn (${st.selectedKhungGioIds.length})
+                    </button>
+                ` : ''}
+            </div>
+
+            <div style="position: relative; margin-bottom: 10px;">
+                <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 0.82rem;"></i>
+                <input type="text" id="cust-pitch-time-search" class="form-control" value="${st.timeSearch}" placeholder="Tìm giờ (VD: 18, 19:00)..." oninput="setCustomerPitchTimeSearch(this.value)" style="padding-left: 32px; height: 36px; font-size: 0.84rem; background: #f8fafc; border-radius: 9px;">
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; max-height: 225px; overflow-y: auto; padding-right: 2px;">
+                ${filteredSlots.length === 0 ? `<div style="grid-column: 1/-1; text-align: center; padding: 14px; font-size: 0.82rem; color: #94a3b8;">Không tìm thấy khung giờ phù hợp</div>` : filteredSlots.map(kg => {
+                    const maKG = String(kg.MaKhungGio || kg.ID);
+                    const start = kg.GioBatDau.substring(0, 5);
+                    const end = kg.GioKetThuc.substring(0, 5);
+                    const [hh, mm] = start.split(':').map(Number);
+                    const isPast = isOnlyTodaySelected && selY ? (new Date(selY, selM - 1, selD, hh, mm) <= now) : false;
+                    const isSelected = st.selectedKhungGioIds.includes(maKG);
+
+                    if (isPast && !isSelected) {
+                        return `
+                            <button type="button" disabled style="padding: 7px 6px; border-radius: 8px; border: 1px dashed #cbd5e1; background: #f8fafc; color: #94a3b8; font-size: 0.78rem; font-weight: 600; cursor: not-allowed; text-decoration: line-through;" title="Khung giờ đã qua">
+                                ${start} - ${end}
+                            </button>
+                        `;
+                    }
+                    return `
+                        <button type="button" onclick="toggleCustomerPitchTimeSlot('${maKG}')" style="padding: 7px 6px; border-radius: 8px; font-size: 0.78rem; font-weight: 700; cursor: pointer; transition: 0.15s; ${isSelected ? 'background: var(--primary); color: #ffffff; border: 1.5px solid var(--primary); box-shadow: 0 2px 6px rgba(22,163,74,0.25);' : 'background: #ffffff; color: #1e293b; border: 1px solid #cbd5e1;'}">
+                            ${isSelected ? '✓ ' : ''}${start} - ${end}
+                        </button>
+                    `;
+                }).join('')}
+            </div>
+            <div style="margin-top: 8px; font-size: 0.75rem; color: #64748b; line-height: 1.4;">
+                <i class="fa-solid fa-circle-info" style="color: var(--primary);"></i> Có thể chọn nhiều ngày hoặc bỏ trống ngày để tìm sân còn giờ trống trong tuần.
+            </div>
+        </div>
+    `;
+}
+
+function evaluateCustomerPitchMatch(sb) {
+    const st = customerPitchFilterState;
+    const pId = String(sb.MaSanBong || sb.ID);
+    const loaiId = String(sb.MaLoaiSan || sb.ID_LoaiSan);
+    const bookedList = st.bookedMap[pId] || [];
+    const now = new Date();
+
+    const datesToCheck = st.selectedDates.length > 0
+        ? st.selectedDates
+        : st.dateOptions.map(d => d.ymd);
+
+    const checkDay = (ymd) => {
+        const [y, m, d] = ymd.split('-').map(Number);
+        const dateOpt = st.dateOptions.find(opt => opt.ymd === ymd);
+        const shortDate = dateOpt ? dateOpt.short : ymd.split('-').reverse().slice(0, 2).join('/');
+
+        const slots = st.selectedKhungGioIds.map(kgId => {
+            const kg = st.khungGios.find(k => String(k.MaKhungGio || k.ID) === String(kgId));
+            if (!kg) return { kgId, timeStr: '', available: false, reason: 'Không hợp lệ', price: 0 };
+
+            const start = kg.GioBatDau.substring(0, 5);
+            const end = kg.GioKetThuc.substring(0, 5);
+            const timeStr = `${start} - ${end}`;
+            const [hh, mm] = start.split(':').map(Number);
+            const isPast = new Date(y, m - 1, d, hh, mm) <= now;
+
+            const priceObj = st.giaTiens.find(gt =>
+                String(gt.MaLoaiSan || gt.ID_LoaiSan) === loaiId &&
+                String(gt.MaKhungGio || gt.ID_KhungGio) === String(kgId)
+            );
+            const priceVal = priceObj ? Number(priceObj.SoTien) : 0;
+            const isOpen = priceVal > 0 && start >= st.gioMo && end <= st.gioDong;
+            const isBooked = bookedList.some(b =>
+                String(b.NgayDa).substring(0, 10) === ymd &&
+                String(b.MaKhungGio || b.ID_KhungGio) === String(kgId)
+            );
+
+            if (isPast) return { kgId, timeStr, available: false, reason: 'Quá giờ', price: priceVal };
+            if (!isOpen) return { kgId, timeStr, available: false, reason: 'Chưa mở giá', price: 0 };
+            if (isBooked) return { kgId, timeStr, available: false, reason: 'Đã đặt', price: priceVal };
+            return { kgId, timeStr, available: true, reason: 'Còn trống', price: priceVal };
         });
 
-        let html = `
-            <div class="customer-breadcrumb">
-                <div class="back-btn" onclick="renderClusters()">
-                    <i class="fa-solid fa-arrow-left"></i> Danh sách cụm sân
-                </div>
-                <div class="breadcrumb-path">
-                    <span class="bc-link" onclick="renderClusters()">Cụm sân</span>
-                    <span>/</span>
-                    <span class="bc-current">${clusterName}</span>
-                </div>
-            </div>
-            
-            <div class="cluster-detail-header">
-                <div>
-                    <div class="cluster-detail-label"><i class="fa-solid fa-circle-check"></i> Cơ sở đang chọn</div>
-                    <h1 class="cluster-detail-title">${clusterName}</h1>
-                    <div class="cluster-detail-info">
-                        <span><i class="fa-solid fa-location-dot"></i> Địa chỉ: <strong style="color: var(--text-dark);">${clusterAddress}</strong></span>
-                        <span><i class="fa-regular fa-clock"></i> Giờ mở cửa: <strong style="color: var(--text-dark);">${gioMo.substring(0,5)} - ${gioDong.substring(0,5)}</strong></span>
+        const allSlotsFree = slots.length > 0 && slots.every(s => s.available);
+        return { ymd, shortDate, allSlotsFree, slots };
+    };
+
+    const dayResults = datesToCheck.map(checkDay);
+    const availableDays = dayResults.filter(dr => dr.allSlotsFree);
+
+    // - Nếu khách KHÔNG chọn ngày nào (lọc toàn tuần): chỉ cần có ít nhất 1 ngày trống đủ khung giờ -> Thỏa điều kiện
+    // - Nếu khách chọn 1 hoặc nhiều ngày cụ thể: phải trống đủ trên TẤT CẢ các ngày đã chọn -> Thỏa điều kiện
+    const isMatch = st.selectedDates.length === 0
+        ? availableDays.length > 0
+        : (dayResults.length > 0 && dayResults.every(dr => dr.allSlotsFree));
+
+    return {
+        isMatch,
+        isAnyDateMode: st.selectedDates.length === 0,
+        dayResults,
+        availableDays
+    };
+}
+
+function renderCustomerPitchCard(sb, evalResult = null) {
+    const st = customerPitchFilterState;
+    const maSB = sb.MaSanBong || sb.ID;
+    const loaiId = sb.MaLoaiSan || sb.ID_LoaiSan;
+    const loaiSanName = sb.loaiSan?.TenLoaiSan || sb.loai_san?.TenLoaiSan || 'Loại sân khác';
+
+    const specHtml = (sb.KichThuoc || sb.DienTich)
+        ? `<div style="font-size: 0.78rem; color: #475569; margin-top: 4px;"><i class="fa-solid fa-ruler-combined" style="color: var(--primary); margin-right: 4px;"></i>${sb.KichThuoc || ''}${sb.KichThuoc && sb.DienTich ? ' • ' : ''}${sb.DienTich ? Number(sb.DienTich) + 'm²' : ''}</div>`
+        : '';
+    const descHtml = sb.MoTa
+        ? `<div style="font-size: 0.76rem; color: #64748b; margin-top: 4px; line-height: 1.4;">${sb.MoTa}</div>`
+        : '';
+
+    let statusBadgeHtml = `<span style="font-size: 0.74rem; color: #15803d; background: #dcfce7; border: 1px solid #bbf7d0; padding: 3px 9px; border-radius: 999px; font-weight: 700; flex-shrink: 0;">Hoạt động</span>`;
+    let slotDetailBoxHtml = '';
+    let cardExtraStyle = '';
+    let btnHtml = `<button class="btn-outline" style="width: 100%; padding: 9px; display: flex; align-items: center; justify-content: center; gap: 6px;"><span>Xem lịch trống</span> <i class="fa-solid fa-arrow-right" style="font-size: 0.8rem;"></i></button>`;
+
+    if (evalResult) {
+        if (evalResult.isMatch) {
+            cardExtraStyle = 'border: 1.5px solid #22c55e; background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%);';
+            statusBadgeHtml = `<span style="font-size: 0.73rem; color: #065f46; background: #d1fae5; border: 1px solid #6ee7b7; padding: 3px 9px; border-radius: 999px; font-weight: 800; flex-shrink: 0;"><i class="fa-solid fa-check"></i> Còn trống</span>`;
+
+            if (evalResult.isAnyDateMode) {
+                const sampleSlots = evalResult.availableDays[0]?.slots || [];
+                const daysStr = evalResult.availableDays.map(d => d.shortDate).join(', ');
+                slotDetailBoxHtml = `
+                    <div style="margin: 10px 0; padding: 8px 10px; background: #ffffff; border: 1px solid #bbf7d0; border-radius: 9px; font-size: 0.78rem;">
+                        <div style="color: #065f46; font-weight: 700; margin-bottom: 4px;"><i class="fa-regular fa-calendar-check"></i> Trống ${evalResult.availableDays.length} ngày: <span style="color:#15803d;">${daysStr}</span></div>
+                        ${sampleSlots.map(sd => `
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 2px 0;">
+                                <span style="color: #334155; font-weight: 600;"><i class="fa-regular fa-clock"></i> ${sd.timeStr}</span>
+                                <strong style="color: var(--primary);">${sd.price.toLocaleString('vi-VN')}đ</strong>
+                            </div>
+                        `).join('')}
                     </div>
-                </div>
-                <div class="context-summary-box">
-                    <div style="font-size: 0.76rem; font-weight: 600; color: #15803d; text-transform: uppercase;">Sân sẵn sàng</div>
-                    <div style="font-size: 1.35rem; font-weight: 800; color: var(--primary);">${activePitches.length} sân</div>
-                </div>
-            </div>
-        `;
+                `;
+            } else if (evalResult.dayResults.length === 1) {
+                const dr = evalResult.dayResults[0];
+                slotDetailBoxHtml = `
+                    <div style="margin: 10px 0; padding: 8px 10px; background: #ffffff; border: 1px solid #bbf7d0; border-radius: 9px; font-size: 0.78rem;">
+                        ${dr.slots.map(sd => `
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 2px 0;">
+                                <span style="color: #065f46; font-weight: 700;"><i class="fa-regular fa-clock"></i> ${sd.timeStr}</span>
+                                <strong style="color: var(--primary);">${sd.price.toLocaleString('vi-VN')}đ</strong>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } else {
+                slotDetailBoxHtml = `
+                    <div style="margin: 10px 0; padding: 8px 10px; background: #ffffff; border: 1px solid #bbf7d0; border-radius: 9px; font-size: 0.77rem;">
+                        ${evalResult.dayResults.map(dr => `
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 2px 0;">
+                                <span style="color: #065f46; font-weight: 700;">Ngày ${dr.shortDate}</span>
+                                <span style="color: #16a34a; font-weight: 700;">✓ Trống đủ ${dr.slots.length} ca</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            btnHtml = `<button class="btn-primary" style="width: 100%; padding: 9px; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 700;"><span>Xem lịch & Đặt sân</span> <i class="fa-solid fa-arrow-right" style="font-size: 0.8rem;"></i></button>`;
+        } else {
+            cardExtraStyle = 'border: 1px solid #e2e8f0; background: #f8fafc; opacity: 0.86;';
+            statusBadgeHtml = `<span style="font-size: 0.73rem; color: #991b1b; background: #fee2e2; border: 1px solid #fecaca; padding: 3px 9px; border-radius: 999px; font-weight: 700; flex-shrink: 0;">Chưa khớp lịch</span>`;
 
-        if (activePitches.length === 0) {
-            html += `<div style="text-align:center; color: var(--text-muted); margin-top: 30px; padding: 45px; background: #fff; border-radius: 14px; border: 1px dashed #cbd5e1;">Cụm sân này hiện chưa có sân con nào hoạt động.</div>`;
+            if (evalResult.isAnyDateMode) {
+                slotDetailBoxHtml = `
+                    <div style="margin: 10px 0; padding: 8px 10px; background: #ffffff; border: 1px dashed #cbd5e1; border-radius: 9px; font-size: 0.77rem; color: #dc2626; font-weight: 600;">
+                        <i class="fa-regular fa-calendar-xmark"></i> Đã kín hoặc chưa mở giá các khung giờ đã chọn trong ${st.dateOptions.length} ngày tới.
+                    </div>
+                `;
+            } else if (evalResult.dayResults.length === 1) {
+                const dr = evalResult.dayResults[0];
+                slotDetailBoxHtml = `
+                    <div style="margin: 10px 0; padding: 8px 10px; background: #ffffff; border: 1px dashed #cbd5e1; border-radius: 9px; font-size: 0.77rem;">
+                        ${dr.slots.map(sd => `
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 2px 0; gap: 6px;">
+                                <span style="color: #475569; font-weight: 600;">${sd.timeStr}</span>
+                                <span style="font-weight: 700; color: ${sd.available ? '#15803d' : '#dc2626'};">
+                                    ${sd.available ? `Trống (${sd.price.toLocaleString('vi-VN')}đ)` : sd.reason}
+                                </span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } else {
+                slotDetailBoxHtml = `
+                    <div style="margin: 10px 0; padding: 8px 10px; background: #ffffff; border: 1px dashed #cbd5e1; border-radius: 9px; font-size: 0.76rem;">
+                        ${evalResult.dayResults.map(dr => {
+                            const badSlot = dr.slots.find(s => !s.available);
+                            return `
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 2px 0; gap: 6px;">
+                                    <span style="color: #475569; font-weight: 600;">Ngày ${dr.shortDate}</span>
+                                    <span style="font-weight: 700; color: ${dr.allSlotsFree ? '#15803d' : '#dc2626'};">
+                                        ${dr.allSlotsFree ? '✓ Trống đủ' : `${badSlot.timeStr} (${badSlot.reason})`}
+                                    </span>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+            }
+            btnHtml = `<button class="btn-outline" style="width: 100%; padding: 8px; display: flex; align-items: center; justify-content: center; gap: 6px; color: #475569;"><span>Xem lịch giờ khác</span> <i class="fa-solid fa-arrow-right" style="font-size: 0.8rem;"></i></button>`;
         }
+    }
 
-        for (const [loaiSanName, data] of Object.entries(grouped)) {
+    return `
+        <div class="pitch-card" style="${cardExtraStyle}" onclick="renderSchedule('${st.clusterId}', '${st.clusterName.replace(/'/g, "\\'")}', '${maSB}', '${sb.TenSan.replace(/'/g, "\\'")}', '${loaiId}', '${loaiSanName.replace(/'/g, "\\'")}')">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px;">
+                <div>
+                    <div class="pitch-name">${sb.TenSan}</div>
+                    <div class="pitch-type"><i class="fa-solid fa-layer-group" style="color: #94a3b8;"></i> ${loaiSanName}</div>
+                    ${specHtml}
+                    ${descHtml}
+                </div>
+                ${statusBadgeHtml}
+            </div>
+            ${slotDetailBoxHtml}
+            ${btnHtml}
+        </div>
+    `;
+}
+
+function renderCustomerPitchResults() {
+    const container = document.getElementById('customer-pitches-list-container');
+    if (!container) return;
+    const st = customerPitchFilterState;
+
+    const typeFiltered = st.pitches.filter(sb => {
+        if (st.selectedLoaiSanId === 'All') return true;
+        return String(sb.MaLoaiSan || sb.ID_LoaiSan) === String(st.selectedLoaiSanId);
+    });
+
+    if (typeFiltered.length === 0) {
+        container.innerHTML = `<div style="text-align:center; padding: 45px 20px; background: #fff; border-radius: 14px; border: 1px dashed #cbd5e1; color: var(--text-muted);">Không có sân bóng nào thuộc loại sân đã chọn.</div>`;
+        return;
+    }
+
+    const isTimeFiltering = st.selectedKhungGioIds.length > 0;
+
+    if (!isTimeFiltering) {
+        const grouped = {};
+        typeFiltered.forEach(sb => {
+            const loaiSanName = sb.loaiSan?.TenLoaiSan || sb.loai_san?.TenLoaiSan || 'Loại sân khác';
+            if (!grouped[loaiSanName]) grouped[loaiSanName] = [];
+            grouped[loaiSanName].push(sb);
+        });
+
+        let html = '';
+        for (const [loaiSanName, list] of Object.entries(grouped)) {
             html += `
                 <div class="pitch-section">
                     <div class="pitch-section-title">
                         <span style="display: inline-flex; align-items: center; gap: 8px;">
                             <i class="fa-regular fa-futbol" style="color: var(--primary);"></i> ${loaiSanName.toUpperCase()}
                         </span>
-                        <span style="font-size: 0.8rem; font-weight: 600; color: #475569; background: #e2e8f0; padding: 3px 10px; border-radius: 999px;">${data.pitches.length} sân</span>
+                        <span style="font-size: 0.8rem; font-weight: 600; color: #475569; background: #e2e8f0; padding: 3px 10px; border-radius: 999px;">${list.length} sân</span>
                     </div>
-                    <div class="pitch-grid">`;
-            data.pitches.forEach(sb => {
-                const specHtml = (sb.KichThuoc || sb.DienTich)
-                    ? `<div style="font-size: 0.78rem; color: #475569; margin-top: 4px;"><i class="fa-solid fa-ruler-combined" style="color: var(--primary); margin-right: 4px;"></i>${sb.KichThuoc || ''}${sb.KichThuoc && sb.DienTich ? ' • ' : ''}${sb.DienTich ? Number(sb.DienTich) + 'm²' : ''}</div>`
-                    : '';
-                const descHtml = sb.MoTa
-                    ? `<div style="font-size: 0.76rem; color: #64748b; margin-top: 4px; line-height: 1.4;">${sb.MoTa}</div>`
-                    : '';
-
-                html += `
-                    <div class="pitch-card" onclick="renderSchedule('${clusterId}', '${clusterName.replace(/'/g, "\\'")}', '${sb.ID}', '${sb.TenSan.replace(/'/g, "\\'")}', '${data.id}', '${loaiSanName}')">
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
-                            <div>
-                                <div class="pitch-name">${sb.TenSan}</div>
-                                <div class="pitch-type"><i class="fa-solid fa-layer-group" style="color: #94a3b8;"></i> ${loaiSanName}</div>
-                                ${specHtml}
-                                ${descHtml}
-                            </div>
-                            <span style="font-size: 0.74rem; color: #15803d; background: #dcfce7; border: 1px solid #bbf7d0; padding: 3px 9px; border-radius: 999px; font-weight: 700; flex-shrink: 0;">Hoạt động</span>
-                        </div>
-                        <button class="btn-outline" style="width: 100%; padding: 9px; display: flex; align-items: center; justify-content: center; gap: 6px;">
-                            <span>Xem lịch trống</span> <i class="fa-solid fa-calendar-Alt" style="font-size: 0.82rem;"></i>
-                        </button>
-                    </div>`;
-            });
-            html += `</div></div>`;
+                    <div class="pitch-grid" style="grid-template-columns: repeat(auto-fill, minmax(245px, 1fr));">
+                        ${list.map(sb => renderCustomerPitchCard(sb, null)).join('')}
+                    </div>
+                </div>
+            `;
         }
-        appContent.innerHTML = html;
-    } catch(e) {
-        console.error(e);
+        container.innerHTML = html;
+        return;
+    }
+
+    const matchedList = [];
+    const unmatchedList = [];
+    typeFiltered.forEach(sb => {
+        const evalRes = evaluateCustomerPitchMatch(sb);
+        if (evalRes.isMatch) matchedList.push({ sb, evalRes });
+        else unmatchedList.push({ sb, evalRes });
+    });
+
+    const dateLabel = st.selectedDates.length === 0
+        ? `Tất cả ${st.dateOptions.length} ngày`
+        : st.selectedDates.map(ymd => st.dateOptions.find(d => d.ymd === ymd)?.short || ymd).join(', ');
+
+    const selectedTimeLabels = st.selectedKhungGioIds.map(id => {
+        const kg = st.khungGios.find(k => String(k.MaKhungGio || k.ID) === String(id));
+        return kg ? `${kg.GioBatDau.substring(0, 5)} - ${kg.GioKetThuc.substring(0, 5)}` : '';
+    }).filter(Boolean).join(', ');
+
+    let html = `
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 12px 16px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 0.86rem; color: #065f46;">
+            <div>
+                <i class="fa-solid fa-filter" style="color: var(--primary); margin-right: 6px;"></i>
+                Ngày: <strong>${dateLabel}</strong> &bull; Khung giờ: <strong>${selectedTimeLabels}</strong>
+            </div>
+            <div style="font-weight: 700;">
+                <span style="color: #15803d;">${matchedList.length} sân trống</span> / <span style="color: #64748b;">${unmatchedList.length} sân không khớp</span>
+            </div>
+        </div>
+
+        <div class="pitch-section" style="margin-bottom: 26px;">
+            <div class="pitch-section-title" style="border-bottom: 2px solid #bbf7d0; padding-bottom: 8px;">
+                <span style="display: inline-flex; align-items: center; gap: 8px; color: #065f46;">
+                    <i class="fa-solid fa-circle-check" style="color: #16a34a;"></i> SÂN CÒN TRỐNG THỎA ĐIỀU KIỆN
+                </span>
+                <span style="font-size: 0.8rem; font-weight: 700; color: #065f46; background: #dcfce7; border: 1px solid #86efac; padding: 3px 11px; border-radius: 999px;">${matchedList.length} sân</span>
+            </div>
+            ${matchedList.length === 0 ? `
+                <div style="padding: 26px 18px; text-align: center; background: #fff; border: 1px dashed #cbd5e1; border-radius: 12px; color: #64748b; font-size: 0.9rem;">
+                    <i class="fa-regular fa-calendar-xmark" style="font-size: 1.6rem; color: #94a3b8; margin-bottom: 8px; display: block;"></i>
+                    Rất tiếc, hiện không có sân nào trống đủ lịch bạn chọn. Bạn có thể chọn ngày/khung giờ khác bên trái hoặc xem lịch chi tiết của các sân bên dưới.
+                </div>
+            ` : `
+                <div class="pitch-grid" style="grid-template-columns: repeat(auto-fill, minmax(245px, 1fr));">
+                    ${matchedList.map(item => renderCustomerPitchCard(item.sb, item.evalRes)).join('')}
+                </div>
+            `}
+        </div>
+    `;
+
+    if (unmatchedList.length > 0) {
+        html += `
+            <div class="pitch-section">
+                <div class="pitch-section-title" style="border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">
+                    <span style="display: inline-flex; align-items: center; gap: 8px; color: #475569;">
+                        <i class="fa-solid fa-clock-rotate-left" style="color: #64748b;"></i> SÂN CHƯA ĐÁP ỨNG KHUNG GIỜ ĐÃ CHỌN (VẪN XEM ĐƯỢC LỊCH)
+                    </span>
+                    <span style="font-size: 0.8rem; font-weight: 700; color: #475569; background: #e2e8f0; padding: 3px 11px; border-radius: 999px;">${unmatchedList.length} sân</span>
+                </div>
+                <div class="pitch-grid" style="grid-template-columns: repeat(auto-fill, minmax(245px, 1fr));">
+                    ${unmatchedList.map(item => renderCustomerPitchCard(item.sb, item.evalRes)).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    container.innerHTML = html;
+}
+
+window.setCustomerPitchTypeFilter = function(loaiId) {
+    customerPitchFilterState.selectedLoaiSanId = String(loaiId);
+    renderCustomerPitchSidebar();
+    renderCustomerPitchResults();
+};
+
+window.toggleCustomerPitchDateFilter = function(ymd) {
+    const idx = customerPitchFilterState.selectedDates.indexOf(ymd);
+    if (idx > -1) customerPitchFilterState.selectedDates.splice(idx, 1);
+    else customerPitchFilterState.selectedDates.push(ymd);
+    customerPitchFilterState.selectedDates.sort();
+    renderCustomerPitchSidebar();
+    renderCustomerPitchResults();
+};
+
+window.clearCustomerPitchDates = function() {
+    customerPitchFilterState.selectedDates = [];
+    renderCustomerPitchSidebar();
+    renderCustomerPitchResults();
+};
+
+window.toggleCustomerPitchTimeSlot = function(maKG) {
+    const idStr = String(maKG);
+    const idx = customerPitchFilterState.selectedKhungGioIds.indexOf(idStr);
+    if (idx > -1) customerPitchFilterState.selectedKhungGioIds.splice(idx, 1);
+    else customerPitchFilterState.selectedKhungGioIds.push(idStr);
+
+    customerPitchFilterState.selectedKhungGioIds.sort((a, b) => {
+        const kgA = customerPitchFilterState.khungGios.find(k => String(k.MaKhungGio || k.ID) === a);
+        const kgB = customerPitchFilterState.khungGios.find(k => String(k.MaKhungGio || k.ID) === b);
+        return (kgA?.GioBatDau || '').localeCompare(kgB?.GioBatDau || '');
+    });
+
+    renderCustomerPitchSidebar();
+    renderCustomerPitchResults();
+};
+
+window.setCustomerPitchTimeSearch = function(val) {
+    customerPitchFilterState.timeSearch = val;
+    renderCustomerPitchSidebar();
+    const input = document.getElementById('cust-pitch-time-search');
+    if (input) {
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+    }
+};
+
+window.clearCustomerPitchTimeSlots = function() {
+    customerPitchFilterState.selectedKhungGioIds = [];
+    renderCustomerPitchSidebar();
+    renderCustomerPitchResults();
+};
+
+window.resetCustomerPitchFilters = function() {
+    customerPitchFilterState.selectedLoaiSanId = 'All';
+    customerPitchFilterState.selectedDates = [];
+    customerPitchFilterState.selectedKhungGioIds = [];
+    customerPitchFilterState.timeSearch = '';
+    renderCustomerPitchSidebar();
+    renderCustomerPitchResults();
+};
+
+async function refreshCustomerPitchesRealtime() {
+    if (!currentClusterId || currentPitchId !== null || !document.getElementById('customer-pitches-list-container')) return;
+    try {
+        const cacheBuster = Date.now();
+        const [sbRes, gtRes] = await Promise.all([
+            fetch(`${API_BASE_URL}/san-bong?cum_san_id=${currentClusterId}&_t=${cacheBuster}`),
+            fetch(`${API_BASE_URL}/gia-tien?cum_san_id=${currentClusterId}&_t=${cacheBuster}`)
+        ]);
+        const activePitches = ((await sbRes.json()).data || []).filter(sb => sb.TrangThai === 'HoatDong');
+        customerPitchFilterState.pitches = activePitches;
+        customerPitchFilterState.giaTiens = (await gtRes.json()).data || [];
+        customerPitchFilterState.gioMo = (currentClusterGioMo || '06:00').substring(0, 5);
+        customerPitchFilterState.gioDong = (currentClusterGioDong || '22:00').substring(0, 5);
+        customerPitchFilterState.clusterAddress = currentClusterAddress || customerPitchFilterState.clusterAddress;
+        customerPitchFilterState.bookedMap = activePitches.length > 0 ? await fetchCustomerClusterBookedMap(activePitches) : {};
+
+        const headerInfo = document.querySelector('.cluster-detail-info');
+        if (headerInfo) {
+            headerInfo.innerHTML = `
+                <span><i class="fa-solid fa-location-dot"></i> Địa chỉ: <strong style="color: var(--text-dark);">${customerPitchFilterState.clusterAddress}</strong></span>
+                <span><i class="fa-regular fa-clock"></i> Giờ mở cửa: <strong style="color: var(--text-dark);">${customerPitchFilterState.gioMo} - ${customerPitchFilterState.gioDong}</strong></span>
+            `;
+        }
+        renderCustomerPitchSidebar();
+        renderCustomerPitchResults();
+    } catch (err) {
+        console.error('Lỗi cập nhật ngầm danh sách sân con:', err);
     }
 }
 
