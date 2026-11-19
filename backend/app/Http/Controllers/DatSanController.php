@@ -811,77 +811,93 @@ class DatSanController extends Controller
                     'LoaiThongBao' => 'DatSan'
                 ]);
             } else if ($request->trang_thai === 'DaHuy' && $datSan->EmailNguoiDat) {
-                try {
-                    $tienCocStr = number_format($datSan->TienCoc, 0, ',', '.') . 'đ';
-                    $mailHuy = "
-                        <h2>Xác nhận hủy lịch đặt sân thành công</h2>
-                        <p>Chào <strong>{$datSan->TenNguoiDat}</strong>,</p>
-                        <p>Lịch đặt sân <strong>#PT-{$datSan->MaDatSan}</strong> tại <strong>{$tenSan} ({$cumSan})</strong> lúc <strong>{$gioDa} ngày {$ngayDa}</strong> đã được hủy thành công theo yêu cầu của bạn.</p>
-                        <p><strong>Số tiền cọc hoàn lại:</strong> <span style='color:#10b981; font-weight:bold;'>{$tienCocStr}</span></p>
-                        <p>Cảm ơn bạn đã sử dụng dịch vụ của DN Football!</p>
-                    ";
-                    Mail::html($mailHuy, function ($message) use ($datSan) {
-                        $message->to($datSan->EmailNguoiDat)
-                                ->subject('Xác nhận hủy vé đặt sân #PT-' . $datSan->MaDatSan . ' - DN Football');
-                    });
-                } catch (\Exception $mailEx) {
-                    \Illuminate\Support\Facades\Log::error('Lỗi gửi mail hủy sân khách vãng lai: ' . $mailEx->getMessage());
-                }
+                $emailHuy = $datSan->EmailNguoiDat;
+                $tenNguoiDatHuy = $datSan->TenNguoiDat;
+                $maDatSanHuy = $datSan->MaDatSan;
+                $tienCocStr = number_format($datSan->TienCoc, 0, ',', '.') . 'đ';
+                $tenSanHuy = $tenSan;
+                $cumSanHuy = $cumSan;
+                $gioDaHuy = $gioDa;
+                $ngayDaHuy = $ngayDa;
+
+                dispatch(function () use ($emailHuy, $tenNguoiDatHuy, $maDatSanHuy, $tienCocStr, $tenSanHuy, $cumSanHuy, $gioDaHuy, $ngayDaHuy) {
+                    try {
+                        $mailHuy = "
+                            <h2>Xác nhận hủy lịch đặt sân thành công</h2>
+                            <p>Chào <strong>{$tenNguoiDatHuy}</strong>,</p>
+                            <p>Lịch đặt sân <strong>#PT-{$maDatSanHuy}</strong> tại <strong>{$tenSanHuy} ({$cumSanHuy})</strong> lúc <strong>{$gioDaHuy} ngày {$ngayDaHuy}</strong> đã được hủy thành công theo yêu cầu của bạn.</p>
+                            <p><strong>Số tiền cọc hoàn lại:</strong> <span style='color:#10b981; font-weight:bold;'>{$tienCocStr}</span></p>
+                            <p>Cảm ơn bạn đã sử dụng dịch vụ của DN Football!</p>
+                        ";
+                        Mail::html($mailHuy, function ($message) use ($emailHuy, $maDatSanHuy) {
+                            $message->to($emailHuy)
+                                    ->subject('Xác nhận hủy vé đặt sân #PT-' . $maDatSanHuy . ' - DN Football');
+                        });
+                    } catch (\Exception $mailEx) {
+                        \Illuminate\Support\Facades\Log::error('Lỗi gửi mail hủy sân khách vãng lai: ' . $mailEx->getMessage());
+                    }
+                })->afterResponse();
             }
 
             DB::commit();
 
             // GỬI EMAIL HÓA ĐƠN ĐIỆN TỬ (ĐÃ TẤT TOÁN) KÈM LỜI CẢM ƠN & LỜI CHÚC KHI CẢ HÓA ĐƠN ĐÃ HOÀN TẤT
             if (in_array($request->trang_thai, ['HoanThanh', 'KhongDen']) && $maHoaDon) {
-                $hdCheck = HoaDonDatSan::with(['nguoiDung', 'khuyenMai', 'datSans.sanBong.cumSan', 'datSans.sanBong.loaiSan', 'datSans.khungGio', 'datSans.giaiDau'])
-                    ->where('MaHoaDonDatSan', $maHoaDon)
-                    ->first();
+                $maDatSanId = $datSan->MaDatSan;
+                $tenSanCopy = $tenSan;
+                $cumSanCopy = $cumSan;
 
-                // Chỉ gửi khi CẢ HÓA ĐƠN đã xong hết (không còn trận nào DaCoc) và có ít nhất 1 trận HoanThanh
-                if ($hdCheck && !$hdCheck->datSans->contains('TrangThai', 'DaCoc') && $hdCheck->datSans->contains('TrangThai', 'HoanThanh')) {
-                    $emailNhanHD = $hdCheck->nguoiDung ? $hdCheck->nguoiDung->Email : $datSan->EmailNguoiDat;
-                    $tenKhachHD  = $hdCheck->nguoiDung ? $hdCheck->nguoiDung->HoTen : ($datSan->TenNguoiDat ?: 'Quý khách');
+                dispatch(function () use ($maHoaDon, $maDatSanId, $tenSanCopy, $cumSanCopy) {
+                    $hdCheck = HoaDonDatSan::with(['nguoiDung', 'khuyenMai', 'datSans.sanBong.cumSan', 'datSans.sanBong.loaiSan', 'datSans.khungGio', 'datSans.giaiDau'])
+                        ->where('MaHoaDonDatSan', $maHoaDon)
+                        ->first();
 
-                    if ($emailNhanHD) {
-                        try {
-                            $hoaDonHtml = self::buildEmailHoaDonTuModel($hdCheck);
-                            $laGiaiDau  = ($datSan->MaGiaiDau !== null && $datSan->giaiDau);
-                            $loiChuc    = $laGiaiDau
-                                ? "Chúc mừng Quý khách và Ban tổ chức đã hoàn thành trọn vẹn mùa giải <strong>{$datSan->giaiDau->TenGiaiDau}</strong> tại <strong>{$cumSan}</strong>! Chúc các cầu thủ luôn giữ vững ngọn lửa đam mê, sức khỏe dồi dào và gặt hái thêm nhiều thành công mới."
-                                : "Cảm ơn bạn và đội bóng đã lựa chọn thi đấu tại <strong>{$tenSan} ({$cumSan})</strong>! Chúc bạn cùng anh em đội bóng luôn tràn đầy năng lượng, giữ vững phong độ và có thật nhiều trận cầu mãn nhãn.";
+                    if ($hdCheck && !$hdCheck->datSans->contains('TrangThai', 'DaCoc') && $hdCheck->datSans->contains('TrangThai', 'HoanThanh')) {
+                        $dsRef = $hdCheck->datSans->firstWhere('MaDatSan', $maDatSanId) ?? $hdCheck->datSans->first();
+                        $emailNhanHD = $hdCheck->nguoiDung ? $hdCheck->nguoiDung->Email : ($dsRef->EmailNguoiDat ?? null);
+                        $tenKhachHD  = $hdCheck->nguoiDung ? $hdCheck->nguoiDung->HoTen : ($dsRef->TenNguoiDat ?: 'Quý khách');
 
-                            $goiYDanhGia = ($datSan->MaNguoiDung !== null)
-                                ? "<p style='margin: 12px 0 0 0; font-size: 13.5px; color: #334155;'>⭐ <em>Nếu hài lòng với chất lượng mặt cỏ và dịch vụ tại cơ sở, bạn đừng quên truy cập mục <strong>Lịch sử đặt sân</strong> trên website để gửi đánh giá cho <strong>{$cumSan}</strong> nhé!</em></p>"
-                                : "";
+                        if ($emailNhanHD) {
+                            try {
+                                $hoaDonHtml = self::buildEmailHoaDonTuModel($hdCheck);
+                                $laGiaiDau  = ($dsRef && $dsRef->MaGiaiDau !== null && $dsRef->giaiDau);
+                                $loiChuc    = $laGiaiDau
+                                    ? "Chúc mừng Quý khách và Ban tổ chức đã hoàn thành trọn vẹn mùa giải <strong>{$dsRef->giaiDau->TenGiaiDau}</strong> tại <strong>{$cumSanCopy}</strong>! Chúc các cầu thủ luôn giữ vững ngọn lửa đam mê, sức khỏe dồi dào và gặt hái thêm nhiều thành công mới."
+                                    : "Cảm ơn bạn và đội bóng đã lựa chọn thi đấu tại <strong>{$tenSanCopy} ({$cumSanCopy})</strong>! Chúc bạn cùng anh em đội bóng luôn tràn đầy năng lượng, giữ vững phong độ và có thật nhiều trận cầu mãn nhãn.";
 
-                            $noiDungMailHoanThanh = "
-                                <div style='font-family: Arial, sans-serif; max-width: 720px; margin: 0 auto; color: #0f172a; line-height: 1.6;'>
-                                    <div style='background: linear-gradient(135deg, #0b5d3b 0%, #15803d 100%); color: #ffffff; padding: 20px 24px; border-radius: 10px 10px 0 0;'>
-                                        <h2 style='margin: 0; font-size: 19px; text-transform: uppercase;'>HÓA ĐƠN TẤT TOÁN DỊCH VỤ ĐẶT SÂN (#{$maHoaDon})</h2>
-                                        <div style='font-size: 13px; opacity: 0.92; margin-top: 4px;'>Hệ thống sân bóng đá trực tuyến DN Football — Đà Nẵng</div>
-                                    </div>
-                                    <div style='padding: 20px 24px; border: 1px solid #cbd5e1; border-top: none; border-radius: 0 0 10px 10px; background: #ffffff;'>
-                                        <p style='margin-top: 0;'>Xin chào <strong>{$tenKhachHD}</strong>,</p>
-                                        <p>Hệ thống <strong>DN Football</strong> xác nhận lịch đặt sân thuộc Hóa đơn <strong>#{$maHoaDon}</strong> của bạn đã <strong>hoàn thành và tất toán đầy đủ 100%</strong>. Dưới đây là Hóa đơn điện tử chính thức để bạn lưu trữ và đối chiếu:</p>
-                                        {$hoaDonHtml}
-                                        <div style='background: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid #16a34a; border-radius: 8px; padding: 14px 18px; margin-top: 16px;'>
-                                            <div style='color: #065f46; font-size: 14px;'>⚽ {$loiChuc}</div>
-                                            {$goiYDanhGia}
+                                $goiYDanhGia = ($dsRef && $dsRef->MaNguoiDung !== null)
+                                    ? "<p style='margin: 12px 0 0 0; font-size: 13.5px; color: #334155;'>⭐ <em>Nếu hài lòng với chất lượng mặt cỏ và dịch vụ tại cơ sở, bạn đừng quên truy cập mục <strong>Lịch sử đặt sân</strong> trên website để gửi đánh giá cho <strong>{$cumSanCopy}</strong> nhé!</em></p>"
+                                    : "";
+
+                                $noiDungMailHoanThanh = "
+                                    <div style='font-family: Arial, sans-serif; max-width: 720px; margin: 0 auto; color: #0f172a; line-height: 1.6;'>
+                                        <div style='background: linear-gradient(135deg, #0b5d3b 0%, #15803d 100%); color: #ffffff; padding: 20px 24px; border-radius: 10px 10px 0 0;'>
+                                            <h2 style='margin: 0; font-size: 19px; text-transform: uppercase;'>HÓA ĐƠN TẤT TOÁN DỊCH VỤ ĐẶT SÂN (#{$maHoaDon})</h2>
+                                            <div style='font-size: 13px; opacity: 0.92; margin-top: 4px;'>Hệ thống sân bóng đá trực tuyến DN Football — Đà Nẵng</div>
                                         </div>
-                                        <p style='margin-top: 18px; margin-bottom: 0; font-size: 13.5px; color: #475569;'>Hẹn gặp lại bạn và đội bóng ở những trận cầu tiếp theo tại <strong>DN Football</strong>!</p>
+                                        <div style='padding: 20px 24px; border: 1px solid #cbd5e1; border-top: none; border-radius: 0 0 10px 10px; background: #ffffff;'>
+                                            <p style='margin-top: 0;'>Xin chào <strong>{$tenKhachHD}</strong>,</p>
+                                            <p>Hệ thống <strong>DN Football</strong> xác nhận lịch đặt sân thuộc Hóa đơn <strong>#{$maHoaDon}</strong> của bạn đã <strong>hoàn thành và tất toán đầy đủ 100%</strong>. Dưới đây là Hóa đơn điện tử chính thức để bạn lưu trữ và đối chiếu:</p>
+                                            {$hoaDonHtml}
+                                            <div style='background: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid #16a34a; border-radius: 8px; padding: 14px 18px; margin-top: 16px;'>
+                                                <div style='color: #065f46; font-size: 14px;'>⚽ {$loiChuc}</div>
+                                                {$goiYDanhGia}
+                                            </div>
+                                            <p style='margin-top: 18px; margin-bottom: 0; font-size: 13.5px; color: #475569;'>Hẹn gặp lại bạn và đội bóng ở những trận cầu tiếp theo tại <strong>DN Football</strong>!</p>
+                                        </div>
                                     </div>
-                                </div>
-                            ";
+                                ";
 
-                            Mail::html($noiDungMailHoanThanh, function ($message) use ($emailNhanHD, $maHoaDon, $cumSan) {
-                                $message->to($emailNhanHD)
-                                        ->subject("Hóa đơn điện tử #{$maHoaDon} (Đã tất toán) & Lời cảm ơn từ {$cumSan} - DN Football");
-                            });
-                        } catch (\Exception $mailEx) {
-                            \Illuminate\Support\Facades\Log::error('Lỗi gửi mail hoàn thành hóa đơn: ' . $mailEx->getMessage());
+                                Mail::html($noiDungMailHoanThanh, function ($message) use ($emailNhanHD, $maHoaDon, $cumSanCopy) {
+                                    $message->to($emailNhanHD)
+                                            ->subject("Hóa đơn điện tử #{$maHoaDon} (Đã tất toán) & Lời cảm ơn từ {$cumSanCopy} - DN Football");
+                                });
+                            } catch (\Exception $mailEx) {
+                                \Illuminate\Support\Facades\Log::error('Lỗi gửi mail hoàn thành hóa đơn: ' . $mailEx->getMessage());
+                            }
                         }
                     }
-                }
+                })->afterResponse();
             }
 
             if ($datSan->MaNguoiDung !== null) {
