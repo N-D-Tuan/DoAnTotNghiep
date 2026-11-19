@@ -18,76 +18,128 @@ class YeuCauHuyGapController extends Controller
     public function taoYeuCau(Request $request)
     {
         $user = NguoiDung::find(Auth::id() ?? $request->user()->MaNguoiDung);
-        $maDatSan = $request->input('ma_dat_san', $request->input('id_dat_san'));
-        $request->merge(['ma_dat_san_check' => $maDatSan]);
+
+        // Hỗ trợ nhận mảng ma_dat_sans (chọn nhiều trận cùng lúc) VÀ tương thích ngược với id_dat_san / ma_dat_san đơn lẻ
+        $rawList = $request->input('ma_dat_sans', []);
+        if (!is_array($rawList) || empty($rawList)) {
+            $singleId = $request->input('ma_dat_san', $request->input('id_dat_san'));
+            $rawList = $singleId ? [$singleId] : [];
+        }
+
+        $maDatSans = array_values(array_unique(array_filter(array_map('strval', $rawList))));
+
+        if (empty($maDatSans)) {
+            return response()->json(['success' => false, 'message' => 'Vui lòng tích chọn ít nhất 1 lịch đặt sân muốn hủy gấp!'], 422);
+        }
 
         $request->validate([
-            'ma_dat_san_check' => 'required|exists:DatSan,MaDatSan',
-            'noi_dung'         => 'required|string|max:500'
+            'noi_dung' => 'required|string|max:500'
+        ], [
+            'noi_dung.required' => 'Vui lòng nhập lý do xin hủy sân gấp!'
         ]);
 
-        $datSan = DatSan::with('sanBong')->find($maDatSan);
+        $danhSachDatSan = DatSan::with(['sanBong.cumSan', 'khungGio', 'giaiDau'])
+            ->whereIn('MaDatSan', $maDatSans)
+            ->get();
 
-        if ($datSan->MaNguoiDung !== $user->MaNguoiDung) {
-            return response()->json(['success' => false, 'message' => 'Bạn không có quyền thao tác trên lịch đặt này!']);
+        if ($danhSachDatSan->count() !== count($maDatSans)) {
+            return response()->json(['success' => false, 'message' => 'Một số lịch đặt sân không tồn tại trên hệ thống!'], 422);
         }
-        if ($datSan->TrangThai !== 'DaCoc') {
-            return response()->json(['success' => false, 'message' => 'Chỉ có thể tạo yêu cầu hủy gấp đối với sân đang ở trạng thái Đã cọc!']);
-        }
 
-        if ($datSan->MaGiaiDau != null) {
-            $daTonTaiGiaiDau = YeuCauHuyGap::whereHas('datSan', function ($query) use ($datSan) {
-                $query->where('MaGiaiDau', $datSan->MaGiaiDau);
-            })->where('TrangThai', 'ChoDuyet')->exists();
+        $processedTournaments = [];
+        $finalBookingsToCreate = [];
 
-            if ($daTonTaiGiaiDau) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Giải đấu này đang có yêu cầu hủy chờ xử lý! Vui lòng không gửi thêm yêu cầu trùng lặp.'
-                ]);
+        foreach ($danhSachDatSan as $datSan) {
+            if ((string) $datSan->MaNguoiDung !== (string) $user->MaNguoiDung) {
+                return response()->json(['success' => false, 'message' => 'Bạn không có quyền thao tác trên lịch đặt này!']);
             }
-        } else {
-            $daTonTai = YeuCauHuyGap::where('MaDatSan', $datSan->MaDatSan)
-                                    ->where('TrangThai', 'ChoDuyet')
-                                    ->exists();
-            if ($daTonTai) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Sân này đã có yêu cầu hủy đang chờ xử lý!'
-                ]);
+            if ($datSan->TrangThai !== 'DaCoc') {
+                return response()->json(['success' => false, 'message' => "Vé #{$datSan->MaDatSan} không còn ở trạng thái Đã cọc để hủy gấp!"]);
+            }
+
+            if ($datSan->MaGiaiDau != null) {
+                // Nếu khách chọn nhiều trận của cùng 1 giải đấu, chỉ tạo 1 yêu cầu đại diện cho cả giải đấu đó
+                if (in_array($datSan->MaGiaiDau, $processedTournaments, true)) {
+                    continue;
+                }
+
+                $daTonTaiGiaiDau = YeuCauHuyGap::whereHas('datSan', function ($query) use ($datSan) {
+                    $query->where('MaGiaiDau', $datSan->MaGiaiDau);
+                })->where('TrangThai', 'ChoDuyet')->exists();
+
+                if ($daTonTaiGiaiDau) {
+                    $tenGiai = $datSan->giaiDau ? $datSan->giaiDau->TenGiaiDau : ('#GD-' . $datSan->MaGiaiDau);
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Giải đấu [{$tenGiai}] đang có yêu cầu hủy chờ xử lý! Vui lòng không gửi trùng lặp."
+                    ]);
+                }
+
+                $processedTournaments[] = $datSan->MaGiaiDau;
+                $finalBookingsToCreate[] = $datSan;
+            } else {
+                $daTonTai = YeuCauHuyGap::where('MaDatSan', $datSan->MaDatSan)
+                    ->where('TrangThai', 'ChoDuyet')
+                    ->exists();
+
+                if ($daTonTai) {
+                    $tenSan = $datSan->sanBong ? $datSan->sanBong->TenSan : $datSan->MaDatSan;
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Vé #PT-{$datSan->MaDatSan} ({$tenSan}) đã có yêu cầu hủy đang chờ xử lý!"
+                    ]);
+                }
+
+                $finalBookingsToCreate[] = $datSan;
             }
         }
 
         DB::beginTransaction();
         try {
-            YeuCauHuyGap::create([
-                'MaNguoiDung' => $user->MaNguoiDung,
-                'MaDatSan'    => $datSan->MaDatSan,
-                'NoiDung'     => $request->noi_dung,
-                'TrangThai'   => 'ChoDuyet'
-            ]);
+            $soYeuCauTao = 0;
+            $soYeuCauTheoCumSan = [];
 
-            $maCumSanTuongUng = $datSan->sanBong->MaCumSan;
-            $nguoiNhanThongBao = NguoiDung::where('VaiTro', 'QuanLySan')
-                                   ->where('MaCumSan', $maCumSanTuongUng)
-                                   ->get();
-
-            foreach ($nguoiNhanThongBao as $nhanSu) {
-                ThongBao::create([
-                    'MaNguoiDung'  => $nhanSu->MaNguoiDung,
-                    'TieuDe'       => 'Yêu cầu hủy sân gấp mới',
-                    'NoiDung'      => "Khách hàng {$user->HoTen} vừa gửi 1 yêu cầu hủy sân gấp.",
-                    'LoaiThongBao' => 'DatSan'
+            foreach ($finalBookingsToCreate as $datSan) {
+                YeuCauHuyGap::create([
+                    'MaNguoiDung' => $user->MaNguoiDung,
+                    'MaDatSan'    => $datSan->MaDatSan,
+                    'NoiDung'     => $request->noi_dung,
+                    'TrangThai'   => 'ChoDuyet'
                 ]);
+                $soYeuCauTao++;
 
-                broadcast(new \App\Events\UserDataUpdated($nhanSu->MaNguoiDung))->toOthers();
+                $maCS = $datSan->sanBong ? $datSan->sanBong->MaCumSan : null;
+                if ($maCS) {
+                    $soYeuCauTheoCumSan[$maCS] = ($soYeuCauTheoCumSan[$maCS] ?? 0) + 1;
+                }
+            }
+
+            // Gửi 1 thông báo gọn gàng cho Quản lý của từng Cụm sân có lịch xin hủy
+            foreach ($soYeuCauTheoCumSan as $maCumSanTuongUng => $soLuongYC) {
+                $nguoiNhanThongBao = NguoiDung::where('VaiTro', 'QuanLySan')
+                    ->where('MaCumSan', $maCumSanTuongUng)
+                    ->get();
+
+                foreach ($nguoiNhanThongBao as $nhanSu) {
+                    ThongBao::create([
+                        'MaNguoiDung'  => $nhanSu->MaNguoiDung,
+                        'TieuDe'       => 'Yêu cầu hủy sân gấp mới',
+                        'NoiDung'      => "Khách hàng {$user->HoTen} vừa gửi {$soLuongYC} yêu cầu hủy sân gấp tại cơ sở của bạn.",
+                        'LoaiThongBao' => 'DatSan'
+                    ]);
+
+                    broadcast(new \App\Events\UserDataUpdated($nhanSu->MaNguoiDung))->toOthers();
+                }
             }
 
             DB::commit();
 
             broadcast(new \App\Events\AdminDataUpdated())->toOthers();
 
-            return response()->json(['success' => true, 'message' => 'Đã gửi yêu cầu hủy gấp thành công! Vui lòng chờ Admin phê duyệt.']);
+            return response()->json([
+                'success' => true,
+                'message' => "Đã gửi thành công {$soYeuCauTao} yêu cầu hủy sân gấp! Vui lòng chờ Quản lý sân phê duyệt."
+            ]);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['success' => false, 'message' => 'Lỗi hệ thống: ' . $e->getMessage()]);
@@ -206,7 +258,7 @@ class YeuCauHuyGapController extends Controller
                             'SoTien'         => $tienHoan,
                             'SoDuTruoc'      => $soDuTruoc,
                             'SoDuSau'        => $soDuSau,
-                            'NoiDung'        => "Hoàn cọc hủy gấp: Sân " . $tenSan . " (Admin phê duyệt)"
+                            'NoiDung'        => "Hoàn cọc hủy gấp: " . $tenSan . ""
                         ]);
                         $user->update(['SoDuVi' => $soDuSau]);
                     }

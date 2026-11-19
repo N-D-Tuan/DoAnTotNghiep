@@ -4763,138 +4763,348 @@ async function markAsRead(id, element) {
 }
 
 // ======================================================
-// MODULE: TẠO YÊU CẦU HỦY GẤP
+// MODULE: TẠO YÊU CẦU HỦY GẤP (CHỌN NHIỀU ĐẶT SÂN THEO TỪNG HÓA ĐƠN)
 // ======================================================
 function showUrgentCancelAlert(message, isSuccess) {
     const alertBox = document.getElementById('urgent-cancel-alert');
+    if (!alertBox) return;
     alertBox.textContent = message;
     alertBox.className = 'modal-alert ' + (isSuccess ? 'success' : 'error');
     alertBox.style.display = 'block';
 }
 
-async function openUrgentCancelModal() {
-    document.getElementById('urgent-cancel-alert').style.display = 'none';
-    document.getElementById('uc-reason').value = '';
-    
+// Hàm tự động dựng khung danh sách chọn theo Hóa đơn ngay bên trong Modal (không cần sửa file customer.html)
+function ensureUrgentCancelMultiPickerContainer() {
     const selectBox = document.getElementById('uc-booking-id');
-    selectBox.innerHTML = '<option value="">Đang tải danh sách lịch đặt...</option>';
-    
+    if (selectBox) {
+        selectBox.style.display = 'none'; // Ẩn thẻ <select> cũ
+    }
+
+    const modalContent = document.querySelector('#urgent-cancel-modal .modal-content');
+    if (modalContent) {
+        modalContent.style.maxWidth = '600px';
+        modalContent.style.width = '94%';
+    }
+
+    let container = document.getElementById('uc-multi-picker-container');
+    if (!container && selectBox && selectBox.parentNode) {
+        const labelEl = selectBox.parentNode.querySelector('label');
+        if (labelEl) {
+            labelEl.innerHTML = 'Chọn các lịch đặt muốn hủy gấp <span style="color: #ef4444;">*</span> <span style="font-size: 0.78rem; font-weight: 500; color: #64748b;">(Nhóm theo Hóa đơn &bull; Có thể chọn nhiều ca)</span>';
+        }
+        container = document.createElement('div');
+        container.id = 'uc-multi-picker-container';
+        selectBox.parentNode.insertBefore(container, selectBox.nextSibling);
+    }
+    return container;
+}
+
+async function openUrgentCancelModal() {
+    const alertBox = document.getElementById('urgent-cancel-alert');
+    if (alertBox) alertBox.style.display = 'none';
+    const reasonEl = document.getElementById('uc-reason');
+    if (reasonEl) reasonEl.value = '';
+
+    const pickerContainer = ensureUrgentCancelMultiPickerContainer();
+    if (pickerContainer) {
+        pickerContainer.innerHTML = `
+            <div style="text-align: center; padding: 28px 16px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 12px; color: #64748b;">
+                <i class="fa-solid fa-spinner fa-spin" style="color: var(--primary); font-size: 1.4rem; margin-bottom: 8px; display: block;"></i>
+                Đang tải danh sách lịch đặt theo Hóa đơn...
+            </div>
+        `;
+    }
+
     document.getElementById('urgent-cancel-modal').style.display = 'flex';
 
     try {
-        // ĐÃ SỬA: Gọi song song 2 API để lấy Lịch Đặt Sân và Yêu Cầu Hủy Gấp
         const [dsRes, ygRes] = await Promise.all([
             fetch(`${API_BASE_URL}/dat-san/cua-toi`),
             fetch(`${API_BASE_URL}/yeu-cau-huy-gap/cua-toi`)
         ]);
-        
+
         const dsData = await dsRes.json();
         const ygData = await ygRes.json();
-        
-        if (dsData.success) {
-            const listDatSan = dsData.data || [];
-            const listYeuCau = ygData.success ? (ygData.data || []) : [];
 
-            // =========================================================
-            // LỌC DỮ LIỆU BƯỚC 1: TÌM CÁC ID ĐANG CHỜ DUYỆT ĐỂ BỎ QUA
-            // =========================================================
-            const pendingDatSanIds = new Set();
-            const pendingGiaiDauIds = new Set();
+        if (!dsData.success || !pickerContainer) return;
 
-            listYeuCau.forEach(yc => {
-                if (yc.TrangThai === 'ChoDuyet') {
-                    pendingDatSanIds.add(yc.ID_DatSan);
-                    // Nếu sân hủy thuộc giải đấu, ghi nhận luôn ID Giải Đấu đó
-                    if (yc.dat_san && yc.dat_san.ID_GiaiDau) {
-                        pendingGiaiDauIds.add(yc.dat_san.ID_GiaiDau);
-                    }
-                }
-            });
+        const listDatSan = dsData.data || [];
+        const listYeuCau = ygData.success ? (ygData.data || []) : [];
 
-            // Lọc ra những sân đang "Đã Cọc" VÀ KHÔNG nằm trong danh sách đang chờ hủy
-            const activeBookings = listDatSan.filter(item => {
-                if (item.TrangThai !== 'DaCoc') return false;
-                if (pendingDatSanIds.has(item.ID)) return false;
-                if (item.ID_GiaiDau && pendingGiaiDauIds.has(item.ID_GiaiDau)) return false;
-                return true;
-            });
+        // 1. Tìm các đặt sân / giải đấu đang có yêu cầu chờ duyệt để loại trừ
+        const pendingDatSanIds = new Set();
+        const pendingGiaiDauIds = new Set();
 
-            if (activeBookings.length === 0) {
-                selectBox.innerHTML = '<option value="">Bạn không có sân nào đang đặt (Đã cọc) để hủy</option>';
-                return;
+        listYeuCau.forEach(yc => {
+            if (yc.TrangThai === 'ChoDuyet') {
+                const dsId = yc.MaDatSan || yc.ID_DatSan;
+                if (dsId) pendingDatSanIds.add(String(dsId));
+                const gdId = yc.dat_san ? (yc.dat_san.MaGiaiDau || yc.dat_san.ID_GiaiDau) : null;
+                if (gdId) pendingGiaiDauIds.add(String(gdId));
             }
+        });
 
-            const now = new Date();
+        const activeBookings = listDatSan.filter(item => {
+            if (item.TrangThai !== 'DaCoc') return false;
+            const itemId = String(item.MaDatSan || item.ID);
+            const gdId = item.MaGiaiDau || item.ID_GiaiDau;
+            if (pendingDatSanIds.has(itemId)) return false;
+            if (gdId && pendingGiaiDauIds.has(String(gdId))) return false;
+            return true;
+        });
 
-            // =========================================================
-            // LỌC DỮ LIỆU BƯỚC 2: KIỂM TRA ĐIỀU KIỆN QUÁ HẠN HỦY BÌNH THƯỜNG
-            // VÀ LOẠI BỎ CÁC TRẬN TRÙNG CỦA CÙNG 1 GIẢI ĐẤU
-            // =========================================================
-            const processedTournaments = new Set();
-            const filteredBookings = [];
+        if (activeBookings.length === 0) {
+            pickerContainer.innerHTML = `
+                <div style="padding: 24px 16px; text-align: center; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 12px; color: #64748b; font-size: 0.9rem;">
+                    <i class="fa-regular fa-calendar-xmark" style="font-size: 1.8rem; color: #94a3b8; margin-bottom: 8px; display: block;"></i>
+                    Bạn hiện không có lịch đặt sân nào ở trạng thái <strong>Đã cọc</strong> để gửi yêu cầu hủy.
+                </div>
+            `;
+            return;
+        }
 
-            // Sắp xếp tăng dần theo Ngày Đá để ưu tiên lấy trận khai mạc làm đại diện cho giải đấu
-            activeBookings.sort((a, b) => new Date(a.NgayDa) - new Date(b.NgayDa));
+        // 2. Tính tổng tiền cọc của từng Giải đấu (vì giải đấu hủy theo toàn bộ giải)
+        const tournamentStatsMap = {};
+        activeBookings.forEach(item => {
+            const gdId = item.MaGiaiDau || item.ID_GiaiDau;
+            if (gdId) {
+                const key = String(gdId);
+                if (!tournamentStatsMap[key]) {
+                    tournamentStatsMap[key] = { count: 0, totalCoc: 0 };
+                }
+                tournamentStatsMap[key].count++;
+                tournamentStatsMap[key].totalCoc += Number(item.TienCoc || 0);
+            }
+        });
 
-            activeBookings.forEach(item => {
-                const gioBatDau = item.khung_gio ? item.khung_gio.GioBatDau : '00:00:00';
-                const matchTime = new Date(`${item.NgayDa}T${gioBatDau}`);
-                
-                const timeDiff = matchTime.getTime() - now.getTime();
-                const hoursDiff = timeDiff / (1000 * 3600); 
+        // 3. Lọc các đặt sân thỏa điều kiện Hủy Gấp:
+        //    - Đá phong trào: còn <= 10 tiếng trước giờ bóng lăn (hoursDiff <= 10 && hoursDiff > -2)
+        //    - Giải đấu: trận khai mạc còn <= 7 ngày (168 tiếng)
+        const now = new Date();
+        const processedTournaments = new Set();
+        const filteredBookings = [];
 
-                if (item.ID_GiaiDau) {
-                    if (hoursDiff <= 168) {
-                        if (!processedTournaments.has(item.ID_GiaiDau)) {
-                            processedTournaments.add(item.ID_GiaiDau); 
-                            filteredBookings.push(item); 
-                        }
-                    } else {
-                        processedTournaments.add(item.ID_GiaiDau);
-                    }
-                } else {
-                    if (hoursDiff <= 10) {
+        activeBookings.sort((a, b) => {
+            const tA = new Date(`${a.NgayDa}T${a.khung_gio ? a.khung_gio.GioBatDau : '00:00:00'}`).getTime();
+            const tB = new Date(`${b.NgayDa}T${b.khung_gio ? b.khung_gio.GioBatDau : '00:00:00'}`).getTime();
+            return tA - tB;
+        });
+
+        activeBookings.forEach(item => {
+            const gioBatDau = item.khung_gio ? item.khung_gio.GioBatDau : '00:00:00';
+            const matchTime = new Date(`${item.NgayDa}T${gioBatDau}`);
+            const hoursDiff = (matchTime.getTime() - now.getTime()) / (1000 * 3600);
+            const gdId = item.MaGiaiDau || item.ID_GiaiDau;
+
+            if (gdId) {
+                const gdKey = String(gdId);
+                if (hoursDiff <= 168) {
+                    if (!processedTournaments.has(gdKey)) {
+                        processedTournaments.add(gdKey);
+                        item._hoursDiff = hoursDiff;
+                        item._tourMatchCount = tournamentStatsMap[gdKey]?.count || 1;
+                        item._tourTotalCoc = tournamentStatsMap[gdKey]?.totalCoc || Number(item.TienCoc || 0);
                         filteredBookings.push(item);
                     }
-                }
-            });
-
-            if (filteredBookings.length === 0) {
-                selectBox.innerHTML = '<option value="">Không có sân nào vi phạm thời hạn (Bạn có thể tự hủy miễn phí bên Lịch sử đặt sân)</option>';
-                return;
-            }
-
-            // =========================================================
-            // RENDER DỮ LIỆU VÀO DROPDOWN
-            // =========================================================
-            let html = '<option value="" title="-- Chọn lịch đặt --">-- Chọn lịch đặt --</option>';
-            filteredBookings.forEach(item => {
-                const cumSan = (item.san_bong && item.san_bong.cum_san) ? item.san_bong.cum_san.TenCumSan : 'Cụm sân chưa xác định';
-                const sanBong = item.san_bong ? item.san_bong.TenSan : 'Sân';
-                const khungGio = item.khung_gio ? `${item.khung_gio.GioBatDau.substring(0,5)}-${item.khung_gio.GioKetThuc.substring(0,5)}` : '';
-                
-                const parts = item.NgayDa.split('-');
-                const dateStr = `${parts[2]}/${parts[1]}/${parts[0]}`;
-                
-                if (item.ID_GiaiDau) {
-                    const tenGiai = item.giai_dau ? item.giai_dau.TenGiaiDau : 'Không xác định';
-                    // Khai báo biến textStr để tái sử dụng
-                    const textStr = `[Giải đấu: ${tenGiai}] ${cumSan} - ${sanBong} | Khai mạc: ${dateStr}`;
-                    // Thêm thuộc tính title để hiện Tooltip khi hover chuột
-                    html += `<option value="${item.ID}" title="${textStr}">${textStr}</option>`;
                 } else {
-                    // Gom Ngày và Giờ lại cho ngắn gọn hơn
-                    const textStr = `[Phong trào] ${cumSan} - ${sanBong} | ${khungGio} (${dateStr})`;
-                    html += `<option value="${item.ID}" title="${textStr}">${textStr}</option>`;
+                    processedTournaments.add(gdKey);
                 }
-            });
+            } else {
+                // Phong trào: sát giờ < 10 tiếng
+                if (hoursDiff <= 10) {
+                    item._hoursDiff = hoursDiff;
+                    filteredBookings.push(item);
+                }
+            }
+        });
 
-            selectBox.innerHTML = html;
+        if (filteredBookings.length === 0) {
+            pickerContainer.innerHTML = `
+                <div style="padding: 22px 16px; text-align: center; background: #f0fdf4; border: 1px dashed #86efac; border-radius: 12px; color: #166534; font-size: 0.88rem; line-height: 1.5;">
+                    <i class="fa-solid fa-circle-check" style="font-size: 1.6rem; color: #16a34a; margin-bottom: 8px; display: block;"></i>
+                    Tất cả các lịch đặt sân hiện tại của bạn đều còn dư thời gian quy định (&gt; 10 tiếng với đá phong trào hoặc &gt; 7 ngày với giải đấu).<br>
+                    <strong>Bạn có thể tự hủy miễn phí và nhận lại 100% cọc ngay tại mục Lịch sử đặt sân!</strong>
+                </div>
+            `;
+            return;
+        }
+
+        // 4. Gom nhóm các lịch đủ điều kiện hủy gấp theo từng HÓA ĐƠN ĐẶT SÂN (MaHoaDonDatSan)
+        const invoiceGroupsMap = new Map();
+        filteredBookings.forEach(item => {
+            const maHD = item.MaHoaDonDatSan || item.chi_tiet_hoa_don?.MaHoaDonDatSan || item.hoa_don_dat_san?.MaHoaDonDatSan || null;
+            const groupKey = maHD ? String(maHD) : ('LE_' + (item.MaDatSan || item.ID));
+            const cumSanName = item.san_bong?.cum_san?.TenCumSan || 'Cụm sân DN Football';
+
+            if (!invoiceGroupsMap.has(groupKey)) {
+                invoiceGroupsMap.set(groupKey, {
+                    groupKey: groupKey,
+                    maHoaDon: maHD,
+                    cumSanName: cumSanName,
+                    items: []
+                });
+            }
+            invoiceGroupsMap.get(groupKey).items.push(item);
+        });
+
+        // 5. Render danh sách từng Hóa đơn + Checkbox từng đặt sân
+        let groupsHtml = '';
+        invoiceGroupsMap.forEach(group => {
+            const safeGroupKey = String(group.groupKey).replace(/[^a-zA-Z0-9_-]/g, '_');
+            const headerTitle = group.maHoaDon
+                ? `Hóa đơn #${group.maHoaDon}`
+                : `Đặt sân lẻ`;
+
+            const selectAllInvoiceBtn = group.items.length > 1 ? `
+                <button type="button" onclick="toggleUrgentCancelInvoiceGroup('${safeGroupKey}')" style="font-size: 0.75rem; font-weight: 700; color: #0b5d3b; background: #ffffff; border: 1px solid #86efac; padding: 3px 10px; border-radius: 6px; cursor: pointer; transition: 0.15s;">
+                    <i class="fa-solid fa-check-double"></i> Chọn cả HĐ (${group.items.length})
+                </button>
+            ` : `<span style="font-size: 0.75rem; font-weight: 600; color: #047857;">1 mục</span>`;
+
+            const itemsHtml = group.items.map(item => {
+                const maDS = item.MaDatSan || item.ID;
+                const gdId = item.MaGiaiDau || item.ID_GiaiDau;
+                const isTour = Boolean(gdId);
+                const sanName = item.san_bong ? item.san_bong.TenSan : 'Sân bóng';
+                const parts = String(item.NgayDa || '').split('-');
+                const dateStr = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : item.NgayDa;
+                const timeStr = item.khung_gio ? `${item.khung_gio.GioBatDau.substring(0,5)} - ${item.khung_gio.GioKetThuc.substring(0,5)}` : '';
+
+                // Tính thời gian còn lại đến giờ bóng lăn để hiển thị trực quan
+                let timeRemainBadge = '';
+                if (typeof item._hoursDiff === 'number') {
+                    if (item._hoursDiff > 0) {
+                        const h = Math.floor(item._hoursDiff);
+                        const m = Math.round((item._hoursDiff - h) * 60);
+                        const timeText = h > 0 ? `Còn ${h}h${m > 0 ? m + 'p' : ''}` : `Còn ${Math.max(1, m)} phút`;
+                        timeRemainBadge = `<span style="font-size: 0.72rem; background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; padding: 1px 7px; border-radius: 99px; font-weight: 700;">⏳ ${timeText}</span>`;
+                    } else {
+                        timeRemainBadge = `<span style="font-size: 0.72rem; background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; padding: 1px 7px; border-radius: 99px; font-weight: 700;">Sát giờ đá</span>`;
+                    }
+                }
+
+                const cocAmount = isTour ? Number(item._tourTotalCoc || item.TienCoc || 0) : Number(item.TienCoc || 0);
+                const titleLine = isTour
+                    ? `<span style="font-family:monospace; color:#4338ca; background:#eef2ff; border:1px solid #c7d2fe; padding:1px 6px; border-radius:4px; font-size:0.78rem;">#GD-${gdId}</span> <strong style="color:#0f172a;">Giải: ${item.giai_dau?.TenGiaiDau || 'Giải đấu'}</strong> <span style="font-size:0.76rem; color:#4338ca; font-weight:600;">(${item._tourMatchCount} trận)</span>`
+                    : `<span style="font-family:monospace; color:#0b5d3b; background:#f0fdf4; border:1px solid #bbf7d0; padding:1px 6px; border-radius:4px; font-size:0.78rem;">#PT-${maDS}</span> <strong style="color:#0f172a;">${sanName}</strong>`;
+
+                const subLine = isTour
+                    ? `Khai mạc: <strong>${timeStr}</strong> ngày <strong>${dateStr}</strong>`
+                    : `Khung giờ: <strong style="color:var(--primary);">${timeStr}</strong> &bull; Ngày: <strong>${dateStr}</strong>`;
+
+                return `
+                    <label style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 9px; margin-bottom: 7px; cursor: pointer; transition: all 0.15s;" onmouseover="this.style.borderColor='#16a34a'; this.style.background='#f8fafc'" onmouseout="this.style.borderColor='#e2e8f0'; this.style.background='#ffffff'">
+                        <div style="display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1;">
+                            <input type="checkbox" class="uc-booking-checkbox uc-group-cb-${safeGroupKey}" value="${maDS}" data-coc="${cocAmount}" onchange="updateUrgentCancelSelectionSummary()" style="width: 17px; height: 17px; accent-color: #16a34a; cursor: pointer; flex-shrink: 0;">
+                            <div style="min-width: 0; flex: 1;">
+                                <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.88rem; margin-bottom: 3px;">
+                                    ${titleLine}
+                                    ${timeRemainBadge}
+                                </div>
+                                <div style="font-size: 0.8rem; color: #64748b;">
+                                    <i class="fa-regular fa-clock" style="margin-right: 3px;"></i>${subLine}
+                                </div>
+                            </div>
+                        </div>
+                        <div style="text-align: right; flex-shrink: 0; padding-left: 8px; border-left: 1px dashed #e2e8f0;">
+                            <div style="font-size: 0.72rem; color: #64748b;">Tiền đã cọc</div>
+                            <div style="font-size: 0.88rem; font-weight: 800; color: #047857;">${cocAmount.toLocaleString('vi-VN')}đ</div>
+                        </div>
+                    </label>
+                `;
+            }).join('');
+
+            groupsHtml += `
+                <div style="background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 12px; overflow: hidden; margin-bottom: 12px;">
+                    <div style="background: #f0fdf4; border-bottom: 1px solid #bbf7d0; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="background: #0b5d3b; color: #ffffff; font-family: monospace; font-weight: 700; font-size: 0.8rem; padding: 2px 8px; border-radius: 5px;">
+                                <i class="fa-solid fa-file-invoice-dollar"></i> ${headerTitle}
+                            </span>
+                            <span style="font-size: 0.82rem; font-weight: 700; color: #1e293b;">
+                                <i class="fa-solid fa-location-dot" style="color: var(--primary);"></i> ${group.cumSanName}
+                            </span>
+                        </div>
+                        ${selectAllInvoiceBtn}
+                    </div>
+                    <div style="padding: 10px 10px 3px 10px;">
+                        ${itemsHtml}
+                    </div>
+                </div>
+            `;
+        });
+
+        pickerContainer.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding: 0 2px;">
+                <span style="font-size: 0.8rem; color: #475569;">
+                    Tìm thấy <strong>${filteredBookings.length}</strong> lịch sát giờ thuộc <strong>${invoiceGroupsMap.size}</strong> hóa đơn:
+                </span>
+                <div style="display: flex; gap: 6px;">
+                    <button type="button" onclick="toggleAllUrgentCancelCheckboxes(true)" style="font-size: 0.75rem; font-weight: 700; padding: 3px 9px; border-radius: 6px; border: 1px solid #cbd5e1; background: #f8fafc; color: #0f172a; cursor: pointer;">Chọn tất cả</button>
+                    <button type="button" onclick="toggleAllUrgentCancelCheckboxes(false)" style="font-size: 0.75rem; font-weight: 600; padding: 3px 9px; border-radius: 6px; border: 1px solid #cbd5e1; background: #ffffff; color: #64748b; cursor: pointer;">Bỏ chọn</button>
+                </div>
+            </div>
+
+            <div style="max-height: 270px; overflow-y: auto; padding-right: 4px;">
+                ${groupsHtml}
+            </div>
+
+            <div style="margin-top: 8px; padding: 10px 14px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 10px; display: flex; justify-content: space-between; align-items: center;">
+                <div style="font-size: 0.84rem; color: #065f46; font-weight: 600;">
+                    Đã chọn: <strong id="uc-selected-count" style="font-size: 0.95rem; color: #047857;">0</strong> lịch đặt sân
+                </div>
+                <div style="font-size: 0.84rem; color: #065f46;">
+                    Tổng tiền cọc đề nghị hoàn: <strong id="uc-selected-total-coc" style="font-size: 1rem; font-weight: 800; color: #047857;">0đ</strong>
+                </div>
+            </div>
+        `;
+
+        // Nếu toàn bộ chỉ có đúng 1 lịch sát giờ thì tự động tích chọn sẵn giúp khách
+        if (filteredBookings.length === 1) {
+            toggleAllUrgentCancelCheckboxes(true);
         }
     } catch (error) {
-        selectBox.innerHTML = '<option value="">Lỗi kết nối máy chủ</option>';
+        if (pickerContainer) {
+            pickerContainer.innerHTML = `<div style="color: #dc2626; padding: 16px; text-align: center;">Lỗi kết nối máy chủ khi tải danh sách lịch đặt!</div>`;
+        }
     }
 }
+
+// Chọn / Bỏ chọn toàn bộ các đặt sân trong cùng 1 Hóa đơn
+window.toggleUrgentCancelInvoiceGroup = function(safeGroupKey) {
+    const boxes = Array.from(document.querySelectorAll(`.uc-group-cb-${safeGroupKey}`));
+    if (boxes.length === 0) return;
+    const allChecked = boxes.every(cb => cb.checked);
+    boxes.forEach(cb => { cb.checked = !allChecked; });
+    updateUrgentCancelSelectionSummary();
+};
+
+// Chọn / Bỏ chọn tất cả Hóa đơn
+window.toggleAllUrgentCancelCheckboxes = function(checked) {
+    document.querySelectorAll('.uc-booking-checkbox').forEach(cb => {
+        cb.checked = checked;
+    });
+    updateUrgentCancelSelectionSummary();
+};
+
+// Cập nhật số lượng lịch đã chọn và tổng số tiền cọc dự kiến hoàn lại
+window.updateUrgentCancelSelectionSummary = function() {
+    const checkedBoxes = Array.from(document.querySelectorAll('.uc-booking-checkbox:checked'));
+    const countEl = document.getElementById('uc-selected-count');
+    const totalCocEl = document.getElementById('uc-selected-total-coc');
+
+    const totalCoc = checkedBoxes.reduce((sum, cb) => sum + Number(cb.getAttribute('data-coc') || 0), 0);
+
+    if (countEl) countEl.textContent = checkedBoxes.length;
+    if (totalCocEl) totalCocEl.textContent = totalCoc.toLocaleString('vi-VN') + 'đ';
+
+    if (checkedBoxes.length > 0) {
+        const alertBox = document.getElementById('urgent-cancel-alert');
+        if (alertBox && alertBox.classList.contains('error') && alertBox.textContent.includes('chọn')) {
+            alertBox.style.display = 'none';
+        }
+    }
+};
 
 function closeUrgentCancelModal() {
     document.getElementById('urgent-cancel-modal').style.display = 'none';
@@ -4902,21 +5112,27 @@ function closeUrgentCancelModal() {
 
 async function submitUrgentCancelRequest() {
     const btn = document.getElementById('btn-submit-urgent-cancel');
-    const datSanId = document.getElementById('uc-booking-id').value;
-    const reason = document.getElementById('uc-reason').value.trim();
+    const checkedBoxes = Array.from(document.querySelectorAll('.uc-booking-checkbox:checked'));
+    const selectedIds = checkedBoxes.map(cb => cb.value);
+    const reason = document.getElementById('uc-reason')?.value.trim() || '';
 
-    if (!datSanId) return showUrgentCancelAlert('Vui lòng chọn lịch đặt muốn hủy!', false);
-    if (!reason) return showUrgentCancelAlert('Vui lòng nhập lý do hủy gấp!', false);
+    if (selectedIds.length === 0) {
+        return showUrgentCancelAlert('Vui lòng tích chọn ít nhất 1 lịch đặt sân muốn hủy gấp!', false);
+    }
+    if (!reason) {
+        return showUrgentCancelAlert('Vui lòng nhập lý do xin hủy sân gấp!', false);
+    }
 
     btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang gửi...';
 
     try {
         const response = await fetch(`${API_BASE_URL}/yeu-cau-huy-gap`, {
             method: 'POST',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                id_dat_san: datSanId,
+                ma_dat_sans: selectedIds,
+                id_dat_san: selectedIds[0], // Tương thích ngược
                 noi_dung: reason
             })
         });
@@ -4930,15 +5146,14 @@ async function submitUrgentCancelRequest() {
             return;
         }
 
-        // Hiện thông báo Custom xanh lá
-        showUrgentCancelAlert('Gửi yêu cầu thành công! Vui lòng chờ Admin duyệt.', true);
-        
+        showUrgentCancelAlert(data.message || `Đã gửi thành công ${selectedIds.length} yêu cầu hủy gấp!`, true);
+
         setTimeout(() => {
             closeUrgentCancelModal();
-            renderRequests('huy_san'); 
+            renderRequests('huy_san');
             btn.disabled = false;
             btn.innerHTML = 'Gửi yêu cầu';
-        }, 2000);
+        }, 1800);
 
     } catch (error) {
         showUrgentCancelAlert('Không thể kết nối đến máy chủ!', false);
