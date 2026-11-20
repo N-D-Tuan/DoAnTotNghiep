@@ -2212,7 +2212,7 @@ function renderGDTable(data) {
                     <span style="font-size: 0.85rem; color: var(--text-muted);">${item.nguoi_dung ? item.nguoi_dung.SoDienThoai : ''}</span>
                 </td>
                 <td style="min-width: 240px;">
-                    <div style="display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; white-space: nowrap;">
+                    <div style="display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;">
                         <strong style="color: var(--primary);">${item.TenGiaiDau}</strong>
                         <span style="font-family: monospace; font-size: 0.78rem; color: #64748b; white-space: nowrap;">(#GD-${item.MaGiaiDau || item.ID})</span>
                     </div>
