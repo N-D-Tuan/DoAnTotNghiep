@@ -3156,13 +3156,29 @@ class DatSanController extends Controller
 
                     if (isset($weatherMap[$weatherKey])) {
                         $w = $weatherMap[$weatherKey];
-                        // Chỉ cảnh báo khi xác suất mưa >= 50% hoặc kiểu thời tiết là Mưa lớn
-                        if ($w['xac_suat_mua'] >= 50.0 || $w['kieu_thoi_tiet'] === 'Mưa lớn') {
+
+                        // Kích hoạt cảnh báo khi mô hình dự báo CÓ MƯA (đã qua ngưỡng tối ưu),
+                        // hoặc có lượng mưa dự kiến > 0mm, hoặc kiểu thời tiết chứa chữ "Mưa"
+                        $laCoMua = (mb_strtolower($w['co_mua'], 'UTF-8') === 'có')
+                            || ($w['luong_mua_mm'] > 0)
+                            || (stripos($w['kieu_thoi_tiet'], 'Mưa') !== false);
+
+                        if ($laCoMua) {
+                            // Phân loại mức độ mưa để câu cảnh báo sát thực tế hơn
+                            $mucDoMua = $w['kieu_thoi_tiet'] ?: 'Có mưa';
+                            if ($w['luong_mua_mm'] >= 2.0) {
+                                $mucDoMua = 'Mưa vừa - to';
+                            } elseif ($w['luong_mua_mm'] >= 0.5) {
+                                $mucDoMua = 'Có mưa';
+                            } else {
+                                $mucDoMua = 'Mưa nhỏ / Khả năng có mưa';
+                            }
+
                             $canhBaoThoiTietList[] = [
                                 'ten_san'        => $tenSan,
                                 'gio_str'        => $gioStr,
                                 'ma_ve'          => $maVe,
-                                'kieu_thoi_tiet' => $w['kieu_thoi_tiet'] ?: 'Có mưa',
+                                'kieu_thoi_tiet' => $mucDoMua,
                                 'xac_suat_mua'   => round($w['xac_suat_mua'], 0),
                                 'luong_mua_mm'   => $w['luong_mua_mm'],
                                 'nhiet_do'       => round($w['nhiet_do'], 1),
