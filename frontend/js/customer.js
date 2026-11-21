@@ -2676,8 +2676,8 @@ function renderCustomerPitchCard(sb, evalResult = null) {
     }
 
     return `
-        <div class="pitch-card" style="${cardExtraStyle}" onclick="renderSchedule('${st.clusterId}', '${st.clusterName.replace(/'/g, "\\'")}', '${maSB}', '${sb.TenSan.replace(/'/g, "\\'")}', '${loaiId}', '${loaiSanName.replace(/'/g, "\\'")}')">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px;">
+        <div class="pitch-card" style="display: flex; flex-direction: column; height: 100%; ${cardExtraStyle}" onclick="renderSchedule('${st.clusterId}', '${st.clusterName.replace(/'/g, "\\'")}', '${maSB}', '${sb.TenSan.replace(/'/g, "\\'")}', '${loaiId}', '${loaiSanName.replace(/'/g, "\\'")}')">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 12px; flex: 1;">
                 <div>
                     <div class="pitch-name">${sb.TenSan}</div>
                     <div class="pitch-type"><i class="fa-solid fa-layer-group" style="color: #94a3b8;"></i> ${loaiSanName}</div>
@@ -2686,8 +2686,10 @@ function renderCustomerPitchCard(sb, evalResult = null) {
                 </div>
                 ${statusBadgeHtml}
             </div>
-            ${slotDetailBoxHtml}
-            ${btnHtml}
+            <div style="margin-top: auto;">
+                ${slotDetailBoxHtml}
+                ${btnHtml}
+            </div>
         </div>
     `;
 }

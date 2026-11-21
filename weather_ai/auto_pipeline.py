@@ -52,7 +52,7 @@ def main():
     if not force_run and LOCK_DATE_FILE.exists():
         last_date = LOCK_DATE_FILE.read_text(encoding="utf-8").strip()
         if last_date == today_str:
-            skip_msg = f"Hôm nay ({today_str}) pipeline đã chạy thành công trước đó. Bỏ qua để không chạy trùng lặp!"
+            skip_msg = f"Hôm nay ({today_str}) pipeline đã chạy thành công trước đó. Bỏ qua để không chạy trùng lặp!\n"
             print(skip_msg)
             logging.info(skip_msg)
             return
