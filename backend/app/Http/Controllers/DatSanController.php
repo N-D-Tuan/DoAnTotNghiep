@@ -422,31 +422,38 @@ class DatSanController extends Controller
             DB::commit();
 
             if ($user->Email) {
-                try {
-                    $htmlVe = '';
-                    foreach ($cacVeVuaTao as $ve) {
-                        $qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=6&data=" . urlencode($ve['maVe']);
-                        $htmlVe .= "
-                            <div style='border:1px solid #cbd5e1; padding:16px; margin-bottom:15px; border-radius:10px; display:flex; align-items:center; justify-content:space-between; background:#ffffff;'>
-                                <div style='padding-right:15px;'>
-                                    <h3 style='margin:0 0 10px 0; color:#10B981; font-size:18px;'>Mã vé: #{$ve['maVe']} <span style='font-size:13px; color:#475569;'>(HĐ #{$ve['maHoaDon']})</span></h3>
-                                    <p style='margin:4px 0;'><strong>Sân:</strong> {$ve['tenSan']} ({$ve['cumSan']})</p>
-                                    <p style='margin:4px 0;'><strong>Ngày:</strong> {$ve['ngay']} | <strong>Giờ:</strong> {$ve['gio']}</p>
-                                    <hr style='border:0; border-top:1px dashed #cbd5e1; margin:10px 0;'/>
-                                    <p style='margin:4px 0;'><strong>Đã cọc:</strong> {$ve['tienCoc']}</p>
+                $emailNhan = $user->Email;
+                $hoTenNhan = $user->HoTen;
+
+                dispatch(function () use ($emailNhan, $hoTenNhan, $cacVeVuaTao, $danhSachMaHoaDon, $htmlTatCaHoaDonEmail) {
+                    try {
+                        $htmlVe = '';
+                        foreach ($cacVeVuaTao as $ve) {
+                            $qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=6&data=" . urlencode($ve['maVe']);
+                            $htmlVe .= "
+                                <div style='border:1px solid #cbd5e1; padding:16px; margin-bottom:15px; border-radius:10px; display:flex; align-items:center; justify-content:space-between; background:#ffffff;'>
+                                    <div style='padding-right:15px;'>
+                                        <h3 style='margin:0 0 10px 0; color:#10B981; font-size:18px;'>Mã vé: #{$ve['maVe']} <span style='font-size:13px; color:#475569;'>(HĐ #{$ve['maHoaDon']})</span></h3>
+                                        <p style='margin:4px 0;'><strong>Sân:</strong> {$ve['tenSan']} ({$ve['cumSan']})</p>
+                                        <p style='margin:4px 0;'><strong>Ngày:</strong> {$ve['ngay']} | <strong>Giờ:</strong> {$ve['gio']}</p>
+                                        <hr style='border:0; border-top:1px dashed #cbd5e1; margin:10px 0;'/>
+                                        <p style='margin:4px 0;'><strong>Đã cọc:</strong> {$ve['tienCoc']}</p>
+                                    </div>
+                                    <div style='text-align:center; border-left:1px dashed #cbd5e1; padding-left:15px;'>
+                                        <img src='{$qrUrl}' alt='QR {$ve['maVe']}' style='width:120px; height:120px; display:block; margin:0 auto; border:1px solid #e2e8f0; border-radius:8px;' />
+                                        <div style='font-size:11px; color:#64748b; margin-top:5px;'>Quét mã khi đến sân</div>
+                                    </div>
                                 </div>
-                                <div style='text-align:center; border-left:1px dashed #cbd5e1; padding-left:15px;'>
-                                    <img src='{$qrUrl}' alt='QR {$ve['maVe']}' style='width:120px; height:120px; display:block; margin:0 auto; border:1px solid #e2e8f0; border-radius:8px;' />
-                                    <div style='font-size:11px; color:#64748b; margin-top:5px;'>Quét mã khi đến sân</div>
-                                </div>
-                            </div>
-                        ";
+                            ";
+                        }
+                        $dsMaHDStr = implode(', #', $danhSachMaHoaDon);
+                        Mail::html("<h2>Xác nhận đặt sân & Hóa đơn điện tử - DN Football</h2><p>Chào <strong>{$hoTenNhan}</strong>, cảm ơn bạn đã đặt sân. Dưới đây là <strong>Hóa đơn đặt sân (#{$dsMaHDStr})</strong> và <strong>Vé điện tử QR Code</strong> của bạn:</p>{$htmlTatCaHoaDonEmail}<h3 style='margin-top:24px; color:#0f172a;'>Danh sách Vé Điện Tử (Check-in tại sân):</h3>{$htmlVe}", function ($message) use ($emailNhan, $dsMaHDStr) {
+                            $message->to($emailNhan)->subject("Hóa Đơn #{$dsMaHDStr} & Vé Điện Tử - DN Football");
+                        });
+                    } catch (\Exception $mailEx) {
+                        \Illuminate\Support\Facades\Log::error('Lỗi gửi mail đặt sân online: ' . $mailEx->getMessage());
                     }
-                    $dsMaHDStr = implode(', #', $danhSachMaHoaDon);
-                    Mail::html("<h2>Xác nhận đặt sân & Hóa đơn điện tử - DN Football</h2><p>Chào <strong>{$user->HoTen}</strong>, cảm ơn bạn đã đặt sân. Dưới đây là <strong>Hóa đơn đặt sân (#{$dsMaHDStr})</strong> và <strong>Vé điện tử QR Code</strong> của bạn:</p>{$htmlTatCaHoaDonEmail}<h3 style='margin-top:24px; color:#0f172a;'>Danh sách Vé Điện Tử (Check-in tại sân):</h3>{$htmlVe}", function ($message) use ($user, $dsMaHDStr) {
-                        $message->to($user->Email)->subject("Hóa Đơn #{$dsMaHDStr} & Vé Điện Tử - DN Football");
-                    });
-                } catch (\Exception $mailEx) {}
+                })->afterResponse();
             }
 
             broadcast(new \App\Events\AdminDataUpdated())->toOthers();
@@ -810,38 +817,47 @@ class DatSanController extends Controller
                     'NoiDung'      => $noiDung,
                     'LoaiThongBao' => 'DatSan'
                 ]);
-            } else if ($request->trang_thai === 'DaHuy' && $datSan->EmailNguoiDat) {
-                $emailHuy = $datSan->EmailNguoiDat;
-                $tenNguoiDatHuy = $datSan->TenNguoiDat;
-                $maDatSanHuy = $datSan->MaDatSan;
-                $tienCocStr = number_format($datSan->TienCoc, 0, ',', '.') . 'đ';
-                $tenSanHuy = $tenSan;
-                $cumSanHuy = $cumSan;
-                $gioDaHuy = $gioDa;
-                $ngayDaHuy = $ngayDa;
-
-                dispatch(function () use ($emailHuy, $tenNguoiDatHuy, $maDatSanHuy, $tienCocStr, $tenSanHuy, $cumSanHuy, $gioDaHuy, $ngayDaHuy) {
-                    try {
-                        $mailHuy = "
-                            <h2>Xác nhận hủy lịch đặt sân thành công</h2>
-                            <p>Chào <strong>{$tenNguoiDatHuy}</strong>,</p>
-                            <p>Lịch đặt sân <strong>#PT-{$maDatSanHuy}</strong> tại <strong>{$tenSanHuy} ({$cumSanHuy})</strong> lúc <strong>{$gioDaHuy} ngày {$ngayDaHuy}</strong> đã được hủy thành công theo yêu cầu của bạn.</p>
-                            <p><strong>Số tiền cọc hoàn lại:</strong> <span style='color:#10b981; font-weight:bold;'>{$tienCocStr}</span></p>
-                            <p>Cảm ơn bạn đã sử dụng dịch vụ của DN Football!</p>
-                        ";
-                        Mail::html($mailHuy, function ($message) use ($emailHuy, $maDatSanHuy) {
-                            $message->to($emailHuy)
-                                    ->subject('Xác nhận hủy vé đặt sân #PT-' . $maDatSanHuy . ' - DN Football');
-                        });
-                    } catch (\Exception $mailEx) {
-                        \Illuminate\Support\Facades\Log::error('Lỗi gửi mail hủy sân khách vãng lai: ' . $mailEx->getMessage());
-                    }
-                })->afterResponse();
             }
 
             DB::commit();
 
-            // GỬI EMAIL HÓA ĐƠN ĐIỆN TỬ (ĐÃ TẤT TOÁN) KÈM LỜI CẢM ƠN & LỜI CHÚC KHI CẢ HÓA ĐƠN ĐÃ HOÀN TẤT
+            // 1. GỬI EMAIL XÁC NHẬN HỦY SÂN & HOÀN CỌC (CHO CẢ KHÁCH THÀNH VIÊN LẪN VÃNG LAI)
+            if ($request->trang_thai === 'DaHuy') {
+                $laThanhVien = ($datSan->MaNguoiDung !== null);
+                $userHuy = $laThanhVien ? NguoiDung::find($datSan->MaNguoiDung) : null;
+                $emailHuy = $laThanhVien ? ($userHuy->Email ?? null) : $datSan->EmailNguoiDat;
+                $tenNguoiDatHuy = $laThanhVien ? ($userHuy->HoTen ?? 'Quý khách') : ($datSan->TenNguoiDat ?: 'Quý khách');
+
+                if ($emailHuy) {
+                    $maDatSanHuy = $datSan->MaDatSan;
+                    $tienCocStr = number_format($datSan->TienCoc, 0, ',', '.') . 'đ';
+                    $tenSanHuy = $tenSan;
+                    $cumSanHuy = $cumSan;
+                    $gioDaHuy = $gioDa;
+                    $ngayDaHuy = $ngayDa;
+                    $noiHoanTien = $laThanhVien ? 'đã được hoàn lại vào Ví điện tử DN Football của bạn' : 'được hoàn trả trực tiếp theo quy định';
+
+                    dispatch(function () use ($emailHuy, $tenNguoiDatHuy, $maDatSanHuy, $tienCocStr, $tenSanHuy, $cumSanHuy, $gioDaHuy, $ngayDaHuy, $noiHoanTien) {
+                        try {
+                            $mailHuy = "
+                                <h2>Xác nhận hủy lịch đặt sân thành công</h2>
+                                <p>Chào <strong>{$tenNguoiDatHuy}</strong>,</p>
+                                <p>Lịch đặt sân <strong>#PT-{$maDatSanHuy}</strong> tại <strong>{$tenSanHuy} ({$cumSanHuy})</strong> lúc <strong>{$gioDaHuy} ngày {$ngayDaHuy}</strong> đã được hủy thành công.</p>
+                                <p><strong>Số tiền cọc hoàn lại:</strong> <span style='color:#10b981; font-weight:bold;'>{$tienCocStr}</span> ({$noiHoanTien}).</p>
+                                <p>Cảm ơn bạn đã sử dụng dịch vụ của DN Football!</p>
+                            ";
+                            Mail::html($mailHuy, function ($message) use ($emailHuy, $maDatSanHuy) {
+                                $message->to($emailHuy)
+                                        ->subject('Xác nhận hủy vé đặt sân #PT-' . $maDatSanHuy . ' - DN Football');
+                            });
+                        } catch (\Exception $mailEx) {
+                            \Illuminate\Support\Facades\Log::error('Lỗi gửi mail hủy sân: ' . $mailEx->getMessage());
+                        }
+                    })->afterResponse();
+                }
+            }
+
+            // 2. GỬI EMAIL KHI CẢ HÓA ĐƠN ĐÃ KẾT THÚC (HOÀN THÀNH HOẶC KHÔNG ĐẾN)
             if (in_array($request->trang_thai, ['HoanThanh', 'KhongDen']) && $maHoaDon) {
                 $maDatSanId = $datSan->MaDatSan;
                 $tenSanCopy = $tenSan;
@@ -852,50 +868,86 @@ class DatSanController extends Controller
                         ->where('MaHoaDonDatSan', $maHoaDon)
                         ->first();
 
-                    if ($hdCheck && !$hdCheck->datSans->contains('TrangThai', 'DaCoc') && $hdCheck->datSans->contains('TrangThai', 'HoanThanh')) {
-                        $dsRef = $hdCheck->datSans->firstWhere('MaDatSan', $maDatSanId) ?? $hdCheck->datSans->first();
-                        $emailNhanHD = $hdCheck->nguoiDung ? $hdCheck->nguoiDung->Email : ($dsRef->EmailNguoiDat ?? null);
-                        $tenKhachHD  = $hdCheck->nguoiDung ? $hdCheck->nguoiDung->HoTen : ($dsRef->TenNguoiDat ?: 'Quý khách');
+                    // Chỉ gửi khi CẢ HÓA ĐƠN không còn trận nào Đã cọc
+                    if (!$hdCheck || $hdCheck->datSans->contains('TrangThai', 'DaCoc')) {
+                        return;
+                    }
 
-                        if ($emailNhanHD) {
-                            try {
-                                $hoaDonHtml = self::buildEmailHoaDonTuModel($hdCheck);
-                                $laGiaiDau  = ($dsRef && $dsRef->MaGiaiDau !== null && $dsRef->giaiDau);
-                                $loiChuc    = $laGiaiDau
-                                    ? "Chúc mừng Quý khách và Ban tổ chức đã hoàn thành trọn vẹn mùa giải <strong>{$dsRef->giaiDau->TenGiaiDau}</strong> tại <strong>{$cumSanCopy}</strong>! Chúc các cầu thủ luôn giữ vững ngọn lửa đam mê, sức khỏe dồi dào và gặt hái thêm nhiều thành công mới."
-                                    : "Cảm ơn bạn và đội bóng đã lựa chọn thi đấu tại <strong>{$tenSanCopy} ({$cumSanCopy})</strong>! Chúc bạn cùng anh em đội bóng luôn tràn đầy năng lượng, giữ vững phong độ và có thật nhiều trận cầu mãn nhãn.";
+                    $dsRef = $hdCheck->datSans->firstWhere('MaDatSan', $maDatSanId) ?? $hdCheck->datSans->first();
+                    $emailNhanHD = $hdCheck->nguoiDung ? $hdCheck->nguoiDung->Email : ($dsRef->EmailNguoiDat ?? null);
+                    $tenKhachHD  = $hdCheck->nguoiDung ? $hdCheck->nguoiDung->HoTen : ($dsRef->TenNguoiDat ?: 'Quý khách');
 
-                                $goiYDanhGia = ($dsRef && $dsRef->MaNguoiDung !== null)
-                                    ? "<p style='margin: 12px 0 0 0; font-size: 13.5px; color: #334155;'>⭐ <em>Nếu hài lòng với chất lượng mặt cỏ và dịch vụ tại cơ sở, bạn đừng quên truy cập mục <strong>Lịch sử đặt sân</strong> trên website để gửi đánh giá cho <strong>{$cumSanCopy}</strong> nhé!</em></p>"
-                                    : "";
+                    if (!$emailNhanHD) {
+                        return;
+                    }
 
-                                $noiDungMailHoanThanh = "
-                                    <div style='font-family: Arial, sans-serif; max-width: 720px; margin: 0 auto; color: #0f172a; line-height: 1.6;'>
-                                        <div style='background: linear-gradient(135deg, #0b5d3b 0%, #15803d 100%); color: #ffffff; padding: 20px 24px; border-radius: 10px 10px 0 0;'>
-                                            <h2 style='margin: 0; font-size: 19px; text-transform: uppercase;'>HÓA ĐƠN TẤT TOÁN DỊCH VỤ ĐẶT SÂN (#{$maHoaDon})</h2>
-                                            <div style='font-size: 13px; opacity: 0.92; margin-top: 4px;'>Hệ thống sân bóng đá trực tuyến DN Football — Đà Nẵng</div>
-                                        </div>
-                                        <div style='padding: 20px 24px; border: 1px solid #cbd5e1; border-top: none; border-radius: 0 0 10px 10px; background: #ffffff;'>
-                                            <p style='margin-top: 0;'>Xin chào <strong>{$tenKhachHD}</strong>,</p>
-                                            <p>Hệ thống <strong>DN Football</strong> xác nhận lịch đặt sân thuộc Hóa đơn <strong>#{$maHoaDon}</strong> của bạn đã <strong>hoàn thành và tất toán đầy đủ 100%</strong>. Dưới đây là Hóa đơn điện tử chính thức để bạn lưu trữ và đối chiếu:</p>
-                                            {$hoaDonHtml}
-                                            <div style='background: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid #16a34a; border-radius: 8px; padding: 14px 18px; margin-top: 16px;'>
-                                                <div style='color: #065f46; font-size: 14px;'>⚽ {$loiChuc}</div>
-                                                {$goiYDanhGia}
-                                            </div>
-                                            <p style='margin-top: 18px; margin-bottom: 0; font-size: 13.5px; color: #475569;'>Hẹn gặp lại bạn và đội bóng ở những trận cầu tiếp theo tại <strong>DN Football</strong>!</p>
-                                        </div>
+                    try {
+                        $hoaDonHtml = self::buildEmailHoaDonTuModel($hdCheck);
+
+                        // NHÁNH A: CÓ ÍT NHẤT 1 TRẬN HOÀN THÀNH -> Gửi Hóa đơn tất toán & Lời cảm ơn
+                        if ($hdCheck->datSans->contains('TrangThai', 'HoanThanh')) {
+                            $laGiaiDau  = ($dsRef && $dsRef->MaGiaiDau !== null && $dsRef->giaiDau);
+                            $loiChuc    = $laGiaiDau
+                                ? "Chúc mừng Quý khách và Ban tổ chức đã hoàn thành trọn vẹn mùa giải <strong>{$dsRef->giaiDau->TenGiaiDau}</strong> tại <strong>{$cumSanCopy}</strong>! Chúc các cầu thủ luôn giữ vững ngọn lửa đam mê, sức khỏe dồi dào và gặt hái thêm nhiều thành công mới."
+                                : "Cảm ơn bạn và đội bóng đã lựa chọn thi đấu tại <strong>{$tenSanCopy} ({$cumSanCopy})</strong>! Chúc bạn cùng anh em đội bóng luôn tràn đầy năng lượng, giữ vững phong độ và có thật nhiều trận cầu mãn nhãn.";
+
+                            $goiYDanhGia = ($dsRef && $dsRef->MaNguoiDung !== null)
+                                ? "<p style='margin: 12px 0 0 0; font-size: 13.5px; color: #334155;'>⭐ <em>Nếu hài lòng với chất lượng mặt cỏ và dịch vụ tại cơ sở, bạn đừng quên truy cập mục <strong>Lịch sử đặt sân</strong> trên website để gửi đánh giá cho <strong>{$cumSanCopy}</strong> nhé!</em></p>"
+                                : "";
+
+                            $noiDungMail = "
+                                <div style='font-family: Arial, sans-serif; max-width: 720px; margin: 0 auto; color: #0f172a; line-height: 1.6;'>
+                                    <div style='background: linear-gradient(135deg, #0b5d3b 0%, #15803d 100%); color: #ffffff; padding: 20px 24px; border-radius: 10px 10px 0 0;'>
+                                        <h2 style='margin: 0; font-size: 19px; text-transform: uppercase;'>HÓA ĐƠN TẤT TOÁN DỊCH VỤ ĐẶT SÂN (#{$maHoaDon})</h2>
+                                        <div style='font-size: 13px; opacity: 0.92; margin-top: 4px;'>Hệ thống sân bóng đá trực tuyến DN Football — Đà Nẵng</div>
                                     </div>
-                                ";
+                                    <div style='padding: 20px 24px; border: 1px solid #cbd5e1; border-top: none; border-radius: 0 0 10px 10px; background: #ffffff;'>
+                                        <p style='margin-top: 0;'>Xin chào <strong>{$tenKhachHD}</strong>,</p>
+                                        <p>Hệ thống <strong>DN Football</strong> xác nhận lịch đặt sân thuộc Hóa đơn <strong>#{$maHoaDon}</strong> của bạn đã <strong>hoàn thành và tất toán đầy đủ 100%</strong>. Dưới đây là Hóa đơn điện tử chính thức để bạn lưu trữ và đối chiếu:</p>
+                                        {$hoaDonHtml}
+                                        <div style='background: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid #16a34a; border-radius: 8px; padding: 14px 18px; margin-top: 16px;'>
+                                            <div style='color: #065f46; font-size: 14px;'>⚽ {$loiChuc}</div>
+                                            {$goiYDanhGia}
+                                        </div>
+                                        <p style='margin-top: 18px; margin-bottom: 0; font-size: 13.5px; color: #475569;'>Hẹn gặp lại bạn và đội bóng ở những trận cầu tiếp theo tại <strong>DN Football</strong>!</p>
+                                    </div>
+                                </div>
+                            ";
 
-                                Mail::html($noiDungMailHoanThanh, function ($message) use ($emailNhanHD, $maHoaDon, $cumSanCopy) {
-                                    $message->to($emailNhanHD)
-                                            ->subject("Hóa đơn điện tử #{$maHoaDon} (Đã tất toán) & Lời cảm ơn từ {$cumSanCopy} - DN Football");
-                                });
-                            } catch (\Exception $mailEx) {
-                                \Illuminate\Support\Facades\Log::error('Lỗi gửi mail hoàn thành hóa đơn: ' . $mailEx->getMessage());
-                            }
+                            Mail::html($noiDungMail, function ($message) use ($emailNhanHD, $maHoaDon, $cumSanCopy) {
+                                $message->to($emailNhanHD)
+                                        ->subject("Hóa đơn điện tử #{$maHoaDon} (Đã tất toán) & Lời cảm ơn từ {$cumSanCopy} - DN Football");
+                            });
                         }
+                        // NHÁNH B: KHÔNG CÓ TRẬN HOÀN THÀNH, HÓA ĐƠN ĐÓNG Ở TRẠNG THÁI KHÔNG ĐẾN -> Gửi Email đối soát giữ cọc
+                        elseif ($hdCheck->datSans->contains('TrangThai', 'KhongDen')) {
+                            $tongCocGiuLai = number_format((float) $hdCheck->datSans->where('TrangThai', 'KhongDen')->sum('TienCoc'), 0, ',', '.') . 'đ';
+
+                            $noiDungMail = "
+                                <div style='font-family: Arial, sans-serif; max-width: 720px; margin: 0 auto; color: #0f172a; line-height: 1.6;'>
+                                    <div style='background: linear-gradient(135deg, #475569 0%, #334155 100%); color: #ffffff; padding: 20px 24px; border-radius: 10px 10px 0 0;'>
+                                        <h2 style='margin: 0; font-size: 19px; text-transform: uppercase;'>THÔNG BÁO CHỐT HÓA ĐƠN VẮNG MẶT (#{$maHoaDon})</h2>
+                                        <div style='font-size: 13px; opacity: 0.92; margin-top: 4px;'>Hệ thống sân bóng đá trực tuyến DN Football — Đà Nẵng</div>
+                                    </div>
+                                    <div style='padding: 20px 24px; border: 1px solid #cbd5e1; border-top: none; border-radius: 0 0 10px 10px; background: #ffffff;'>
+                                        <p style='margin-top: 0;'>Xin chào <strong>{$tenKhachHD}</strong>,</p>
+                                        <p>Hệ thống <strong>DN Football</strong> ghi nhận bạn đã không đến nhận sân cho các lịch đặt thuộc Hóa đơn <strong>#{$maHoaDon}</strong> tại <strong>{$cumSanCopy}</strong>.</p>
+                                        <div style='background: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #ef4444; border-radius: 8px; padding: 12px 16px; margin: 14px 0; font-size: 13.5px; color: #991b1b;'>
+                                            Theo quy định đặt sân, số tiền đặt cọc <strong>{$tongCocGiuLai}</strong> sẽ không được hoàn lại và hóa đơn đã được chốt đóng (không phát sinh thêm khoản thu tại sân).
+                                        </div>
+                                        {$hoaDonHtml}
+                                        <p style='margin-top: 16px; margin-bottom: 0; font-size: 13.5px; color: #475569;'>Nếu có nhầm lẫn hoặc cần hỗ trợ, vui lòng liên hệ trực tiếp Hotline cơ sở. Hẹn gặp lại bạn ở những lần đặt sân tiếp theo!</p>
+                                    </div>
+                                </div>
+                            ";
+
+                            Mail::html($noiDungMail, function ($message) use ($emailNhanHD, $maHoaDon, $cumSanCopy) {
+                                $message->to($emailNhanHD)
+                                        ->subject("Thông báo chốt vắng mặt & đối soát Hóa đơn #{$maHoaDon} - {$cumSanCopy}");
+                            });
+                        }
+                    } catch (\Exception $mailEx) {
+                        \Illuminate\Support\Facades\Log::error('Lỗi gửi mail chốt hóa đơn: ' . $mailEx->getMessage());
                     }
                 })->afterResponse();
             }
@@ -1072,46 +1124,48 @@ class DatSanController extends Controller
 
             DB::commit();
 
-            // Gửi Email Hóa đơn điện tử & Vé QR Code tới Email khách
+            // Gửi Email Hóa đơn điện tử & Vé QR Code tới Email khách (chạy ngầm sau khi trả response)
             if ($emailKhach) {
-                try {
-                    $htmlVe = '';
-                    foreach ($cacVeVuaTao as $ve) {
-                        $qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=6&data=" . urlencode($ve['maVe']);
-                        $htmlVe .= "
-                            <div style='border:1px solid #cbd5e1; padding:16px; margin-bottom:15px; border-radius:10px; display:flex; align-items:center; justify-content:space-between; background:#ffffff;'>
-                                <div style='padding-right:15px;'>
-                                    <h3 style='margin:0 0 10px 0; color:#10B981; font-size:18px;'>Mã vé: #{$ve['maVe']} <span style='font-size:13px; color:#475569;'>(HĐ #{$ve['maHoaDon']})</span></h3>
-                                    <p style='margin:4px 0;'><strong>Sân:</strong> {$ve['tenSan']} ({$ve['cumSan']})</p>
-                                    <p style='margin:4px 0;'><strong>Ngày:</strong> {$ve['ngay']} | <strong>Giờ:</strong> {$ve['gio']}</p>
-                                    <hr style='border:0; border-top:1px dashed #cbd5e1; margin:10px 0;'/>
-                                    <p style='margin:4px 0;'><strong>Đã cọc:</strong> {$ve['tienCoc']}</p>
+                dispatch(function () use ($emailKhach, $hoTenKhach, $cacVeVuaTao, $danhSachMaHoaDon, $htmlTatCaHoaDonEmail) {
+                    try {
+                        $htmlVe = '';
+                        foreach ($cacVeVuaTao as $ve) {
+                            $qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=6&data=" . urlencode($ve['maVe']);
+                            $htmlVe .= "
+                                <div style='border:1px solid #cbd5e1; padding:16px; margin-bottom:15px; border-radius:10px; display:flex; align-items:center; justify-content:space-between; background:#ffffff;'>
+                                    <div style='padding-right:15px;'>
+                                        <h3 style='margin:0 0 10px 0; color:#10B981; font-size:18px;'>Mã vé: #{$ve['maVe']} <span style='font-size:13px; color:#475569;'>(HĐ #{$ve['maHoaDon']})</span></h3>
+                                        <p style='margin:4px 0;'><strong>Sân:</strong> {$ve['tenSan']} ({$ve['cumSan']})</p>
+                                        <p style='margin:4px 0;'><strong>Ngày:</strong> {$ve['ngay']} | <strong>Giờ:</strong> {$ve['gio']}</p>
+                                        <hr style='border:0; border-top:1px dashed #cbd5e1; margin:10px 0;'/>
+                                        <p style='margin:4px 0;'><strong>Đã cọc:</strong> {$ve['tienCoc']}</p>
+                                    </div>
+                                    <div style='text-align:center; border-left:1px dashed #cbd5e1; padding-left:15px;'>
+                                        <img src='{$qrUrl}' alt='QR {$ve['maVe']}' style='width:120px; height:120px; display:block; margin:0 auto; border:1px solid #e2e8f0; border-radius:8px;' />
+                                        <div style='font-size:11px; color:#64748b; margin-top:5px;'>Quét mã khi đến sân</div>
+                                    </div>
                                 </div>
-                                <div style='text-align:center; border-left:1px dashed #cbd5e1; padding-left:15px;'>
-                                    <img src='{$qrUrl}' alt='QR {$ve['maVe']}' style='width:120px; height:120px; display:block; margin:0 auto; border:1px solid #e2e8f0; border-radius:8px;' />
-                                    <div style='font-size:11px; color:#64748b; margin-top:5px;'>Quét mã khi đến sân</div>
-                                </div>
-                            </div>
+                            ";
+                        }
+
+                        $dsMaHDStr = implode(', #', $danhSachMaHoaDon);
+                        $noiDungMail = "
+                            <h2>Xác nhận đặt sân & Hóa đơn điện tử - DN Football</h2>
+                            <p>Chào <strong>{$hoTenKhach}</strong>,</p>
+                            <p>Cảm ơn bạn đã đặt sân trực tiếp tại quầy DN Football. Dưới đây là <strong>Hóa đơn đặt sân (#{$dsMaHDStr})</strong> và <strong>Vé điện tử QR Code</strong> của bạn:</p>
+                            {$htmlTatCaHoaDonEmail}
+                            <h3 style='margin-top:24px; color:#0f172a;'>Danh sách Vé Điện Tử (Check-in tại sân):</h3>
+                            {$htmlVe}
                         ";
+
+                        Mail::html($noiDungMail, function ($message) use ($emailKhach, $dsMaHDStr) {
+                            $message->to($emailKhach)
+                                    ->subject("Hóa Đơn #{$dsMaHDStr} & Vé Đặt Sân - DN Football");
+                        });
+                    } catch (\Exception $mailEx) {
+                        \Illuminate\Support\Facades\Log::error('Lỗi gửi mail đặt sân hộ: ' . $mailEx->getMessage());
                     }
-
-                    $dsMaHDStr = implode(', #', $danhSachMaHoaDon);
-                    $noiDungMail = "
-                        <h2>Xác nhận đặt sân & Hóa đơn điện tử - DN Football</h2>
-                        <p>Chào <strong>{$hoTenKhach}</strong>,</p>
-                        <p>Cảm ơn bạn đã đặt sân trực tiếp tại quầy DN Football. Dưới đây là <strong>Hóa đơn đặt sân (#{$dsMaHDStr})</strong> và <strong>Vé điện tử QR Code</strong> của bạn:</p>
-                        {$htmlTatCaHoaDonEmail}
-                        <h3 style='margin-top:24px; color:#0f172a;'>Danh sách Vé Điện Tử (Check-in tại sân):</h3>
-                        {$htmlVe}
-                    ";
-
-                    Mail::html($noiDungMail, function ($message) use ($emailKhach, $dsMaHDStr) {
-                        $message->to($emailKhach)
-                                ->subject("Hóa Đơn #{$dsMaHDStr} & Vé Đặt Sân - DN Football");
-                    });
-                } catch (\Exception $mailEx) {
-                    \Illuminate\Support\Facades\Log::error('Lỗi gửi mail đặt sân hộ: ' . $mailEx->getMessage());
-                }
+                })->afterResponse();
             }
 
             broadcast(new \App\Events\SystemDataUpdated())->toOthers();
@@ -2353,57 +2407,61 @@ class DatSanController extends Controller
                 }
             }
 
-            // GỬI 1 EMAIL XÁC NHẬN HỦY & HOÀN CỌC DUY NHẤT CHO KHÁCH VÃNG LAI / ĐẶT SÂN HỘ
-            if ($first->MaNguoiDung === null && $first->EmailNguoiDat) {
-                try {
-                    $tongCocStr = number_format($tongTienHoan, 0, ',', '.') . 'đ';
-                    $danhSachTranHtml = '';
-
-                    foreach ($cacTranCanHuy as $dsItem) {
-                        $tenSanItem = $dsItem->sanBong ? $dsItem->sanBong->TenSan : 'Sân bóng';
-                        $cumSanItem = ($dsItem->sanBong && $dsItem->sanBong->cumSan) ? $dsItem->sanBong->cumSan->TenCumSan : '';
-                        $ngayDaItem = date('d/m/Y', strtotime($dsItem->NgayDa));
-                        $gioDaItem  = $dsItem->khungGio ? substr($dsItem->khungGio->GioBatDau, 0, 5) . ' - ' . substr($dsItem->khungGio->GioKetThuc, 0, 5) : '';
-                        $cocItem    = number_format($dsItem->TienCoc, 0, ',', '.') . 'đ';
-
-                        $danhSachTranHtml .= "
-                            <li style='margin-bottom: 4px;'>
-                                <strong>Vé #PT-{$dsItem->MaDatSan}:</strong> {$tenSanItem} ({$cumSanItem}) — {$gioDaItem} ngày {$ngayDaItem} (Cọc: <strong>{$cocItem}</strong>)
-                            </li>
-                        ";
-                    }
-
-                    $tieuDeMail = $laHuyToanBo
-                        ? "Xác nhận hủy toàn bộ Hóa đơn đặt sân #{$maHoaDon} thành công"
-                        : "Xác nhận hủy {$soTranHuy} trận trong Hóa đơn đặt sân #{$maHoaDon} thành công";
-
-                    $moTaMail = $laHuyToanBo
-                        ? "Toàn bộ <strong>{$soTranHuy} trận</strong> trong hóa đơn đặt sân <strong>#{$maHoaDon}</strong> của bạn đã được hủy thành công theo yêu cầu:"
-                        : "<strong>{$soTranHuy} trận</strong> dưới đây trong hóa đơn đặt sân <strong>#{$maHoaDon}</strong> của bạn đã được hủy thành công theo yêu cầu (các trận còn lại trong hóa đơn vẫn giữ nguyên hiệu lực):";
-
-                    $mailHuyHD = "
-                        <h2>{$tieuDeMail}</h2>
-                        <p>Chào <strong>{$first->TenNguoiDat}</strong>,</p>
-                        <p>{$moTaMail}</p>
-                        <ul>
-                            {$danhSachTranHtml}
-                        </ul>
-                        <p><strong>Tổng số tiền cọc hoàn lại:</strong> <span style='color:#10b981; font-weight:bold; font-size:16px;'>{$tongCocStr}</span></p>
-                        <p>Cảm ơn bạn đã sử dụng dịch vụ của DN Football!</p>
-                    ";
-
-                    Mail::html($mailHuyHD, function ($message) use ($first, $maHoaDon, $soTranHuy, $laHuyToanBo) {
-                        $subj = $laHuyToanBo
-                            ? "Xác nhận hủy Hóa đơn đặt sân #{$maHoaDon} - DN Football"
-                            : "Xác nhận hủy {$soTranHuy} trận (HĐ #{$maHoaDon}) - DN Football";
-                        $message->to($first->EmailNguoiDat)->subject($subj);
-                    });
-                } catch (\Exception $mailEx) {
-                    \Illuminate\Support\Facades\Log::error('Lỗi gửi mail hủy hóa đơn khách vãng lai: ' . $mailEx->getMessage());
-                }
-            }
-
             DB::commit();
+
+            // GỬI 1 EMAIL XÁC NHẬN HỦY & HOÀN CỌC DUY NHẤT CHO KHÁCH VÃNG LAI / ĐẶT SÂN HỘ (CHẠY NGẦM)
+            if ($first->MaNguoiDung === null && $first->EmailNguoiDat) {
+                $tongCocStr = number_format($tongTienHoan, 0, ',', '.') . 'đ';
+                $danhSachTranHtml = '';
+
+                foreach ($cacTranCanHuy as $dsItem) {
+                    $tenSanItem = $dsItem->sanBong ? $dsItem->sanBong->TenSan : 'Sân bóng';
+                    $cumSanItem = ($dsItem->sanBong && $dsItem->sanBong->cumSan) ? $dsItem->sanBong->cumSan->TenCumSan : '';
+                    $ngayDaItem = date('d/m/Y', strtotime($dsItem->NgayDa));
+                    $gioDaItem  = $dsItem->khungGio ? substr($dsItem->khungGio->GioBatDau, 0, 5) . ' - ' . substr($dsItem->khungGio->GioKetThuc, 0, 5) : '';
+                    $cocItem    = number_format($dsItem->TienCoc, 0, ',', '.') . 'đ';
+
+                    $danhSachTranHtml .= "
+                        <li style='margin-bottom: 4px;'>
+                            <strong>Vé #PT-{$dsItem->MaDatSan}:</strong> {$tenSanItem} ({$cumSanItem}) — {$gioDaItem} ngày {$ngayDaItem} (Cọc: <strong>{$cocItem}</strong>)
+                        </li>
+                    ";
+                }
+
+                $tieuDeMail = $laHuyToanBo
+                    ? "Xác nhận hủy toàn bộ Hóa đơn đặt sân #{$maHoaDon} thành công"
+                    : "Xác nhận hủy {$soTranHuy} trận trong Hóa đơn đặt sân #{$maHoaDon} thành công";
+
+                $moTaMail = $laHuyToanBo
+                    ? "Toàn bộ <strong>{$soTranHuy} trận</strong> trong hóa đơn đặt sân <strong>#{$maHoaDon}</strong> của bạn đã được hủy thành công theo yêu cầu:"
+                    : "<strong>{$soTranHuy} trận</strong> dưới đây trong hóa đơn đặt sân <strong>#{$maHoaDon}</strong> của bạn đã được hủy thành công theo yêu cầu (các trận còn lại trong hóa đơn vẫn giữ nguyên hiệu lực):";
+
+                $mailHuyHD = "
+                    <h2>{$tieuDeMail}</h2>
+                    <p>Chào <strong>{$first->TenNguoiDat}</strong>,</p>
+                    <p>{$moTaMail}</p>
+                    <ul>
+                        {$danhSachTranHtml}
+                    </ul>
+                    <p><strong>Tổng số tiền cọc hoàn lại:</strong> <span style='color:#10b981; font-weight:bold; font-size:16px;'>{$tongCocStr}</span></p>
+                    <p>Cảm ơn bạn đã sử dụng dịch vụ của DN Football!</p>
+                ";
+
+                $emailHuyHD = $first->EmailNguoiDat;
+                $subjHuyHD = $laHuyToanBo
+                    ? "Xác nhận hủy Hóa đơn đặt sân #{$maHoaDon} - DN Football"
+                    : "Xác nhận hủy {$soTranHuy} trận (HĐ #{$maHoaDon}) - DN Football";
+
+                dispatch(function () use ($emailHuyHD, $subjHuyHD, $mailHuyHD) {
+                    try {
+                        Mail::html($mailHuyHD, function ($message) use ($emailHuyHD, $subjHuyHD) {
+                            $message->to($emailHuyHD)->subject($subjHuyHD);
+                        });
+                    } catch (\Exception $mailEx) {
+                        \Illuminate\Support\Facades\Log::error('Lỗi gửi mail hủy hóa đơn khách vãng lai: ' . $mailEx->getMessage());
+                    }
+                })->afterResponse();
+            }
 
             if ($first->MaNguoiDung !== null) {
                 broadcast(new \App\Events\UserDataUpdated($first->MaNguoiDung))->toOthers();
@@ -2497,12 +2555,18 @@ class DatSanController extends Controller
                 </div>
             ";
 
-            Mail::html($noiDungMail, function ($message) use ($emailNhan, $maVeRaw) {
-                $message->to($emailNhan)
-                        ->subject("Xác nhận dời lịch vé #{$maVeRaw} - DN Football");
-            });
+            dispatch(function () use ($noiDungMail, $emailNhan, $maVeRaw) {
+                try {
+                    Mail::html($noiDungMail, function ($message) use ($emailNhan, $maVeRaw) {
+                        $message->to($emailNhan)
+                                ->subject("Xác nhận dời lịch vé #{$maVeRaw} - DN Football");
+                    });
+                } catch (\Exception $mailEx) {
+                    \Illuminate\Support\Facades\Log::error('Lỗi gửi email xác nhận dời lịch: ' . $mailEx->getMessage());
+                }
+            })->afterResponse();
         } catch (\Exception $mailEx) {
-            \Illuminate\Support\Facades\Log::error('Lỗi gửi email xác nhận dời lịch: ' . $mailEx->getMessage());
+            \Illuminate\Support\Facades\Log::error('Lỗi chuẩn bị email xác nhận dời lịch: ' . $mailEx->getMessage());
         }
     }
 
