@@ -2898,6 +2898,23 @@ async function refreshCustomerPitchesRealtime() {
     }
 }
 
+function getCustomerWeatherSlotBadge(w) {
+    if (!w) return '';
+    const tooltip = `${w.kieu_thoi_tiet} | Xác suất mưa: ${w.xac_suat_mua}% | Lượng mưa: ${w.luong_mua_mm}mm | Nhiệt độ: ${w.nhiet_do}°C`;
+    if (w.co_mua) {
+        return `<div title="${tooltip}" style="margin-top: 4px; display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px; border-radius: 999px; background: #E0F2FE; border: 1px solid #7DD3FC; color: #0369A1; font-size: 0.69rem; font-weight: 700; line-height: 1.2; cursor: default;">
+            <i class="fa-solid fa-cloud-rain"></i> ${w.xac_suat_mua}% &bull; ${w.nhiet_do}°C
+        </div>`;
+    }
+    const isSunny = (w.kieu_thoi_tiet || '').toLowerCase().includes('nắng');
+    const icon = isSunny
+        ? '<i class="fa-solid fa-sun" style="color: #F59E0B;"></i>'
+        : '<i class="fa-solid fa-cloud" style="color: #94A3B8;"></i>';
+    return `<div title="${tooltip}" style="margin-top: 4px; display: inline-flex; align-items: center; gap: 3px; color: #64748B; font-size: 0.69rem; font-weight: 600; line-height: 1.2; cursor: default;">
+        ${icon} ${w.nhiet_do}°C
+    </div>`;
+}
+
 async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSanId, pitchType) {
     currentClusterId = clusterId; currentClusterName = clusterName;
     currentPitchId = pitchId; currentPitchName = pitchName;
@@ -2918,15 +2935,17 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
             }
         }
 
-        const [gtRes, kgRes, dsRes] = await Promise.all([
+        const [gtRes, kgRes, dsRes, wtRes] = await Promise.all([
             fetch(`${API_BASE_URL}/gia-tien?cum_san_id=${clusterId}`),
             fetch(`${API_BASE_URL}/khung-gio`),
-            fetch(`${API_BASE_URL}/dat-san/da-dat?id_san_bong=${pitchId}`)
+            fetch(`${API_BASE_URL}/dat-san/da-dat?id_san_bong=${pitchId}`),
+            fetch(`${API_BASE_URL}/thoi-tiet?cum_san_id=${clusterId}`).catch(() => null)
         ]);
 
         const giaTienData = (await gtRes.json()).data || [];
         const allKhungGio = (await kgRes.json()).data || [];
         const bookedSlots = (await dsRes.json()).data || [];
+        const weatherMap = (wtRes && wtRes.ok) ? ((await wtRes.json()).data || {}) : {};
 
         const validPrices = giaTienData.filter(gt => gt.ID_LoaiSan == loaiSanId);
         const availableTimeSlots = allKhungGio;
@@ -3037,7 +3056,7 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                 </div>
 
                 <!-- Chú thích màu sắc ô lịch -->
-                <div style="display: flex; align-items: center; gap: 18px; font-size: 0.84rem; font-weight: 600; color: #475569;">
+                <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 0.84rem; font-weight: 600; color: #475569;">
                     <span style="display: inline-flex; align-items: center; gap: 7px;">
                         <span style="width: 15px; height: 15px; border-radius: 4px; background: #F0FDF4; border: 1.5px solid #86EFAC; display: inline-block;"></span> Còn trống
                     </span>
@@ -3045,7 +3064,10 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                         <span style="width: 15px; height: 15px; border-radius: 4px; background: var(--primary); display: inline-block;"></span> Đang chọn
                     </span>
                     <span style="display: inline-flex; align-items: center; gap: 7px;">
-                        <span style="width: 15px; height: 15px; border-radius: 4px; background: #E2E8F0; border: 1px solid #CBD5E1; display: inline-block;"></span> Đã đặt / Quá giờ
+                        <span style="width: 15px; height: 15px; border-radius: 4px; background: #E2E8F0; border: 1px solid #CBD5E1; display: inline-block;"></span> Đã đặt
+                    </span>
+                    <span style="display: inline-flex; align-items: center; gap: 7px;">
+                        <span style="width: 15px; height: 15px; border-radius: 4px; background: #F8FAFC; border: 1px dashed #CBD5E1; display: inline-block;"></span> Quá giờ
                     </span>
                 </div>
             </div>
@@ -3114,11 +3136,13 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                 const isPast = slotDateTime <= now; 
                 
                 let statusClass = 'available', statusText = 'CÒN TRỐNG';
+                let slotExtraStyle = '';
                 const slotDataArgs = `'${clusterId}', '${clusterName.replace(/'/g, "\\'")}', '${pitchId}', '${pitchName.replace(/'/g, "\\'")}', '${date.full}', '${timeStr}', ${priceValue}`;
                 
                 if (isPast) {
                     statusClass = 'booked'; 
                     statusText = 'Quá giờ';
+                    slotExtraStyle = 'style="background: #F8FAFC; border: 1px dashed #CBD5E1; color: #94A3B8;"';
                 } else if (!isValid) {
                     statusClass = 'booked'; 
                     statusText = 'Đóng';
@@ -3130,9 +3154,14 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                     statusText = 'ĐÃ CHỌN ✓'; 
                 }
                 
+                const hourPrefix = kg.GioBatDau.substring(0, 2);
+                const weatherBadgeHtml = (!isPast && isValid)
+                    ? getCustomerWeatherSlotBadge(weatherMap[`${formatNgayDa}_${hourPrefix}`])
+                    : '';
+
                 html += `
-                    <td style="border-bottom: 1px solid #f1f5f9; padding: 6px;">
-                        <div class="slot ${statusClass}" 
+                    <td style="border-bottom: 1px solid #f1f5f9; padding: 6px; text-align: center;">
+                        <div class="slot ${statusClass}" ${slotExtraStyle}
                             data-slot-id="${slotId}"
                             data-slot-key="${slotKey}"
                             data-date-full="${date.full}"
@@ -3141,6 +3170,7 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                             ${(!isBooked && !isPast && isValid) ? `onclick="toggleSlot(this, ${slotDataArgs})"` : ''}>
                             ${statusText}
                         </div>
+                        ${weatherBadgeHtml}
                     </td>
                 `;
             });

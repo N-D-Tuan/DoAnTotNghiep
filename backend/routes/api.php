@@ -60,6 +60,8 @@ Route::get('/dat-san-guest/vnpay-return', [DatSanController::class, 'vnpayReturn
 Route::get('/danh-gia', [DanhGiaController::class, 'layDanhSachTheoCumSan']);
 Route::get('/hoa-don-dat-san/{maHoaDon}', [DatSanController::class, 'layChiTietHoaDonDatSan']);
 
+Route::get('/thoi-tiet', [DatSanController::class, 'layDuBaoThoiTietTheoCum']);
+
 // ==========================================================
 // NHÓM 2: PROTECTED API (BẮT BUỘC TRUYỀN TOKEN TRONG HEADER)
 // Sử dụng auth:sanctum để tự động kiểm tra Token
