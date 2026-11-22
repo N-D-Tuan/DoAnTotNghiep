@@ -1275,21 +1275,40 @@ async function refreshGuestPitchesRealtime() {
     }
 }
 
+function getGuestWeatherSlotBadge(w) {
+    if (!w) return '';
+    const tooltip = `${w.kieu_thoi_tiet} | Xác suất mưa: ${w.xac_suat_mua}% | Lượng mưa: ${w.luong_mua_mm}mm | Nhiệt độ: ${w.nhiet_do}°C`;
+    if (w.co_mua) {
+        return `<div title="${tooltip}" style="margin-top: 4px; display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px; border-radius: 999px; background: #E0F2FE; border: 1px solid #7DD3FC; color: #0369A1; font-size: 0.69rem; font-weight: 700; line-height: 1.2; cursor: default;">
+            <i class="fa-solid fa-cloud-rain"></i> ${w.xac_suat_mua}% &bull; ${w.nhiet_do}°C
+        </div>`;
+    }
+    const isSunny = (w.kieu_thoi_tiet || '').toLowerCase().includes('nắng');
+    const icon = isSunny
+        ? '<i class="fa-solid fa-sun" style="color: #F59E0B;"></i>'
+        : '<i class="fa-solid fa-cloud" style="color: #94A3B8;"></i>';
+    return `<div title="${tooltip}" style="margin-top: 4px; display: inline-flex; align-items: center; gap: 3px; color: #64748B; font-size: 0.69rem; font-weight: 600; line-height: 1.2; cursor: default;">
+        ${icon} ${w.nhiet_do}°C
+    </div>`;
+}
+
 async function loadSchedule(clusterId, pitchId) {
     appContent.innerHTML = '<div style="text-align:center; padding: 40px;"><i class="fa-solid fa-spinner fa-spin fa-2x" style="color:#16A34A"></i></div>';
 
     try {
-        const [sbRes, gtRes, kgRes, dsRes] = await Promise.all([
+        const [sbRes, gtRes, kgRes, dsRes, wtRes] = await Promise.all([
             fetch(`${API_BASE_URL}/san-bong?cum_san_id=${clusterId}`),
             fetch(`${API_BASE_URL}/gia-tien?cum_san_id=${clusterId}`),
             fetch(`${API_BASE_URL}/khung-gio`),
-            fetch(`${API_BASE_URL}/dat-san/da-dat?id_san_bong=${pitchId}`)
+            fetch(`${API_BASE_URL}/dat-san/da-dat?id_san_bong=${pitchId}`),
+            fetch(`${API_BASE_URL}/thoi-tiet?cum_san_id=${clusterId}`).catch(() => null)
         ]);
 
         const pitches = (await sbRes.json()).data || [];
         const prices = (await gtRes.json()).data || [];
         const timeSlots = (await kgRes.json()).data || [];
         const booked = (await dsRes.json()).data || [];
+        const weatherMap = (wtRes && wtRes.ok) ? ((await wtRes.json()).data || {}) : {};
 
         const pitch = pitches.find(p => (p.MaSanBong || p.ID) == pitchId);
         appState.currentPitch = pitch;
@@ -1426,14 +1445,17 @@ async function loadSchedule(clusterId, pitchId) {
                 const isSelected = guestSelectedSlots.some(s => s.id === slotId);
                 const slotDataStr = `'${timeStr}', '${priceVal}', '${date.short}', '${maKG}'`;
 
+                const hourPrefix = kg.GioBatDau.substring(0, 2);
+                const weatherBadgeHtml = isPast ? '' : getGuestWeatherSlotBadge(weatherMap[`${date.dbDate}_${hourPrefix}`]);
+
                 if (isPast) {
                     html += `<td style="text-align:center; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F8FAFC;"><button class="slot-btn past" data-slot-id="${slotId}" disabled>Quá giờ</button></td>`;
                 } else if (isBooked) {
-                    html += `<td style="text-align:center; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F8FAFC;"><button class="slot-btn booked" data-slot-id="${slotId}" data-slot-data="${slotDataStr}" disabled>Đã đặt</button></td>`;
+                    html += `<td style="text-align:center; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F8FAFC; padding: 6px 4px;"><button class="slot-btn booked" data-slot-id="${slotId}" data-slot-data="${slotDataStr}" disabled>Đã đặt</button>${weatherBadgeHtml}</td>`;
                 } else if (isSelected) {
-                    html += `<td style="text-align:center; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F8FAFC;"><button class="slot-btn available selected" data-slot-id="${slotId}" data-slot-data="${slotDataStr}" onclick="triggerModal(this, ${slotDataStr})">ĐÃ CHỌN ✓</button></td>`;
+                    html += `<td style="text-align:center; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F8FAFC; padding: 6px 4px;"><button class="slot-btn available selected" data-slot-id="${slotId}" data-slot-data="${slotDataStr}" onclick="triggerModal(this, ${slotDataStr})">ĐÃ CHỌN ✓</button>${weatherBadgeHtml}</td>`;
                 } else {
-                    html += `<td style="text-align:center; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F8FAFC;"><button class="slot-btn available" data-slot-id="${slotId}" data-slot-data="${slotDataStr}" onclick="triggerModal(this, ${slotDataStr})">TRỐNG</button></td>`;
+                    html += `<td style="text-align:center; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F8FAFC; padding: 6px 4px;"><button class="slot-btn available" data-slot-id="${slotId}" data-slot-data="${slotDataStr}" onclick="triggerModal(this, ${slotDataStr})">TRỐNG</button>${weatherBadgeHtml}</td>`;
                 }
             });
             html += `</tr>`;

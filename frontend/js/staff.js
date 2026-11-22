@@ -1052,6 +1052,23 @@ window.shiftStaffScheduleDays = function(offsetDays) {
     changeStaffScheduleStartDate(nextYmd);
 };
 
+function getStaffWeatherSlotBadge(w) {
+    if (!w) return '';
+    const tooltip = `${w.kieu_thoi_tiet} | Xác suất mưa: ${w.xac_suat_mua}% | Lượng mưa: ${w.luong_mua_mm}mm | Nhiệt độ: ${w.nhiet_do}°C`;
+    if (w.co_mua) {
+        return `<div title="${tooltip}" style="margin-top: 4px; display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px; border-radius: 999px; background: #E0F2FE; border: 1px solid #7DD3FC; color: #0369A1; font-size: 0.69rem; font-weight: 700; line-height: 1.2; cursor: default;">
+            <i class="fa-solid fa-cloud-rain"></i> ${w.xac_suat_mua}% &bull; ${w.nhiet_do}°C
+        </div>`;
+    }
+    const isSunny = (w.kieu_thoi_tiet || '').toLowerCase().includes('nắng');
+    const icon = isSunny
+        ? '<i class="fa-solid fa-sun" style="color: #F59E0B;"></i>'
+        : '<i class="fa-solid fa-cloud" style="color: #94A3B8;"></i>';
+    return `<div title="${tooltip}" style="margin-top: 4px; display: inline-flex; align-items: center; gap: 3px; color: #64748B; font-size: 0.69rem; font-weight: 600; line-height: 1.2; cursor: default;">
+        ${icon} ${w.nhiet_do}°C
+    </div>`;
+}
+
 // Render Lưới Lịch cho một Sân cụ thể
 async function loadStaffSchedule(clusterId, pitchName, pitchId, loaiSanId, customStartDate = null) {
     currentPitchId = pitchId;
@@ -1065,15 +1082,17 @@ async function loadStaffSchedule(clusterId, pitchName, pitchId, loaiSanId, custo
     container.innerHTML = `<div style="text-align:center; padding: 50px;"><i class="fa-solid fa-spinner fa-spin text-primary" style="font-size: 2rem;"></i><br><br>Đang tải lịch của ${pitchName}...</div>`;
 
     try {
-        const [gtRes, kgRes, dsRes] = await Promise.all([
+        const [gtRes, kgRes, dsRes, wtRes] = await Promise.all([
             fetch(`${API_BASE_URL}/gia-tien?cum_san_id=${clusterId}`),
             fetch(`${API_BASE_URL}/khung-gio`),
-            fetch(`${API_BASE_URL}/dat-san/da-dat?id_san_bong=${pitchId}`)
+            fetch(`${API_BASE_URL}/dat-san/da-dat?id_san_bong=${pitchId}`),
+            fetch(`${API_BASE_URL}/thoi-tiet?cum_san_id=${clusterId}`).catch(() => null)
         ]);
 
         const giaTienData = (await gtRes.json()).data || [];
         const allKhungGio = (await kgRes.json()).data || [];
         const bookedSlots = (await dsRes.json()).data || [];
+        const weatherMap = (wtRes && wtRes.ok) ? ((await wtRes.json()).data || {}) : {};
 
         const validPrices = giaTienData.filter(gt => gt.ID_LoaiSan == loaiSanId);
 
@@ -1111,6 +1130,23 @@ async function loadStaffSchedule(clusterId, pitchName, pitchId, loaiSanId, custo
                         <button type="button" class="btn-outline-sm" onclick="shiftStaffScheduleDays(7)">7 ngày tiếp <i class="fa-solid fa-chevron-right"></i></button>
                     </div>
                 </div>
+
+                <!-- Chú thích màu trạng thái khung giờ -->
+                <div style="display: flex; align-items: center; justify-content: flex-end; gap: 16px; flex-wrap: wrap; padding: 10px 18px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; font-size: 0.82rem; font-weight: 600; color: #475569;">
+                    <span style="display: inline-flex; align-items: center; gap: 6px;">
+                        <span style="width: 15px; height: 15px; border-radius: 4px; background: #F0FDF4; border: 1.5px solid #86EFAC; display: inline-block;"></span> Còn trống
+                    </span>
+                    <span style="display: inline-flex; align-items: center; gap: 6px;">
+                        <span style="width: 15px; height: 15px; border-radius: 4px; background: var(--primary); display: inline-block;"></span> Đã chọn
+                    </span>
+                    <span style="display: inline-flex; align-items: center; gap: 6px;">
+                        <span style="width: 15px; height: 15px; border-radius: 4px; background: #E2E8F0; border: 1px solid #CBD5E1; display: inline-block;"></span> Đã đặt
+                    </span>
+                    <span style="display: inline-flex; align-items: center; gap: 6px;">
+                        <span style="width: 15px; height: 15px; border-radius: 4px; background: #F1F5F9; border: 1px dashed #CBD5E1; display: inline-block;"></span> Quá giờ
+                    </span>
+                </div>
+
                 <div style="width: 100%; max-height: 500px; overflow-y: auto; overflow-x: auto;"> 
                     <table class="schedule-table" style="margin: 0; border: none;">
                         <thead>
@@ -1155,12 +1191,16 @@ async function loadStaffSchedule(clusterId, pitchName, pitchId, loaiSanId, custo
                 const isSelected = selectedOfflineSlots.some(s => s.id === slotId);
                 
                 let statusClass = 'available', statusText = 'CÒN TRỐNG';
-                
+                let slotExtraStyle = '';
+
                 const slotDataStr = `'${pitchId}', '${kg.ID}', '${date.dbFormat}', '${date.displayFormat}', '${timeStr}', ${priceValue}`;
                 let onClickAttr = `data-slot-data="${slotDataStr}" onclick="toggleOfflineSlot(this, ${slotDataStr})"`;
                 
                 if (isPast) {
-                    statusClass = 'booked'; statusText = 'Quá giờ'; onClickAttr = '';
+                    statusClass = 'booked';
+                    statusText = 'Quá giờ';
+                    onClickAttr = '';
+                    slotExtraStyle = 'style="background: #F8FAFC; border: 1px dashed #CBD5E1; color: #94A3B8;"';
                 } else if (!isValid) {
                     statusClass = 'booked'; statusText = 'Đóng'; onClickAttr = '';
                 } else if (isBooked) { 
@@ -1169,7 +1209,17 @@ async function loadStaffSchedule(clusterId, pitchName, pitchId, loaiSanId, custo
                     statusClass = 'available selected'; statusText = 'ĐÃ CHỌN ✓';
                 }
                 
-                html += `<td><div class="slot ${statusClass}" data-slot-id="${slotId}" ${onClickAttr}>${statusText}</div></td>`;
+                const hourPrefix = kg.GioBatDau.substring(0, 2);
+                const weatherBadgeHtml = (!isPast && isValid)
+                    ? getStaffWeatherSlotBadge(weatherMap[`${date.dbFormat}_${hourPrefix}`])
+                    : '';
+
+                html += `
+                    <td style="text-align: center; vertical-align: middle; padding: 6px;">
+                        <div class="slot ${statusClass}" ${slotExtraStyle} data-slot-id="${slotId}" ${onClickAttr}>${statusText}</div>
+                        ${weatherBadgeHtml}
+                    </td>
+                `;
             });
             html += `</tr>`;
         });

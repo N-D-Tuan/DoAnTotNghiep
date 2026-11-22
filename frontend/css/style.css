@@ -804,7 +804,6 @@ h1, h2, h3, h4 {
     background-color: #F8FAFC !important; 
     color: #94A3B8 !important; 
     border: 1px dashed #CBD5E1 !important;
-    text-decoration: line-through;
     cursor: not-allowed; 
 }
 

@@ -3515,4 +3515,39 @@ class DatSanController extends Controller
             }
         }
     }
+
+    public function layDuBaoThoiTietTheoCum(Request $request)
+    {
+        $maCumSan = trim((string) $request->query('cum_san_id', ''));
+        if ($maCumSan === '') {
+            return response()->json(['success' => true, 'data' => []]);
+        }
+
+        $weatherMap = self::docDuBaoThoiTietTuCSV();
+        $result = [];
+        $prefix = $maCumSan . '_';
+
+        foreach ($weatherMap as $key => $w) {
+            if (strpos($key, $prefix) === 0) {
+                // $key dạng "CSANPHUC_2026-11-22 18:00:00" -> lấy "2026-11-22_18"
+                $timePart = substr($key, strlen($prefix));
+                $dateStr = substr($timePart, 0, 10);
+                $hourStr = substr($timePart, 11, 2);
+
+                $laCoMua = (mb_strtolower($w['co_mua'], 'UTF-8') === 'có')
+                    || ($w['luong_mua_mm'] > 0)
+                    || (stripos($w['kieu_thoi_tiet'], 'Mưa') !== false);
+
+                $result["{$dateStr}_{$hourStr}"] = [
+                    'co_mua'         => $laCoMua,
+                    'xac_suat_mua'   => round($w['xac_suat_mua']),
+                    'luong_mua_mm'   => $w['luong_mua_mm'],
+                    'kieu_thoi_tiet' => $w['kieu_thoi_tiet'] ?: ($laCoMua ? 'Có mưa' : 'Ít mây'),
+                    'nhiet_do'       => round($w['nhiet_do']),
+                ];
+            }
+        }
+
+        return response()->json(['success' => true, 'data' => $result]);
+    }
 }
