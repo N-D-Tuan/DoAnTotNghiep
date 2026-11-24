@@ -1575,6 +1575,7 @@ function handlePurposeChange(selectElement) {
         currentBookingPurpose = selectElement.value;
         sessionStorage.setItem('dn_football_booking_purpose', currentBookingPurpose); 
         updateCartTotal();
+        syncCustomerPitchDatesWithPurpose();
     }
 }
 
@@ -1584,6 +1585,7 @@ function confirmPurposeChange() {
         currentBookingPurpose = pendingBookingPurpose;
         sessionStorage.setItem('dn_football_booking_purpose', currentBookingPurpose); 
         clearAllSlots(); 
+        syncCustomerPitchDatesWithPurpose();
     }
     pendingBookingPurpose = null;
     pendingSelectElement = null;
@@ -1658,6 +1660,8 @@ function closeCartModal() {
         if (needReRender) {
             renderSchedule(currentClusterId, currentClusterName, currentPitchId, currentPitchName, currentLoaiSanId, currentPitchType);
         }
+    } else if (currentClusterId !== null && currentPitchId === null && isPurposeChanged) {
+        syncCustomerPitchDatesWithPurpose();
     }
 }
 
@@ -2222,6 +2226,23 @@ function buildCustomerPitchDateOptions() {
         }
     }
     return options;
+}
+
+function syncCustomerPitchDatesWithPurpose() {
+    // Chỉ chạy khi đang đứng ở giao diện danh sách sân con
+    if (currentClusterId === null || currentPitchId !== null) return;
+    if (!document.getElementById('customer-pitch-filter-sidebar')) return;
+
+    const newDateOptions = buildCustomerPitchDateOptions();
+    const validYmds = new Set(newDateOptions.map(d => d.ymd));
+
+    customerPitchFilterState.dateOptions = newDateOptions;
+    // Giữ lại các ngày đã chọn nếu vẫn nằm trong danh sách ngày mới, ngược lại tự bỏ chọn
+    customerPitchFilterState.selectedDates = customerPitchFilterState.selectedDates.filter(d => validYmds.has(d));
+
+    // Chỉ vẽ lại Sidebar bộ lọc và Danh sách sân con (không load lại toàn trang)
+    renderCustomerPitchSidebar();
+    renderCustomerPitchResults();
 }
 
 async function fetchCustomerClusterBookedMap(pitches) {
