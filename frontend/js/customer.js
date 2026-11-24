@@ -353,7 +353,7 @@ async function revalidateCartPrices() {
                 const end = matchingKhungGio.GioKetThuc.substring(0, 5);
 
                 // Loại bỏ nếu không có giá, giá <= 0 HOẶC NẰM NGOÀI GIỜ MỞ/ĐÓNG CỬA
-                if (!priceInfo || priceInfo.SoTien <= 0 || start < moCua || end > dongCua) {
+                if (!priceInfo || priceInfo.SoTien <= 0 || !isTimeSlotWithinOperatingHours(start, end, moCua, dongCua)) {
                     isChanged = true;
                     continue; 
                 }
@@ -1885,7 +1885,7 @@ async function checkoutBooking() {
                             const start = kgMatch.GioBatDau.substring(0, 5);
                             const end = kgMatch.GioKetThuc.substring(0, 5);
                             
-                            if (start >= moCua && end <= dongCua) {
+                            if (isTimeSlotWithinOperatingHours(start, end, moCua, dongCua)) {
                                 isSlotValid = true;
                             }
                         }
@@ -2377,13 +2377,24 @@ function renderCustomerPitchesLayout() {
     }
 }
 
+function isTimeSlotWithinOperatingHours(startStr, endStr, moCuaStr, dongCuaStr) {
+    const toMins = (t, isEnd = false) => {
+        const [h, m] = String(t || '00:00').substring(0, 5).split(':').map(Number);
+        const mins = h * 60 + m;
+        return (isEnd && mins === 0) ? 1440 : mins;
+    };
+    const s = toMins(startStr, false);
+    const e = toMins(endStr, true);
+    const open = toMins(moCuaStr, false);
+    const close = toMins(dongCuaStr, true);
+    return s >= open && e <= close && s < e;
+}
+
 function getCustomerOperatingTimeSlots() {
     const st = customerPitchFilterState;
     return st.khungGios.filter(kg => {
         const maKG = String(kg.MaKhungGio || kg.ID);
-        const start = kg.GioBatDau.substring(0, 5);
-        const end = kg.GioKetThuc.substring(0, 5);
-        if (start < st.gioMo || end > st.gioDong) return false;
+        if (!isTimeSlotWithinOperatingHours(kg.GioBatDau, kg.GioKetThuc, st.gioMo, st.gioDong)) return false;
         return st.giaTiens.some(gt => String(gt.MaKhungGio || gt.ID_KhungGio) === maKG && Number(gt.SoTien) > 0);
     });
 }
@@ -2556,7 +2567,7 @@ function evaluateCustomerPitchMatch(sb) {
                 String(gt.MaKhungGio || gt.ID_KhungGio) === String(kgId)
             );
             const priceVal = priceObj ? Number(priceObj.SoTien) : 0;
-            const isOpen = priceVal > 0 && start >= st.gioMo && end <= st.gioDong;
+            const isOpen = priceVal > 0 && isTimeSlotWithinOperatingHours(start, end, st.gioMo, st.gioDong);
             const isBooked = bookedList.some(b =>
                 String(b.NgayDa).substring(0, 10) === ymd &&
                 String(b.MaKhungGio || b.ID_KhungGio) === String(kgId)
@@ -3123,7 +3134,7 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
             const start = kg.GioBatDau.substring(0, 5);
             const end = kg.GioKetThuc.substring(0, 5);
 
-            const isValid = priceInfo && priceInfo.SoTien > 0 && (start >= moCua && end <= dongCua);
+            const isValid = priceInfo && priceInfo.SoTien > 0 && isTimeSlotWithinOperatingHours(start, end, moCua, dongCua);
             const priceValue = priceInfo ? priceInfo.SoTien : 0;
 
             const displayStyle = isValid ? '' : 'display: none;';

@@ -1069,6 +1069,19 @@ function getStaffWeatherSlotBadge(w) {
     </div>`;
 }
 
+function isTimeSlotWithinOperatingHours(startStr, endStr, moCuaStr, dongCuaStr) {
+    const toMins = (t, isEnd = false) => {
+        const [h, m] = String(t || '00:00').substring(0, 5).split(':').map(Number);
+        const mins = h * 60 + m;
+        return (isEnd && mins === 0) ? 1440 : mins;
+    };
+    const s = toMins(startStr, false);
+    const e = toMins(endStr, true);
+    const open = toMins(moCuaStr, false);
+    const close = toMins(dongCuaStr, true);
+    return s >= open && e <= close && s < e;
+}
+
 // Render Lưới Lịch cho một Sân cụ thể
 async function loadStaffSchedule(clusterId, pitchName, pitchId, loaiSanId, customStartDate = null) {
     currentPitchId = pitchId;
@@ -1082,17 +1095,22 @@ async function loadStaffSchedule(clusterId, pitchName, pitchId, loaiSanId, custo
     container.innerHTML = `<div style="text-align:center; padding: 50px;"><i class="fa-solid fa-spinner fa-spin text-primary" style="font-size: 2rem;"></i><br><br>Đang tải lịch của ${pitchName}...</div>`;
 
     try {
-        const [gtRes, kgRes, dsRes, wtRes] = await Promise.all([
+        const [gtRes, kgRes, dsRes, wtRes, csRes] = await Promise.all([
             fetch(`${API_BASE_URL}/gia-tien?cum_san_id=${clusterId}`),
             fetch(`${API_BASE_URL}/khung-gio`),
             fetch(`${API_BASE_URL}/dat-san/da-dat?id_san_bong=${pitchId}`),
-            fetch(`${API_BASE_URL}/thoi-tiet?cum_san_id=${clusterId}`).catch(() => null)
+            fetch(`${API_BASE_URL}/thoi-tiet?cum_san_id=${clusterId}`).catch(() => null),
+            fetch(`${API_BASE_URL}/cum-san/${clusterId}`).catch(() => null)
         ]);
 
         const giaTienData = (await gtRes.json()).data || [];
         const allKhungGio = (await kgRes.json()).data || [];
         const bookedSlots = (await dsRes.json()).data || [];
         const weatherMap = (wtRes && wtRes.ok) ? ((await wtRes.json()).data || {}) : {};
+        const clusterInfo = (csRes && csRes.ok) ? ((await csRes.json()).data || null) : null;
+
+        const moCua = clusterInfo?.GioMoCua ? clusterInfo.GioMoCua.substring(0, 5) : '06:00';
+        const dongCua = clusterInfo?.GioDongCua ? clusterInfo.GioDongCua.substring(0, 5) : '22:00';
 
         const validPrices = giaTienData.filter(gt => gt.ID_LoaiSan == loaiSanId);
 
@@ -1168,7 +1186,7 @@ async function loadStaffSchedule(clusterId, pitchName, pitchId, loaiSanId, custo
 
         allKhungGio.forEach((kg) => {
             const priceInfo = validPrices.find(p => p.ID_KhungGio == kg.ID);
-            const isValid = priceInfo && priceInfo.SoTien > 0;
+            const isValid = priceInfo && priceInfo.SoTien > 0 && isTimeSlotWithinOperatingHours(kg.GioBatDau, kg.GioKetThuc, moCua, dongCua);
             const displayStyle = isValid ? '' : 'display: none;';
             const priceValue = priceInfo ? priceInfo.SoTien : 0;
             const displayPrice = isValid ? `${Number(priceValue).toLocaleString('vi-VN')}đ` : '-';
@@ -5232,7 +5250,7 @@ function renderAdminRescheduleSlotsGrid() {
         const end = kg.GioKetThuc.substring(0, 5);
         const priceObj = validPrices.find(p => String(p.MaKhungGio || p.ID_KhungGio) === maKG);
 
-        if (!priceObj || Number(priceObj.SoTien) <= 0 || start < moCua || end > dongCua) {
+        if (!priceObj || Number(priceObj.SoTien) <= 0 || !isTimeSlotWithinOperatingHours(start, end, moCua, dongCua)) {
             return;
         }
 
