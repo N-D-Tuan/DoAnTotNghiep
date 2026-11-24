@@ -767,6 +767,19 @@ function renderGuestPitchesLayout() {
     }
 }
 
+function isTimeSlotWithinOperatingHours(startStr, endStr, moCuaStr, dongCuaStr) {
+    const toMins = (t, isEnd = false) => {
+        const [h, m] = String(t || '00:00').substring(0, 5).split(':').map(Number);
+        const mins = h * 60 + m;
+        return (isEnd && mins === 0) ? 1440 : mins;
+    };
+    const s = toMins(startStr, false);
+    const e = toMins(endStr, true);
+    const open = toMins(moCuaStr, false);
+    const close = toMins(dongCuaStr, true);
+    return s >= open && e <= close && s < e;
+}
+
 function getGuestOperatingTimeSlots() {
     const c = appState.currentCluster || {};
     const moCua = (c.GioMoCua || '06:00').substring(0, 5);
@@ -775,9 +788,7 @@ function getGuestOperatingTimeSlots() {
 
     return st.khungGios.filter(kg => {
         const maKG = String(kg.MaKhungGio || kg.ID);
-        const start = kg.GioBatDau.substring(0, 5);
-        const end = kg.GioKetThuc.substring(0, 5);
-        if (start < moCua || end > dongCua) return false;
+        if (!isTimeSlotWithinOperatingHours(kg.GioBatDau, kg.GioKetThuc, moCua, dongCua)) return false;
         return st.giaTiens.some(gt => String(gt.MaKhungGio || gt.ID_KhungGio) === maKG && Number(gt.SoTien) > 0);
     });
 }
@@ -949,7 +960,7 @@ function evaluateGuestPitchMatch(sb) {
                 String(gt.MaKhungGio || gt.ID_KhungGio) === String(kgId)
             );
             const priceVal = priceObj ? Number(priceObj.SoTien) : 0;
-            const isOpen = priceVal > 0 && start >= moCua && end <= dongCua;
+            const isOpen = priceVal > 0 && isTimeSlotWithinOperatingHours(start, end, moCua, dongCua);
             const isBooked = bookedList.some(b =>
                 String(b.NgayDa).substring(0, 10) === ymd &&
                 String(b.MaKhungGio || b.ID_KhungGio) === String(kgId)
@@ -1319,9 +1330,15 @@ async function loadSchedule(clusterId, pitchId) {
         const loaiName = pitch.loaiSan?.TenLoaiSan || pitch.loai_san?.TenLoaiSan || 'Sân bóng';
         const pitchLoaiId = pitch.MaLoaiSan || pitch.ID_LoaiSan;
 
-        const validPrices = prices.filter(gt => (gt.MaLoaiSan || gt.ID_LoaiSan) == pitchLoaiId);
-        const validKhungGioIds = validPrices.map(gt => gt.MaKhungGio || gt.ID_KhungGio);
-        const availableTimeSlots = timeSlots.filter(kg => validKhungGioIds.includes(kg.MaKhungGio || kg.ID));
+        const moCua = (c.GioMoCua || '06:00').substring(0, 5);
+        const dongCua = (c.GioDongCua || '22:00').substring(0, 5);
+
+        const validPrices = prices.filter(gt => (gt.MaLoaiSan || gt.ID_LoaiSan) == pitchLoaiId && Number(gt.SoTien) > 0);
+        const validKhungGioIds = validPrices.map(gt => String(gt.MaKhungGio || gt.ID_KhungGio));
+        const availableTimeSlots = timeSlots.filter(kg =>
+            validKhungGioIds.includes(String(kg.MaKhungGio || kg.ID)) &&
+            isTimeSlotWithinOperatingHours(kg.GioBatDau, kg.GioKetThuc, moCua, dongCua)
+        );
 
         const dateArray = [];
         const today = new Date();

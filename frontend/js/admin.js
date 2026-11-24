@@ -1159,6 +1159,19 @@ async function saveSanBong() {
     }
 }
 
+function isTimeSlotWithinOperatingHours(startStr, endStr, moCuaStr, dongCuaStr) {
+    const toMins = (t, isEnd = false) => {
+        const [h, m] = String(t || '00:00').substring(0, 5).split(':').map(Number);
+        const mins = h * 60 + m;
+        return (isEnd && mins === 0) ? 1440 : mins;
+    };
+    const s = toMins(startStr, false);
+    const e = toMins(endStr, true);
+    const open = toMins(moCuaStr, false);
+    const close = toMins(dongCuaStr, true);
+    return s >= open && e <= close && s < e;
+}
+
 async function loadGiaTienTheoCum(cs) {
     try {
         const maCS = cs.MaCumSan || cs.ID;
@@ -1172,7 +1185,9 @@ async function loadGiaTienTheoCum(cs) {
         let allKhungGio = (await kgRes.json()).data;
         const currentPrices = (await gtRes.json()).data || [];
 
-        const validKhungGio = allKhungGio.filter(kg => kg.GioBatDau >= cs.GioMoCua && kg.GioKetThuc <= cs.GioDongCua);
+        const validKhungGio = allKhungGio.filter(kg =>
+            isTimeSlotWithinOperatingHours(kg.GioBatDau, kg.GioKetThuc, cs.GioMoCua, cs.GioDongCua)
+        );
 
         const container = document.getElementById('price-container');
         if (validKhungGio.length === 0) {
@@ -5790,17 +5805,22 @@ async function renderAdminSchedule(clusterId, pitchName, pitchId, loaiSanId, cus
     contentArea.innerHTML = `<div style="text-align:center; padding: 50px;"><i class="fa-solid fa-spinner fa-spin text-primary" style="font-size: 2rem;"></i><br><br>Đang tải ma trận lịch...</div>`;
 
     try {
-        const [gtRes, kgRes, dsRes, wtRes] = await Promise.all([
+        const [gtRes, kgRes, dsRes, wtRes, csRes] = await Promise.all([
             fetch(`${API_BASE_URL}/gia-tien?cum_san_id=${clusterId}`),
             fetch(`${API_BASE_URL}/khung-gio`),
             fetch(`${API_BASE_URL}/dat-san/da-dat?id_san_bong=${pitchId}`),
-            fetch(`${API_BASE_URL}/thoi-tiet?cum_san_id=${clusterId}`).catch(() => null)
+            fetch(`${API_BASE_URL}/thoi-tiet?cum_san_id=${clusterId}`).catch(() => null),
+            fetch(`${API_BASE_URL}/cum-san/${clusterId}`).catch(() => null)
         ]);
 
         const giaTienData = (await gtRes.json()).data || [];
         const allKhungGio = (await kgRes.json()).data || [];
         const bookedSlots = (await dsRes.json()).data || [];
         const weatherMap = (wtRes && wtRes.ok) ? ((await wtRes.json()).data || {}) : {};
+        const clusterInfo = (csRes && csRes.ok) ? ((await csRes.json()).data || null) : null;
+
+        const moCua = clusterInfo?.GioMoCua ? clusterInfo.GioMoCua.substring(0, 5) : '06:00';
+        const dongCua = clusterInfo?.GioDongCua ? clusterInfo.GioDongCua.substring(0, 5) : '22:00';
 
         const validPrices = giaTienData.filter(gt => gt.ID_LoaiSan == loaiSanId);
 
@@ -5883,7 +5903,7 @@ async function renderAdminSchedule(clusterId, pitchName, pitchId, loaiSanId, cus
 
         allKhungGio.forEach((kg) => {
             const priceInfo = validPrices.find(p => p.ID_KhungGio == kg.ID);
-            const isValid = priceInfo && priceInfo.SoTien > 0;
+            const isValid = priceInfo && priceInfo.SoTien > 0 && isTimeSlotWithinOperatingHours(kg.GioBatDau, kg.GioKetThuc, moCua, dongCua);
             const displayStyle = isValid ? '' : 'display: none;';
             const priceValue = priceInfo ? priceInfo.SoTien : 0;
             const displayPrice = isValid ? `${Number(priceValue).toLocaleString('vi-VN')}đ` : '-';
@@ -10181,7 +10201,13 @@ window.openSystemCatalogModal = async function(initialTab = 'LoaiSan') {
             <!-- Footer -->
             <div style="padding: 13px 26px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
                 <span style="font-size: 0.8rem; color: #64748b;"><i class="fa-solid fa-shield-halved" style="color: var(--primary);"></i> Khi đổi Mã khóa chính, các bảng liên kết sẽ tự động cập nhật đồng bộ.</span>
-                <button type="button" class="btn-outline-sm" style="padding: 8px 24px; font-weight: 600;" onclick="closeLoaiSanManagerModal()">Đóng cửa sổ</button>
+                <button type="button"
+                    style="padding: 8px 24px; border-radius: 8px; border: 1px solid #fecaca; background: #fef2f2; color: #dc2626; font-weight: 700; font-size: 0.88rem; cursor: pointer; transition: all 0.2s ease;"
+                    onmouseover="this.style.background='#fee2e2'; this.style.borderColor='#fca5a5'; this.style.color='#b91c1c';"
+                    onmouseout="this.style.background='#fef2f2'; this.style.borderColor='#fecaca'; this.style.color='#dc2626';"
+                    onclick="closeLoaiSanManagerModal()">
+                    Đóng cửa sổ
+                </button>
             </div>
         </div>
     `;
@@ -10472,7 +10498,9 @@ async function loadAdminCatalogData(tabName) {
                 const end = String(kg.GioKetThuc).substring(0, 5);
                 const [sh, sm] = start.split(':').map(Number);
                 const [eh, em] = end.split(':').map(Number);
-                const mins = (eh * 60 + em) - (sh * 60 + sm);
+                const startMins = sh * 60 + sm;
+                const endMins = (eh === 0 && em === 0 && startMins > 0) ? 1440 : (eh * 60 + em);
+                const mins = endMins - startMins;
                 const label = `${start} - ${end}`;
 
                 return `
@@ -10614,7 +10642,12 @@ window.saveCatalogItemAdmin = async function() {
         const gioBD = document.getElementById('cat-start-input')?.value || '';
         const gioKT = document.getElementById('cat-end-input')?.value || '';
         if (!gioBD || !gioKT) return showSystemModal('Thiếu thông tin', 'Vui lòng chọn Giờ bắt đầu và Giờ kết thúc!', 'error');
-        if (gioBD >= gioKT) return showSystemModal('Giờ không hợp lệ', 'Giờ kết thúc phải lớn hơn Giờ bắt đầu!', 'error');
+        
+        const [sh, sm] = gioBD.split(':').map(Number);
+        const [eh, em] = gioKT.split(':').map(Number);
+        const startMins = sh * 60 + sm;
+        const endMins = (eh === 0 && em === 0 && startMins > 0) ? 1440 : (eh * 60 + em);
+        if (startMins >= endMins) return showSystemModal('Giờ không hợp lệ', 'Giờ kết thúc phải lớn hơn Giờ bắt đầu!', 'error');
 
         // Kiểm tra trùng cặp giờ bắt đầu - kết thúc
         const isTimeDup = (adminCatalogCache.KhungGio || []).some(kg => {
