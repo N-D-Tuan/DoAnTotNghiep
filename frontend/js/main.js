@@ -441,10 +441,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         const bookedSlots = (await dsRes.json()).data || [];
 
                         document.querySelectorAll('.schedule-table .slot-btn.booked').forEach(el => {
-                            if (el.innerText === 'Đã đặt') {
+                            if (el.textContent.trim().includes('Đã đặt')) {
                                 el.classList.remove('booked');
                                 el.classList.add('available');
-                                el.innerText = 'TRỐNG';
+                                el.innerHTML = GUEST_SLOT_LABELS.available;
                                 el.disabled = false;
                                 
                                 const slotData = el.getAttribute('data-slot-data');
@@ -460,7 +460,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             if (slotEl && !slotEl.classList.contains('booked')) {
                                 slotEl.classList.remove('available', 'selected');
                                 slotEl.classList.add('booked');
-                                slotEl.innerText = 'Đã đặt';
+                                slotEl.innerHTML = GUEST_SLOT_LABELS.booked;
                                 slotEl.disabled = true;
                                 slotEl.removeAttribute('onclick');
 
@@ -1303,7 +1303,85 @@ function getGuestWeatherSlotBadge(w) {
     </div>`;
 }
 
+const GUEST_SLOT_LABELS = {
+    available: '<i class="fa-regular fa-futbol"></i><span>Còn trống</span>',
+    selected:  '<i class="fa-solid fa-futbol"></i><span>Đang chọn</span>',
+    booked:    '<i class="fa-solid fa-shirt"></i><span>Đã đặt</span>',
+    past:      '<i class="fa-solid fa-stopwatch"></i><span>Quá giờ</span>'
+};
+
+function injectGuestScheduleSlotStyles() {
+    if (document.getElementById('guest-schedule-slot-v2-style')) return;
+    const style = document.createElement('style');
+    style.id = 'guest-schedule-slot-v2-style';
+    style.innerHTML = `
+        .schedule-table .slot-btn {
+            width: 100%;
+            min-width: 96px;
+            padding: 8px 10px;
+            border-radius: 10px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            white-space: nowrap;
+            transition: all 0.18s ease;
+            letter-spacing: 0.1px;
+        }
+        .schedule-table .slot-btn i {
+            font-size: 0.84rem;
+        }
+        /* 1. Còn trống: Xanh lá pastel dịu mắt */
+        .schedule-table .slot-btn.available {
+            background: linear-gradient(180deg, #F0FDF4 0%, #DCFCE7 100%) !important;
+            border: 1.5px solid #86EFAC !important;
+            color: #15803D !important;
+            cursor: pointer;
+            box-shadow: 0 1px 2px rgba(22, 163, 74, 0.08);
+        }
+        .schedule-table .slot-btn.available:hover {
+            background: linear-gradient(180deg, #DCFCE7 0%, #BBF7D0 100%) !important;
+            border-color: #22C55E !important;
+            color: #166534 !important;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(22, 163, 74, 0.16);
+        }
+        /* 2. Đang chọn: Cam ấm nổi bật */
+        .schedule-table .slot-btn.available.selected,
+        .schedule-table .slot-btn.available.selected:hover {
+            background: linear-gradient(135deg, #F97316 0%, #EA580C 100%) !important;
+            border: 1.5px solid #EA580C !important;
+            color: #FFFFFF !important;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(234, 88, 12, 0.28);
+        }
+        /* 3. Đã đặt: Hồng đỏ pastel (đồng bộ 100% với chú thích) */
+        .schedule-table .slot-btn.booked,
+        .schedule-table .slot-btn.booked:disabled {
+            background: #FFF1F2 !important;
+            border: 1.5px solid #FECDD3 !important;
+            color: #BE123C !important;
+            opacity: 1 !important;
+            cursor: not-allowed;
+        }
+        /* 4. Quá giờ: Xám nhạt viền nét đứt */
+        .schedule-table .slot-btn.past,
+        .schedule-table .slot-btn.past:disabled {
+            background: #F8FAFC !important;
+            border: 1.5px dashed #CBD5E1 !important;
+            color: #94A3B8 !important;
+            opacity: 1 !important;
+            cursor: not-allowed;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
 async function loadSchedule(clusterId, pitchId) {
+    injectGuestScheduleSlotStyles();
+
     appContent.innerHTML = '<div style="text-align:center; padding: 40px;"><i class="fa-solid fa-spinner fa-spin fa-2x" style="color:#16A34A"></i></div>';
 
     try {
@@ -1399,34 +1477,34 @@ async function loadSchedule(clusterId, pitchId) {
                 </div>
 
                 <!-- Chú thích 4 trạng thái khung giờ -->
-                <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 0.82rem; font-weight: 600; color: #475569;">
-                    <span style="display: inline-flex; align-items: center; gap: 6px;">
-                        <span style="width: 15px; height: 15px; border-radius: 4px; background: #DCFCE7; border: 1.5px solid #86EFAC; display: inline-block;"></span> Trống
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.78rem; font-weight: 700;">
+                    <span style="display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; background: #F0FDF4; border: 1.5px solid #86EFAC; color: #15803D;">
+                        <i class="fa-regular fa-futbol"></i> Còn trống
                     </span>
-                    <span style="display: inline-flex; align-items: center; gap: 6px;">
-                        <span style="width: 15px; height: 15px; border-radius: 4px; background: #EA580C; display: inline-block;"></span> Đang chọn
+                    <span style="display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; background: linear-gradient(135deg, #F97316 0%, #EA580C 100%); border: 1.5px solid #EA580C; color: #FFFFFF;">
+                        <i class="fa-solid fa-futbol"></i> Đang chọn
                     </span>
-                    <span style="display: inline-flex; align-items: center; gap: 6px;">
-                        <span style="width: 15px; height: 15px; border-radius: 4px; background: #E2E8F0; border: 1px solid #CBD5E1; display: inline-block;"></span> Đã đặt
+                    <span style="display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; background: #FFF1F2; border: 1.5px solid #FECDD3; color: #BE123C;">
+                        <i class="fa-solid fa-shirt"></i> Đã đặt
                     </span>
-                    <span style="display: inline-flex; align-items: center; gap: 6px;">
-                        <span style="width: 15px; height: 15px; border-radius: 4px; background: #F8FAFC; border: 1px dashed #CBD5E1; display: inline-block;"></span> Quá giờ
+                    <span style="display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; background: #F8FAFC; border: 1.5px dashed #CBD5E1; color: #94A3B8;">
+                        <i class="fa-solid fa-stopwatch"></i> Quá giờ
                     </span>
                 </div>
             </div>
 
-            <div class="schedule-container" style="position: relative; background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 14px; overflow-x: auto;">
-                <table class="schedule-table" style="width: 100%; border-collapse: separate; border-spacing: 0; min-width: 900px; table-layout: auto;">
+            <div class="schedule-container" style="position: relative; background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 14px; overflow: visible;">
+                <table class="schedule-table" style="width: 100%; border-collapse: separate; border-spacing: 0; table-layout: auto;">
                     <thead>
                         <tr>
-                            <th style="width: 130px; min-width: 130px; padding: 14px 10px; border-bottom: 2px solid #CBD5E1; border-right: 1px solid #E2E8F0; background: #F8FAFC; position: sticky; top: 0; left: 0; z-index: 50; text-align: center; color: #0F172A;">
+                            <th style="width: 130px; min-width: 130px; padding: 14px 10px; border-bottom: 2px solid #CBD5E1; border-right: 1px solid #E2E8F0; background: #F8FAFC; position: sticky; top: 72px; left: 0; z-index: 50; text-align: center; color: #0F172A; border-top-left-radius: 13px;">
                                 Khung giờ
                             </th>
-                            <th style="width: 105px; min-width: 105px; padding: 14px 10px; border-bottom: 2px solid #CBD5E1; border-right: 2px solid #CBD5E1; background: #F8FAFC; position: sticky; top: 0; left: 130px; z-index: 49; text-align: center; color: #0F172A;">
+                            <th style="width: 105px; min-width: 105px; padding: 14px 10px; border-bottom: 2px solid #CBD5E1; border-right: 2px solid #CBD5E1; background: #F8FAFC; position: sticky; top: 72px; left: 130px; z-index: 49; text-align: center; color: #0F172A;">
                                 Giá sân
                             </th>
-                            ${dateArray.map((d) => `
-                                <th style="min-width: 108px; padding: 10px 8px; text-align: center; white-space: nowrap; border-bottom: 2px solid #CBD5E1; border-right: 1px solid #F1F5F9; background: ${d.isWeekend ? '#FFFBEB' : '#F8FAFC'}; position: sticky; top: 0; z-index: 40; color: #0F172A;">
+                            ${dateArray.map((d, idx) => `
+                                <th style="min-width: 108px; padding: 10px 8px; text-align: center; white-space: nowrap; border-bottom: 2px solid #CBD5E1; border-right: 1px solid #F1F5F9; background: ${d.isWeekend ? '#FFFBEB' : '#F8FAFC'}; position: sticky; top: 72px; z-index: 40; color: #0F172A; ${idx === dateArray.length - 1 ? 'border-top-right-radius: 13px;' : ''}">
                                     <div style="font-size: 0.74rem; font-weight: 700; color: ${d.isWeekend ? '#D97706' : '#64748B'}; line-height: 1.2; margin-bottom: 2px;">${d.dayLabel}</div>
                                     <div style="font-size: 0.92rem; font-weight: 800; color: #0F172A;">${d.short}</div>
                                 </th>
@@ -1466,13 +1544,13 @@ async function loadSchedule(clusterId, pitchId) {
                 const weatherBadgeHtml = isPast ? '' : getGuestWeatherSlotBadge(weatherMap[`${date.dbDate}_${hourPrefix}`]);
 
                 if (isPast) {
-                    html += `<td style="text-align:center; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F8FAFC;"><button class="slot-btn past" data-slot-id="${slotId}" disabled>Quá giờ</button></td>`;
+                    html += `<td style="text-align:center; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F8FAFC; padding: 6px 4px;"><button class="slot-btn past" data-slot-id="${slotId}" disabled>${GUEST_SLOT_LABELS.past}</button></td>`;
                 } else if (isBooked) {
-                    html += `<td style="text-align:center; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F8FAFC; padding: 6px 4px;"><button class="slot-btn booked" data-slot-id="${slotId}" data-slot-data="${slotDataStr}" disabled>Đã đặt</button>${weatherBadgeHtml}</td>`;
+                    html += `<td style="text-align:center; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F8FAFC; padding: 6px 4px;"><button class="slot-btn booked" data-slot-id="${slotId}" data-slot-data="${slotDataStr}" disabled>${GUEST_SLOT_LABELS.booked}</button>${weatherBadgeHtml}</td>`;
                 } else if (isSelected) {
-                    html += `<td style="text-align:center; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F8FAFC; padding: 6px 4px;"><button class="slot-btn available selected" data-slot-id="${slotId}" data-slot-data="${slotDataStr}" onclick="triggerModal(this, ${slotDataStr})">ĐÃ CHỌN ✓</button>${weatherBadgeHtml}</td>`;
+                    html += `<td style="text-align:center; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F8FAFC; padding: 6px 4px;"><button class="slot-btn available selected" data-slot-id="${slotId}" data-slot-data="${slotDataStr}" onclick="triggerModal(this, ${slotDataStr})">${GUEST_SLOT_LABELS.selected}</button>${weatherBadgeHtml}</td>`;
                 } else {
-                    html += `<td style="text-align:center; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F8FAFC; padding: 6px 4px;"><button class="slot-btn available" data-slot-id="${slotId}" data-slot-data="${slotDataStr}" onclick="triggerModal(this, ${slotDataStr})">TRỐNG</button>${weatherBadgeHtml}</td>`;
+                    html += `<td style="text-align:center; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F8FAFC; padding: 6px 4px;"><button class="slot-btn available" data-slot-id="${slotId}" data-slot-data="${slotDataStr}" onclick="triggerModal(this, ${slotDataStr})">${GUEST_SLOT_LABELS.available}</button>${weatherBadgeHtml}</td>`;
                 }
             });
             html += `</tr>`;
@@ -1540,7 +1618,7 @@ function toggleGuestSlot(element, clusterId, clusterName, pitchId, pitchName, da
     if (existingIndex > -1) {
         guestSelectedSlots.splice(existingIndex, 1);
         element.classList.remove('selected'); 
-        element.innerText = 'TRỐNG';
+        element.innerHTML = GUEST_SLOT_LABELS.available;
     } else {
         guestSelectedSlots.push({ 
             id: slotId, 
@@ -1555,7 +1633,7 @@ function toggleGuestSlot(element, clusterId, clusterName, pitchId, pitchName, da
             clusterName
         });
         element.classList.add('selected'); 
-        element.innerText = 'ĐÃ CHỌN ✓';
+        element.innerHTML = GUEST_SLOT_LABELS.selected;
     }
     
     updateGuestFloatingCart();
@@ -1582,7 +1660,7 @@ window.clearGuestCart = function() {
     const allButtons = document.querySelectorAll('.slot-btn.available.selected');
     allButtons.forEach(btn => {
         btn.classList.remove('selected');
-        btn.innerText = 'TRỐNG';
+        btn.innerHTML = GUEST_SLOT_LABELS.available;
     });
     
     updateGuestFloatingCart();
@@ -1662,7 +1740,7 @@ window.removeGuestSlotByIndex = function(index) {
     const btn = document.querySelector(`.schedule-table .slot-btn[data-slot-id="${slotToRemove.id}"]`);
     if (btn) {
         btn.classList.remove('selected');
-        btn.innerText = 'TRỐNG';
+        btn.innerHTML = GUEST_SLOT_LABELS.available;
     }
 
     updateGuestFloatingCart();

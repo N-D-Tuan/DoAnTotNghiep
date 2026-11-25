@@ -95,10 +95,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // 1. Nhả tất cả các ô đang xám (Đã đặt) thành màu xanh (Trống)
                     document.querySelectorAll('.schedule-table .slot.booked').forEach(el => {
-                        if (el.innerText === 'Đã đặt') {
+                        if (el.textContent.trim().includes('Đã đặt')) {
                             el.classList.remove('booked');
                             el.classList.add('available');
-                            el.innerText = 'CÒN TRỐNG';
+                            el.innerHTML = STAFF_SLOT_LABELS.available;
                             
                             // Khôi phục sự kiện click cho phép Nhân viên chọn
                             const slotIdData = el.getAttribute('data-slot-data');
@@ -115,7 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (slotEl && !slotEl.classList.contains('booked')) {
                             slotEl.classList.remove('available', 'selected');
                             slotEl.classList.add('booked');
-                            slotEl.innerText = 'Đã đặt';
+                            slotEl.innerHTML = STAFF_SLOT_LABELS.booked;
                             slotEl.removeAttribute('onclick');
 
                             // 3. Nếu xui xẻo Nhân viên đang chọn đúng ô mà khách vừa đặt online -> Rút ô đó khỏi giỏ hàng
@@ -1082,8 +1082,79 @@ function isTimeSlotWithinOperatingHours(startStr, endStr, moCuaStr, dongCuaStr) 
     return s >= open && e <= close && s < e;
 }
 
+const STAFF_SLOT_LABELS = {
+    available: '<i class="fa-regular fa-futbol"></i><span>Còn trống</span>',
+    selected:  '<i class="fa-solid fa-futbol"></i><span>Đang chọn</span>',
+    booked:    '<i class="fa-solid fa-shirt"></i><span>Đã đặt</span>',
+    past:      '<i class="fa-solid fa-stopwatch"></i><span>Quá giờ</span>',
+    closed:    '<i class="fa-solid fa-ban"></i><span>Đóng</span>'
+};
+
+function injectStaffScheduleSlotStyles() {
+    if (document.getElementById('staff-schedule-slot-v2-style')) return;
+    const style = document.createElement('style');
+    style.id = 'staff-schedule-slot-v2-style';
+    style.innerHTML = `
+        .schedule-table .slot {
+            width: 100%;
+            min-width: 96px;
+            padding: 8px 10px;
+            border-radius: 10px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            white-space: nowrap;
+            transition: all 0.18s ease;
+            letter-spacing: 0.1px;
+        }
+        .schedule-table .slot i { font-size: 0.84rem; }
+        .schedule-table .slot.available {
+            background: linear-gradient(180deg, #F0FDF4 0%, #DCFCE7 100%) !important;
+            border: 1.5px solid #86EFAC !important;
+            color: #15803D !important;
+            cursor: pointer;
+            box-shadow: 0 1px 2px rgba(22, 163, 74, 0.08);
+        }
+        .schedule-table .slot.available:hover {
+            background: linear-gradient(180deg, #DCFCE7 0%, #BBF7D0 100%) !important;
+            border-color: #22C55E !important;
+            color: #166534 !important;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(22, 163, 74, 0.16);
+        }
+        .schedule-table .slot.selected,
+        .schedule-table .slot.available.selected,
+        .schedule-table .slot.selected:hover,
+        .schedule-table .slot.available.selected:hover {
+            background: linear-gradient(135deg, #F97316 0%, #EA580C 100%) !important;
+            border: 1.5px solid #EA580C !important;
+            color: #FFFFFF !important;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(234, 88, 12, 0.28);
+        }
+        .schedule-table .slot.booked {
+            background: #FFF1F2 !important;
+            border: 1.5px solid #FECDD3 !important;
+            color: #BE123C !important;
+            cursor: not-allowed;
+        }
+        .schedule-table .slot.past {
+            background: #F8FAFC !important;
+            border: 1.5px dashed #CBD5E1 !important;
+            color: #94A3B8 !important;
+            cursor: not-allowed;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
 // Render Lưới Lịch cho một Sân cụ thể
 async function loadStaffSchedule(clusterId, pitchName, pitchId, loaiSanId, customStartDate = null) {
+    injectStaffScheduleSlotStyles();
+
     currentPitchId = pitchId;
     currentCumSanId = clusterId;
     currentLoaiSanId = loaiSanId;
@@ -1150,18 +1221,18 @@ async function loadStaffSchedule(clusterId, pitchName, pitchId, loaiSanId, custo
                 </div>
 
                 <!-- Chú thích màu trạng thái khung giờ -->
-                <div style="display: flex; align-items: center; justify-content: flex-end; gap: 16px; flex-wrap: wrap; padding: 10px 18px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; font-size: 0.82rem; font-weight: 600; color: #475569;">
-                    <span style="display: inline-flex; align-items: center; gap: 6px;">
-                        <span style="width: 15px; height: 15px; border-radius: 4px; background: #F0FDF4; border: 1.5px solid #86EFAC; display: inline-block;"></span> Còn trống
+                <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; padding: 10px 18px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; font-size: 0.78rem; font-weight: 700;">
+                    <span style="display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; background: #F0FDF4; border: 1.5px solid #86EFAC; color: #15803D;">
+                        <i class="fa-regular fa-futbol"></i> Còn trống
                     </span>
-                    <span style="display: inline-flex; align-items: center; gap: 6px;">
-                        <span style="width: 15px; height: 15px; border-radius: 4px; background: var(--primary); display: inline-block;"></span> Đã chọn
+                    <span style="display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; background: linear-gradient(135deg, #F97316 0%, #EA580C 100%); border: 1.5px solid #EA580C; color: #FFFFFF;">
+                        <i class="fa-solid fa-futbol"></i> Đang chọn
                     </span>
-                    <span style="display: inline-flex; align-items: center; gap: 6px;">
-                        <span style="width: 15px; height: 15px; border-radius: 4px; background: #E2E8F0; border: 1px solid #CBD5E1; display: inline-block;"></span> Đã đặt
+                    <span style="display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; background: #FFF1F2; border: 1.5px solid #FECDD3; color: #BE123C;">
+                        <i class="fa-solid fa-shirt"></i> Đã đặt
                     </span>
-                    <span style="display: inline-flex; align-items: center; gap: 6px;">
-                        <span style="width: 15px; height: 15px; border-radius: 4px; background: #F1F5F9; border: 1px dashed #CBD5E1; display: inline-block;"></span> Quá giờ
+                    <span style="display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; background: #F8FAFC; border: 1.5px dashed #CBD5E1; color: #94A3B8;">
+                        <i class="fa-solid fa-stopwatch"></i> Quá giờ
                     </span>
                 </div>
 
@@ -1208,23 +1279,25 @@ async function loadStaffSchedule(clusterId, pitchName, pitchId, loaiSanId, custo
                 const slotId = `${pitchId}-${date.dbFormat}-${kg.ID}`;
                 const isSelected = selectedOfflineSlots.some(s => s.id === slotId);
                 
-                let statusClass = 'available', statusText = 'CÒN TRỐNG';
-                let slotExtraStyle = '';
-
+                let statusClass = 'available', statusText = STAFF_SLOT_LABELS.available;
                 const slotDataStr = `'${pitchId}', '${kg.ID}', '${date.dbFormat}', '${date.displayFormat}', '${timeStr}', ${priceValue}`;
                 let onClickAttr = `data-slot-data="${slotDataStr}" onclick="toggleOfflineSlot(this, ${slotDataStr})"`;
                 
                 if (isPast) {
-                    statusClass = 'booked';
-                    statusText = 'Quá giờ';
+                    statusClass = 'past';
+                    statusText = STAFF_SLOT_LABELS.past;
                     onClickAttr = '';
-                    slotExtraStyle = 'style="background: #F8FAFC; border: 1px dashed #CBD5E1; color: #94A3B8;"';
                 } else if (!isValid) {
-                    statusClass = 'booked'; statusText = 'Đóng'; onClickAttr = '';
-                } else if (isBooked) { 
-                    statusClass = 'booked'; statusText = 'Đã đặt'; onClickAttr = '';
+                    statusClass = 'past';
+                    statusText = STAFF_SLOT_LABELS.closed;
+                    onClickAttr = '';
+                } else if (isBooked) {
+                    statusClass = 'booked';
+                    statusText = STAFF_SLOT_LABELS.booked;
+                    onClickAttr = '';
                 } else if (isSelected) {
-                    statusClass = 'available selected'; statusText = 'ĐÃ CHỌN ✓';
+                    statusClass = 'available selected';
+                    statusText = STAFF_SLOT_LABELS.selected;
                 }
                 
                 const hourPrefix = kg.GioBatDau.substring(0, 2);
@@ -1234,7 +1307,7 @@ async function loadStaffSchedule(clusterId, pitchName, pitchId, loaiSanId, custo
 
                 html += `
                     <td style="text-align: center; vertical-align: middle; padding: 6px;">
-                        <div class="slot ${statusClass}" ${slotExtraStyle} data-slot-id="${slotId}" ${onClickAttr}>${statusText}</div>
+                        <div class="slot ${statusClass}" data-slot-id="${slotId}" ${onClickAttr}>${statusText}</div>
                         ${weatherBadgeHtml}
                     </td>
                 `;
@@ -1261,7 +1334,7 @@ window.toggleOfflineSlot = function(element, pitchId, kgId, dateDb, dateDisplay,
     if (existingIndex > -1) {
         selectedOfflineSlots.splice(existingIndex, 1);
         element.classList.remove('selected'); 
-        element.innerText = 'CÒN TRỐNG';
+        element.innerHTML = STAFF_SLOT_LABELS.available;
     } else {
         selectedOfflineSlots.push({ 
             id: slotId, 
@@ -1276,7 +1349,7 @@ window.toggleOfflineSlot = function(element, pitchId, kgId, dateDb, dateDisplay,
             clusterName: window.currentClusterNameStaff
         });
         element.classList.add('selected'); 
-        element.innerText = 'ĐÃ CHỌN ✓';
+        element.innerHTML = STAFF_SLOT_LABELS.selected;
     }
     updateOfflineCartUI();
 };
@@ -1288,7 +1361,7 @@ function clearOfflineCart() {
         const el = document.querySelector(`.schedule-table .slot[data-slot-id="${slot.id}"]`);
         if (el) {
             el.classList.remove('selected');
-            el.innerText = 'CÒN TRỐNG';
+            el.innerHTML = STAFF_SLOT_LABELS.available;
         }
     });
     updateOfflineCartUI();
@@ -1372,7 +1445,7 @@ window.removeSlotFromCartModal = function(index) {
     const el = document.querySelector(`.schedule-table .slot[data-slot-id="${removedSlot.id}"]`);
     if (el) {
         el.classList.remove('selected');
-        el.innerText = 'CÒN TRỐNG';
+        el.innerHTML = STAFF_SLOT_LABELS.available;
     }
     
     updateOfflineCartUI();
@@ -1455,7 +1528,7 @@ async function submitOfflineBooking() {
                 if (el) {
                     el.classList.remove('selected', 'available');
                     el.classList.add('booked');
-                    el.innerText = 'Đã đặt';
+                    el.innerHTML = STAFF_SLOT_LABELS.booked;
                     el.removeAttribute('onclick');
                 }
             });
@@ -1492,7 +1565,7 @@ async function submitOfflineBooking() {
                     if (el) {
                         el.classList.remove('selected', 'available');
                         el.classList.add('booked');
-                        el.innerText = 'Đã đặt';
+                        el.innerHTML = STAFF_SLOT_LABELS.booked;
                         el.removeAttribute('onclick');
                     }
                 });

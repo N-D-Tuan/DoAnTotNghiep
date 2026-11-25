@@ -647,10 +647,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                         // Bước A1: Nhả tất cả các ô đang "Đã đặt" về lại "CÒN TRỐNG" và khôi phục sự kiện click
                         document.querySelectorAll('.schedule-table .slot.booked').forEach(el => {
-                            if (el.innerText.trim() === 'Đã đặt') {
+                            if (el.textContent.trim().includes('Đã đặt')) {
                                 el.classList.remove('booked');
                                 el.classList.add('available');
-                                el.innerText = 'CÒN TRỐNG';
+                                el.innerHTML = CUSTOMER_SLOT_LABELS.available;
                                 const slotArgs = el.getAttribute('data-slot-args');
                                 if (slotArgs) {
                                     el.setAttribute('onclick', `toggleSlot(this, ${slotArgs})`);
@@ -683,7 +683,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                                 slotEl.classList.remove('available', 'selected');
                                 slotEl.classList.add('booked');
-                                slotEl.innerText = 'Đã đặt';
+                                slotEl.innerHTML = CUSTOMER_SLOT_LABELS.booked;
                                 slotEl.removeAttribute('onclick');
 
                                 // Nếu ô này đang nằm trong giỏ hàng của khách -> Gỡ khỏi giỏ và báo Toast
@@ -706,7 +706,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             const slotId = el.getAttribute('data-slot-id');
                             if (!selectedSlots.some(s => s.id === slotId)) {
                                 el.classList.remove('selected');
-                                el.innerText = 'CÒN TRỐNG';
+                                el.innerHTML = CUSTOMER_SLOT_LABELS.available;
                             }
                         });
                     } catch (err) {
@@ -861,6 +861,7 @@ function saveToSession() {
 
 function updateFloatingCart() {
     const cartBar = document.getElementById('floating-cart');
+    if (!cartBar) return;
     const cartCount = document.getElementById('cart-count');
     const cartDeposit = document.getElementById('floating-cart-deposit');
     
@@ -874,13 +875,33 @@ function updateFloatingCart() {
     if (cartDeposit) {
         cartDeposit.innerText = depositAmount.toLocaleString('vi-VN') + 'đ';
     }
-    
-    const btnFloatingClear = document.querySelector('.cart-actions button[onclick="clearAllSlots()"]'); // Nút Xóa tất cả (nếu có)
+
     const isEmpty = selectedSlots.length === 0;
+    const cartActions = cartBar.querySelector('.cart-actions');
+    let btnFloatingClear = document.getElementById('btn-floating-clear-all') ||
+                           cartBar.querySelector('.cart-actions button[onclick="clearAllSlots()"]');
+
+    // Tự tạo nút "Xóa tất cả" bên cạnh nút "Tiến hành đặt sân" nếu chưa có trong HTML
+    if (!btnFloatingClear && cartActions) {
+        cartActions.style.display = 'flex';
+        cartActions.style.alignItems = 'center';
+        cartActions.style.gap = '10px';
+
+        btnFloatingClear = document.createElement('button');
+        btnFloatingClear.id = 'btn-floating-clear-all';
+        btnFloatingClear.type = 'button';
+        btnFloatingClear.setAttribute('onclick', 'clearAllSlots()');
+        btnFloatingClear.innerHTML = '<i class="fa-solid fa-trash-can"></i> Xóa tất cả';
+        btnFloatingClear.style.cssText = 'padding: 10px 16px; border-radius: 8px; border: 1.5px solid #dc2626; background: #dc2626; color: #ffffff; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s ease; white-space: nowrap;';
+        btnFloatingClear.onmouseover = function() { this.style.background = '#ef4444'; this.style.borderColor = '#ef4444'; };
+        btnFloatingClear.onmouseout = function() { this.style.background = '#dc2626'; this.style.borderColor = '#dc2626'; };
+        
+        cartActions.insertBefore(btnFloatingClear, cartActions.firstChild);
+    }
 
     if (btnFloatingClear) {
+        btnFloatingClear.style.display = isEmpty ? 'none' : 'inline-flex';
         btnFloatingClear.disabled = isEmpty;
-        isEmpty ? btnFloatingClear.classList.add('btn-disabled') : btnFloatingClear.classList.remove('btn-disabled');
     }
 }
 
@@ -1583,9 +1604,15 @@ function confirmPurposeChange() {
     document.getElementById('purpose-confirm-modal').style.display = 'none';
     if (pendingBookingPurpose !== null) {
         currentBookingPurpose = pendingBookingPurpose;
+        initialBookingPurpose = currentBookingPurpose;
         sessionStorage.setItem('dn_football_booking_purpose', currentBookingPurpose); 
         clearAllSlots(); 
-        syncCustomerPitchDatesWithPurpose();
+
+        if (currentClusterId !== null && currentPitchId !== null) {
+            renderSchedule(currentClusterId, currentClusterName, currentPitchId, currentPitchName, currentLoaiSanId, currentPitchType);
+        } else {
+            syncCustomerPitchDatesWithPurpose();
+        }
     }
     pendingBookingPurpose = null;
     pendingSelectElement = null;
@@ -1816,7 +1843,7 @@ async function checkoutBooking() {
                     const slotId = el.getAttribute('data-slot-id');
                     if (!selectedSlots.some(s => s.id === slotId)) {
                         el.classList.remove('selected');
-                        el.innerText = 'CÒN TRỐNG';
+                        el.innerHTML = CUSTOMER_SLOT_LABELS.available;
                     }
                 });
 
@@ -1847,7 +1874,7 @@ async function checkoutBooking() {
                         const slotId = el.getAttribute('data-slot-id');
                         if (!selectedSlots.some(s => s.id === slotId)) {
                             el.classList.remove('selected');
-                            el.innerText = 'CÒN TRỐNG';
+                            el.innerHTML = CUSTOMER_SLOT_LABELS.available;
                         }
                     });
 
@@ -2947,7 +2974,79 @@ function getCustomerWeatherSlotBadge(w) {
     </div>`;
 }
 
+const CUSTOMER_SLOT_LABELS = {
+    available: '<i class="fa-regular fa-futbol"></i><span>Còn trống</span>',
+    selected:  '<i class="fa-solid fa-futbol"></i><span>Đang chọn</span>',
+    booked:    '<i class="fa-solid fa-shirt"></i><span>Đã đặt</span>',
+    past:      '<i class="fa-solid fa-stopwatch"></i><span>Quá giờ</span>',
+    closed:    '<i class="fa-solid fa-ban"></i><span>Đóng</span>'
+};
+
+function injectCustomerScheduleSlotStyles() {
+    if (document.getElementById('customer-schedule-slot-v2-style')) return;
+    const style = document.createElement('style');
+    style.id = 'customer-schedule-slot-v2-style';
+    style.innerHTML = `
+        .schedule-table .slot {
+            box-sizing: border-box;
+            width: 100%;
+            min-width: 88px;
+            padding: 7px 6px;
+            border-radius: 10px;
+            font-size: 0.76rem;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            white-space: nowrap;
+            transition: all 0.18s ease;
+            letter-spacing: 0.1px;
+        }
+        .schedule-table .slot i { font-size: 0.84rem; }
+        .schedule-table .slot.available {
+            background: linear-gradient(180deg, #F0FDF4 0%, #DCFCE7 100%) !important;
+            border: 1.5px solid #86EFAC !important;
+            color: #15803D !important;
+            cursor: pointer;
+            box-shadow: 0 1px 2px rgba(22, 163, 74, 0.08);
+        }
+        .schedule-table .slot.available:hover {
+            background: linear-gradient(180deg, #DCFCE7 0%, #BBF7D0 100%) !important;
+            border-color: #22C55E !important;
+            color: #166534 !important;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(22, 163, 74, 0.16);
+        }
+        .schedule-table .slot.selected,
+        .schedule-table .slot.available.selected,
+        .schedule-table .slot.selected:hover,
+        .schedule-table .slot.available.selected:hover {
+            background: linear-gradient(135deg, #F97316 0%, #EA580C 100%) !important;
+            border: 1.5px solid #EA580C !important;
+            color: #FFFFFF !important;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(234, 88, 12, 0.28);
+        }
+        .schedule-table .slot.booked {
+            background: #FFF1F2 !important;
+            border: 1.5px solid #FECDD3 !important;
+            color: #BE123C !important;
+            cursor: not-allowed;
+        }
+        .schedule-table .slot.past {
+            background: #F8FAFC !important;
+            border: 1.5px dashed #CBD5E1 !important;
+            color: #94A3B8 !important;
+            cursor: not-allowed;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
 async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSanId, pitchType) {
+    injectCustomerScheduleSlotStyles();
+
     currentClusterId = clusterId; currentClusterName = clusterName;
     currentPitchId = pitchId; currentPitchName = pitchName;
     currentLoaiSanId = loaiSanId; currentPitchType = pitchType;
@@ -3036,6 +3135,12 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
         const moCua = currentClusterGioMo ? currentClusterGioMo.substring(0, 5) : '06:00';
         const dongCua = currentClusterGioDong ? currentClusterGioDong.substring(0, 5) : '22:00';
 
+        const isWideSchedule = dateArray.length > 7;
+        const containerScrollStyle = isWideSchedule
+            ? 'overflow: auto; max-height: 75vh;'
+            : 'overflow: visible;';
+        const thStickyTop = isWideSchedule ? '0px' : '70px';
+
         let html = `
             <div class="customer-breadcrumb">
                 <div class="back-btn" onclick="renderPitches('${currentClusterId}', '${currentClusterName}', '${currentClusterAddress}', '${currentClusterGioMo}', '${currentClusterGioDong}')">
@@ -3088,42 +3193,41 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                 </div>
 
                 <!-- Chú thích màu sắc ô lịch -->
-                <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 0.84rem; font-weight: 600; color: #475569;">
-                    <span style="display: inline-flex; align-items: center; gap: 7px;">
-                        <span style="width: 15px; height: 15px; border-radius: 4px; background: #F0FDF4; border: 1.5px solid #86EFAC; display: inline-block;"></span> Còn trống
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.78rem; font-weight: 700;">
+                    <span style="display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; background: #F0FDF4; border: 1.5px solid #86EFAC; color: #15803D;">
+                        <i class="fa-regular fa-futbol"></i> Còn trống
                     </span>
-                    <span style="display: inline-flex; align-items: center; gap: 7px;">
-                        <span style="width: 15px; height: 15px; border-radius: 4px; background: var(--primary); display: inline-block;"></span> Đang chọn
+                    <span style="display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; background: linear-gradient(135deg, #F97316 0%, #EA580C 100%); border: 1.5px solid #EA580C; color: #FFFFFF;">
+                        <i class="fa-solid fa-futbol"></i> Đang chọn
                     </span>
-                    <span style="display: inline-flex; align-items: center; gap: 7px;">
-                        <span style="width: 15px; height: 15px; border-radius: 4px; background: #E2E8F0; border: 1px solid #CBD5E1; display: inline-block;"></span> Đã đặt
+                    <span style="display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; background: #FFF1F2; border: 1.5px solid #FECDD3; color: #BE123C;">
+                        <i class="fa-solid fa-shirt"></i> Đã đặt
                     </span>
-                    <span style="display: inline-flex; align-items: center; gap: 7px;">
-                        <span style="width: 15px; height: 15px; border-radius: 4px; background: #F8FAFC; border: 1px dashed #CBD5E1; display: inline-block;"></span> Quá giờ
+                    <span style="display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; background: #F8FAFC; border: 1.5px dashed #CBD5E1; color: #94A3B8;">
+                        <i class="fa-solid fa-stopwatch"></i> Quá giờ
                     </span>
                 </div>
             </div>
             
-            <div class="schedule-container" style="margin-bottom: 40px; margin-top: 0;">
-                <div style="width: 100%; max-width: 100%; max-height: calc(100vh - 240px); overflow-y: auto; overflow-x: auto; border-radius: 14px;"> 
-                    <table class="schedule-table" style="width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0;">
-                        <thead>
-                            <tr>
-                                <th style="box-sizing: border-box; width: 140px; min-width: 140px; max-width: 140px; padding: 14px 10px; text-align: center; border-bottom: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; background: #F8FAFC; position: sticky; top: 0; left: 0; z-index: 60;">
-                                    Khung giờ
+            <div class="schedule-container" style="margin-bottom: 40px; margin-top: 0; ${containerScrollStyle} border-radius: 14px;">
+                <table class="schedule-table" style="width: 100%; border-collapse: separate; border-spacing: 0; table-layout: auto;">
+                    <thead>
+                        <tr>
+                            <th style="box-sizing: border-box; width: 118px; min-width: 118px; padding: 12px 6px; text-align: center; border-bottom: 2px solid #cbd5e1; border-right: 1px solid #cbd5e1; background: #F8FAFC; position: sticky; top: ${thStickyTop}; left: 0; z-index: 30;">
+                                Khung giờ
+                            </th>
+                            <th style="box-sizing: border-box; width: 92px; min-width: 92px; padding: 12px 6px; text-align: center; border-bottom: 2px solid #cbd5e1; border-right: 2px solid #cbd5e1; background: #F8FAFC; position: sticky; top: ${thStickyTop}; left: 118px; z-index: 29;">
+                                Giá sân
+                            </th>
+                            ${dateArray.map(d => `
+                                <th style="min-width: 100px; padding: 10px 4px; text-align: center; border-bottom: 2px solid #cbd5e1; border-right: 1px solid #e2e8f0; background: ${d.isWeekend ? '#fffbeb' : '#F8FAFC'}; position: sticky; top: ${thStickyTop}; z-index: 20;">
+                                    <div style="font-size: 0.74rem; font-weight: 700; color: ${d.isWeekend ? '#d97706' : '#64748b'}; line-height: 1.2;">${d.dayLabel}</div>
+                                    <div style="font-size: 0.9rem; font-weight: 800; color: #0f172a; margin-top: 2px;">${d.short}</div>
                                 </th>
-                                <th style="box-sizing: border-box; width: 110px; min-width: 110px; max-width: 110px; padding: 14px 10px; text-align: center; border-bottom: 1px solid #cbd5e1; border-right: 2px solid #cbd5e1; background: #F8FAFC; position: sticky; top: 0; left: 140px; z-index: 59;">
-                                    Giá sân
-                                </th>
-                                ${dateArray.map(d => `
-                                    <th style="min-width: 115px; padding: 10px 8px; text-align: center; border-bottom: 1px solid #cbd5e1; border-right: 1px solid #e2e8f0; background: ${d.isWeekend ? '#fffbeb' : '#F8FAFC'}; position: sticky; top: 0; z-index: 50;">
-                                        <div style="font-size: 0.75rem; font-weight: 700; color: ${d.isWeekend ? '#d97706' : '#64748b'}; line-height: 1.2;">${d.dayLabel}</div>
-                                        <div style="font-size: 0.92rem; font-weight: 800; color: #0f172a; margin-top: 2px;">${d.short}</div>
-                                    </th>
-                                `).join('')}
-                            </tr>
-                        </thead>
-                        <tbody>
+                            `).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
         `;
 
         const now = new Date();
@@ -3144,10 +3248,10 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
 
             html += `
                 <tr style="${displayStyle}">
-                    <td style="box-sizing: border-box; width: 140px; min-width: 140px; max-width: 140px; text-align: center; background: #fff; position: sticky; left: 0; z-index: 20; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #f1f5f9;">
-                        <strong style="color: #0f172a; font-size: 0.88rem;">${timeStr}</strong>
+                    <td style="box-sizing: border-box; width: 118px; min-width: 118px; text-align: center; background: #fff; position: sticky; left: 0; z-index: 15; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #f1f5f9; padding: 8px 4px; white-space: nowrap;">
+                        <strong style="color: #0f172a; font-size: 0.84rem;">${timeStr}</strong>
                     </td>
-                    <td style="box-sizing: border-box; width: 110px; min-width: 110px; max-width: 110px; text-align: center; background: #fff; position: sticky; left: 140px; z-index: 19; color: var(--primary); font-weight: 700; font-size: 0.88rem; border-right: 2px solid #e2e8f0; border-bottom: 1px solid #f1f5f9;">
+                    <td style="box-sizing: border-box; width: 92px; min-width: 92px; text-align: center; background: #fff; position: sticky; left: 118px; z-index: 14; color: var(--primary); font-weight: 700; font-size: 0.84rem; border-right: 2px solid #e2e8f0; border-bottom: 1px solid #f1f5f9; padding: 8px 4px; white-space: nowrap;">
                         ${displayPrice}
                     </td>
             `;
@@ -3167,23 +3271,21 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
                 const slotDateTime = new Date(year, month - 1, day, startHour, startMinute);
                 const isPast = slotDateTime <= now; 
                 
-                let statusClass = 'available', statusText = 'CÒN TRỐNG';
-                let slotExtraStyle = '';
+                let statusClass = 'available', statusText = CUSTOMER_SLOT_LABELS.available;
                 const slotDataArgs = `'${clusterId}', '${clusterName.replace(/'/g, "\\'")}', '${pitchId}', '${pitchName.replace(/'/g, "\\'")}', '${date.full}', '${timeStr}', ${priceValue}`;
                 
                 if (isPast) {
-                    statusClass = 'booked'; 
-                    statusText = 'Quá giờ';
-                    slotExtraStyle = 'style="background: #F8FAFC; border: 1px dashed #CBD5E1; color: #94A3B8;"';
+                    statusClass = 'past';
+                    statusText = CUSTOMER_SLOT_LABELS.past;
                 } else if (!isValid) {
-                    statusClass = 'booked'; 
-                    statusText = 'Đóng';
-                } else if (isBooked) { 
-                    statusClass = 'booked'; 
-                    statusText = 'Đã đặt'; 
-                } else if (isSelected) { 
-                    statusClass = 'available selected'; 
-                    statusText = 'ĐÃ CHỌN ✓'; 
+                    statusClass = 'past';
+                    statusText = CUSTOMER_SLOT_LABELS.closed;
+                } else if (isBooked) {
+                    statusClass = 'booked';
+                    statusText = CUSTOMER_SLOT_LABELS.booked;
+                } else if (isSelected) {
+                    statusClass = 'available selected';
+                    statusText = CUSTOMER_SLOT_LABELS.selected;
                 }
                 
                 const hourPrefix = kg.GioBatDau.substring(0, 2);
@@ -3193,7 +3295,7 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
 
                 html += `
                     <td style="border-bottom: 1px solid #f1f5f9; padding: 6px; text-align: center;">
-                        <div class="slot ${statusClass}" ${slotExtraStyle}
+                        <div class="slot ${statusClass}"
                             data-slot-id="${slotId}"
                             data-slot-key="${slotKey}"
                             data-date-full="${date.full}"
@@ -3208,7 +3310,7 @@ async function renderSchedule(clusterId, clusterName, pitchId, pitchName, loaiSa
             });
             html += `</tr>`;
         });
-        html += `</tbody></table></div></div>`;
+        html += `</tbody></table></div>`;
         appContent.innerHTML = html;
     } catch (e) { console.error(e); }
 }
@@ -3220,10 +3322,12 @@ function toggleSlot(element, clusterId, clusterName, pitchId, pitchName, date, t
     
     if (existingIndex > -1) {
         selectedSlots.splice(existingIndex, 1);
-        element.classList.remove('selected'); element.innerText = 'CÒN TRỐNG';
+        element.classList.remove('selected'); 
+        element.innerHTML = CUSTOMER_SLOT_LABELS.available;
     } else {
         selectedSlots.push({ id: slotId, clusterId, clusterName, pitchId, pitchName, date, time, price });
-        element.classList.add('selected'); element.innerText = 'ĐÃ CHỌN ✓';
+        element.classList.add('selected'); 
+        element.innerHTML = CUSTOMER_SLOT_LABELS.selected;
     }
     saveToSession();
 }
@@ -3237,10 +3341,10 @@ function updateSlotUI(slot, isSelected) {
 
     if (isSelected) {
         slotElement.classList.add('selected');
-        slotElement.innerText = 'ĐÃ CHỌN ✓';
+        slotElement.innerHTML = isSelected ? CUSTOMER_SLOT_LABELS.selected : CUSTOMER_SLOT_LABELS.available;
     } else {
         slotElement.classList.remove('selected');
-        slotElement.innerText = 'CÒN TRỐNG';
+        slotElement.innerHTML = isSelected ? CUSTOMER_SLOT_LABELS.selected : CUSTOMER_SLOT_LABELS.available;
     }
 }
 
@@ -3272,7 +3376,7 @@ function markSlotAsBooked(slot) {
     // ==========================================
     // 4. ĐỔI CHỮ
     // ==========================================
-    slotElement.textContent = 'Đã đặt';
+    slotElement.innerHTML = CUSTOMER_SLOT_LABELS.booked;
 
     // ==========================================
     // 5. KHÔNG CHO CLICK ĐẶT LẠI
@@ -6078,16 +6182,6 @@ function setupFloatingContacts() {
         @keyframes pulse-animation { 
             0% { transform: scale(1); opacity: 1; } 
             100% { transform: scale(1.6); opacity: 0; } 
-        }
-
-        /* Giữ nguyên nền xanh và chữ trắng khi hover vào ô ĐÃ CHỌN */
-        .schedule-table .slot.selected,
-        .schedule-table .slot.available.selected,
-        .schedule-table .slot.selected:hover,
-        .schedule-table .slot.available.selected:hover {
-            background-color: var(--primary) !important;
-            color: #ffffff !important;
-            border-color: var(--primary) !important;
         }
     `;
     document.head.appendChild(style);

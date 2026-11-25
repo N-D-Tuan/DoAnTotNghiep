@@ -115,6 +115,25 @@ button { cursor: pointer; font-family: var(--font-main); border: none; }
     background: var(--primary-light);
 }
 
+/* Đồng bộ màu đỏ cho nút Xóa tất cả trong Modal giỏ hàng */
+#cart-modal .modal-footer button[onclick="clearAllSlots()"] {
+    background: #dc2626;
+    border-color: #dc2626;
+    color: #ffffff;
+    font-weight: 700;
+}
+
+#cart-modal .modal-footer button[onclick="clearAllSlots()"]:hover:not(:disabled) {
+    background: #ef4444;
+    border-color: #ef4444;
+    color: #ffffff;
+}
+
+#cart-modal .modal-footer button[onclick="clearAllSlots()"]:disabled {
+    border-color: #cbd5e1;
+    color: #ffffff;
+}
+
 /* CUSTOMER HEADER & NAVIGATION */
 .customer-header {
     background: rgba(255, 255, 255, 0.88);
