@@ -5287,6 +5287,40 @@ async function renderTongQuan() {
     updateDashboardStats('all');
 }
 
+window.handleXuLyQuenChotSan = async function(btn) {
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang tìm...';
+    }
+
+    const now = new Date();
+    const pad = n => n < 10 ? '0' + n : n;
+    const todayYmd = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+
+    const d = new Date(now);
+    d.setDate(d.getDate() - 1);
+    let targetDate = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/admin/dat-san`);
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+            const pastUnclosedDates = json.data
+                .filter(item => item.TrangThai === 'DaCoc' && item.NgayDa && item.NgayDa < todayYmd)
+                .map(item => item.NgayDa.substring(0, 10))
+                .sort((a, b) => b.localeCompare(a)); // Sắp xếp giảm dần -> ngày gần nhất ở vị trí [0]
+
+            if (pastUnclosedDates.length > 0) {
+                targetDate = pastUnclosedDates[0];
+            }
+        }
+    } catch (e) {
+        console.error('Lỗi tìm ngày chưa chốt gần nhất:', e);
+    }
+
+    renderQuanLyDatSan('DaCoc', targetDate);
+};
+
 /**
  * Cập nhật dữ liệu thống kê theo từng vùng độc lập:
  * @param {string} scope - 'all' (tất cả), 'chart' (chỉ biểu đồ & 4 thẻ trên), 'staff' (chỉ bảng hiệu suất nhân viên)
@@ -5324,10 +5358,10 @@ async function updateDashboardStats(scope = 'all') {
                 alertContainer.innerHTML = `
                     <div style="background: #fef2f2; border: 1px solid #f87171; border-left: 4px solid #ef4444; color: #b91c1c; padding: 16px 20px; border-radius: 8px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px rgba(239, 68, 68, 0.1);">
                         <div>
-                            <h4 style="margin: 0 0 4px 0; font-size: 1.05rem;"><i class="fa-solid fa-triangle-exclamation"></i> CẢNH BÁO: CHƯA CHỐT SÂN NGÀY HÔM TRƯỚC</h4>
-                            <p style="margin: 0; font-size: 0.9rem;">Hệ thống phát hiện có <strong>${data.so_san_quen_chot}</strong> lịch đặt sân của ngày hôm trước vẫn đang ở trạng thái "Đã cọc". Vui lòng kiểm tra và chốt sân ngay!</p>
+                            <h4 style="margin: 0 0 4px 0; font-size: 1.05rem;"><i class="fa-solid fa-triangle-exclamation"></i> CẢNH BÁO: CHƯA CHỐT SÂN NGÀY TRƯỚC ĐÓ</h4>
+                            <p style="margin: 0; font-size: 0.9rem;">Hệ thống phát hiện có <strong>${data.so_san_quen_chot}</strong> lịch đặt sân của các ngày trước vẫn đang ở trạng thái "Đã cọc". Vui lòng kiểm tra và chốt sân ngay!</p>
                         </div>
-                        <button onclick="renderQuanLyDatSan('DaCoc', '${yesterday}')" style="background: #ef4444; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s;">Xử lý ngay</button>
+                        <button onclick="handleXuLyQuenChotSan(this)" style="background: #ef4444; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s;">Xử lý ngay</button>
                     </div>`;
             } else {
                 alertContainer.innerHTML = '';
