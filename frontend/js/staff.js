@@ -1599,7 +1599,7 @@ function openOfflineBookingSuccessInvoiceModal(maHoaDon, maHoaDons = []) {
 
     const printBtnsHtml = invoiceList.map(idHD => `
         <button type="button" class="btn-primary" style="flex: 1.3; padding: 10px; background: #2563eb; border-color: #2563eb; white-space: nowrap;" onclick="document.getElementById('offline-invoice-ask-modal').style.display='none'; printAdminBookingInvoice('${idHD}');">
-            <i class="fa-solid fa-print"></i> Xuất HĐ #${idHD}
+            <i class="fa-solid fa-print"></i> In Phiếu Cọc #${idHD}
         </button>
     `).join('');
 
@@ -1608,8 +1608,8 @@ function openOfflineBookingSuccessInvoiceModal(maHoaDon, maHoaDons = []) {
             <div style="font-size: 3.4rem; color: #10b981; margin-bottom: 12px;"><i class="fa-solid fa-circle-check"></i></div>
             <h3 style="margin-bottom: 8px; font-size: 1.3rem;">Giữ sân thành công!</h3>
             <p style="color: var(--text-muted); margin-bottom: 22px; font-size: 0.93rem; line-height: 1.5;">
-                Đã tạo hóa đơn đặt sân <strong>#${invoiceList.join(', #')}</strong>.<br>
-                <strong style="color:#0f172a;">Bạn có muốn xuất hóa đơn đặt sân cho khách không?</strong>
+                Đã tạo phiếu xác nhận đặt cọc <strong>#${invoiceList.join(', #')}</strong>.<br>
+                <strong style="color:#0f172a;">Bạn có muốn in Phiếu xác nhận đặt cọc cho khách không?</strong>
             </p>
             <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
                 <button type="button" class="btn-outline" style="flex: 1; padding: 10px;" onclick="document.getElementById('offline-invoice-ask-modal').style.display='none'">Đóng</button>
@@ -4525,6 +4525,8 @@ window.printAdminBookingInvoice = async function(maHoaDon) {
         const tienThanhToanTaiSan = Math.max(0, tongTien - tienCoc);
         const conPhaiThu = (hd.TrangThai === 'DaHuy' || daTatToanXong) ? 0 : tienThanhToanTaiSan;
 
+        const docTitle = daTatToanXong ? 'HÓA ĐƠN DỊCH VỤ ĐẶT SÂN' : 'PHIẾU XÁC NHẬN ĐẶT CỌC (TẠM TÍNH)';
+
         const badgeTrangThaiHD = daTatToanXong
             ? `<span style="background:#d1fae5; color:#065f46; border:1px solid #6ee7b7; padding:4px 10px; border-radius:4px; font-size:12px; font-weight:800; display:inline-block; margin-top:4px;">ĐÃ THANH TOÁN ĐỦ 100%</span>`
             : (hd.TrangThai === 'DaHuy'
@@ -4539,7 +4541,7 @@ window.printAdminBookingInvoice = async function(maHoaDon) {
             <html lang="vi">
             <head>
                 <meta charset="UTF-8">
-                <title>Hóa đơn dịch vụ đặt sân #${hd.MaHoaDonDatSan} - DN Football</title>
+                <title>${docTitle} #${hd.MaHoaDonDatSan} - DN Football</title>
                 <style>
                     body { font-family: Arial, sans-serif; color: #0f172a; margin: 28px; line-height: 1.5; font-size: 13px; }
                     .invoice-box { border: 1.5px solid #cbd5e1; border-radius: 8px; overflow: hidden; background: #ffffff; }
@@ -4566,7 +4568,7 @@ window.printAdminBookingInvoice = async function(maHoaDon) {
                             <div style="margin-top:2px; color:#475569; font-size:12.5px;"><strong>Hotline CSKH:</strong> 0899244124</div>
                         </div>
                         <div style="text-align:right;">
-                            <div class="doc-title">HÓA ĐƠN DỊCH VỤ ĐẶT SÂN</div>
+                            <div class="doc-title">${docTitle}</div>
                             <div style="margin-top:4px; color:#334155;">Số HĐ: <strong style="font-family:monospace; font-size:14px; color:#0b5d3b;">#${hd.MaHoaDonDatSan}</strong></div>
                             <div style="margin-top:2px; color:#475569; font-size:12.5px;">Ngày lập: ${ngayLap}</div>
                             ${badgeTrangThaiHD}

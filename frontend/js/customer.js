@@ -1753,17 +1753,10 @@ function showCustomerBookingModal(title, message, isSuccess = true, actionType =
 
     let actionButtonsHtml = '';
     if (isSuccess) {
-        const printButtons = invoiceList.map(idHD => `
-            <button type="button" class="btn-primary" style="flex: 1.2; padding: 11px 12px; border-radius: 10px; font-weight: 700; background: #2563eb; border-color: #2563eb; white-space: nowrap;" onclick="printCustomerBookingInvoice('${idHD}')">
-                <i class="fa-solid fa-print" style="margin-right: 5px;"></i> Xuất HĐ #${idHD}
-            </button>
-        `).join('');
-
         actionButtonsHtml = `
             <button type="button" class="btn-outline" style="flex: 1; padding: 11px 12px; border-radius: 10px; font-weight: 600; background: #fff; border-color: #cbd5e1; color: #475569;" onclick="closeCustomerBookingModal()">Đóng</button>
-            ${printButtons}
-            <button type="button" class="btn-primary" style="flex: 1.2; padding: 11px 12px; border-radius: 10px; font-weight: 700; background: #10b981; border-color: #10b981; white-space: nowrap;" onclick="closeCustomerBookingModal(); renderMyBookings();">
-                <i class="fa-solid fa-ticket" style="margin-right: 5px;"></i> Xem hóa đơn & vé
+            <button type="button" class="btn-primary" style="flex: 1.3; padding: 11px 12px; border-radius: 10px; font-weight: 700; background: #10b981; border-color: #10b981; white-space: nowrap;" onclick="closeCustomerBookingModal(); renderMyBookings();">
+                <i class="fa-solid fa-ticket" style="margin-right: 5px;"></i> Xem lịch sử & vé
             </button>
         `;
     } else if (actionType === 'topup') {
@@ -1780,7 +1773,7 @@ function showCustomerBookingModal(title, message, isSuccess = true, actionType =
     }
 
     const invoiceNoteHtml = (isSuccess && invoiceList.length > 0)
-        ? `<div style="margin-top:8px; color:#0f172a; font-weight:700;">Mã hóa đơn: #${invoiceList.join(', #')} — Bạn có thể in từng hóa đơn ngay bên dưới!</div>`
+        ? `<div style="margin-top:8px; color:#0f172a; font-weight:600;">Phiếu xác nhận đặt cọc (#${invoiceList.join(', #')}) và Vé điện tử QR đã được gửi về Email của bạn.</div>`
         : '';
 
     modal.innerHTML = `
@@ -3606,7 +3599,7 @@ function applyBookingFiltersAndRender() {
             const ngayTaoStr = hd?.NgayTao ? new Date(hd.NgayTao).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : formatDate(group.matches[0].NgayDa);
 
             let invoiceActionsHtml = '';
-            if (group.maHoaDon) {
+            if (group.maHoaDon && trangThaiHD === 'HoanThanh') {
                 invoiceActionsHtml += `
                     <button type="button" class="btn-outline-sm" style="background:#eff6ff; color:#2563eb; border-color:#bfdbfe; padding:7px 13px; border-radius:8px; font-weight:700; display:inline-flex; align-items:center; gap:6px;" onclick="printCustomerBookingInvoice('${group.maHoaDon}')">
                         <i class="fa-solid fa-print"></i> Xuất hóa đơn
@@ -3811,7 +3804,9 @@ function applyBookingFiltersAndRender() {
             const existingTourReview = matchedWithReview ? (matchedWithReview.danh_gia || matchedWithReview.danhGia) : null;
             const representativeMatch = gd.matches.find(m => m.TrangThai === 'HoanThanh') || firstMatch;
 
-            const btnExportInvoiceTour = gd.maHoaDon
+            const trangThaiHDTour = gd.hoaDonObj?.TrangThai || (gd.matches.some(m => m.TrangThai === 'DaCoc') ? 'DaCoc' : gd.matches[0]?.TrangThai);
+
+            const btnExportInvoiceTour = (gd.maHoaDon && trangThaiHDTour === 'HoanThanh')
                 ? `<button type="button" class="btn-outline-sm" style="background:#eff6ff; color:#2563eb; border-color:#bfdbfe; padding:7px 13px; border-radius:8px; font-weight:700;" onclick="event.stopPropagation(); printCustomerBookingInvoice('${gd.maHoaDon}')"><i class="fa-solid fa-print"></i> Xuất hóa đơn</button>`
                 : '';
 
@@ -3846,7 +3841,6 @@ function applyBookingFiltersAndRender() {
                 actionTourHtml = `<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">${btnExportInvoiceTour}<div class="cancel-tour-disabled"><i class="fa-solid fa-lock"></i><span>Không thể hủy tự động</span></div></div>`;
             }
 
-            const trangThaiHDTour = gd.hoaDonObj?.TrangThai || (gd.matches.some(m => m.TrangThai === 'DaCoc') ? 'DaCoc' : gd.matches[0]?.TrangThai);
             const statusBadgeHtml = `<span style="margin-left: 10px;">${renderBadge(trangThaiHDTour)}</span>`;
 
             const hdTour = gd.hoaDonObj;

@@ -447,8 +447,8 @@ class DatSanController extends Controller
                             ";
                         }
                         $dsMaHDStr = implode(', #', $danhSachMaHoaDon);
-                        Mail::html("<h2>Xác nhận đặt sân & Hóa đơn điện tử - DN Football</h2><p>Chào <strong>{$hoTenNhan}</strong>, cảm ơn bạn đã đặt sân. Dưới đây là <strong>Hóa đơn đặt sân (#{$dsMaHDStr})</strong> và <strong>Vé điện tử QR Code</strong> của bạn:</p>{$htmlTatCaHoaDonEmail}<h3 style='margin-top:24px; color:#0f172a;'>Danh sách Vé Điện Tử (Check-in tại sân):</h3>{$htmlVe}", function ($message) use ($emailNhan, $dsMaHDStr) {
-                            $message->to($emailNhan)->subject("Hóa Đơn #{$dsMaHDStr} & Vé Điện Tử - DN Football");
+                        Mail::html("<h2>Phiếu xác nhận đặt cọc & Vé điện tử - DN Football</h2><p>Chào <strong>{$hoTenNhan}</strong>, cảm ơn bạn đã đặt sân. Dưới đây là <strong>Phiếu xác nhận đặt cọc (#{$dsMaHDStr})</strong> và <strong>Vé điện tử QR Code</strong> của bạn. Hóa đơn điện tử chính thức sẽ được gửi sau khi bạn hoàn thành trận đấu:</p>{$htmlTatCaHoaDonEmail}<h3 style='margin-top:24px; color:#0f172a;'>Danh sách Vé Điện Tử (Check-in tại sân):</h3>{$htmlVe}", function ($message) use ($emailNhan, $dsMaHDStr) {
+                            $message->to($emailNhan)->subject("Phiếu xác nhận đặt cọc #{$dsMaHDStr} & Vé Điện Tử - DN Football");
                         });
                     } catch (\Exception $mailEx) {
                         \Illuminate\Support\Facades\Log::error('Lỗi gửi mail đặt sân online: ' . $mailEx->getMessage());
@@ -896,7 +896,7 @@ class DatSanController extends Controller
                                 : "";
 
                             $noiDungMail = "
-                                <div style='font-family: Arial, sans-serif; max-width: 720px; margin: 0 auto; color: #0f172a; line-height: 1.6;'>
+                                <div style='font-family: Arial, sans-serif; max-width: 880px; margin: 0 auto; color: #0f172a; line-height: 1.6;'>
                                     <div style='background: linear-gradient(135deg, #0b5d3b 0%, #15803d 100%); color: #ffffff; padding: 20px 24px; border-radius: 10px 10px 0 0;'>
                                         <h2 style='margin: 0; font-size: 19px; text-transform: uppercase;'>HÓA ĐƠN TẤT TOÁN DỊCH VỤ ĐẶT SÂN (#{$maHoaDon})</h2>
                                         <div style='font-size: 13px; opacity: 0.92; margin-top: 4px;'>Hệ thống sân bóng đá trực tuyến DN Football — Đà Nẵng</div>
@@ -924,7 +924,7 @@ class DatSanController extends Controller
                             $tongCocGiuLai = number_format((float) $hdCheck->datSans->where('TrangThai', 'KhongDen')->sum('TienCoc'), 0, ',', '.') . 'đ';
 
                             $noiDungMail = "
-                                <div style='font-family: Arial, sans-serif; max-width: 720px; margin: 0 auto; color: #0f172a; line-height: 1.6;'>
+                                <div style='font-family: Arial, sans-serif; max-width: 880px; margin: 0 auto; color: #0f172a; line-height: 1.6;'>
                                     <div style='background: linear-gradient(135deg, #475569 0%, #334155 100%); color: #ffffff; padding: 20px 24px; border-radius: 10px 10px 0 0;'>
                                         <h2 style='margin: 0; font-size: 19px; text-transform: uppercase;'>THÔNG BÁO CHỐT HÓA ĐƠN VẮNG MẶT (#{$maHoaDon})</h2>
                                         <div style='font-size: 13px; opacity: 0.92; margin-top: 4px;'>Hệ thống sân bóng đá trực tuyến DN Football — Đà Nẵng</div>
@@ -1150,9 +1150,9 @@ class DatSanController extends Controller
 
                         $dsMaHDStr = implode(', #', $danhSachMaHoaDon);
                         $noiDungMail = "
-                            <h2>Xác nhận đặt sân & Hóa đơn điện tử - DN Football</h2>
+                            <h2>Phiếu xác nhận đặt cọc & Vé điện tử - DN Football</h2>
                             <p>Chào <strong>{$hoTenKhach}</strong>,</p>
-                            <p>Cảm ơn bạn đã đặt sân trực tiếp tại quầy DN Football. Dưới đây là <strong>Hóa đơn đặt sân (#{$dsMaHDStr})</strong> và <strong>Vé điện tử QR Code</strong> của bạn:</p>
+                            <p>Cảm ơn bạn đã đặt sân trực tiếp tại quầy DN Football. Dưới đây là <strong>Phiếu xác nhận đặt cọc (#{$dsMaHDStr})</strong> và <strong>Vé điện tử QR Code</strong> của bạn:</p>
                             {$htmlTatCaHoaDonEmail}
                             <h3 style='margin-top:24px; color:#0f172a;'>Danh sách Vé Điện Tử (Check-in tại sân):</h3>
                             {$htmlVe}
@@ -1160,7 +1160,7 @@ class DatSanController extends Controller
 
                         Mail::html($noiDungMail, function ($message) use ($emailKhach, $dsMaHDStr) {
                             $message->to($emailKhach)
-                                    ->subject("Hóa Đơn #{$dsMaHDStr} & Vé Đặt Sân - DN Football");
+                                    ->subject("Phiếu xác nhận đặt cọc #{$dsMaHDStr} & Vé Đặt Sân - DN Football");
                         });
                     } catch (\Exception $mailEx) {
                         \Illuminate\Support\Facades\Log::error('Lỗi gửi mail đặt sân hộ: ' . $mailEx->getMessage());
@@ -1467,9 +1467,9 @@ class DatSanController extends Controller
 
                 $dsMaHDStr = implode(', #', $danhSachMaHoaDon);
                 $noiDungMail = "
-                    <h2>Xác nhận đặt sân & Hóa đơn điện tử - DN Football</h2>
+                    <h2>Phiếu xác nhận đặt cọc & Vé điện tử - DN Football</h2>
                     <p>Chào <strong>{$bookingData['ho_ten']}</strong>,</p>
-                    <p>Cảm ơn bạn đã đặt sân tại DN Football. Dưới đây là <strong>Hóa đơn đặt sân (#{$dsMaHDStr})</strong> và thông tin vé của bạn:</p>
+                    <p>Cảm ơn bạn đã đặt sân tại DN Football. Dưới đây là <strong>Phiếu xác nhận đặt cọc (#{$dsMaHDStr})</strong> và thông tin vé của bạn. Hóa đơn điện tử chính thức sẽ được gửi sau khi bạn hoàn thành trận đấu:</p>
                     {$htmlTatCaHoaDonEmail}
                     <h3 style='margin-top:24px; color:#0f172a;'>Danh sách Vé Điện Tử:</h3>
                     {$htmlVe}
@@ -1487,7 +1487,7 @@ class DatSanController extends Controller
 
                 Mail::html($noiDungMail, function ($message) use ($bookingData, $dsMaHDStr) {
                     $message->to($bookingData['email_khach'])
-                            ->subject("Hóa Đơn #{$dsMaHDStr} & Vé Đặt Sân - DN Football");
+                            ->subject("Phiếu xác nhận đặt cọc #{$dsMaHDStr} & Vé Đặt Sân - DN Football");
                 });
             } catch (\Exception $mailEx) {
                 \Illuminate\Support\Facades\Log::error('Lỗi gửi mail vé khách vãng lai: ' . $mailEx->getMessage());
@@ -1851,10 +1851,12 @@ class DatSanController extends Controller
 
         // Kiểm tra xem hóa đơn đã kết thúc (không còn trận nào DaCoc) hay chưa
         $daTatToanXong = ($hoaDon->TrangThai === 'HoanThanh') || (!$listDatSan->contains('TrangThai', 'DaCoc') && $listDatSan->contains('TrangThai', 'HoanThanh'));
+        $laKhongDen = ($hoaDon->TrangThai === 'KhongDen') || (!$listDatSan->contains('TrangThai', 'DaCoc') && !$listDatSan->contains('TrangThai', 'HoanThanh') && $listDatSan->contains('TrangThai', 'KhongDen'));
         $tienThanhToanTaiSan = max(0, $tongTienHD - $tongDaCoc);
-        $conPhaiThu = ($hoaDon->TrangThai === 'DaHuy' || $daTatToanXong) ? 0 : $tienThanhToanTaiSan;
+        $conPhaiThu = ($hoaDon->TrangThai === 'DaHuy' || $daTatToanXong || $laKhongDen) ? 0 : $tienThanhToanTaiSan;
 
         if ($daTatToanXong) {
+            $tieuDeChungTu = 'HÓA ĐƠN DỊCH VỤ ĐẶT SÂN';
             $badgeTrangThaiHD = "<span style='background:#d1fae5; color:#065f46; border:1px solid #6ee7b7; padding:4px 10px; border-radius:4px; font-size:12px; font-weight:800;'>ĐÃ THANH TOÁN ĐỦ 100%</span>";
             $dongCuoiThanhToanHtml = "
                 <tr>
@@ -1866,7 +1868,17 @@ class DatSanController extends Controller
                     <td style='padding:10px 0 2px 0; text-align:right; font-size:15.5px; font-weight:800; color:#0b5d3b;'>0đ (Đã tất toán)</td>
                 </tr>
             ";
+        } elseif ($laKhongDen) {
+            $tieuDeChungTu = 'PHIẾU ĐỐI SOÁT CHỐT VẮNG MẶT';
+            $badgeTrangThaiHD = "<span style='background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; padding:4px 10px; border-radius:4px; font-size:12px; font-weight:800;'>KHÁCH KHÔNG ĐẾN (GIỮ CỌC)</span>";
+            $dongCuoiThanhToanHtml = "
+                <tr style='border-top:2px solid #0f172a;'>
+                    <td style='padding:10px 0 2px 0; font-size:14.5px; font-weight:800; color:#475569;'>CÒN PHẢI THU:</td>
+                    <td style='padding:10px 0 2px 0; text-align:right; font-size:15.5px; font-weight:800; color:#475569;'>0đ (Đã chốt đóng)</td>
+                </tr>
+            ";
         } else {
+            $tieuDeChungTu = 'PHIẾU XÁC NHẬN ĐẶT CỌC';
             $badgeTrangThaiHD = "<span style='background:#fef3c7; color:#92400e; border:1px solid #fde68a; padding:4px 10px; border-radius:4px; font-size:12px; font-weight:800;'>ĐÃ ĐẶT CỌC GIỮ SÂN</span>";
             $dongCuoiThanhToanHtml = "
                 <tr style='border-top:2px solid #0f172a;'>
@@ -1890,14 +1902,14 @@ class DatSanController extends Controller
                 <div style='padding:18px 22px; border-bottom:2px solid #0b5d3b; background:#f8fafc;'>
                     <table style='width:100%; border-collapse:collapse;'>
                         <tr>
-                            <td style='vertical-align:top;'>
-                                <div style='font-size:17px; font-weight:800; color:#0b5d3b; text-transform:uppercase;'>HỆ THỐNG SÂN BÓNG ĐÁ DN FOOTBALL</div>
+                            <td style='vertical-align:top; padding-right:16px;'>
+                                <div style='font-size:16px; font-weight:800; color:#0b5d3b; text-transform:uppercase; white-space:nowrap;'>HỆ THỐNG SÂN BÓNG ĐÁ DN FOOTBALL</div>
                                 <div style='font-size:13px; color:#334155; margin-top:4px;'><strong>Đơn vị quản lý:</strong> {$tenCumSan}</div>
                                 <div style='font-size:12.5px; color:#475569; margin-top:2px;'><strong>Địa chỉ:</strong> {$diaChiCum}</div>
                                 <div style='font-size:12.5px; color:#475569; margin-top:2px;'><strong>Hotline CSKH:</strong> {$hotlineCoSo}</div>
                             </td>
                             <td style='vertical-align:top; text-align:right;'>
-                                <div style='font-size:18px; font-weight:800; color:#0f172a; letter-spacing:0.3px;'>HÓA ĐƠN DỊCH VỤ ĐẶT SÂN</div>
+                                <div style='font-size:17px; font-weight:800; color:#0f172a; letter-spacing:0.3px; white-space:nowrap;'>{$tieuDeChungTu}</div>
                                 <div style='font-size:13px; color:#334155; margin-top:4px;'>Số HĐ: <strong style='font-family:monospace; font-size:14px; color:#0b5d3b;'>#{$hoaDon->MaHoaDonDatSan}</strong></div>
                                 <div style='font-size:12.5px; color:#475569; margin-top:2px;'>Ngày lập: {$ngayLap}</div>
                                 <div style='margin-top:6px;'>{$badgeTrangThaiHD}</div>
@@ -2098,6 +2110,14 @@ class DatSanController extends Controller
 
         if (!$hoaDon) {
             return response()->json(['success' => false, 'message' => 'Không tìm thấy hóa đơn đặt sân!'], 404);
+        }
+
+        $currentUser = auth('sanctum')->user() ?? auth()->user();
+        if ($currentUser && $currentUser->VaiTro === 'KhachHang' && $hoaDon->TrangThai !== 'HoanThanh') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Chỉ có thể xuất hóa đơn khi hóa đơn đã ở trạng thái Hoàn thành!'
+            ], 403);
         }
 
         // Sắp xếp toàn bộ các trận trong hóa đơn theo Ngày đá và Khung giờ tăng dần

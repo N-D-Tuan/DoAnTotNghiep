@@ -1857,8 +1857,8 @@ window.showGuestPaymentResultModal = function(status, maHoaDon = null) {
     if (status === 'success') {
         iconHtml = '<i class="fa-solid fa-circle-check" style="font-size: 3.5rem; color: #22C55E;"></i>';
         title = 'Đặt sân thành công!';
-        const hdLabel = invoiceIds.length > 0 ? ` (Mã hóa đơn: <strong style="color:#22C55E;">#${invoiceIds.join(', #')}</strong>)` : '';
-        message = `Thanh toán qua VNPay đã hoàn tất${hdLabel}. Chúng tôi đã gửi Hóa đơn và Vé điện tử QR về Email của bạn.<br><br><strong style="color:#0f172a;">Bạn có muốn xuất hóa đơn đặt sân ngay bây giờ không?</strong>`;
+        const hdLabel = invoiceIds.length > 0 ? ` (Mã phiếu: <strong style="color:#22C55E;">#${invoiceIds.join(', #')}</strong>)` : '';
+        message = `Thanh toán cọc qua VNPay đã hoàn tất${hdLabel}. <strong>Phiếu xác nhận đặt cọc</strong> và <strong>Vé điện tử QR</strong> đã được gửi về Email của bạn.<br><br>Hóa đơn điện tử chính thức sẽ được gửi qua Email ngay sau khi bạn hoàn thành trận đấu.`;
         btnColor = '#22C55E';
         guestSelectedSlots = [];
         updateGuestFloatingCart();
@@ -1879,26 +1879,11 @@ window.showGuestPaymentResultModal = function(status, maHoaDon = null) {
         btnColor = '#ef4444';
     }
 
-    const printButtonsHtml = invoiceIds.map(idHD => `
-        <button type="button" class="btn" onclick="exportGuestBookingInvoice('${idHD}')" style="flex: 1.3; background: #22C55E; color: #0F172A; font-weight: 700; padding: 12px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap;">
-            <i class="fa-solid fa-print"></i> Xuất HĐ #${idHD}
+    const actionButtonsHtml = `
+        <button type="button" class="btn" id="btn-close-guest-result" onclick="closeGuestPaymentResultModal()" style="width: 100%; background: ${btnColor}; color: #0F172A; font-weight: 700; padding: 12px; border-radius: 10px;">
+            Đóng
         </button>
-    `).join('');
-
-    const actionButtonsHtml = (status === 'success' && invoiceIds.length > 0)
-        ? `
-            <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-                <button type="button" class="btn" onclick="closeGuestPaymentResultModal()" style="flex: 1; background: #334155; color: #f8fafc; font-weight: 600; padding: 12px; border-radius: 10px;">
-                    Đóng
-                </button>
-                ${printButtonsHtml}
-            </div>
-        `
-        : `
-            <button type="button" class="btn" id="btn-close-guest-result" onclick="closeGuestPaymentResultModal()" style="width: 100%; background: ${btnColor}; color: #0F172A; font-weight: 700; padding: 12px;">
-                Đóng
-            </button>
-        `;
+    `;
 
     modal.innerHTML = `
         <div class="modal-card" style="max-width: 460px; text-align: center; padding: 28px 24px;">
