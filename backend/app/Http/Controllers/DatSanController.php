@@ -771,14 +771,68 @@ class DatSanController extends Controller
             }
 
             $maHoaDon = $datSan->MaHoaDonDatSan;
+            $giamGiaSuCo = 0;
+            $lyDoSuCo = trim((string) $request->input('ly_do_su_co', ''));
 
-            $datSan->update([
+            // CHỈ QUẢN LÝ SÂN mới được nhập giảm giá sự cố khi chốt Hoàn thành
+            if ($request->trang_thai === 'HoanThanh' && $userDangNhap->VaiTro === 'QuanLySan') {
+                $giamGiaInput = (float) $request->input('giam_gia_su_co', 0);
+                if ($giamGiaInput > 0) {
+                    $giamToiDa = max(0, (float) $datSan->TongTien - (float) $datSan->TienCoc);
+                    if ($giamGiaInput > $giamToiDa) {
+                        DB::rollBack();
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Số tiền giảm sự cố không được vượt quá phần còn lại của ca đá (' . number_format($giamToiDa, 0, ',', '.') . 'đ). Nếu muốn hoàn cả cọc, vui lòng dùng nút Hủy sân & Hoàn tiền!'
+                        ]);
+                    }
+                    if ($lyDoSuCo === '') {
+                        DB::rollBack();
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Vui lòng nhập lý do sự cố khi áp dụng giảm giá trực tiếp!'
+                        ]);
+                    }
+                    $giamGiaSuCo = $giamGiaInput;
+                }
+            }
+
+            $updateData = [
                 'TrangThai'      => $request->trang_thai,
                 'MaNhanVienXuLy' => $userDangNhap->MaNguoiDung
-            ]);
+            ];
+
+            if ($giamGiaSuCo > 0) {
+                $giaMoi = max((float) $datSan->TienCoc, (float) $datSan->TongTien - $giamGiaSuCo);
+                $updateData['TongTien'] = $giaMoi;
+            }
+
+            $datSan->update($updateData);
 
             if ($maHoaDon) {
+                if ($giamGiaSuCo > 0) {
+                    DB::table('ChiTietHoaDon')
+                        ->where('MaHoaDonDatSan', $maHoaDon)
+                        ->where('MaDatSan', $datSan->MaDatSan)
+                        ->update(['DonGia' => $updateData['TongTien']]);
+                }
+
                 self::dongBoHoaDonDatSan($maHoaDon);
+
+                // Ràng buộc an toàn: Tổng tiền hóa đơn sau giảm không được nhỏ hơn tổng tiền khách đã cọc
+                if ($giamGiaSuCo > 0) {
+                    $hdSauDongBo = HoaDonDatSan::with('datSans')->find($maHoaDon);
+                    if ($hdSauDongBo) {
+                        $tongCocHD = (float) $hdSauDongBo->datSans->where('TrangThai', '!=', 'DaHuy')->sum('TienCoc');
+                        if ((float) $hdSauDongBo->TongTien < $tongCocHD) {
+                            DB::rollBack();
+                            return response()->json([
+                                'success' => false,
+                                'message' => 'Tổng tiền hóa đơn sau khi giảm (' . number_format($hdSauDongBo->TongTien, 0, ',', '.') . 'đ) nhỏ hơn số tiền khách đã cọc (' . number_format($tongCocHD, 0, ',', '.') . 'đ). Vui lòng giảm số tiền nhỏ hơn!'
+                            ]);
+                        }
+                    }
+                }
             }
 
             if ($datSan->MaGiaiDau != null) {
@@ -863,7 +917,7 @@ class DatSanController extends Controller
                 $tenSanCopy = $tenSan;
                 $cumSanCopy = $cumSan;
 
-                dispatch(function () use ($maHoaDon, $maDatSanId, $tenSanCopy, $cumSanCopy) {
+                dispatch(function () use ($maHoaDon, $maDatSanId, $tenSanCopy, $cumSanCopy, $giamGiaSuCo, $lyDoSuCo) {
                     $hdCheck = HoaDonDatSan::with(['nguoiDung', 'khuyenMai', 'datSans.sanBong.cumSan', 'datSans.sanBong.loaiSan', 'datSans.khungGio', 'datSans.giaiDau'])
                         ->where('MaHoaDonDatSan', $maHoaDon)
                         ->first();
@@ -895,6 +949,10 @@ class DatSanController extends Controller
                                 ? "<p style='margin: 12px 0 0 0; font-size: 13.5px; color: #334155;'>⭐ <em>Nếu hài lòng với chất lượng mặt cỏ và dịch vụ tại cơ sở, bạn đừng quên truy cập mục <strong>Lịch sử đặt sân</strong> trên website để gửi đánh giá cho <strong>{$cumSanCopy}</strong> nhé!</em></p>"
                                 : "";
 
+                            $ghiChuSuCoMailHtml = ($giamGiaSuCo > 0)
+                                ? "<div style='background: #fffbeb; border: 1px solid #fde68a; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 12px 16px; margin: 12px 0; font-size: 13.5px; color: #92400e;'><strong>Thông báo điều chỉnh giá do sự cố:</strong> Cơ sở đã giảm trực tiếp <strong>" . number_format($giamGiaSuCo, 0, ',', '.') . "đ</strong> vào đơn giá ca sân này (Lý do: <em>{$lyDoSuCo}</em>). Xin lỗi quý khách vì sự bất tiện này!</div>"
+                                : "";
+
                             $noiDungMail = "
                                 <div style='font-family: Arial, sans-serif; max-width: 880px; margin: 0 auto; color: #0f172a; line-height: 1.6;'>
                                     <div style='background: linear-gradient(135deg, #0b5d3b 0%, #15803d 100%); color: #ffffff; padding: 20px 24px; border-radius: 10px 10px 0 0;'>
@@ -904,6 +962,7 @@ class DatSanController extends Controller
                                     <div style='padding: 20px 24px; border: 1px solid #cbd5e1; border-top: none; border-radius: 0 0 10px 10px; background: #ffffff;'>
                                         <p style='margin-top: 0;'>Xin chào <strong>{$tenKhachHD}</strong>,</p>
                                         <p>Hệ thống <strong>DN Football</strong> xác nhận lịch đặt sân thuộc Hóa đơn <strong>#{$maHoaDon}</strong> của bạn đã <strong>hoàn thành và tất toán đầy đủ 100%</strong>. Dưới đây là Hóa đơn điện tử chính thức để bạn lưu trữ và đối chiếu:</p>
+                                        {$ghiChuSuCoMailHtml}
                                         {$hoaDonHtml}
                                         <div style='background: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid #16a34a; border-radius: 8px; padding: 14px 18px; margin-top: 16px;'>
                                             <div style='color: #065f46; font-size: 14px;'>⚽ {$loiChuc}</div>
@@ -3569,5 +3628,220 @@ class DatSanController extends Controller
         }
 
         return response()->json(['success' => true, 'data' => $result]);
+    }
+
+    /**
+     * Nhân viên / Quản lý gửi báo cáo sự cố sân -> Gửi tới TẤT CẢ Quản lý sân đang hoạt động của cụm sân đó
+     */
+    public function baoSuCoDatSan(Request $request, $id)
+    {
+        $userDangNhap = auth()->user();
+        if (!in_array($userDangNhap->VaiTro, ['NhanVien', 'QuanLySan'])) {
+            return response()->json(['success' => false, 'message' => 'Không có quyền thực hiện!'], 403);
+        }
+
+        $request->validate([
+            'ly_do' => 'required|string|max:255'
+        ], [
+            'ly_do.required' => 'Vui lòng nhập mô tả sự cố!'
+        ]);
+
+        $datSan = DatSan::with(['sanBong.cumSan', 'khungGio', 'nguoiDung'])->find($id);
+        if (!$datSan || !$datSan->sanBong) {
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy lịch đặt sân!']);
+        }
+
+        $maCumSan = $datSan->sanBong->MaCumSan;
+        $tenSan   = $datSan->sanBong->TenSan;
+        $ngayDa   = date('d/m/Y', strtotime($datSan->NgayDa));
+        $gioDa    = $datSan->khungGio ? substr($datSan->khungGio->GioBatDau, 0, 5) . ' - ' . substr($datSan->khungGio->GioKetThuc, 0, 5) : '';
+        $maVe     = $datSan->MaGiaiDau ? "GD-{$datSan->MaGiaiDau}" : "PT-{$datSan->MaDatSan}";
+
+        $tenKhach = $datSan->nguoiDung ? $datSan->nguoiDung->HoTen : ($datSan->TenNguoiDat ?: 'Khách vãng lai');
+        $sdtKhach = $datSan->nguoiDung ? $datSan->nguoiDung->SoDienThoai : ($datSan->SDTNguoiDat ?: 'N/A');
+        $maKhachRef = $datSan->MaNguoiDung ?: 'GUEST';
+        $lyDo = trim($request->input('ly_do'));
+
+        // Lấy TẤT CẢ tài khoản Quản lý sân thuộc cụm sân này và KHÔNG bị khóa
+        $danhSachQuanLy = NguoiDung::where('VaiTro', 'QuanLySan')
+            ->where('MaCumSan', $maCumSan)
+            ->where(function ($q) {
+                $q->where('TrangThaiKhoa', 0)->orWhereNull('TrangThaiKhoa');
+            })
+            ->get();
+
+        if ($danhSachQuanLy->isEmpty()) {
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy tài khoản Quản lý sân đang hoạt động nào tại cơ sở này!']);
+        }
+
+        $tieuDe = "[SỰ CỐ SÂN] {$tenSan} (#{$maVe}) - {$ngayDa}";
+        $noiDung = "Khách: {$tenKhach} ({$sdtKhach}) | Ca: {$gioDa} ngày {$ngayDa} | Lý do: {$lyDo} | Báo bởi: {$userDangNhap->HoTen} [REF:{$datSan->MaDatSan}|{$maKhachRef}|{$datSan->NgayDa}]";
+
+        foreach ($danhSachQuanLy as $ql) {
+            ThongBao::create([
+                'MaNguoiDung'  => $ql->MaNguoiDung,
+                'TieuDe'       => $tieuDe,
+                'NoiDung'      => $noiDung,
+                'LoaiThongBao' => 'HeThong'
+            ]);
+            broadcast(new \App\Events\UserDataUpdated($ql->MaNguoiDung))->toOthers();
+        }
+
+        broadcast(new \App\Events\AdminDataUpdated())->toOthers();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Đã gửi báo cáo sự cố tới ' . $danhSachQuanLy->count() . ' Quản lý sân!'
+        ]);
+    }
+
+    /**
+     * Quản lý sân tặng nhanh Voucher đền bù cá nhân cho Khách hàng thành viên
+     */
+    public function tangVoucherDenBu(Request $request)
+    {
+        $userDangNhap = auth()->user();
+        if ($userDangNhap->VaiTro !== 'QuanLySan') {
+            return response()->json(['success' => false, 'message' => 'Chỉ Quản lý sân mới có quyền tạo Voucher đền bù!'], 403);
+        }
+
+        $request->validate([
+            'ma_nguoi_dung'   => 'required',
+            'loai_khuyen_mai' => 'required|in:PhanTram,CoDinh',
+            'gia_tri'         => 'required|numeric|min:1',
+            'gia_tri_toi_da'  => 'nullable|numeric|min:0',
+            'ly_do'           => 'nullable|string|max:255',
+            'ma_dat_san'      => 'nullable|string'
+        ]);
+
+        $khach = NguoiDung::where('MaNguoiDung', $request->ma_nguoi_dung)
+            ->where('VaiTro', 'KhachHang')
+            ->first();
+
+        if (!$khach) {
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy tài khoản Khách hàng thành viên này!']);
+        }
+
+        $loai = $request->loai_khuyen_mai;
+        $giaTri = (float) $request->gia_tri;
+        if ($loai === 'PhanTram' && $giaTri > 100) {
+            return response()->json(['success' => false, 'message' => 'Mức giảm phần trăm không được vượt quá 100%!']);
+        }
+
+        $giaTriToiDa = ($loai === 'CoDinh') ? $giaTri : (float) ($request->input('gia_tri_toi_da') ?: 200000);
+        $lyDo = trim((string) $request->input('ly_do', 'Đền bù sự cố tại sân'));
+        $tenCumSan = $userDangNhap->cumSan ? $userDangNhap->cumSan->TenCumSan : 'DN Football';
+
+        // Sinh mã Voucher duy nhất
+        // Sinh mã Voucher theo cấu trúc DENBU + Mã đặt sân (VD: DENBUDS015)
+        $maDatSanClean = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) $request->input('ma_dat_san', '')));
+        if ($maDatSanClean !== '') {
+            $baseCode = 'DENBU' . $maDatSanClean;
+            $maKM = $baseCode;
+            $suffix = 2;
+            while (KhuyenMai::where('MaKhuyenMai', $maKM)->exists()) {
+                $maKM = $baseCode . 'L' . $suffix; // VD: DENBUDS015L2 nếu tặng thêm lần 2 cho cùng 1 ca
+                $suffix++;
+            }
+        } else {
+            do {
+                $maKM = 'DENBU' . strtoupper(substr(md5(uniqid((string) mt_rand(), true)), 0, 5));
+            } while (KhuyenMai::where('MaKhuyenMai', $maKM)->exists());
+        }
+
+        $ngayKetThuc = now()->addDays(30);
+
+        KhuyenMai::create([
+            'MaKhuyenMai'          => $maKM,
+            'TenKhuyenMai'         => "Voucher đền bù sự cố - {$tenCumSan}",
+            'MaNguoiDung'          => $khach->MaNguoiDung,
+            'LoaiKhuyenMai'        => $loai,
+            'GiaTri'               => $giaTri,
+            'GiaTriToiDa'          => $giaTriToiDa,
+            'GiaTriHoaDonToiThieu' => 0,
+            'SoLuong'              => 1,
+            'SoLuongDaDung'        => 0,
+            'NgayBatDau'           => now(),
+            'NgayKetThuc'          => $ngayKetThuc,
+            'TrangThai'            => 'DangApDung',
+            'MoTa'                 => $lyDo
+        ]);
+
+        $mucGiamText = ($loai === 'PhanTram')
+            ? "{$giaTri}% (tối đa " . number_format($giaTriToiDa, 0, ',', '.') . "đ)"
+            : number_format($giaTri, 0, ',', '.') . "đ";
+
+        // Gửi thông báo Web cho khách hàng
+        ThongBao::create([
+            'MaNguoiDung'  => $khach->MaNguoiDung,
+            'TieuDe'       => "Bạn nhận được Voucher đền bù #{$maKM}",
+            'NoiDung'      => "Cơ sở {$tenCumSan} gửi tặng bạn mã giảm giá #{$maKM} (Giảm {$mucGiamText}, đơn tối thiểu 0đ, HSD đến " . $ngayKetThuc->format('d/m/Y') . "). Lý do: {$lyDo}. Xin lỗi bạn vì sự bất tiện vừa qua!",
+            'LoaiThongBao' => 'HeThong'
+        ]);
+
+        // Gửi Email xin lỗi kèm mã Voucher (chạy ngầm)
+        if ($khach->Email) {
+            $emailKhach = $khach->Email;
+            $tenKhach = $khach->HoTen;
+            $hsdStr = $ngayKetThuc->format('d/m/Y');
+            dispatch(function () use ($emailKhach, $tenKhach, $maKM, $mucGiamText, $tenCumSan, $lyDo, $hsdStr) {
+                try {
+                    $html = "
+                        <div style='font-family:Arial,sans-serif; max-width:600px; margin:0 auto; border:1px solid #cbd5e1; border-radius:10px; overflow:hidden;'>
+                            <div style='background:#0b5d3b; color:#fff; padding:18px 22px;'>
+                                <h2 style='margin:0; font-size:18px;'>THƯ XIN LỖI & QUÀ TẶNG VOUCHER ĐỀN BÙ</h2>
+                            </div>
+                            <div style='padding:20px 22px; color:#0f172a; line-height:1.6;'>
+                                <p>Xin chào <strong>{$tenKhach}</strong>,</p>
+                                <p>Ban quản lý <strong>{$tenCumSan}</strong> chân thành xin lỗi bạn vì sự cố ngoài ý muốn vừa qua (<em>{$lyDo}</em>).</p>
+                                <p>Như lời xin lỗi, chúng tôi xin gửi tặng riêng bạn 01 Mã khuyến mãi cho lần đặt sân tiếp theo:</p>
+                                <div style='background:#f0fdf4; border:1.5px dashed #16a34a; border-radius:8px; padding:14px; text-align:center; margin:16px 0;'>
+                                    <div style='font-size:13px; color:#475569;'>MÃ VOUCHER CÁ NHÂN CỦA BẠN</div>
+                                    <div style='font-size:24px; font-weight:800; color:#0b5d3b; font-family:monospace; letter-spacing:2px; margin:4px 0;'>{$maKM}</div>
+                                    <div style='font-size:14px; color:#047857; font-weight:700;'>Giảm {$mucGiamText} &bull; Đơn tối thiểu 0đ</div>
+                                    <div style='font-size:12px; color:#64748b; margin-top:4px;'>Hạn sử dụng đến: {$hsdStr} (01 lượt dùng)</div>
+                                </div>
+                                <p style='margin-bottom:0;'>Rất mong tiếp tục được đón tiếp bạn và đội bóng tại <strong>DN Football</strong>!</p>
+                            </div>
+                        </div>
+                    ";
+                    Mail::html($html, function ($message) use ($emailKhach, $maKM, $tenCumSan) {
+                        $message->to($emailKhach)->subject("Tặng Voucher đền bù #{$maKM} từ {$tenCumSan} - DN Football");
+                    });
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::error('Lỗi gửi mail voucher đền bù: ' . $e->getMessage());
+                }
+            })->afterResponse();
+        }
+
+        broadcast(new \App\Events\UserDataUpdated($khach->MaNguoiDung))->toOthers();
+        broadcast(new \App\Events\AdminDataUpdated())->toOthers();
+
+        return response()->json([
+            'success' => true,
+            'message' => "Đã tạo & gửi tặng Voucher #{$maKM} (Giảm {$mucGiamText}) cho khách hàng {$khach->HoTen}!"
+        ]);
+    }
+
+    public function danhDauDaXuLySuCo($id)
+    {
+        if (auth()->user()->VaiTro !== 'QuanLySan') {
+            return response()->json(['success' => false, 'message' => 'Không có quyền thực hiện!'], 403);
+        }
+
+        $notifs = ThongBao::where('TieuDe', 'like', '[SỰ CỐ SÂN]%')
+            ->where('NoiDung', 'like', "%[REF:{$id}|%")
+            ->get();
+
+        foreach ($notifs as $tb) {
+            $tb->update([
+                'TieuDe' => preg_replace('/^\[SỰ CỐ SÂN\]/', '[ĐÃ XỬ LÝ SỰ CỐ]', $tb->TieuDe),
+                'DaDoc'  => 1
+            ]);
+        }
+
+        broadcast(new \App\Events\AdminDataUpdated())->toOthers();
+
+        return response()->json(['success' => true]);
     }
 }

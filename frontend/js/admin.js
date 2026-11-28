@@ -206,6 +206,11 @@ document.addEventListener(
 
                 loadNotifications();
 
+                // Nếu Quản lý đang đứng ở trang Dashboard -> TỰ ĐỘNG REFRESH DANH SÁCH SỰ CỐ
+                if (document.getElementById('dashboard-incident-container') && typeof loadDashboardIncidents === 'function') {
+                    loadDashboardIncidents();
+                }
+
                 // Nếu Admin đang mở tab TỔNG QUAN (Dashboard) -> TỰ ĐỘNG REFRESH BIỂU ĐỒ & SỐ LƯỢNG
                 if (document.getElementById('revenueChart')) {
                     updateDashboardStats();
@@ -355,7 +360,12 @@ document.addEventListener(
                     console.log('⚡ Nhận thông báo cá nhân nội bộ!');
                     
                     // 1. Luôn luôn cập nhật dữ liệu chuông đỏ trên Header khi có bất kỳ thông báo nào
-                    await loadNotifications(); 
+                    await loadNotifications();
+
+                    // Nếu Quản lý đang đứng ở trang Dashboard -> Tự động load lại danh sách sự cố
+                    if (document.getElementById('dashboard-incident-container') && typeof loadDashboardIncidents === 'function') {
+                        loadDashboardIncidents();
+                    }
                     
                     // 2. Kiểm tra thông báo mới nhất để xem có phải nghiệp vụ KHÓA TÀI KHOẢN hay không
                     try {
@@ -2630,6 +2640,9 @@ async function markAllAsRead() {
             el.style.backgroundColor = '#ffffff';
         });
         
+        if (document.getElementById('dashboard-incident-container') && typeof loadDashboardIncidents === 'function') {
+            loadDashboardIncidents();
+        }
     } catch (e) {
         console.error('Lỗi cập nhật đã đọc', e);
     }
@@ -2667,6 +2680,10 @@ async function markAsRead(id, element) {
             }
             // Gọi lại loadNotifications để cập nhật lại số lượng badge đỏ trên Header
             loadNotifications();
+
+            if (document.getElementById('dashboard-incident-container') && typeof loadDashboardIncidents === 'function') {
+                loadDashboardIncidents();
+            }
         }
     } catch (e) {
         console.error('Lỗi cập nhật trạng thái thông báo:', e);
@@ -3396,23 +3413,68 @@ window.openConfirmStatusActionAdmin = function(trangThai) {
         modal.style.cssText = 'display: none; z-index: 10020; align-items: center; justify-content: center;';
         document.body.appendChild(modal);
     }
+
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user') || '{}');
     const isComplete = trangThai === 'HoanThanh';
+    const isQuanLy = currentUser.VaiTro === 'QuanLySan';
+    const item = allDatSanData.find(b => String(b.ID) === String(pendingDSId) || String(b.MaDatSan) === String(pendingDSId));
+    const donGiaGoc = item ? Number(item.TongTien || 0) : 0;
+    const tienCoc = item ? Number(item.TienCoc || 0) : 0;
+    const maxDiscount = Math.max(0, donGiaGoc - tienCoc);
+
+    const incidentDiscountHtml = (isComplete && isQuanLy && item) ? `
+        <div style="text-align: left; margin-bottom: 18px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 12px 14px;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 700; color: #92400e; font-size: 0.88rem; margin: 0;">
+                <input type="checkbox" id="adm-incident-toggle" onchange="toggleAdminIncidentDiscountBox()" style="width: 16px; height: 16px; accent-color: #ea580c;">
+                <span>Phát sinh sự cố (Giảm giá trực tiếp ca này)</span>
+            </label>
+
+            <div id="adm-incident-box" style="display: none; margin-top: 12px; padding-top: 10px; border-top: 1px dashed #fcd34d;">
+                <div style="font-size: 0.8rem; color: #64748b; margin-bottom: 8px;">
+                    Giá ca gốc: <strong>${donGiaGoc.toLocaleString('vi-VN')}đ</strong> | Đã cọc: <strong>${tienCoc.toLocaleString('vi-VN')}đ</strong> | Giảm tối đa: <strong style="color:#ea580c;">${maxDiscount.toLocaleString('vi-VN')}đ</strong>
+                </div>
+
+                <!-- 3 nút chọn nhanh -->
+                <div style="display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap;">
+                    <button type="button" onclick="setAdminIncidentDiscount(${Math.min(maxDiscount, Math.round(donGiaGoc * 0.3))}, ${donGiaGoc}, ${maxDiscount})" style="padding: 4px 10px; font-size: 0.78rem; border-radius: 6px; border: 1px solid #fdba74; background: #fff; color: #c2410c; font-weight: 700; cursor: pointer;">Giảm 30%</button>
+                    <button type="button" onclick="setAdminIncidentDiscount(${Math.min(maxDiscount, Math.round(donGiaGoc * 0.5))}, ${donGiaGoc}, ${maxDiscount})" style="padding: 4px 10px; font-size: 0.78rem; border-radius: 6px; border: 1px solid #fdba74; background: #fff; color: #c2410c; font-weight: 700; cursor: pointer;">Giảm 50%</button>
+                    <button type="button" onclick="setAdminIncidentDiscount(${maxDiscount}, ${donGiaGoc}, ${maxDiscount})" style="padding: 4px 10px; font-size: 0.78rem; border-radius: 6px; border: 1px solid #fca5a5; background: #fef2f2; color: #dc2626; font-weight: 700; cursor: pointer;">Miễn phần còn lại</button>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 10px;">
+                    <label style="font-size: 0.82rem; font-weight: 700; color: #334155; display: block; margin-bottom: 4px;">Số tiền giảm cụ thể (VNĐ)</label>
+                    <input type="number" id="adm-incident-discount" class="form-control" min="0" max="${maxDiscount}" step="1000" value="0" oninput="updateAdminIncidentPreview(${donGiaGoc}, ${maxDiscount})" style="height: 36px; font-weight: 700; color: #dc2626;">
+                </div>
+
+                <div id="adm-incident-preview" style="font-size: 0.82rem; color: #047857; font-weight: 700; margin-bottom: 10px;">
+                    Giá ca sau giảm: ${donGiaGoc.toLocaleString('vi-VN')}đ
+                </div>
+
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label style="font-size: 0.82rem; font-weight: 700; color: #334155; display: block; margin-bottom: 4px;">Lý do sự cố <span style="color: red;">*</span></label>
+                    <input type="text" id="adm-incident-reason" class="form-control" placeholder="VD: Hư đèn sân 1 phút 35, mưa lớn dừng sớm..." style="height: 36px;">
+                </div>
+            </div>
+        </div>
+    ` : '';
+
     modal.innerHTML = `
-        <div class="modal-content" style="max-width: 420px; width: 92%; text-align: center; padding: 26px 22px; border-radius: 16px;">
+        <div class="modal-content" style="max-width: ${isComplete && isQuanLy ? '480px' : '420px'}; width: 92%; text-align: center; padding: 26px 22px; border-radius: 16px;">
             <div style="font-size: 3rem; color: ${isComplete ? '#10b981' : '#f59e0b'}; margin-bottom: 10px;">
                 <i class="fa-solid ${isComplete ? 'fa-circle-check' : 'fa-user-slash'}"></i>
             </div>
             <h3 style="margin-bottom: 8px; font-size: 1.25rem; font-weight: 800; color: #0f172a;">
                 Xác nhận chốt "${isComplete ? 'Hoàn thành' : 'Không đến'}"?
             </h3>
-            <p style="color: #64748b; font-size: 0.9rem; line-height: 1.5; margin-bottom: 20px;">
+            <p style="color: #64748b; font-size: 0.9rem; line-height: 1.5; margin-bottom: 16px;">
                 ${isComplete
                     ? 'Xác nhận khách đã hoàn thành trận đấu và thanh toán đủ phần còn lại tại sân?'
                     : 'Xác nhận khách không đến nhận sân (vé sẽ chuyển sang Không đến và giữ lại tiền cọc)?'}
             </p>
+            ${incidentDiscountHtml}
             <div style="display: flex; gap: 10px; justify-content: center;">
                 <button type="button" class="btn-outline" style="flex: 1; padding: 10px;" onclick="document.getElementById('ds-final-status-confirm-modal').style.display='none'">Hủy bỏ</button>
-                <button type="button" class="btn-primary" style="flex: 1.2; padding: 10px; background: ${isComplete ? '#10b981' : '#ea580c'}; border-color: ${isComplete ? '#10b981' : '#ea580c'};" onclick="document.getElementById('ds-final-status-confirm-modal').style.display='none'; executeCapNhatDatSan('${trangThai}');">
+                <button type="button" class="btn-primary" style="flex: 1.2; padding: 10px; background: ${isComplete ? '#10b981' : '#ea580c'}; border-color: ${isComplete ? '#10b981' : '#ea580c'};" onclick="confirmFinalStatusAdmin('${trangThai}', ${maxDiscount})">
                     Đồng ý xác nhận
                 </button>
             </div>
@@ -3420,6 +3482,90 @@ window.openConfirmStatusActionAdmin = function(trangThai) {
     `;
     modal.style.display = 'flex';
 };
+
+window.toggleAdminIncidentDiscountBox = function() {
+    const checked = document.getElementById('adm-incident-toggle')?.checked;
+    const box = document.getElementById('adm-incident-box');
+    if (box) box.style.display = checked ? 'block' : 'none';
+};
+
+window.setAdminIncidentDiscount = function(amount, donGiaGoc, maxDiscount) {
+    const input = document.getElementById('adm-incident-discount');
+    if (input) {
+        input.value = Math.min(maxDiscount, Math.max(0, amount));
+        updateAdminIncidentPreview(donGiaGoc, maxDiscount);
+    }
+};
+
+window.updateAdminIncidentPreview = function(donGiaGoc, maxDiscount) {
+    const input = document.getElementById('adm-incident-discount');
+    const preview = document.getElementById('adm-incident-preview');
+    if (!input || !preview) return;
+    let val = Number(input.value || 0);
+    if (val > maxDiscount) val = maxDiscount;
+    if (val < 0) val = 0;
+    const giaMoi = Math.max(0, donGiaGoc - val);
+    preview.innerHTML = `Giá ca sau giảm: <span style="color:#0b5d3b;">${giaMoi.toLocaleString('vi-VN')}đ</span> (Đã giảm ${val.toLocaleString('vi-VN')}đ &bull; Thuế VAT 8% sẽ tự động tính lại trên giá mới)`;
+};
+
+window.confirmFinalStatusAdmin = function(trangThai, maxDiscount) {
+    let giamGiaSuCo = 0;
+    let lyDoSuCo = '';
+
+    if (trangThai === 'HoanThanh' && document.getElementById('adm-incident-toggle')?.checked) {
+        giamGiaSuCo = Number(document.getElementById('adm-incident-discount')?.value || 0);
+        lyDoSuCo = document.getElementById('adm-incident-reason')?.value.trim() || '';
+
+        if (giamGiaSuCo > maxDiscount) {
+            return showSystemModal('Vượt mức giảm', `Số tiền giảm không được vượt quá ${maxDiscount.toLocaleString('vi-VN')}đ!`, 'error');
+        }
+        if (giamGiaSuCo > 0 && !lyDoSuCo) {
+            return showSystemModal('Thiếu lý do', 'Vui lòng nhập lý do sự cố khi giảm giá trực tiếp!', 'error');
+        }
+    }
+
+    document.getElementById('ds-final-status-confirm-modal').style.display = 'none';
+    executeCapNhatDatSan(trangThai, null, null, giamGiaSuCo, lyDoSuCo);
+};
+
+async function executeCapNhatDatSan(trangThai, otp = null, customAlertBox = null, giamGiaSuCo = 0, lyDoSuCo = '') {
+    if (!pendingDSId) return false;
+    closeDSConfirmModal(); 
+
+    try {
+        const payload = { trang_thai: trangThai };
+        if (otp) payload.otp = otp;
+        if (giamGiaSuCo > 0) {
+            payload.giam_gia_su_co = giamGiaSuCo;
+            payload.ly_do_su_co = lyDoSuCo;
+        }
+
+        const response = await fetch(`${API_BASE_URL}/admin/dat-san/${pendingDSId}/chot`, {
+            method: 'PUT',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            showDSAlert('Đã cập nhật trạng thái thành công!', true);
+            loadDanhSachDatSanAdmin();
+            return true;
+        } else {
+            if (customAlertBox) {
+                customAlertBox.innerHTML = (data.message || 'Lỗi xử lý.').replace(/\n/g, '<br>');
+                customAlertBox.className = 'modal-alert error';
+                customAlertBox.style.display = 'block';
+            } else {
+                showDSAlert(data.message || 'Lỗi xử lý.', false);
+            }
+            return false;
+        }
+    } catch (e) {
+        showDSAlert('Lỗi kết nối máy chủ.', false);
+        return false;
+    }
+}
 
 function closeDSConfirmModal() { document.getElementById('ds-confirm-modal').style.display = 'none'; }
 
@@ -3524,41 +3670,6 @@ async function confirmMemberCancelAdmin() {
     } else {
         btn.disabled = false;
         btn.innerHTML = 'Hủy & Hoàn tiền';
-    }
-}
-
-async function executeCapNhatDatSan(trangThai, otp = null, customAlertBox = null) {
-    if (!pendingDSId) return false;
-    closeDSConfirmModal(); 
-
-    try {
-        const payload = { trang_thai: trangThai };
-        if (otp) payload.otp = otp;
-
-        const response = await fetch(`${API_BASE_URL}/admin/dat-san/${pendingDSId}/chot`, {
-            method: 'PUT',
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const data = await response.json();
-        
-        if (response.ok && data.success) {
-            showDSAlert('Đã cập nhật trạng thái thành công!', true);
-            loadDanhSachDatSanAdmin();
-            return true;
-        } else {
-            if (customAlertBox) {
-                customAlertBox.innerHTML = (data.message || 'Lỗi xử lý.').replace(/\n/g, '<br>');
-                customAlertBox.className = 'modal-alert error';
-                customAlertBox.style.display = 'block';
-            } else {
-                showDSAlert(data.message || 'Lỗi xử lý.', false);
-            }
-            return false;
-        }
-    } catch (e) {
-        showDSAlert('Lỗi kết nối máy chủ.', false);
-        return false;
     }
 }
 
@@ -5147,6 +5258,8 @@ async function renderTongQuan() {
         
         <div id="dashboard-alert-container"></div>
 
+        <div id="dashboard-incident-container"></div>
+
         <div class="stat-grid" style="margin-bottom: 24px;">
             <div class="stat-card">
                 <div class="stat-title">Doanh thu hôm nay</div>
@@ -5348,6 +5461,10 @@ async function updateDashboardStats(scope = 'all') {
         // VÙNG 1: CẬP NHẬT 4 THẺ TRÊN CÙNG & BIỂU ĐỒ (Chỉ chạy khi scope === 'all' hoặc 'chart')
         // =========================================================
         if (scope === 'all' || scope === 'chart') {
+            if (currentUser.VaiTro === 'QuanLySan' && typeof loadDashboardIncidents === 'function') {
+                loadDashboardIncidents();
+            }
+
             // Cập nhật Cảnh báo quên chốt sân (Chỉ quản lý mới bị nhắc)
             const alertContainer = document.getElementById('dashboard-alert-container');
             if (currentUser.VaiTro === 'QuanLySan' && data.so_san_quen_chot > 0) {
@@ -11831,3 +11948,175 @@ function renderAdminTxPagination(totalPages) {
     html += `<button class="btn-outline-sm" ${adminTxPage === totalPages ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''} onclick="adminTxPage++; applyAdminTxFilters()"><i class="fa-solid fa-chevron-right"></i></button>`;
     div.innerHTML = html;
 }
+
+// ======================================================
+// MODULE: CẢNH BÁO SỰ CỐ TRÊN DASHBOARD & TẶNG VOUCHER ĐỀN BÙ (QUẢN LÝ SÂN)
+// ======================================================
+window.loadDashboardIncidents = async function() {
+    const currentUser = JSON.parse(sessionStorage.getItem('dn_football_user') || '{}');
+    if (currentUser.VaiTro !== 'QuanLySan') return;
+
+    const container = document.getElementById('dashboard-incident-container');
+    if (!container) return;
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/thong-bao`);
+        const json = await res.json();
+        const incidents = (json.data || []).filter(n => String(n.TieuDe || '').startsWith('[SỰ CỐ SÂN]'));
+
+        if (incidents.length === 0) {
+            container.innerHTML = '';
+            return;
+        }
+
+        const rowsHtml = incidents.map(n => {
+            const rawText = String(n.NoiDung || '');
+            const refMatch = rawText.match(/\[REF:([^|\]]+)\|([^|\]]+)\|?([^\]]*)\]/);
+            const maDatSan = refMatch ? refMatch[1] : '';
+            const maKhach  = refMatch ? refMatch[2] : 'GUEST';
+            const ngayDa   = refMatch && refMatch[3] ? refMatch[3] : '';
+            const cleanContent = rawText.replace(/\s*\[REF:[^\]]+\]/, '');
+            const isMember = maKhach && maKhach !== 'GUEST';
+
+            return `
+                <div style="background: #ffffff; border: 1px solid #fed7aa; border-radius: 10px; padding: 12px 16px; margin-top: 10px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 240px;">
+                        <div style="font-weight: 800; color: #9a3412; font-size: 0.92rem;">${n.TieuDe}</div>
+                        <div style="font-size: 0.84rem; color: #334155; margin-top: 3px; line-height: 1.45;">${cleanContent}</div>
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                        ${maDatSan ? `<button type="button" class="btn-outline-sm" style="background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; font-weight: 700;" onclick="goToIncidentBooking('${maDatSan}', '${ngayDa}')"><i class="fa-solid fa-arrow-right"></i> Xem & Giảm giá ca</button>` : ''}
+                        ${isMember ? `<button type="button" class="btn-primary" style="background: #ea580c; border-color: #ea580c; padding: 6px 12px; font-size: 0.82rem;" onclick="openGiveCompensationVoucherModal('${maKhach}', '${maDatSan}', '${n.ID}')"><i class="fa-solid fa-gift"></i> Tặng Voucher đền bù</button>` : ''}
+                        <button type="button" class="btn-outline-sm" style="background: #f0fdf4; color: #15803d; border-color: #86efac; font-weight: 700;" onclick="markIncidentResolved('${n.ID}', '${maDatSan}')"><i class="fa-solid fa-check"></i> Đã xử lý</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        container.innerHTML = `
+            <div style="background: #fff7ed; border: 1px solid #fdba74; border-left: 5px solid #ea580c; border-radius: 12px; padding: 16px 20px; margin-bottom: 24px; box-shadow: 0 4px 10px rgba(234, 88, 12, 0.08);">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+                    <h4 style="margin: 0; color: #c2410c; font-size: 1.02rem; font-weight: 800;">
+                        <i class="fa-solid fa-triangle-exclamation"></i> CẢNH BÁO: CÓ ${incidents.length} CA SỰ CỐ SÂN CẦN XỬ LÝ
+                    </h4>
+                </div>
+                ${rowsHtml}
+            </div>
+        `;
+    } catch (e) {
+        console.error('Lỗi tải cảnh báo sự cố:', e);
+    }
+};
+
+window.goToIncidentBooking = async function(maDatSan, ngayDa) {
+    await renderQuanLyDatSan('All', ngayDa || '');
+    const searchInput = document.getElementById('ds-search-input');
+    if (searchInput) {
+        searchInput.value = maDatSan;
+        handleDSSearch(maDatSan);
+    }
+};
+
+window.markIncidentResolved = async function(notifId, maDatSan = '') {
+    try {
+        if (maDatSan) {
+            await fetch(`${API_BASE_URL}/admin/dat-san/${maDatSan}/da-xu-ly-su-co`, { method: 'PUT' });
+        } else {
+            await fetch(`${API_BASE_URL}/thong-bao/${notifId}/doc`, { method: 'PUT' });
+        }
+        loadDashboardIncidents();
+        loadNotifications();
+    } catch (e) {}
+};
+
+window.openGiveCompensationVoucherModal = function(maKhach, maDatSan, notifId) {
+    let modal = document.getElementById('admin-comp-voucher-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'admin-comp-voucher-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 10040; align-items: center; justify-content: center;';
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 440px; width: 92%; padding: 24px; border-radius: 16px; text-align: left;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; margin-bottom: 14px; border-bottom: 1px solid #e2e8f0;">
+                <h3 style="margin: 0; font-size: 1.12rem; font-weight: 800; color: #0b5d3b;">
+                    <i class="fa-solid fa-gift" style="color: #ea580c; margin-right: 6px;"></i> Tặng Voucher Đền Bù Cá Nhân
+                </h3>
+                <i class="fa-solid fa-xmark" style="cursor: pointer; color: #64748b;" onclick="document.getElementById('admin-comp-voucher-modal').style.display='none'"></i>
+            </div>
+            <div style="font-size: 0.84rem; color: #475569; margin-bottom: 14px; background: #f8fafc; padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                Mã khách nhận: <strong>#${maKhach}</strong> &bull; Hạn dùng: <strong>30 ngày</strong> &bull; Số lượt: <strong>1 lần</strong> &bull; Đơn tối thiểu: <strong>0đ</strong>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                <div class="form-group" style="margin: 0;">
+                    <label style="font-size: 0.84rem; font-weight: 700;">Loại giảm</label>
+                    <select id="cv-loai" class="form-control">
+                        <option value="PhanTram">Phần trăm (%)</option>
+                        <option value="CoDinh">Số tiền cố định (VNĐ)</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin: 0;">
+                    <label style="font-size: 0.84rem; font-weight: 700;">Mức giảm <span style="color:red;">*</span></label>
+                    <input type="number" id="cv-giatri" class="form-control" value="20" min="1">
+                </div>
+            </div>
+            <div class="form-group" style="margin-bottom: 18px;">
+                <label style="font-size: 0.84rem; font-weight: 700;">Lý do / Lời nhắn gửi khách</label>
+                <input type="text" id="cv-lydo" class="form-control" value="Xin lỗi quý khách về sự cố sân vừa qua">
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn-outline" style="width: auto; padding: 9px 18px;" onclick="document.getElementById('admin-comp-voucher-modal').style.display='none'">Hủy</button>
+                <button type="button" id="btn-submit-cv" class="btn-primary" style="width: auto; padding: 9px 20px;" onclick="submitCompensationVoucher('${maKhach}', '${maDatSan}', '${notifId}')">
+                    <i class="fa-solid fa-paper-plane"></i> Tạo & Gửi tặng khách
+                </button>
+            </div>
+        </div>
+    `;
+    modal.style.display = 'flex';
+};
+
+window.submitCompensationVoucher = async function(maKhach, maDatSan, notifId) {
+    const loai = document.getElementById('cv-loai')?.value || 'PhanTram';
+    const giaTri = Number(document.getElementById('cv-giatri')?.value || 0);
+    const lyDo = document.getElementById('cv-lydo')?.value.trim() || '';
+
+    if (giaTri <= 0) {
+        return showSystemModal('Lỗi', 'Vui lòng nhập mức giảm hợp lệ!', 'error');
+    }
+
+    const btn = document.getElementById('btn-submit-cv');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang tạo...';
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/admin/khuyen-mai/tang-voucher-den-bu`, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                ma_nguoi_dung: maKhach,
+                loai_khuyen_mai: loai,
+                gia_tri: giaTri,
+                ly_do: lyDo,
+                ma_dat_san: maDatSan
+            })
+        });
+        const data = await res.json();
+        document.getElementById('admin-comp-voucher-modal').style.display = 'none';
+
+        if (res.ok && data.success) {
+            showSystemModal('Thành công', data.message, 'success');
+            loadDashboardIncidents();
+            loadNotifications();
+        } else {
+            showSystemModal('Lỗi', data.message || 'Không thể tạo Voucher đền bù!', 'error');
+        }
+    } catch (e) {
+        showSystemModal('Lỗi mạng', 'Mất kết nối máy chủ!', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Tạo & Gửi tặng khách';
+    }
+};

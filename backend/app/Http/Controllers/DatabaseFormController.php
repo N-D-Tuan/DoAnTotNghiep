@@ -76,7 +76,7 @@ class DatabaseFormController extends Controller
         $rows = [];
         if (Schema::hasTable($activeTable)) {
             $pkFirst = $configs[$activeTable]['pk'][0];
-            $rows = DB::table($activeTable)->orderBy($pkFirst, 'asc')->limit(500)->get();
+            $rows = DB::table($activeTable)->orderBy($pkFirst, 'asc')->get();
         }
 
         return response()->json([

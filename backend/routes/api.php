@@ -136,6 +136,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/admin/giai-dau', [GiaiDauController::class, 'layDanhSachAdmin']);
     Route::put('/admin/giai-dau/{id}/xu-ly', [GiaiDauController::class, 'xuLyYeuCau']);
     Route::get('/admin/giai-dau/{id}/ma-tran', [GiaiDauController::class, 'layMaTranLich']);
+    Route::post('/admin/dat-san/{id}/bao-su-co', [DatSanController::class, 'baoSuCoDatSan']);
+    Route::post('/admin/khuyen-mai/tang-voucher-den-bu', [DatSanController::class, 'tangVoucherDenBu']);
+    Route::put('/admin/dat-san/{id}/da-xu-ly-su-co', [DatSanController::class, 'danhDauDaXuLySuCo']);
     
     // 8. Admin: Quản lý hạ tầng (Thêm, sửa, xóa sân)
     Route::post('/cum-san', [CumSanController::class, 'store']);

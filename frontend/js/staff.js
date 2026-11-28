@@ -2710,6 +2710,9 @@ function openStaffDSConfirmModal(id) {
                 <button type="button" onclick="closeStaffDSConfirmModal(); openAdminRescheduleModal('${id}')" style="padding: 10px 16px; border-radius: 10px; border: 1px solid #bfdbfe; background: #eff6ff; color: #2563eb; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
                     <i class="fa-solid fa-calendar-day"></i> Dời lịch
                 </button>
+                <button type="button" onclick="closeStaffDSConfirmModal(); openStaffReportIncidentModal('${id}')" style="padding: 10px 16px; border-radius: 10px; border: 1px solid #fed7aa; background: #fff7ed; color: #ea580c; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-triangle-exclamation"></i> Báo sự cố
+                </button>
                 <button type="button" onclick="openStaffCancelConfirmModal()" style="padding: 10px 16px; border-radius: 10px; border: 1px solid #fecaca; background: #fef2f2; color: #ef4444; font-weight: 600; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
                     <i class="fa-solid fa-ban"></i> Hủy sân & Hoàn tiền
                 </button>
@@ -2763,6 +2766,82 @@ function closeStaffDSConfirmModal() {
     const modal = document.getElementById('staff-ds-confirm-modal');
     if(modal) modal.style.display = 'none'; 
 }
+
+window.openStaffReportIncidentModal = function(id) {
+    const item = staffDatSanData.find(b => String(b.ID) === String(id) || String(b.MaDatSan) === String(id));
+    if (!item) return;
+
+    let modal = document.getElementById('staff-incident-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'staff-incident-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; z-index: 10030; align-items: center; justify-content: center;';
+        document.body.appendChild(modal);
+    }
+
+    const tenSan = item.san_bong ? item.san_bong.TenSan : 'Sân bóng';
+    const gioStr = item.khung_gio ? `${item.khung_gio.GioBatDau.substring(0,5)} - ${item.khung_gio.GioKetThuc.substring(0,5)}` : '';
+    const tenKhach = item.ID_NguoiDung ? (item.nguoi_dung?.HoTen || 'Khách hàng') : (item.TenNguoiDat || 'Khách vãng lai');
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 460px; width: 92%; padding: 24px; border-radius: 16px; text-align: left;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; margin-bottom: 14px; border-bottom: 1px solid #e2e8f0;">
+                <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #ea580c;">
+                    <i class="fa-solid fa-triangle-exclamation" style="margin-right: 6px;"></i> Báo cáo sự cố lên Quản lý
+                </h3>
+                <i class="fa-solid fa-xmark" style="cursor: pointer; color: #64748b; font-size: 1.2rem;" onclick="document.getElementById('staff-incident-modal').style.display='none'"></i>
+            </div>
+            <div style="background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; padding: 10px 14px; font-size: 0.86rem; color: #9a3412; margin-bottom: 14px; line-height: 1.55;">
+                <div><strong>Sân:</strong> ${tenSan} (${gioStr})</div>
+                <div><strong>Khách hàng:</strong> ${tenKhach}</div>
+                <div style="font-size: 0.8rem; margin-top: 4px;">* Báo cáo sẽ gửi ngay tới tất cả Quản lý sân để xử lý giảm giá hoặc tặng Voucher đền bù.</div>
+            </div>
+            <div class="form-group" style="margin-bottom: 18px;">
+                <label style="font-weight: 700; font-size: 0.88rem; color: #0f172a; margin-bottom: 6px; display: block;">Mô tả sự cố <span style="color: red;">*</span></label>
+                <textarea id="staff-incident-reason" class="form-control" rows="3" placeholder="VD: Hư đèn sân 1 phút 35, khách không thể đá tiếp..." style="width: 100%; resize: none;"></textarea>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn-outline" style="width: auto; padding: 10px 18px;" onclick="document.getElementById('staff-incident-modal').style.display='none'">Hủy</button>
+                <button type="button" id="btn-submit-staff-incident" class="btn-primary" style="width: auto; padding: 10px 20px; background: #ea580c; border-color: #ea580c;" onclick="submitStaffReportIncident('${id}')">
+                    <i class="fa-solid fa-paper-plane"></i> Gửi báo cáo sự cố
+                </button>
+            </div>
+        </div>
+    `;
+    modal.style.display = 'flex';
+};
+
+window.submitStaffReportIncident = async function(id) {
+    const lyDo = document.getElementById('staff-incident-reason')?.value.trim() || '';
+    if (!lyDo) {
+        return showSystemModal('Thiếu thông tin', 'Vui lòng nhập mô tả sự cố!', 'error');
+    }
+
+    const btn = document.getElementById('btn-submit-staff-incident');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang gửi...';
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/admin/dat-san/${id}/bao-su-co`, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ly_do: lyDo })
+        });
+        const data = await res.json();
+        document.getElementById('staff-incident-modal').style.display = 'none';
+        if (res.ok && data.success) {
+            showSystemModal('Đã gửi báo cáo', data.message, 'success');
+        } else {
+            showSystemModal('Lỗi', data.message || 'Không thể gửi báo cáo sự cố!', 'error');
+        }
+    } catch (e) {
+        showSystemModal('Lỗi mạng', 'Mất kết nối máy chủ!', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Gửi báo cáo sự cố';
+    }
+};
 
 function openStaffCancelConfirmModal() {
     closeStaffDSConfirmModal(); // Đóng modal hiện tại
