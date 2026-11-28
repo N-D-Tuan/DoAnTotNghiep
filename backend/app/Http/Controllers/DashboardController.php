@@ -55,22 +55,39 @@ class DashboardController extends Controller
             return "{$ngay}_{$maKG}_{$maDS}";
         })->last();
 
-        // Nếu trận đang xét KHÔNG PHẢI trận cuối cùng -> Chỉ ghi nhận đúng tiền sân gốc của trận đó (chẵn 100%, không chia lẻ VAT)
-        if ($tranCuoiCung && (string) $ds->MaDatSan !== (string) $tranCuoiCung->MaDatSan) {
-            return $tienGocTranNay;
-        }
-
-        // Nếu trận đang xét LÀ TRẬN CUỐI CÙNG của Hóa đơn / Giải đấu -> Ghi nhận tiền sân gốc + toàn bộ Thuế VAT (trừ Khuyến mãi nếu có)
         $tongGocChiuThue = (float) $cacTranChiuThue->sum('TongTien');
         $tongCocKhongDen = (float) $cacTranTrongHD->where('TrangThai', 'KhongDen')->sum('TienCoc');
 
         // Tổng thực thu của toàn bộ các trận chịu thuế trong HĐ = TongTien HĐ - Tổng cọc các trận KhongDen
         $tongThucThuCacTranChiuThue = max(0, (float) $hoaDon->TongTien - $tongCocKhongDen);
-
-        // Phần chênh lệch (Thuế VAT 8% - Khuyến mãi) của cả Hóa đơn sẽ được cộng dồn vào trận cuối cùng này
         $chenhLechThueVaKM = $tongThucThuCacTranChiuThue - $tongGocChiuThue;
+        $giaTranCuoi = $tranCuoiCung ? (float) $tranCuoiCung->TongTien : $tienGocTranNay;
 
-        return max(0, $tienGocTranNay + $chenhLechThueVaKM);
+        // NHÁNH 1 (LOGIC CŨ): Nếu dồn vào trận cuối mà KHÔNG bị âm -> Giữ nguyên 100% cách tính cũ
+        if (($giaTranCuoi + $chenhLechThueVaKM) >= 0) {
+            if ($tranCuoiCung && (string) $ds->MaDatSan !== (string) $tranCuoiCung->MaDatSan) {
+                return $tienGocTranNay;
+            }
+            return $tienGocTranNay + $chenhLechThueVaKM;
+        }
+
+        // NHÁNH 2 (DỰ PHÒNG KHI MÃ GIẢM SÂU > GIÁ TRẬN CUỐI): Phân bổ thực thu theo tỷ lệ để tổng luôn khớp 100%
+        if ($tongGocChiuThue <= 0) {
+            return 0;
+        }
+
+        if ($tranCuoiCung && (string) $ds->MaDatSan !== (string) $tranCuoiCung->MaDatSan) {
+            return round($tongThucThuCacTranChiuThue * ($tienGocTranNay / $tongGocChiuThue));
+        }
+
+        // Trận cuối cùng nhận phần còn lại để triệt tiêu sai số làm tròn
+        $daPhanBo = 0;
+        foreach ($cacTranChiuThue as $item) {
+            if ((string) $item->MaDatSan !== (string) $tranCuoiCung->MaDatSan) {
+                $daPhanBo += round($tongThucThuCacTranChiuThue * ((float) $item->TongTien / $tongGocChiuThue));
+            }
+        }
+        return max(0, $tongThucThuCacTranChiuThue - $daPhanBo);
     }
 
     public function layThongKe(Request $request)
